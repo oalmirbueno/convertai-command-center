@@ -8,7 +8,7 @@ import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles, Bot } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
@@ -53,6 +53,7 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "Central", url: "/central", icon: HeartPulse },
       { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
       { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
+      { title: "Execução da equipe", url: "/execucao", icon: Bot },
       { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
       { title: "Briefings", url: "/briefings", icon: FileText },
     ],

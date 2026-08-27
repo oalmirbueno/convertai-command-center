@@ -1,0 +1,221 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+/**
+ * A camada de Operadores internos (Hermes): Vértice, Registro, Prisma e
+ * Augusto como cidadãos do painel, sem fingir que são gente.
+ *
+ * Cada regra abaixo veio literal do pedido do dono, e cada uma quebraria
+ * em silêncio num refactor: operador sem e-mail/senha, responsável humano
+ * intocável, feito só com evidência, auditoria imutável, trava de
+ * execução simultânea, notificação só de exceção, flag com rollback.
+ */
+
+const raiz = resolve(__dirname, "../..");
+const migracao = readFileSync(
+  resolve(raiz, "supabase/migrations/20260827200000_operadores_internos.sql"), "utf8",
+);
+const servicos = readFileSync(
+  resolve(raiz, "supabase/functions/_shared/aceleriq-operators-services.ts"), "utf8",
+);
+const ferramentas = readFileSync(
+  resolve(raiz, "supabase/functions/_shared/mcp-tools.ts"), "utf8",
+);
+const pagina = readFileSync(resolve(raiz, "src/pages/AdminExecucao.tsx"), "utf8");
+
+describe("operador interno e outra entidade, nao gente ficticia", () => {
+  it("a tabela nao tem e-mail, senha nem cliente atribuido", () => {
+    const bloco = migracao.slice(
+      migracao.indexOf("create table if not exists public.internal_operators"),
+      migracao.indexOf("alter table public.internal_operators"),
+    );
+    expect(bloco).not.toMatch(/email|password|senha|client_id/);
+    // E tem o que o pedido listou.
+    for (const campo of ["slug", "display_name", "role", "status", "scope", "permissions", "hermes_profile_ref", "created_at", "last_run_at"]) {
+      expect(bloco, `campo ${campo} ausente`).toContain(campo);
+    }
+  });
+
+  it("os quatro do piloto nascem na migration, idempotentes", () => {
+    for (const slug of ["'vertice'", "'registro'", "'prisma'", "'augusto'"]) {
+      expect(migracao).toContain(slug);
+    }
+    expect(migracao).toContain("on conflict (slug) do nothing");
+    // Augusto e o coordenador.
+    const augusto = migracao.slice(migracao.indexOf("('augusto'"));
+    expect(augusto.slice(0, 220)).toContain("true");
+  });
+
+  it("o responsavel humano e intocavel: nada escreve em assigned_to", () => {
+    // A regra mais importante do pedido. Nenhuma peca da camada pode
+    // escrever assigned_to — nem migration, nem servico, nem RPC.
+    expect(migracao).not.toMatch(/update\s+public\.tasks|set\s+assigned_to/i);
+    // O servico LE assigned_to para mostrar o humano; escrever em tasks,
+    // jamais: o unico uso de from('tasks') e um select.
+    const usosDeTasks = servicos.match(/from\('tasks'\)[\s\r\n]*\.(\w+)/g) ?? [];
+    expect(usosDeTasks.length).toBeGreaterThan(0);
+    for (const uso of usosDeTasks) expect(uso).toContain(".select");
+    // A leitura MOSTRA o humano (e o que mantem ele no centro), so nao muda.
+    expect(servicos).toContain("responsavel_humano");
+  });
+});
+
+describe("execucao com trava, idempotencia e retomada", () => {
+  it("duas execucoes simultaneas da mesma tarefa colidem", () => {
+    expect(migracao).toContain("operator_task_links_uma_ativa");
+    expect(migracao).toContain("operator_runs_uma_viva");
+    // E o servico traduz a colisao em instrucao, nao em susto.
+    expect(servicos).toContain("ja tem uma execucao EM ANDAMENTO");
+  });
+
+  it("idempotencia por execucao: (operador, run_key) e unico", () => {
+    expect(migracao).toContain("unique (operator_id, run_key)");
+    expect(migracao).toContain("on conflict (operator_id, run_key) do update");
+  });
+
+  it("run sem heartbeat vira timeout visivel e libera a trava", () => {
+    expect(migracao).toContain("operator_expire_stale_runs");
+    expect(migracao).toContain("make_interval(secs => r.timeout_seconds)");
+    // A leitura do quadro expira antes de listar: deteccao sem cron novo.
+    expect(servicos).toContain("rpc('operator_expire_stale_runs')");
+    expect(pagina).toContain('rpc("operator_expire_stale_runs")');
+  });
+
+  it("nao se promete zero falha: incidentes e ultima falha sao visiveis", () => {
+    expect(servicos).toContain("incidentes");
+    expect(servicos).toContain("ultima_falha");
+    expect(pagina).toContain("incidente(s) de execução");
+  });
+});
+
+describe("feito de verdade tem evidencia", () => {
+  it("done sem evidencia e rebaixado para review no banco", () => {
+    expect(migracao).toContain("then 'review' else 'done'");
+  });
+
+  it("o relatorio separa feito, revisao, aguardando e bloqueado", () => {
+    expect(pagina).toContain("Feito COM evidencia");
+    expect(pagina).toContain("inclui feito sem evidencia");
+    expect(pagina).toContain("Aguardando insumo");
+    expect(pagina).toContain("Bloqueado");
+  });
+
+  it("evidencia nunca carrega credencial", () => {
+    // URL assinada perde a query string na gravacao.
+    expect(migracao).toContain("query removida: continha credencial");
+    expect(migracao).toMatch(/token\|signature\|x-amz/);
+  });
+});
+
+describe("auditoria imutavel", () => {
+  it("update e delete sao recusados por trigger, para qualquer um", () => {
+    expect(migracao).toContain("operator_audit_imutavel");
+    expect(migracao).toContain("before update or delete on public.operator_audit_log");
+    expect(migracao).toContain("e imutavel");
+  });
+
+  it("registra quem, qual operador, qual tarefa, acao, antes/depois, cron e aprovacao", () => {
+    const bloco = migracao.slice(
+      migracao.indexOf("create table if not exists public.operator_audit_log"),
+      migracao.indexOf("alter table public.operator_audit_log"),
+    );
+    for (const campo of ["actor", "operator_id", "kanban_task_id", "action", "old_status", "new_status", "evidence", "from_cron", "approval_required", "run_key"]) {
+      expect(bloco, `auditoria sem ${campo}`).toContain(campo);
+    }
+  });
+});
+
+describe("notificacao e excecao, nao diario", () => {
+  it("progress e heartbeat nunca notificam; marcos e excecoes sim", () => {
+    expect(migracao).toContain(
+      "_notifica := _event in ('started', 'done', 'failed', 'blocked', 'review')",
+    );
+    expect(migracao).toContain("or _approval_required");
+  });
+
+  it("a notificacao abre direto o vinculo na area de execucao", () => {
+    expect(migracao).toContain("'/execucao?vinculo='");
+    // E a pagina rola ate ele e destaca.
+    expect(pagina).toContain('searchParams.get("vinculo")');
+    expect(pagina).toContain("scrollIntoView");
+  });
+});
+
+describe("flag com rollback documentado", () => {
+  it("a flag existe, o RPC respeita e a pagina tambem", () => {
+    expect(migracao).toContain("'operators_layer'");
+    expect(migracao).toContain("flag_off: a camada de operadores esta desligada");
+    expect(pagina).toContain("flag === false");
+    expect(pagina).toContain("Nada foi apagado");
+  });
+
+  it("o rollback esta escrito na propria migration", () => {
+    expect(migracao).toMatch(/ROLLBACK[\s\r\n-]*DOCUMENTADO/);
+    expect(migracao).toContain("enabled = false");
+  });
+
+  it("a migration nao apaga nem sobrescreve nada existente", () => {
+    expect(migracao).not.toMatch(/\bdrop\s+table\b/i);
+    expect(migracao).not.toMatch(/\btruncate\b/i);
+    // Os unicos UPDATE/DELETE tocam as tabelas NOVAS da propria camada.
+    const escritas = migracao.match(/(?:update|delete from)\s+public\.(\w+)/gi) ?? [];
+    for (const w of escritas) {
+      expect(w, `escrita fora da camada: ${w}`).toMatch(
+        /internal_operators|operator_task_links|operator_runs|operator_audit_log|feature_flags/,
+      );
+    }
+  });
+});
+
+describe("o MCP expoe exatamente duas capacidades", () => {
+  it("relatar e ler o quadro; nada de acao externa", () => {
+    expect(ferramentas).toContain("'aceleriq_operator_report'");
+    expect(ferramentas).toContain("'aceleriq_operator_board'");
+    // A descricao avisa o agente do que NAO acontece por ali.
+    expect(ferramentas).toContain("NAO atribui tarefa a humano");
+    expect(ferramentas).toContain("NAO publica, NAO gasta, NAO altera financeiro");
+  });
+
+  it("os slugs validos sao os quatro do piloto", () => {
+    expect(ferramentas).toContain("'vertice', 'registro', 'prisma', 'augusto'");
+  });
+});
+
+describe("a area Execucao da equipe", () => {
+  it("tem as oito visoes do pedido", () => {
+    for (const visao of [
+      "Fila por operador", "Em andamento", "Concluídas com evidência", "Em revisão",
+      "Aguardando insumo", "Bloqueadas", "Aprovações pendentes", "Relatórios",
+    ]) {
+      expect(pagina, `visao ${visao} ausente`).toContain(visao);
+    }
+  });
+
+  it("cada item mostra os campos do pedido", () => {
+    for (const trecho of [
+      "responsavel_humano", // no servico
+    ]) {
+      expect(servicos).toContain(trecho);
+    }
+    for (const trecho of ["humano:", "evidência:", "próximo passo:", "bloqueio:", "aprovação necessária", "prazo"]) {
+      expect(pagina, `campo ${trecho} ausente no cartao`).toContain(trecho);
+    }
+  });
+
+  it("e da equipe, atras de RBAC e da flag", () => {
+    expect(pagina).toContain('["admin", "manager", "design", "traffic"]');
+    const app = readFileSync(resolve(raiz, "src/App.tsx"), "utf8");
+    expect(app).toContain('path="/execucao"');
+    expect(app).toMatch(/execucao.*StaffRoute/);
+  });
+
+  it("os relatorios saem dos MESMOS dados da tela", () => {
+    // Gerados de vinculos+runs+tarefas ja carregados; nenhuma consulta
+    // propria de relatorio que pudesse divergir do quadro.
+    const bloco = pagina.slice(pagina.indexOf("const relatorio = useMemo"), pagina.indexOf("const copiar"));
+    expect(bloco).toContain("vinculos.filter");
+    expect(bloco).toContain("incidentes");
+    expect(bloco).not.toContain("supabase");
+  });
+});

@@ -31,6 +31,7 @@ const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
 const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
+const AdminExecucao = lazy(() => import("@/pages/AdminExecucao"));
 const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = lazy(() => import("@/pages/AdminAds"));
 const AdminCiclo = lazy(() => import("@/pages/AdminCiclo"));
@@ -174,6 +175,7 @@ function AppRoutes() {
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
       <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/execucao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminExecucao /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/metricas" element={<ProtectedRoute><StaffRoute><AppLayout><AdminMetricas /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/anuncios" element={<ProtectedRoute><StaffRoute><AppLayout><AdminAds /></AppLayout></StaffRoute></ProtectedRoute>} />
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela

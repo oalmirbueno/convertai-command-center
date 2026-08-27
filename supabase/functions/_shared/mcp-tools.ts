@@ -32,6 +32,11 @@ import {
   auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
+  OPERATOR_EVENTS,
+  operatorBoard,
+  operatorReport,
+} from './aceleriq-operators-services.ts';
+import {
   getFinanceAdsInvestment,
   getFinanceCapital,
   getFinanceCashFlow,
@@ -280,7 +285,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.30.0',
+  version: '1.31.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2398,6 +2403,81 @@ const financeHistoryTool = makeFinanceRead(
   (input) => listFinanceHistory(input),
 );
 
+// ─── Operadores internos (Hermes) ─────────────────────────────
+const operatorReportTool: ToolDefinition = {
+  name: 'aceleriq_operator_report',
+  title: 'Relatar execucao de operador interno',
+  description:
+    'Registra um evento de execucao de um operador interno Hermes (vertice, registro, prisma, augusto): started, progress, done, failed, blocked, review, awaiting_input ou heartbeat. O banco aplica tudo numa transacao: vinculo com a tarefa (SEM tocar no responsavel humano), historico de runs com idempotencia por (operador, run_key), trilha de auditoria IMUTAVEL e notificacao interna apenas para excecoes e marcos (progress e heartbeat nunca notificam). done sem evidencia vira review: feito de verdade tem evidencia verificavel. Duas execucoes simultaneas da mesma tarefa colidem com erro claro. Evidencia com credencial na URL perde a query string. NAO atribui tarefa a humano, NAO publica, NAO gasta, NAO altera financeiro.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', enum: ['vertice', 'registro', 'prisma', 'augusto'], description: 'Slug do operador interno.' },
+      event: { type: 'string', enum: [...OPERATOR_EVENTS], description: 'O que aconteceu nesta execucao.' },
+      run_key: { type: 'string', minLength: 8, maxLength: 128, description: 'Chave idempotente da execucao (mesma chave = mesma run).' },
+      kanban_task_id: { type: 'string', description: 'UUID da tarefa no Kanban, quando houver.' },
+      painel_task_id: { type: 'string', description: 'UUID de item do painel fora do Kanban, quando houver.' },
+      action: { type: 'string', maxLength: 300, description: 'A acao em uma frase.' },
+      evidence: { type: 'string', maxLength: 2000, description: 'Link ou descricao da evidencia. Sem tokens/URLs assinadas.' },
+      next_step: { type: 'string', maxLength: 300 },
+      block_reason: { type: 'string', maxLength: 500 },
+      error: { type: 'string', maxLength: 1000 },
+      approval_required: { type: 'boolean', default: false },
+      from_cron: { type: 'boolean', default: false },
+      attempt: { type: 'integer', minimum: 1, maximum: 50, description: 'Numero da tentativa (retry com backoff e do chamador; aqui fica o registro).' },
+      timeout_seconds: { type: 'integer', minimum: 30, maximum: 21600, default: 900 },
+    },
+    required: ['operator', 'event', 'run_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      operator: z.enum(['vertice', 'registro', 'prisma', 'augusto']),
+      event: z.enum(OPERATOR_EVENTS),
+      run_key: z.string().min(8).max(128),
+      kanban_task_id: UUID.optional(),
+      painel_task_id: UUID.optional(),
+      action: z.string().max(300).optional(),
+      evidence: z.string().max(2000).optional(),
+      next_step: z.string().max(300).optional(),
+      block_reason: z.string().max(500).optional(),
+      error: z.string().max(1000).optional(),
+      approval_required: z.boolean().optional(),
+      from_cron: z.boolean().optional(),
+      attempt: limite(50),
+      timeout_seconds: limite(21600, 30),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorReport(parsed.data, ctx.keyId);
+  },
+};
+
+const operatorBoardTool = makeRead(
+  'aceleriq_operator_board',
+  'Quadro dos operadores internos',
+  'A area Execucao da equipe em dados: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Antes de listar, expira runs sem heartbeat (timeout vira visivel e a trava libera para retomada segura). Filtra por operador e status. SOMENTE LEITURA.',
+  z.object({
+    operator: z.enum(['vertice', 'registro', 'prisma', 'augusto']).optional(),
+    status: z.enum(['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked']).optional(),
+    limit: limite(500),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', enum: ['vertice', 'registro', 'prisma', 'augusto'] },
+      status: { type: 'string', enum: ['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked'] },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 50 },
+    },
+    additionalProperties: false,
+  },
+  (input) => operatorBoard(input),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2430,6 +2510,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   financeCapitalTool,
   financeAdsTool,
   financeHistoryTool,
+  operatorReportTool,
+  operatorBoardTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

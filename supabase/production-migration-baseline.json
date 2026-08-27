@@ -489,6 +489,14 @@
       "remote_name": "comercial_classe_qualificacao",
       "remote_statements_sha256": "e7962c4a247996a5f01f3c936f9f221ae315b0cf102f17eb69ffe58c05b38115",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260827200000",
+      "path": "supabase/migrations/20260827200000_operadores_internos.sql",
+      "local_sha256": "76e2aa288af5c4767e7df7d3b8072d607f135933de2b0a66c8f10211f41dadf2",
+      "remote_name": "operadores_internos",
+      "remote_statements_sha256": "7c9e451877c202d83c4d3666ec476d10c5030224f8ae360a5318ab20b4ea603d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
