@@ -201,6 +201,15 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
     'reports:read', 'briefings:read', 'files:read',
     'workspace:read', 'contracts:read', 'editorial:read',
     'commercial:read',
+    // Decisão do dono (27/08): o financeiro abre para TODA credencial
+    // interna de leitura, sem marcação por chave. A separação por
+    // consentimento era regra do implementador e virou atrito real — o
+    // agente do GPT ficou dias sem ver o caixa por falta de um checkbox.
+    // O que continua de pé, e é o que protege de verdade: chave restrita
+    // a cliente NUNCA alcança o financeiro (as ferramentas não estão na
+    // lista tenant-scoped, e o despachante nega por padrão), e não existe
+    // escrita financeira pelo MCP.
+    'aceleriq:finance',
   ],
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
@@ -271,7 +280,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.29.0',
+  version: '1.30.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────

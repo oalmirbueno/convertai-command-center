@@ -311,18 +311,21 @@ describe("visualizar, nunca editar", () => {
   });
 });
 
-describe("dinheiro é consentimento à parte", () => {
-  it("exige aceleriq:finance — leitura geral NÃO abre o financeiro", () => {
+describe("financeiro aberto para a equipe, fechado para cliente", () => {
+  it("leitura interna abre o financeiro — decisão do dono, 27/08", () => {
+    // A regra ANTERIOR era o oposto: finance fora da expansão, consentido
+    // chave a chave. Era regra do implementador e virou atrito real — o
+    // agente do GPT ficou dias sem ver o caixa por falta de um checkbox, e
+    // o dono mandou abrir. O escopo próprio continua existindo (dá para
+    // conceder SÓ finance a uma chave), mas leitura ampla agora o inclui.
     expect(ferramentas).toContain("const FINANCE: readonly ToolScope[] = ['aceleriq:finance'];");
 
-    // A prova real: aceleriq:read não expande para finance. Se alguém
-    // adicionar finance nessa lista, todo leitor passa a ver o caixa.
     const expansoes = ferramentas.slice(
       ferramentas.indexOf("export const SCOPE_EXPANSIONS"),
       ferramentas.indexOf("export function expandScopes"),
     );
     expect(expansoes).toContain("'aceleriq:read'");
-    expect(expansoes).not.toContain("aceleriq:finance");
+    expect(expansoes).toContain("'aceleriq:finance'");
   });
 
   it("o escopo é CONCEDÍVEL: sem estar na lista de staff, era porta pintada", () => {
