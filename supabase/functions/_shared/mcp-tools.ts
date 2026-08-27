@@ -271,7 +271,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.28.0',
+  version: '1.29.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -428,11 +428,40 @@ const capabilitiesTool: ToolDefinition = {
       memory_propose: TOOLS.filter(t => t.scopes.includes('memory:propose')).length,
       editorial_read: TOOLS.filter(t => t.scopes.includes('editorial:read')).length,
       editorial_write: TOOLS.filter(t => t.scopes.includes('editorial:write')).length,
+      finance: TOOLS.filter(t => t.scopes.includes('aceleriq:finance')).length,
       public: TOOLS.filter(t => t.scopes.length === 0).length,
     };
+
+    /**
+     * O diagnostico de catalogo velho, dito em voz alta.
+     *
+     * O caso real: tres agentes ficaram em HOLD dizendo "as rotas
+     * financeiras nao estao invocaveis neste turno" — e estavam certos.
+     * O servidor tinha as 14, mas o adaptador deles guardava a lista de
+     * antes. `initialize` declara `listChanged: false` (verdade: nao temos
+     * stream para empurrar aviso de mudanca), entao o cliente cacheia e
+     * nunca mais pergunta. O catalogo cresce e ninguem avisa.
+     *
+     * Esta ferramenta e justamente a que o agente confuso chama. Entao ela
+     * passa a responder o que ele precisa ouvir: os nomes que ele DEVERIA
+     * conseguir chamar e a instrucao exata de como destravar. Sem isto o
+     * agente conclui "a ferramenta nao existe" — e fica parado com o dado
+     * disponivel do outro lado.
+     */
+    const nomesVisiveis = visible.map(t => t.name);
+    const comoDestravar = nomesVisiveis.length > 0
+      ? 'Se alguma tool listada em `tools` aqui NAO aparecer na sua lista de funcoes, o seu adaptador esta com o catalogo antigo em cache: peca tools/list de novo, ou reconecte o conector do Aceleriq OS. O servidor nao empurra aviso de mudanca (listChanged=false), entao a lista so atualiza quando o cliente pergunta.'
+      : 'Nenhuma tool visivel para esta credencial: confira os escopos concedidos.';
+
     return Promise.resolve({
       server: SERVER_INFO,
       protocolVersion: '2025-06-18',
+      catalogo: {
+        tools_no_servidor: TOOLS.length,
+        tools_visiveis_para_esta_credencial: visible.length,
+        nomes_visiveis: nomesVisiveis,
+        como_destravar: comoDestravar,
+      },
       grantedScopes: ctx.scopes,
       supportedScopes: ALL_SCOPES,
       counts,

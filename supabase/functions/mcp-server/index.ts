@@ -186,10 +186,26 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
   if (method === "initialize") {
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
+      // `listChanged: false` e a verdade, nao uma escolha: o transporte e
+      // POST puro (GET responde 405), entao nao existe stream para empurrar
+      // notifications/tools/list_changed. Declarar `true` seria prometer um
+      // aviso que nunca chega.
+      //
+      // O efeito colateral e real: o cliente cacheia a lista e nunca mais
+      // pergunta, enquanto o catalogo cresce (63 tools na 1.20, 78 na 1.28).
+      // Foi o que deixou tres agentes em HOLD jurando que as rotas
+      // financeiras nao existiam. Como nao da para empurrar, o conserto e
+      // tornar a defasagem DETECTAVEL: as instrucoes abaixo sao relidas em
+      // todo initialize e dizem o tamanho do catalogo desta versao, entao um
+      // agente com lista menor consegue perceber sozinho que esta velha.
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
       instructions:
-        "Use tools/list to inspect Aceleriq tools. Tools with required scopes need OAuth Bearer authorization before tools/call.",
+        `Aceleriq OS ${SERVER_INFO.version}: este servidor expoe ${TOOLS.length} tools nesta versao. `
+        + "Se a sua lista de funcoes tiver menos que isso, ela esta velha: chame tools/list de novo "
+        + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
+        + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
+        + "Tools com escopo exigem OAuth Bearer antes de tools/call.",
     });
   }
 
