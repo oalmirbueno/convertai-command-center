@@ -1834,6 +1834,27 @@ export type Database = {
           },
         ]
       }
+      feature_flags: {
+        Row: {
+          description: string | null
+          enabled: boolean
+          flag_key: string
+          updated_at: string
+        }
+        Insert: {
+          description?: string | null
+          enabled?: boolean
+          flag_key: string
+          updated_at?: string
+        }
+        Update: {
+          description?: string | null
+          enabled?: boolean
+          flag_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       file_approval_events: {
         Row: {
           actor_id: string | null
@@ -2886,6 +2907,48 @@ export type Database = {
         }
         Relationships: []
       }
+      internal_operators: {
+        Row: {
+          created_at: string
+          display_name: string
+          hermes_profile_ref: string
+          id: string
+          is_coordinator: boolean
+          last_run_at: string | null
+          permissions: Json
+          role: string
+          scope: string
+          slug: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          hermes_profile_ref: string
+          id?: string
+          is_coordinator?: boolean
+          last_run_at?: string | null
+          permissions?: Json
+          role: string
+          scope: string
+          slug: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          hermes_profile_ref?: string
+          id?: string
+          is_coordinator?: boolean
+          last_run_at?: string | null
+          permissions?: Json
+          role?: string
+          scope?: string
+          slug?: string
+          status?: string
+        }
+        Relationships: []
+      }
       mcp_audit_log: {
         Row: {
           correlation_id: string
@@ -3140,6 +3203,181 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_audit_log: {
+        Row: {
+          action: string
+          actor: string
+          approval_required: boolean
+          evidence: string | null
+          from_cron: boolean
+          id: string
+          kanban_task_id: string | null
+          new_status: string | null
+          occurred_at: string
+          old_status: string | null
+          operator_id: string | null
+          run_key: string | null
+          task_link_id: string | null
+        }
+        Insert: {
+          action: string
+          actor: string
+          approval_required?: boolean
+          evidence?: string | null
+          from_cron?: boolean
+          id?: string
+          kanban_task_id?: string | null
+          new_status?: string | null
+          occurred_at?: string
+          old_status?: string | null
+          operator_id?: string | null
+          run_key?: string | null
+          task_link_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string
+          approval_required?: boolean
+          evidence?: string | null
+          from_cron?: boolean
+          id?: string
+          kanban_task_id?: string | null
+          new_status?: string | null
+          occurred_at?: string
+          old_status?: string | null
+          operator_id?: string | null
+          run_key?: string | null
+          task_link_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_audit_log_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_runs: {
+        Row: {
+          attempt: number
+          detail: Json
+          error: string | null
+          finished_at: string | null
+          heartbeat_at: string
+          id: string
+          operator_id: string
+          run_key: string
+          started_at: string
+          status: string
+          task_link_id: string | null
+          timeout_seconds: number
+        }
+        Insert: {
+          attempt?: number
+          detail?: Json
+          error?: string | null
+          finished_at?: string | null
+          heartbeat_at?: string
+          id?: string
+          operator_id: string
+          run_key: string
+          started_at?: string
+          status?: string
+          task_link_id?: string | null
+          timeout_seconds?: number
+        }
+        Update: {
+          attempt?: number
+          detail?: Json
+          error?: string | null
+          finished_at?: string | null
+          heartbeat_at?: string
+          id?: string
+          operator_id?: string
+          run_key?: string
+          started_at?: string
+          status?: string
+          task_link_id?: string | null
+          timeout_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_runs_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_runs_task_link_id_fkey"
+            columns: ["task_link_id"]
+            isOneToOne: false
+            referencedRelation: "operator_task_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_task_links: {
+        Row: {
+          agent_run_id: string | null
+          approval_required: boolean
+          block_reason: string | null
+          created_at: string
+          execution_source: string
+          id: string
+          kanban_task_id: string | null
+          last_action: string | null
+          last_evidence: string | null
+          next_step: string | null
+          operator_id: string
+          painel_task_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_run_id?: string | null
+          approval_required?: boolean
+          block_reason?: string | null
+          created_at?: string
+          execution_source?: string
+          id?: string
+          kanban_task_id?: string | null
+          last_action?: string | null
+          last_evidence?: string | null
+          next_step?: string | null
+          operator_id: string
+          painel_task_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_run_id?: string | null
+          approval_required?: boolean
+          block_reason?: string | null
+          created_at?: string
+          execution_source?: string
+          id?: string
+          kanban_task_id?: string | null
+          last_action?: string | null
+          last_evidence?: string | null
+          next_step?: string | null
+          operator_id?: string
+          painel_task_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_task_links_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
             referencedColumns: ["id"]
           },
         ]
@@ -5695,6 +5933,28 @@ export type Database = {
           source_queue: string
         }
         Returns: number
+      }
+      operator_expire_stale_runs: { Args: never; Returns: number }
+      operator_report_event: {
+        Args: {
+          _action?: string
+          _actor: string
+          _approval_required?: boolean
+          _attempt?: number
+          _block_reason?: string
+          _detail?: Json
+          _error?: string
+          _event: string
+          _evidence?: string
+          _from_cron?: boolean
+          _kanban_task_id?: string
+          _next_step?: string
+          _operator_slug: string
+          _painel_task_id?: string
+          _run_key: string
+          _timeout_seconds?: number
+        }
+        Returns: Json
       }
       read_email_batch: {
         Args: { batch_size: number; queue_name: string; vt: number }
