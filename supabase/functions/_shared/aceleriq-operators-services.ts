@@ -42,6 +42,85 @@ export const OPERATOR_EVENTS = [
   'started', 'progress', 'done', 'failed', 'blocked', 'review', 'awaiting_input', 'heartbeat',
 ] as const;
 
+/** Teto de operadores. Não é burocracia: é o freio de um laço em fuga. */
+const MAXIMO_DE_OPERADORES = 40;
+
+const SLUG_VALIDO = /^[a-z][a-z0-9-]{1,38}$/;
+
+/**
+ * Cadastra um operador interno novo.
+ *
+ * O elenco NÃO está mais cravado no código: era limitação minha ter
+ * escrito Vértice/Registro/Prisma/Augusto num enum, o que fazia cada
+ * operador novo exigir deploy. Agora é dado — o Hermes registra quantos
+ * precisar, e o painel mostra na hora.
+ *
+ * A linha que NÃO se cruza: criar operador é um ato EXPLÍCITO. Reportar
+ * execução com um slug desconhecido continua sendo ERRO, nunca criação
+ * silenciosa. Se qualquer slug criasse operador, "vertise" viraria um
+ * quinto operador fantasma em vez de um erro — exatamente a armadilha do
+ * uuid transposto que já custou horas aqui.
+ */
+export async function operatorRegister(input: {
+  slug: string;
+  display_name: string;
+  role: string;
+  scope: string;
+  hermes_profile_ref?: string;
+  is_coordinator?: boolean;
+  permissions?: Record<string, unknown>;
+}, actor: string) {
+  const slug = String(input.slug || '').trim().toLowerCase();
+  if (!SLUG_VALIDO.test(slug)) {
+    throw new Error(
+      'slug invalido: use minusculas, numeros e hifen, comecando por letra (ex.: "sonar", "atlas-qa").',
+    );
+  }
+
+  const { count } = await comPrazo(
+    db().from('internal_operators').select('id', { count: 'exact', head: true }),
+  );
+  if ((count ?? 0) >= MAXIMO_DE_OPERADORES) {
+    throw new Error(
+      `limite de ${MAXIMO_DE_OPERADORES} operadores atingido. Desative os que nao usa antes de criar outro.`,
+    );
+  }
+
+  const { data: existente } = await comPrazo(
+    db().from('internal_operators').select('id, slug, display_name, status').eq('slug', slug).maybeSingle(),
+  );
+  if (existente) {
+    // Já existe: devolve o que há, em vez de duplicar ou estourar. Chamar
+    // duas vezes é o caso comum de retry, não erro do chamador.
+    return { criado: false, ja_existia: true, operador: existente };
+  }
+
+  const { data, error } = await comPrazo(
+    db().from('internal_operators').insert({
+      slug,
+      display_name: String(input.display_name || slug).trim().slice(0, 80),
+      role: String(input.role || 'Operacao').trim().slice(0, 80),
+      scope: String(input.scope || 'Escopo a definir').trim().slice(0, 300),
+      permissions: input.permissions ?? {},
+      hermes_profile_ref: String(input.hermes_profile_ref || `hermes:${slug}`).trim().slice(0, 120),
+      is_coordinator: input.is_coordinator === true,
+      status: 'active',
+    }).select('id, slug, display_name, role, scope, status, is_coordinator').single(),
+  );
+  if (error) throw new Error(`internal_operators: ${error.message}`);
+
+  // O nascimento entra na trilha: "de onde veio este operador?" precisa
+  // ter resposta, e a auditoria e imutavel.
+  await comPrazo(db().from('operator_audit_log').insert({
+    actor,
+    operator_id: (data as Record<string, unknown>).id,
+    action: `operador registrado: ${slug}`,
+    new_status: 'active',
+  }));
+
+  return { criado: true, ja_existia: false, operador: data };
+}
+
 export interface OperatorReportInput {
   operator: string;
   event: (typeof OPERATOR_EVENTS)[number];

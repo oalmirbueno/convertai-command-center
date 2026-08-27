@@ -177,8 +177,36 @@ describe("o MCP expoe exatamente duas capacidades", () => {
     expect(ferramentas).toContain("NAO publica, NAO gasta, NAO altera financeiro");
   });
 
-  it("os slugs validos sao os quatro do piloto", () => {
-    expect(ferramentas).toContain("'vertice', 'registro', 'prisma', 'augusto'");
+  it("o elenco NAO e fixo: nada de enum travando os quatro do piloto", () => {
+    // A primeira versao cravou Vertice/Registro/Prisma/Augusto num enum, e
+    // cada operador novo exigiria deploy. Quem valida agora e o banco.
+    expect(ferramentas).not.toContain("z.enum(['vertice', 'registro', 'prisma', 'augusto'])");
+    expect(ferramentas).toContain("'aceleriq_operator_register'");
+  });
+
+  it("slug desconhecido e ERRO, nunca criacao silenciosa", () => {
+    // A trava que importa: se reportar com slug qualquer criasse operador,
+    // "vertise" viraria um operador fantasma em vez de erro — a mesma
+    // armadilha do uuid transposto. Criar e ato EXPLICITO.
+    expect(migracao).toContain("operator_not_found");
+    const servicoRegistro = servicos.slice(servicos.indexOf("export async function operatorRegister"));
+    expect(servicoRegistro).toContain("insert({");
+    // E o report nao insere operador em lugar nenhum.
+    const servicoReport = servicos.slice(
+      servicos.indexOf("export async function operatorReport"),
+      servicos.indexOf("export async function operatorBoard"),
+    );
+    expect(servicoReport).not.toContain("internal_operators");
+  });
+
+  it("cadastrar duas vezes devolve o existente, e ha teto contra laco em fuga", () => {
+    expect(servicos).toContain("ja_existia: true");
+    expect(servicos).toContain("MAXIMO_DE_OPERADORES");
+  });
+
+  it("o nascimento do operador entra na trilha imutavel", () => {
+    expect(servicos).toContain("operador registrado:");
+    expect(servicos).toContain("operator_audit_log");
   });
 });
 

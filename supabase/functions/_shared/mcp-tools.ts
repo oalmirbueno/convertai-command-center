@@ -34,6 +34,7 @@ import {
 import {
   OPERATOR_EVENTS,
   operatorBoard,
+  operatorRegister,
   operatorReport,
 } from './aceleriq-operators-services.ts';
 import {
@@ -285,7 +286,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.32.0',
+  version: '1.33.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2414,7 +2415,7 @@ const operatorReportTool: ToolDefinition = {
   inputSchema: {
     type: 'object',
     properties: {
-      operator: { type: 'string', enum: ['vertice', 'registro', 'prisma', 'augusto'], description: 'Slug do operador interno.' },
+      operator: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Slug do operador interno, como aparece em aceleriq_operator_board. Operador desconhecido e recusado: cadastre antes com aceleriq_operator_register.' },
       event: { type: 'string', enum: [...OPERATOR_EVENTS], description: 'O que aconteceu nesta execucao.' },
       run_key: { type: 'string', minLength: 8, maxLength: 128, description: 'Chave idempotente da execucao (mesma chave = mesma run).' },
       kanban_task_id: { type: 'string', description: 'UUID da tarefa no Kanban, quando houver.' },
@@ -2434,7 +2435,7 @@ const operatorReportTool: ToolDefinition = {
   },
   handler: async (input, ctx) => {
     const schema = z.object({
-      operator: z.enum(['vertice', 'registro', 'prisma', 'augusto']),
+      operator: z.string().regex(/^[a-z][a-z0-9-]{1,38}$/),
       event: z.enum(OPERATOR_EVENTS),
       run_key: z.string().min(8).max(128),
       kanban_task_id: UUID.optional(),
@@ -2462,14 +2463,14 @@ const operatorBoardTool = makeRead(
   'Quadro dos operadores internos',
   'A area Execucao da equipe em dados, com MANUAL DE USO no proprio retorno (como_usar), RESUMO em numeros e as TAREFAS DISPONIVEIS do Kanban (com kanban_task_id pronto, cliente, projeto e prazo) para o operador escolher trabalho real em vez de inventar id. Traz tambem: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Antes de listar, expira runs sem heartbeat (timeout vira visivel e a trava libera para retomada segura). Filtra por operador e status. SOMENTE LEITURA.',
   z.object({
-    operator: z.enum(['vertice', 'registro', 'prisma', 'augusto']).optional(),
+    operator: z.string().regex(/^[a-z][a-z0-9-]{1,38}$/).optional(),
     status: z.enum(['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked']).optional(),
     limit: limite(500),
   }).strict(),
   {
     type: 'object',
     properties: {
-      operator: { type: 'string', enum: ['vertice', 'registro', 'prisma', 'augusto'] },
+      operator: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Filtra por um operador.' },
       status: { type: 'string', enum: ['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked'] },
       limit: { type: 'integer', minimum: 1, maximum: 500, default: 50 },
     },
@@ -2477,6 +2478,45 @@ const operatorBoardTool = makeRead(
   },
   (input) => operatorBoard(input),
 );
+
+const operatorRegisterTool: ToolDefinition = {
+  name: 'aceleriq_operator_register',
+  title: 'Cadastrar operador interno',
+  description:
+    'Cria um operador interno novo (Hermes) no painel: slug, nome exibido, funcao, escopo e permissoes descritivas. O elenco NAO e fixo - alem de Vertice, Registro, Prisma e Augusto, cadastre quantos precisar. Chamar duas vezes com o mesmo slug devolve o existente em vez de duplicar. O nascimento entra na trilha de auditoria imutavel. Operador NAO tem e-mail, senha nem cliente atribuido, e nunca ocupa o assigned_to de uma tarefa: quem responde pelo trabalho continua sendo gente. IMPORTANTE: reportar execucao com slug desconhecido continua sendo ERRO e nunca cria operador - assim um slug digitado errado vira erro, e nao um operador fantasma.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      slug: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,38}$', description: 'Identidade estavel, minusculas com hifen (ex.: "sonar", "atlas-qa").' },
+      display_name: { type: 'string', maxLength: 80, description: 'Nome exibido no painel.' },
+      role: { type: 'string', maxLength: 80, description: 'Funcao em poucas palavras.' },
+      scope: { type: 'string', maxLength: 300, description: 'O que este operador cobre.' },
+      hermes_profile_ref: { type: 'string', maxLength: 120, description: 'Referencia do perfil Hermes. Padrao: hermes:<slug>.' },
+      is_coordinator: { type: 'boolean', default: false },
+      permissions: { type: 'object', description: 'Mapa descritivo do que ele cobre. A imposicao dura e o catalogo do MCP.' },
+    },
+    required: ['slug', 'display_name', 'role', 'scope'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      slug: z.string().regex(/^[a-z][a-z0-9-]{1,38}$/),
+      display_name: z.string().min(1).max(80),
+      role: z.string().min(1).max(80),
+      scope: z.string().min(1).max(300),
+      hermes_profile_ref: z.string().max(120).optional(),
+      is_coordinator: z.boolean().optional(),
+      permissions: z.record(z.unknown()).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorRegister(parsed.data, ctx.keyId);
+  },
+};
 
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
@@ -2510,6 +2550,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   financeCapitalTool,
   financeAdsTool,
   financeHistoryTool,
+  operatorRegisterTool,
   operatorReportTool,
   operatorBoardTool,
   financeEntriesTool,
