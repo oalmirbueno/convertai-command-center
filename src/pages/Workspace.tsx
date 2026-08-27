@@ -770,6 +770,44 @@ export default function Workspace() {
     }
   }
 
+
+  /**
+   * Copia a IMAGEM do arquivo para a área de transferência — o gesto
+   * inverso do colar. Copiou aqui, cola no WhatsApp, no Canva, onde for.
+   *
+   * A área de transferência do navegador só aceita PNG para imagem; JPG e
+   * WebP passam por um canvas antes. Falhou (permissão, formato)? A
+   * resposta aponta o caminho que funciona sempre: baixar e copiar do
+   * disco.
+   */
+  async function copiarImagemDoNode(n: Node) {
+    try {
+      const url = await urlFor(n);
+      if (!url) throw new Error("URL do arquivo indisponível.");
+      const resposta = await fetch(url);
+      const blob = await resposta.blob();
+      let png: Blob = blob;
+      if (blob.type !== "image/png") {
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+        png = await new Promise<Blob>((res, rej) =>
+          canvas.toBlob((b) => (b ? res(b) : rej(new Error("Falha ao converter a imagem."))), "image/png"),
+        );
+      }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+      toast({ title: "Imagem copiada", description: "Cole com Ctrl+V onde quiser." });
+    } catch (e: any) {
+      toast({
+        title: "Não foi possível copiar a imagem",
+        description: e?.message || "Baixe o arquivo e copie do disco.",
+        variant: "destructive",
+      });
+    }
+  }
+
   async function removeStoredObjects(rows: Array<{ file_url?: string | null; storage_bucket?: string | null; storage_path?: string | null }>) {
     const byBucket = new Map<string, Set<string>>();
     for (const row of rows) {
@@ -1569,6 +1607,11 @@ export default function Workspace() {
               <DropdownMenuItem onSelect={() => downloadNodeFile(n)}>
                 <Download className="w-3.5 h-3.5 mr-2" /> Baixar
               </DropdownMenuItem>
+              {kindOf(n) === "image" && (
+                <DropdownMenuItem onSelect={() => void copiarImagemDoNode(n)}>
+                  <Copy className="w-3.5 h-3.5 mr-2" /> Copiar imagem
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => copyLink(n)}>
                 <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
               </DropdownMenuItem>
@@ -1743,6 +1786,11 @@ export default function Workspace() {
               <ContextMenuItem onSelect={() => downloadNodeFile(n)}>
                 <Download className="w-3.5 h-3.5 mr-2" /> Baixar
               </ContextMenuItem>
+              {kindOf(n) === "image" && (
+                <ContextMenuItem onSelect={() => void copiarImagemDoNode(n)}>
+                  <Copy className="w-3.5 h-3.5 mr-2" /> Copiar imagem
+                </ContextMenuItem>
+              )}
               <ContextMenuItem onSelect={() => copyLink(n)}>
                 <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
               </ContextMenuItem>

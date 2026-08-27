@@ -14,6 +14,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { toast } from "sonner";
+import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -639,6 +640,42 @@ export default function Kanban() {
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   };
 
+
+  /**
+   * Botão direito no cartão: as MESMAS ações do menu de três pontos, mais
+   * o copiar. Mover chama changeStatus e excluir passa pela mesma
+   * confirmação — menu paralelo com lógica própria divergiria do
+   * principal no primeiro conserto.
+   */
+  const [menuTarefa, setMenuTarefa] = useState<{ x: number; y: number; task: any } | null>(null);
+
+  function itensDaTarefa(task: any): ItemDeMenu[] {
+    const itens: ItemDeMenu[] = [
+      { rotulo: "Abrir tarefa", acao: () => handleCardClick(task) },
+      {
+        rotulo: "Copiar título",
+        acao: () => {
+          void navigator.clipboard
+            .writeText([task.title, task.project?.name].filter(Boolean).join(" — "))
+            .then(() => toast.success("Título copiado."))
+            .catch(() => toast.error("Não foi possível copiar."));
+        },
+      },
+    ];
+    if (!isClient) {
+      itens.push({ separador: true });
+      for (const c of columns) {
+        if (c.id === canonicalTaskStatus(task.status)) continue;
+        itens.push({ rotulo: `Mover para ${c.title}`, acao: () => void changeStatus(task, c.id) });
+      }
+      if (!requestIdFromTaskSource(task.source)) {
+        itens.push({ separador: true });
+        itens.push({ rotulo: "Excluir", destrutivo: true, acao: () => setDeleteTask(task) });
+      }
+    }
+    return itens;
+  }
+
   const handleCardClick = (task: any) => {
     setDetailTask(task);
   };
@@ -731,6 +768,14 @@ export default function Kanban() {
           onClose={() => setCreateStatus(null)}
           defaultStatus={createStatus || "backlog"}
           teamMembers={teamMembers || []}
+        />
+      )}
+      {menuTarefa && (
+        <MenuDeContexto
+          x={menuTarefa.x}
+          y={menuTarefa.y}
+          itens={itensDaTarefa(menuTarefa.task)}
+          aoFechar={() => setMenuTarefa(null)}
         />
       )}
       <ConfirmModal
@@ -985,6 +1030,7 @@ export default function Kanban() {
                         onDragStart={isClient || dragBlockedByFilters || dropSaving ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
                         onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                         onClick={() => handleCardClick(task)}
+                        onContextMenu={(e) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); }}
                         onKeyDown={(event) => {
                           if (event.target !== event.currentTarget) return;
                           if (event.key === "Enter" || event.key === " ") {
@@ -1161,6 +1207,7 @@ export default function Kanban() {
                             handleDrop(col.id, insertAt);
                           }}
                           onClick={() => handleCardClick(task)}
+                          onContextMenu={(e) => { e.preventDefault(); setMenuTarefa({ x: e.clientX, y: e.clientY, task }); }}
                           onKeyDown={(event) => {
                             if (event.target !== event.currentTarget) return;
                             if (event.key === "Enter" || event.key === " ") {

@@ -28,6 +28,7 @@ import { isInternalClient } from "@/lib/clientFlags";
 import { useBilling } from "@/hooks/useFinancialData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { useQuery } from "@tanstack/react-query";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
@@ -586,6 +587,32 @@ export default function Clients() {
   const financialError = financialQuery.isError;
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<ClientRecord | null>(null);
+
+  /** Botão direito na linha do cliente: abrir e copiar os contatos. */
+  const [menuCliente, setMenuCliente] = useState<{ x: number; y: number; cliente: any } | null>(null);
+
+  function itensDoCliente(c: any): ItemDeMenu[] {
+    const copiar = (rotulo: string, valor: string) => () => {
+      void navigator.clipboard
+        .writeText(valor)
+        .then(() => toast.success(`${rotulo} copiado.`))
+        .catch(() => toast.error("Não foi possível copiar."));
+    };
+    const itens: ItemDeMenu[] = [
+      { rotulo: "Abrir cadastro", acao: () => setEditClient(c) },
+      { separador: true },
+      { rotulo: "Copiar nome", acao: copiar("Nome", c.company_name || c.full_name || "") },
+    ];
+    if (c.email) itens.push({ rotulo: "Copiar e-mail", acao: copiar("E-mail", c.email) });
+    if (c.phone) itens.push({ rotulo: "Copiar telefone", acao: copiar("Telefone", c.phone) });
+    if (c.phone) {
+      itens.push({
+        rotulo: "Abrir WhatsApp",
+        acao: () => window.open(`https://wa.me/${String(c.phone).replace(/\D/g, "")}`, "_blank", "noopener,noreferrer"),
+      });
+    }
+    return itens;
+  }
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -1251,6 +1278,7 @@ export default function Clients() {
                 <button
                   type="button"
                   onClick={() => setEditClient(c)}
+                  onContextMenu={(e) => { e.preventDefault(); setMenuCliente({ x: e.clientX, y: e.clientY, cliente: c }); }}
                   aria-label={`Abrir cadastro do cliente ${c.company_name || c.full_name}`}
                   aria-describedby={isAdmin ? `client-finance-${c.id}` : undefined}
                   className="flex w-full items-center gap-3 rounded-xl border-0 bg-transparent px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:gap-4 md:px-5 md:py-4"
@@ -1533,6 +1561,14 @@ export default function Clients() {
         initialProjectId={searchParams.get("project")}
       />
       {isAdmin && <BriefingLinkModal open={briefingOpen} onClose={() => setBriefingOpen(false)} />}
+      {menuCliente && (
+        <MenuDeContexto
+          x={menuCliente.x}
+          y={menuCliente.y}
+          itens={itensDoCliente(menuCliente.cliente)}
+          aoFechar={() => setMenuCliente(null)}
+        />
+      )}
     </div>
   );
 }
