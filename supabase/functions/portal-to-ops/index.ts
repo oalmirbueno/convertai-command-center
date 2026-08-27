@@ -1,5 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { resolveOpsReceivePortalSyncUrl } from "../_shared/ops-config.ts";
+import {
+  resolveOpsReceivePortalSyncUrl,
+  opsBridgeRetiredResponse,
+  resolveOpsUrlOrNull,
+} from "../_shared/ops-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +11,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_RECEIVE_PORTAL_SYNC_URL = resolveOpsReceivePortalSyncUrl();
+// A ponte legada com o Ops esta aposentada por padrao, e o resolvedor
+// LANCA nesse caso. Resolver no topo do modulo matava a funcao antes
+// dela existir: o Supabase respondia WORKER_ERROR 500, indistinguivel
+// de defeito real. Aposentada nao e quebrada — aqui ela sobe, responde
+// e explica o proprio estado.
+const OPS_RECEIVE_PORTAL_SYNC_URL = resolveOpsUrlOrNull(resolveOpsReceivePortalSyncUrl);
 
 const OPS_WEBHOOK_SECRET =
   Deno.env.get("OPS_WEBHOOK_SECRET") ??
@@ -43,6 +52,11 @@ interface PortalEvent {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Ponte desligada: responde e explica, em vez de tentar enviar
+  // para lugar nenhum. O OPTIONS acima continua respondendo, entao
+  // a auditoria enxerga a funcao viva.
+  if (!OPS_RECEIVE_PORTAL_SYNC_URL) return opsBridgeRetiredResponse(corsHeaders);
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,

@@ -196,3 +196,44 @@ export function resolvePortalFunctionUrl(
   })
   return joinFunctionUrl(`${portalUrl}/functions/v1`, functionName)
 }
+
+/* ─────────────── A ponte aposentada, sem derrubar a função ──────────── */
+
+/**
+ * A URL da ponte Ops, ou `null` quando ela está desligada. NUNCA lança.
+ *
+ * As seis funções da ponte resolviam a URL no TOPO do módulo. Com a ponte
+ * aposentada (o padrão), `resolveOps*` lança na carga e a função inteira
+ * morre antes de existir: o Supabase responde WORKER_ERROR 500, que é
+ * indistinguível de defeito real. Foi o que fez a auditoria acusar seis
+ * funções "falhando" quando na verdade elas estavam desligadas de
+ * propósito.
+ *
+ * Aposentada não é quebrada. Com este resolvedor a função sobe, responde,
+ * e explica o próprio estado — e quem audita consegue ver a diferença.
+ */
+export function resolveOpsUrlOrNull(
+  resolver: (options?: OpsUrlOptions) => string,
+  options: OpsUrlOptions = {},
+): string | null {
+  try {
+    return resolver(options)
+  } catch (error) {
+    if (error instanceof OpsConfigurationError) return null
+    throw error
+  }
+}
+
+/** O corpo padrão da resposta de ponte desligada. */
+export function opsBridgeRetiredResponse(headers: Record<string, string> = {}): Response {
+  return new Response(
+    JSON.stringify({
+      error: 'ops_bridge_retired',
+      message:
+        'A ponte legada com o Ops está desligada. Esta função existe, subiu e '
+        + 'está respondendo: ela só não tem para onde enviar. Para religar, '
+        + 'defina OPS_LEGACY_BRIDGE_ENABLED=true e as URLs do Ops.',
+    }),
+    { status: 503, headers: { ...headers, 'Content-Type': 'application/json' } },
+  )
+}

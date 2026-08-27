@@ -11,7 +11,11 @@
 // success=false so the Kanban UI never blanks because of a background sync miss.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { resolveOpsBaseUrl } from "../_shared/ops-config.ts";
+import {
+  resolveOpsBaseUrl,
+  opsBridgeRetiredResponse,
+  resolveOpsUrlOrNull,
+} from "../_shared/ops-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +24,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_FUNCTIONS_BASE = resolveOpsBaseUrl();
+// A ponte legada com o Ops esta aposentada por padrao, e o resolvedor
+// LANCA nesse caso. Resolver no topo do modulo matava a funcao antes
+// dela existir: o Supabase respondia WORKER_ERROR 500, indistinguivel
+// de defeito real. Aposentada nao e quebrada — aqui ela sobe, responde
+// e explica o proprio estado.
+const OPS_FUNCTIONS_BASE = resolveOpsUrlOrNull(resolveOpsBaseUrl);
 
 type OpsEndpoint = {
   url: string;
@@ -36,18 +45,24 @@ const getOpsEndpoints = (): OpsEndpoint[] => {
       buildBody: (p) => ({ project_id: p ?? null }),
     });
   }
-  endpoints.push({
-    url: `${OPS_FUNCTIONS_BASE}/ops-nodes-list`,
-    buildBody: (p) => ({ project_id: p ?? null }),
-  });
-  endpoints.push({
-    url: `${OPS_FUNCTIONS_BASE}/sync-to-portal`,
-    buildBody: (p) => ({ event: "ops_nodes_list", data: { project_id: p ?? null } }),
-  });
-  endpoints.push({
-    url: `${OPS_FUNCTIONS_BASE}/ops-full-export`,
-    buildBody: (p) => ({ project_id: p ?? null }),
-  });
+  // Sem a ponte, os destinos derivados dela nao existem. Montar mesmo assim
+  // produziria "null/ops-nodes-list" — uma URL de lixo que so falharia mais
+  // tarde, com erro que nao explica nada. A URL propria (OPS_NODES_LIST_URL)
+  // acima segue valendo: ela nao depende da ponte.
+  if (OPS_FUNCTIONS_BASE) {
+    endpoints.push({
+      url: `${OPS_FUNCTIONS_BASE}/ops-nodes-list`,
+      buildBody: (p) => ({ project_id: p ?? null }),
+    });
+    endpoints.push({
+      url: `${OPS_FUNCTIONS_BASE}/sync-to-portal`,
+      buildBody: (p) => ({ event: "ops_nodes_list", data: { project_id: p ?? null } }),
+    });
+    endpoints.push({
+      url: `${OPS_FUNCTIONS_BASE}/ops-full-export`,
+      buildBody: (p) => ({ project_id: p ?? null }),
+    });
+  }
   // dedupe by url
   const seen = new Set<string>();
   return endpoints.filter((e) => (seen.has(e.url) ? false : (seen.add(e.url), true)));
@@ -112,6 +127,12 @@ const OPS_TO_KANBAN_STATUS: Record<string, string> = {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Ponte desligada E sem URL propria: nao ha para onde perguntar, entao
+  // responde explicando. Com OPS_NODES_LIST_URL configurada a funcao segue
+  // trabalhando normalmente — ela nao depende da ponte. Recusar so porque a
+  // ponte esta desligada quebraria um caminho que funciona.
+  if (getOpsEndpoints().length === 0) return opsBridgeRetiredResponse(corsHeaders);
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,

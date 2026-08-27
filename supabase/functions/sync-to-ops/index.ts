@@ -4,18 +4,32 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { resolveOpsReceivePortalSyncUrl } from "../_shared/ops-config.ts";
+import {
+  resolveOpsReceivePortalSyncUrl,
+  opsBridgeRetiredResponse,
+  resolveOpsUrlOrNull,
+} from "../_shared/ops-config.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
 
-const OPS_URL = resolveOpsReceivePortalSyncUrl();
+// A ponte legada com o Ops esta aposentada por padrao, e o resolvedor
+// LANCA nesse caso. Resolver no topo do modulo matava a funcao antes
+// dela existir: o Supabase respondia WORKER_ERROR 500, indistinguivel
+// de defeito real. Aposentada nao e quebrada — aqui ela sobe, responde
+// e explica o proprio estado.
+const OPS_URL = resolveOpsUrlOrNull(resolveOpsReceivePortalSyncUrl);
 const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+
+  // Ponte desligada: responde e explica, em vez de tentar enviar
+  // para lugar nenhum. O OPTIONS acima continua respondendo, entao
+  // a auditoria enxerga a funcao viva.
+  if (!OPS_URL) return opsBridgeRetiredResponse(cors);
 
   const received = req.headers.get("x-webhook-secret");
   if (!OPS_SECRET || received !== OPS_SECRET) {
@@ -31,9 +45,15 @@ serve(async (req) => {
   const results: Record<string, number> = { projects: 0, briefings: 0, milestones: 0, updates: 0 };
   const errors: string[] = [];
 
+  // O destino ja passou pela guarda da ponte la em cima. Capturar aqui
+  // porque `pushToOps` e uma funcao DECLARADA: o TypeScript nao leva a
+  // garantia de nao-nulo para dentro dela (ela poderia ser chamada antes
+  // da guarda, ate onde o compilador sabe).
+  const destino = OPS_URL;
+
   async function pushToOps(type: string, data: Record<string, unknown>, context?: Record<string, unknown>) {
     try {
-      const res = await fetch(OPS_URL, {
+      const res = await fetch(destino, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-webhook-secret": OPS_SECRET },
         body: JSON.stringify({ type, data, context }),
