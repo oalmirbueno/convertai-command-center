@@ -2909,12 +2909,15 @@ export type Database = {
       }
       internal_operators: {
         Row: {
+          area: string | null
           created_at: string
           display_name: string
+          display_order: number
           hermes_profile_ref: string
           id: string
           is_coordinator: boolean
           last_run_at: string | null
+          parent_slug: string | null
           permissions: Json
           role: string
           scope: string
@@ -2922,12 +2925,15 @@ export type Database = {
           status: string
         }
         Insert: {
+          area?: string | null
           created_at?: string
           display_name: string
+          display_order?: number
           hermes_profile_ref: string
           id?: string
           is_coordinator?: boolean
           last_run_at?: string | null
+          parent_slug?: string | null
           permissions?: Json
           role: string
           scope: string
@@ -2935,12 +2941,15 @@ export type Database = {
           status?: string
         }
         Update: {
+          area?: string | null
           created_at?: string
           display_name?: string
+          display_order?: number
           hermes_profile_ref?: string
           id?: string
           is_coordinator?: boolean
           last_run_at?: string | null
+          parent_slug?: string | null
           permissions?: Json
           role?: string
           scope?: string
@@ -5935,6 +5944,36 @@ export type Database = {
         Returns: number
       }
       operator_expire_stale_runs: { Args: never; Returns: number }
+      operator_human_action: {
+        Args: {
+          _link_id: string
+          _new_status?: string
+          _note?: string
+          _resolve_approval?: boolean
+        }
+        Returns: {
+          agent_run_id: string | null
+          approval_required: boolean
+          block_reason: string | null
+          created_at: string
+          execution_source: string
+          id: string
+          kanban_task_id: string | null
+          last_action: string | null
+          last_evidence: string | null
+          next_step: string | null
+          operator_id: string
+          painel_task_id: string | null
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "operator_task_links"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       operator_report_event: {
         Args: {
           _action?: string
@@ -5953,6 +5992,21 @@ export type Database = {
           _painel_task_id?: string
           _run_key: string
           _timeout_seconds?: number
+        }
+        Returns: Json
+      }
+      operator_update: {
+        Args: {
+          _actor: string
+          _area?: string
+          _display_name?: string
+          _display_order?: number
+          _is_coordinator?: boolean
+          _parent_slug?: string
+          _role?: string
+          _scope?: string
+          _slug: string
+          _status?: string
         }
         Returns: Json
       }
