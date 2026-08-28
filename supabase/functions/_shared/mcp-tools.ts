@@ -34,8 +34,10 @@ import {
 import {
   OPERATOR_EVENTS,
   operatorBoard,
+  operatorOrganize,
   operatorRegister,
   operatorReport,
+  vaultOverview,
 } from './aceleriq-operators-services.ts';
 import {
   getFinanceAdsInvestment,
@@ -286,7 +288,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.33.0',
+  version: '1.34.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2518,6 +2520,54 @@ const operatorRegisterTool: ToolDefinition = {
   },
 };
 
+const vaultOverviewTool = makeRead(
+  'aceleriq_vault_overview',
+  'Cofre do cliente (somente leitura, sem senhas)',
+  'O que existe no cofre de um cliente: titulo, categoria, endereco, usuario e observacoes de cada item, para o agente saber QUAIS sistemas o cliente usa. As SENHAS nao sao retornadas, por construcao e nao por filtro: credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz. Se for preciso entrar de fato em algum sistema, isso e gesto do responsavel humano com o cofre aberto na tela. Editar e apagar item de cofre nao existem neste catalogo.',
+  z.object({ client_id: UUID }).strict(),
+  {
+    type: 'object',
+    properties: { client_id: { type: 'string', description: 'UUID do cliente.' } },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  (input) => vaultOverview(input),
+);
+
+const operatorOrganizeTool = makeWrite(
+  'aceleriq_operator_organize',
+  'Organizar o agente no organograma',
+  'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui.',
+  z.object({
+    slug: z.string().min(2).max(40),
+    display_name: z.string().min(1).max(80).optional(),
+    role: z.string().min(1).max(80).optional(),
+    area: z.string().min(1).max(60).optional(),
+    parent_slug: z.string().max(40).optional(),
+    display_order: limite(999, 0).optional(),
+    scope: z.string().min(1).max(300).optional(),
+    status: z.enum(['active', 'paused', 'retired']).optional(),
+    is_coordinator: z.boolean().optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      slug: { type: 'string', description: 'Slug do operador a organizar.' },
+      display_name: { type: 'string', description: 'Nome exibido.' },
+      role: { type: 'string', description: 'Papel descrito.' },
+      area: { type: 'string', description: 'Funcao que agrupa no organograma (ex.: Conteudo, Trafego, Dados).' },
+      parent_slug: { type: 'string', description: 'Slug de quem coordena. String vazia solta o agente para responder direto ao Hermes.' },
+      display_order: { type: 'number', description: 'Ordem dentro do grupo (menor aparece antes).' },
+      scope: { type: 'string', description: 'Escopo de atuacao.' },
+      status: { type: 'string', enum: ['active', 'paused', 'retired'] },
+      is_coordinator: { type: 'boolean', description: 'Se coordena outros agentes.' },
+    },
+    required: ['slug'],
+    additionalProperties: false,
+  },
+  (input, ctx) => operatorOrganize(input, ctx.actor),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2550,7 +2600,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   financeCapitalTool,
   financeAdsTool,
   financeHistoryTool,
+  vaultOverviewTool,
   operatorRegisterTool,
+  operatorOrganizeTool,
   operatorReportTool,
   operatorBoardTool,
   financeEntriesTool,

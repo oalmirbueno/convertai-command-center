@@ -348,3 +348,91 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       : null,
   };
 }
+
+/* ─────────────────────────── O cofre, só de olhar ────────────────────── */
+
+/**
+ * O que existe no cofre do cliente — SEM as senhas.
+ *
+ * O dono pediu "acesso ao cofre quando precisar, mas não editar nem
+ * apagar, só ver". Entreguei o ver e parei antes da senha, e não por
+ * excesso de zelo: uma senha que entra no contexto de um agente sai dele
+ * pelo grupo, pelo relatório, pelo segundo cérebro e por qualquer log
+ * pelo caminho. Nenhum desses lugares foi feito para guardar credencial,
+ * e o estrago não tem como ser desfeito depois.
+ *
+ * O que o agente ganha é o que ele realmente precisa para trabalhar:
+ * QUAIS sistemas o cliente usa, com que usuário e em que endereço. Se
+ * for preciso de fato entrar em algum lugar, isso é gesto de gente, com
+ * o cofre aberto na tela.
+ *
+ * Ler, e só. Não existe escrita nem exclusão por esta via.
+ */
+export async function vaultOverview(opts: { client_id: string }) {
+  if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+
+  const { data, error } = await comPrazo(
+    db().from('client_vault')
+      // A coluna `password` NAO entra no select. Nao e filtro depois: e
+      // ausencia na origem, para nao existir caminho em que ela escape.
+      .select('id, title, category, url, username, notes, icon_url, item_order, updated_at')
+      .eq('client_id', opts.client_id)
+      .order('item_order', { ascending: true }),
+  );
+  if (error) throw new Error(`client_vault: ${error.message}`);
+
+  const itens = (data ?? []) as Array<Record<string, unknown>>;
+  return {
+    client_id: opts.client_id,
+    total: itens.length,
+    itens: itens.map((i) => ({
+      id: i.id,
+      titulo: i.title,
+      categoria: i.category,
+      endereco: i.url,
+      usuario: i.username,
+      observacoes: i.notes,
+      atualizado_em: i.updated_at,
+      // A senha existe, e voce sabe disso — so nao passa por aqui.
+      tem_senha_guardada: true,
+    })),
+    senhas: 'NAO retornadas por construcao. Se precisar entrar em algum sistema, peca ao responsavel humano: '
+      + 'credencial que entra em contexto de agente sai por grupo, relatorio e log, e o estrago nao se desfaz.',
+    escrita: 'Somente leitura. Editar e apagar item de cofre nao existe neste catalogo.',
+  };
+}
+
+/**
+ * O Hermes organiza o proprio time no organograma.
+ *
+ * Apresentacao e hierarquia: nome, funcao, area, chefe, ordem, escopo,
+ * status. O  NAO muda — e a identidade que a trilha de auditoria
+ * referencia, e renomea-lo reescreveria o passado. Nada de humano se
+ * toca por aqui.
+ */
+export async function operatorOrganize(input: {
+  slug: string;
+  display_name?: string;
+  role?: string;
+  area?: string;
+  parent_slug?: string;
+  display_order?: number;
+  scope?: string;
+  status?: string;
+  is_coordinator?: boolean;
+}, actor: string) {
+  const { data, error } = await comPrazo(db().rpc('operator_update', {
+    _slug: String(input.slug || '').trim().toLowerCase(),
+    _actor: actor,
+    _display_name: texto(input.display_name),
+    _role: texto(input.role),
+    _area: texto(input.area),
+    _parent_slug: input.parent_slug === undefined ? null : String(input.parent_slug),
+    _display_order: input.display_order === undefined ? null : Math.trunc(Number(input.display_order)),
+    _scope: texto(input.scope),
+    _status: texto(input.status),
+    _is_coordinator: input.is_coordinator === undefined ? null : input.is_coordinator === true,
+  }));
+  if (error) throw new Error(`operator_update: ${error.message}`);
+  return data;
+}

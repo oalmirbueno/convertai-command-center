@@ -55,6 +55,8 @@ type Operador = {
   status: string;
   scope: string;
   is_coordinator: boolean;
+  area: string | null;
+  parent_slug: string | null;
   last_run_at: string | null;
 };
 
@@ -121,8 +123,11 @@ export default function AdminExecucao() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("internal_operators")
-        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at")
-        .order("is_coordinator");
+        .select("id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug")
+        // A ordem do organograma sai do banco: o Hermes reordena por RPC e
+        // o painel obedece, sem deploy no meio.
+        .order("display_order", { ascending: true })
+        .order("display_name", { ascending: true });
       if (error) return [];
       return (data || []) as Operador[];
     },
@@ -477,6 +482,12 @@ export default function AdminExecucao() {
         emAndamento: n.andamento,
         feitas: n.feitas,
         bloqueadas: n.bloqueadas,
+        area: o.area,
+        // O chefe aparece pelo NOME, nao pelo slug: quem le o organograma
+        // procura "Augusto", nao "augusto-coord".
+        chefe: o.parent_slug
+          ? operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug
+          : null,
       };
     }),
     [operadores, vinculos],

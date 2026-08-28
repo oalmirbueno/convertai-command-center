@@ -23,6 +23,9 @@ const ferramentas = readFileSync(
   resolve(raiz, "supabase/functions/_shared/mcp-tools.ts"), "utf8",
 );
 const pagina = readFileSync(resolve(raiz, "src/pages/AdminExecucao.tsx"), "utf8");
+const organograma = readFileSync(
+  resolve(raiz, "src/components/execucao/OrganogramaAgentes.tsx"), "utf8",
+);
 
 describe("operador interno e outra entidade, nao gente ficticia", () => {
   it("a tabela nao tem e-mail, senha nem cliente atribuido", () => {
@@ -126,8 +129,12 @@ describe("auditoria imutavel", () => {
   });
 });
 
-describe("notificacao e excecao, nao diario", () => {
-  it("progress e heartbeat nunca notificam; marcos e excecoes sim", () => {
+describe("notificacao, como nasceu", () => {
+  // A regra de origem era excecao apenas. O dono depois pediu o oposto —
+  // "eu preciso saber de tudo" — e a migration 20260828010000 abriu para
+  // todo evento menos heartbeat. Este bloco guarda o ponto de partida:
+  // se alguem reescrever a migration ANTIGA, a historia muda por baixo.
+  it("a versao original avisava so em marcos e excecoes", () => {
     expect(migracao).toContain(
       "_notifica := _event in ('started', 'done', 'failed', 'blocked', 'review')",
     );
@@ -207,6 +214,142 @@ describe("o MCP expoe exatamente duas capacidades", () => {
   it("o nascimento do operador entra na trilha imutavel", () => {
     expect(servicos).toContain("operador registrado:");
     expect(servicos).toContain("operator_audit_log");
+  });
+});
+
+describe("o trabalho do operador conta no progresso do cliente", () => {
+  const progresso = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828000000_operador_conta_no_progresso.sql"), "utf8",
+  );
+
+  it("entrega concluida COM evidencia entra na historia do cliente", () => {
+    // project_memory e o que o Ciclo, a Central e o Dossie ja leem. Sem
+    // esta ponte, o agente entregava e o trabalho ficava numa ilha.
+    expect(progresso).toContain("insert into public.project_memory");
+    expect(progresso).toContain("'entrega'");
+    expect(progresso).toContain("'operador'");
+  });
+
+  it("SO o done com evidencia: os outros eventos nao viram linha", () => {
+    // Se cada passo virasse registro, a historia do cliente viraria log
+    // de maquina e ninguem leria.
+    const bloco = progresso.slice(
+      progresso.indexOf("A ponte com o progresso do cliente"),
+      progresso.indexOf("_notifica :="),
+    );
+    expect(bloco).toContain("if _status_novo = 'done' and _kanban_task_id is not null then");
+    expect(bloco).not.toContain("'started'");
+    expect(bloco).not.toContain("'progress'");
+  });
+
+  it("o cliente sai pelo PROJETO: tasks nao tem client_id", () => {
+    expect(progresso).toContain("join public.projects pj on pj.id = t.project_id");
+  });
+
+  it("reportar done duas vezes nao duplica a linha", () => {
+    expect(progresso).toContain("metadata->>'run_key' = _run_key");
+    expect(progresso).toContain("if _memoria_id is null then");
+  });
+
+  it("o registro e interno: o cliente nao le 'operador Vertice'", () => {
+    expect(progresso).toContain("'client_visible', false");
+  });
+
+  it("o agente fica sabendo que a entrega contou", () => {
+    expect(progresso).toContain("'registrado_no_progresso'");
+  });
+});
+
+describe("hierarquia por funcao, organizada pelo Hermes", () => {
+  const hier = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828010000_hierarquia_e_notificacao_de_tudo.sql"), "utf8",
+  );
+
+  it("area, chefe e ordem viram coluna: agente novo nao pede deploy", () => {
+    expect(hier).toContain("add column if not exists area text");
+    expect(hier).toContain("add column if not exists parent_slug text");
+    expect(hier).toContain("add column if not exists display_order integer");
+  });
+
+  it("quem ja existe nasce com area, e a area vem do papel gravado", () => {
+    // Sem isto o organograma estrearia com todo mundo em "Sem area".
+    expect(hier).toContain("set area = coalesce(area, nullif(trim(role), ''), 'Operacao')");
+  });
+
+  it("o Hermes edita o organograma, mas o slug e intocavel", () => {
+    expect(hier).toContain("create or replace function public.operator_update");
+    const corpo = hier.slice(hier.indexOf("update public.internal_operators set"));
+    expect(corpo).not.toMatch(/^\s*slug\s*=/m);
+  });
+
+  it("ciclo no organograma e barrado antes de virar recursao no painel", () => {
+    expect(hier).toContain("um agente nao pode coordenar a si mesmo");
+    expect(hier).toContain("direta ou indiretamente");
+    expect(hier).toContain("_saltos < 40");
+  });
+
+  it("o painel agrupa a base por funcao e le a ordem do banco", () => {
+    expect(organograma).toContain('o.area?.trim() || "Sem área definida"');
+    expect(pagina).toContain('.order("display_order", { ascending: true })');
+  });
+
+  it("o chefe aparece pelo nome, nao pelo slug", () => {
+    expect(pagina).toContain("operadores.find((p) => p.slug === o.parent_slug)?.display_name");
+  });
+});
+
+describe("o dono sabe de tudo", () => {
+  const hier = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828010000_hierarquia_e_notificacao_de_tudo.sql"), "utf8",
+  );
+
+  it("todo passo notifica: nao e mais so excecao", () => {
+    expect(hier).toContain("_notifica := _event <> 'heartbeat'");
+  });
+
+  it("heartbeat continua fora, e o motivo esta escrito", () => {
+    // Pulso de cron de minuto em minuto transformaria o sino em
+    // metronomo, e um sino que toca sempre para de ser lido.
+    expect(hier).toContain("Heartbeat e o");
+    expect(hier).toContain("metronomo");
+  });
+
+  it("o que esta pronto para o cliente sai marcado, e so com evidencia", () => {
+    expect(hier).toContain("PRONTO PARA O CLIENTE");
+    expect(hier).toContain("'operator_pronto'");
+    expect(hier).toContain("'pronto_para_cliente', _pronto_cliente");
+    // A marca so nasce dentro do ramo de done com cliente resolvido.
+    const ramo = hier.slice(hier.indexOf("if _client_id is not null then"));
+    expect(ramo.indexOf("_pronto_cliente := true;")).toBeGreaterThan(-1);
+  });
+
+  it("o aviso diz QUAL tarefa e de QUAL cliente", () => {
+    expect(hier).toContain("nullif(trim(_titulo_tarefa), '')");
+    expect(hier).toContain("coalesce(' · ' || _nome_cliente, '')");
+  });
+});
+
+describe("cofre: ver sim, senha nao", () => {
+  it("a senha nao entra no select — ausencia na origem, nao filtro depois", () => {
+    // Filtrar depois deixaria um caminho em que a senha escapa. Aqui ela
+    // simplesmente nao e buscada.
+    const bloco = servicos.slice(servicos.indexOf("export async function vaultOverview"));
+    expect(bloco).toContain("id, title, category, url, username, notes");
+    expect(bloco).not.toMatch(/select\([^)]*password/);
+  });
+
+  it("o agente sabe que a senha existe, e por que nao a recebe", () => {
+    expect(servicos).toContain("tem_senha_guardada: true");
+    expect(servicos).toContain("NAO retornadas por construcao");
+    expect(servicos).toContain("o estrago nao se desfaz");
+  });
+
+  it("nao existe escrita nem exclusao de cofre no catalogo", () => {
+    expect(ferramentas).toContain("'aceleriq_vault_overview'");
+    expect(ferramentas).not.toContain("aceleriq_vault_update");
+    expect(ferramentas).not.toContain("aceleriq_vault_delete");
+    const bloco = servicos.slice(servicos.indexOf("export async function vaultOverview"));
+    expect(bloco).not.toMatch(/\.(insert|update|upsert|delete)\(/);
   });
 });
 
@@ -312,9 +455,6 @@ describe("a area Execucao da equipe", () => {
   });
 
   it("a hierarquia poe o dono no topo e nao promete disparo que nao existe", () => {
-    const organograma = readFileSync(
-      resolve(raiz, "src/components/execucao/OrganogramaAgentes.tsx"), "utf8",
-    );
     expect(organograma).toContain('nivel: "dono"');
     expect(organograma).toContain("Hermes");
     expect(organograma).toContain("Hierarquia da operação");

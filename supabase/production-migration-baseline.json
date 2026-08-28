@@ -505,6 +505,22 @@
       "remote_name": "operador_acao_humana",
       "remote_statements_sha256": "e19e412e976f62d04c46daa25532c1729871e9f60246e890517c6fe7602573f5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828000000",
+      "path": "supabase/migrations/20260828000000_operador_conta_no_progresso.sql",
+      "local_sha256": "d5e73ccbd399edcdb2fe232d246e9ad9d3003b2f4e208c02e5eb9eed22d4a611",
+      "remote_name": "operador_conta_no_progresso",
+      "remote_statements_sha256": "7e4d41f2bc1b1ecd58bd9fe06593cef4c6263ba11d7650117f5ceec32a820522",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828010000",
+      "path": "supabase/migrations/20260828010000_hierarquia_e_notificacao_de_tudo.sql",
+      "local_sha256": "3fa3ae53155c714c571010c27b1858321b073a0a4b090b20c64ba23b99e2158c",
+      "remote_name": "hierarquia_e_notificacao_de_tudo",
+      "remote_statements_sha256": "61f09a97f47748c5821073d9c7243b0b0b7fb68e6223fd2acfbfcf1bb61e55a0",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
