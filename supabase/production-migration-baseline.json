@@ -537,6 +537,14 @@
       "remote_name": "cliente_vive_em_profiles",
       "remote_statements_sha256": "210871f21fca5a0b793568c50c646c60590497519d70f633ba49d3fa614e0c75",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828040000",
+      "path": "supabase/migrations/20260828040000_agendamento_que_nao_saiu.sql",
+      "local_sha256": "993b66e803ebda9977e2f211f51e11651760101f39003ba261a4dcdf55f55363",
+      "remote_name": "agendamento_que_nao_saiu",
+      "remote_statements_sha256": "7d28b3770ac8edd7a9720d6340116ce3ece0df21fa6bf7c6ad8f78544cee4d00",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -619,12 +619,40 @@ describe("no telefone, as opcoes correm para o lado", () => {
 describe("a hierarquia se le como estrutura, nao como grade", () => {
   it("os niveis se ligam por tronco, senao e so cartao solto com titulo", () => {
     expect(organograma).toContain("const Tronco");
-    expect(organograma).toContain("bg-gradient-to-b from-border");
+    // Cor SOLIDA. O tronco era um gradiente que terminava em border/40 e,
+    // num tema de fundo 5%, sumia no meio do caminho: a linha aparecia
+    // cortada, que e pior do que nao ter linha.
+    expect(organograma).toContain('"mx-auto w-px bg-border"');
   });
 
-  it("cada grupo de funcao e uma caixa com nome, contagem e regua", () => {
-    expect(organograma).toContain("rounded-lg border border-border/60 bg-muted/20");
-    expect(organograma).toContain('doGrupo.length === 1 ? "agente" : "agentes"');
+  it("cada grupo de funcao e uma caixa solida com nome, contagem e acento", () => {
+    expect(organograma).toContain("rounded-xl border border-border bg-secondary");
+    expect(organograma).toContain("acentoDaArea");
+  });
+
+  it("nenhuma superficie grande usa fundo translucido", () => {
+    // A queixa foi literal: "sem ficar transparente no escuro". Este tema
+    // e escuro-primeiro (fundo 5%, cartao 10%, muted 13%), entao um
+    // bg-muted/20 vira 13% a um quinto de opacidade sobre 5% e some. A
+    // hierarquia visual aqui se faz por DEGRAU de superficie solida.
+    // Translucido so onde e enfeite pequeno sobre superficie solida:
+    // selo, monograma, barra de acento.
+    // Sem os comentarios: a explicacao acima CITA a classe proibida, e uma
+    // busca ingenua casaria com o proprio aviso. Ja cai nessa hoje, numa
+    // conferencia de SQL que deu "bug ainda existe" por causa de um
+    // comentario meu. Codigo se audita sobre o codigo.
+    const semComentario = (t: string) =>
+      t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const grandes = semComentario(organograma)
+      .match(/bg-(card|secondary|muted|background)\/(\[?[0-9.]+\]?)/g) ?? [];
+    expect(grandes, `superficie translucida: ${grandes.join(", ")}`).toHaveLength(0);
+    expect(semComentario(pagina).match(/bg-\w+\/\[0\.0[0-9]\]/g) ?? []).toHaveLength(0);
+  });
+
+  it("a cor de cada area e estavel, nao muda quando entra agente novo", () => {
+    // Cor por posicao na lista dancaria a cada cadastro e destreinaria o
+    // olho de quem usa todo dia. A chave e o NOME da area.
+    expect(organograma).toContain("area.charCodeAt(i)");
   });
 
   it("o cabecalho resume o time em numeros", () => {

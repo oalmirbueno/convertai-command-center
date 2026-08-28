@@ -648,7 +648,7 @@ export default function AdminExecucao() {
           <p className="mt-1 text-[11px] text-muted-foreground">próximo passo: {v.next_step}</p>
         )}
         {v.block_reason && (
-          <p className="mt-1 rounded-lg border border-destructive/25 bg-destructive/[0.05] px-2 py-1 text-[11px] text-destructive">
+          <p className="mt-1 rounded-lg border border-destructive/25 bg-secondary px-2 py-1 text-[11px] text-destructive">
             bloqueio: {v.block_reason}
           </p>
         )}
@@ -758,7 +758,7 @@ export default function AdminExecucao() {
       </div>
 
       {incidentes.length > 0 && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/[0.05] p-3">
+        <div className="rounded-xl border border-destructive/30 bg-secondary p-3">
           <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-destructive">
             <AlertTriangle className="h-3.5 w-3.5" /> {incidentes.length} incidente(s) de execução
           </p>
@@ -931,7 +931,7 @@ export default function AdminExecucao() {
                           tarefaId: String(t.id), titulo: String(t.title),
                         })}
                         title="Colocar esta tarefa na fila de um agente"
-                        className="shrink-0 rounded-lg border border-primary/40 bg-primary/5 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10"
+                        className="shrink-0 rounded-lg border border-primary/40 bg-secondary px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10"
                       >
                         encaminhar
                       </button>
@@ -964,7 +964,7 @@ export default function AdminExecucao() {
       )}
 
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (
-        <p className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-warning/[0.06] px-2.5 py-1.5 text-[11px] text-warning">
+        <p className="inline-flex items-center gap-1.5 rounded-lg border border-warning/30 bg-secondary px-2.5 py-1.5 text-[11px] text-warning">
           <XCircle className="h-3.5 w-3.5" />
           Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
         </p>
