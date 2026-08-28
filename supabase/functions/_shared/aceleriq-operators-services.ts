@@ -436,3 +436,184 @@ export async function operatorOrganize(input: {
   if (error) throw new Error(`operator_update: ${error.message}`);
   return data;
 }
+
+/* ──────────────────── Estudio: rascunho sim, publicar nao ─────────────── */
+
+/** O documento do Estudio de um projeto, como esta agora. */
+export async function studioRead(opts: { project_id: string }) {
+  if (!isUuid(opts.project_id)) throw new Error('project_id must be a UUID');
+
+  const { data, error } = await comPrazo(
+    db().from('studio_docs')
+      .select('project_id, doc_blocks, notes, published, updated_at')
+      .eq('project_id', opts.project_id)
+      .maybeSingle(),
+  );
+  if (error) throw new Error(`studio_docs: ${error.message}`);
+  if (!data) {
+    return { project_id: opts.project_id, existe: false, publicado: false, notas: null, blocos: 0 };
+  }
+
+  const d = data as Record<string, unknown>;
+  const blocos = Array.isArray(d.doc_blocks) ? (d.doc_blocks as unknown[]).length : 0;
+  return {
+    project_id: opts.project_id,
+    existe: true,
+    publicado: d.published === true,
+    notas: d.notes ?? null,
+    blocos,
+    doc_blocks: d.doc_blocks ?? [],
+    atualizado_em: d.updated_at,
+    aviso: d.published === true
+      ? 'Este documento esta PUBLICADO: o cliente le em tempo real. Escrever nele e publicar, e isso continua sendo gesto humano.'
+      : 'Rascunho: o cliente nao ve. Pode escrever.',
+  };
+}
+
+/**
+ * Escreve no RASCUNHO do Estudio.
+ *
+ * A regra que vale a pena entender antes de mexer: `published = true` faz
+ * o painel do cliente ler `notes` EM TEMPO REAL (canal realtime em
+ * TabDocument). Entao editar um documento publicado nao e "editar": e
+ * publicar, ao vivo, na tela de quem paga. O dono ja escreveu que
+ * publicacao fica fora da autonomia dos operadores, e esta funcao respeita
+ * isso do jeito mais simples que existe: se o documento esta publicado,
+ * recusa e explica.
+ *
+ * `published` nunca e escrito aqui, nem para true nem para false. Despublicar
+ * tambem seria efeito externo — sumir com o documento da tela do cliente.
+ */
+export async function studioDraft(input: {
+  project_id: string;
+  notes?: string;
+  doc_blocks?: unknown[];
+}, actor: string) {
+  if (!isUuid(input.project_id)) throw new Error('project_id must be a UUID');
+  if (input.notes === undefined && input.doc_blocks === undefined) {
+    throw new Error('nada a escrever: informe notes e/ou doc_blocks.');
+  }
+
+  const { data: atual, error: erroLeitura } = await comPrazo(
+    db().from('studio_docs').select('project_id, published').eq('project_id', input.project_id).maybeSingle(),
+  );
+  if (erroLeitura) throw new Error(`studio_docs: ${erroLeitura.message}`);
+
+  if (atual && (atual as Record<string, unknown>).published === true) {
+    throw new Error(
+      'documento_publicado: este documento esta no ar e o cliente le em tempo real. '
+      + 'Alterar agora seria publicar. Deixe a nova versao como proposta para a equipe, '
+      + 'ou peca a um responsavel humano para despublicar antes.',
+    );
+  }
+
+  const campos: Record<string, unknown> = { project_id: input.project_id, updated_at: new Date().toISOString() };
+  if (input.notes !== undefined) campos.notes = String(input.notes);
+  if (input.doc_blocks !== undefined) campos.doc_blocks = input.doc_blocks;
+  // `published` fica DE FORA do payload de proposito: o upsert nao pode
+  // criar um documento ja publicado nem mexer no estado de publicacao.
+
+  const { data, error } = await comPrazo(
+    db().from('studio_docs').upsert(campos, { onConflict: 'project_id' })
+      .select('project_id, notes, published, updated_at').single(),
+  );
+  if (error) throw new Error(`studio_docs: ${error.message}`);
+
+  await comPrazo(db().from('operator_audit_log').insert({
+    actor,
+    action: `rascunho do estudio atualizado: projeto ${input.project_id}`,
+  }));
+
+  return {
+    ok: true,
+    ...(data as Record<string, unknown>),
+    publicar: 'Publicar continua sendo gesto humano, pelo Estudio no painel.',
+  };
+}
+
+/* ─────────────── O que a equipe fez, pronto para o cerebro ────────────── */
+
+/**
+ * Consolidado do trabalho dos operadores num periodo, ja organizado.
+ *
+ * Existe para o Hermes ter o que salvar no segundo cerebro sem precisar
+ * remontar a historia a cada vez, e sem inventar o que nao aconteceu. Sai
+ * agrupado por area e por agente, com o que virou entrega, o que travou e
+ * o que esta esperando gente.
+ *
+ * Nao gera texto bonito: gera FATO organizado. A redacao e do Hermes, que
+ * escreve melhor do que um template meu conseguiria — e um resumo montado
+ * por regra fixa vira aquele relatorio que ninguem le.
+ */
+export async function operatorDigest(opts: { dias?: number }) {
+  const dias = Math.min(Math.max(Math.floor(Number(opts.dias) || 7), 1), 90);
+  const desde = new Date(Date.now() - dias * 86_400_000).toISOString();
+
+  const [{ data: ops }, { data: trilha }] = await Promise.all([
+    comPrazo(db().from('internal_operators')
+      .select('id, slug, display_name, area, status, is_coordinator')),
+    comPrazo(db().from('operator_audit_log')
+      .select('operator_id, actor, action, new_status, evidence, kanban_task_id, occurred_at, approval_required')
+      .gte('occurred_at', desde)
+      .order('occurred_at', { ascending: false })
+      .limit(READ_LIMITS.maxPageSize)),
+  ]);
+
+  const operadores = (ops ?? []) as Array<Record<string, unknown>>;
+  const eventos = (trilha ?? []) as Array<Record<string, unknown>>;
+  const porId = new Map(operadores.map((o) => [o.id as string, o]));
+
+  const porAgente = new Map<string, {
+    agente: string; area: string; entregas: number; travados: number;
+    esperando: number; aprovacoes: number; evidencias: string[];
+  }>();
+
+  for (const e of eventos) {
+    const op = porId.get(e.operator_id as string);
+    if (!op) continue;
+    const chave = op.slug as string;
+    let linha = porAgente.get(chave);
+    if (!linha) {
+      linha = {
+        agente: (op.display_name as string) ?? chave,
+        area: (op.area as string) ?? 'Sem area definida',
+        entregas: 0, travados: 0, esperando: 0, aprovacoes: 0, evidencias: [],
+      };
+      porAgente.set(chave, linha);
+    }
+    const st = e.new_status as string | null;
+    if (st === 'done') {
+      linha.entregas += 1;
+      const ev = typeof e.evidence === 'string' ? e.evidence.trim() : '';
+      // So evidencia de verdade entra, e sem repetir: a lista serve para
+      // provar, nao para encher.
+      if (ev && linha.evidencias.length < 12 && !linha.evidencias.includes(ev)) {
+        linha.evidencias.push(ev);
+      }
+    } else if (st === 'blocked') linha.travados += 1;
+    else if (st === 'awaiting_input') linha.esperando += 1;
+    if (e.approval_required === true) linha.aprovacoes += 1;
+  }
+
+  const porArea = new Map<string, unknown[]>();
+  for (const linha of porAgente.values()) {
+    const atual = porArea.get(linha.area);
+    if (atual) atual.push(linha);
+    else porArea.set(linha.area, [linha]);
+  }
+
+  const entregas = [...porAgente.values()].reduce((s, l) => s + l.entregas, 0);
+  return {
+    periodo_dias: dias,
+    desde,
+    total_de_eventos: eventos.length,
+    entregas_concluidas: entregas,
+    // A trilha e cortada no teto de leitura. Dizer isso e o que separa um
+    // consolidado de uma mentira educada.
+    trilha_completa: eventos.length < READ_LIMITS.maxPageSize,
+    por_area: [...porArea.entries()].map(([area, agentes]) => ({ area, agentes })),
+    agentes_sem_movimento: operadores
+      .filter((o) => o.status === 'active' && !porAgente.has(o.slug as string))
+      .map((o) => ({ agente: o.display_name, area: o.area })),
+  };
+}

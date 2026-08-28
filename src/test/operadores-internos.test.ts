@@ -329,6 +329,88 @@ describe("o dono sabe de tudo", () => {
   });
 });
 
+describe("Estudio: rascunho sim, publicar nao", () => {
+  const bloco = servicos.slice(servicos.indexOf("export async function studioDraft"));
+
+  it("documento publicado recusa escrita, porque escrever nele e publicar", () => {
+    // published = true faz o painel do cliente ler `notes` em tempo real
+    // (canal realtime em TabDocument). Editar ali nao e editar: e publicar
+    // ao vivo na tela de quem paga.
+    expect(bloco).toContain("documento_publicado:");
+    expect(bloco).toContain("le em tempo real");
+  });
+
+  it("published nunca entra no payload, nem para true nem para false", () => {
+    // Despublicar tambem seria efeito externo: sumir com o documento da
+    // tela do cliente.
+    const payload = bloco.slice(bloco.indexOf("const campos"), bloco.indexOf(".upsert("));
+    expect(payload).not.toMatch(/campos\.published|published\s*[:=]/);
+    expect(bloco).toContain("nao pode\n  // criar um documento ja publicado");
+  });
+
+  it("a leitura avisa em qual dos dois estados o documento esta", () => {
+    const leitura = servicos.slice(
+      servicos.indexOf("export async function studioRead"),
+      servicos.indexOf("export async function studioDraft"),
+    );
+    expect(leitura).toContain("Rascunho: o cliente nao ve");
+    expect(leitura).toContain("continua sendo gesto humano");
+  });
+
+  it("o catalogo tem leitura e rascunho, e nenhuma ferramenta de publicar", () => {
+    expect(ferramentas).toContain("'aceleriq_studio_read'");
+    expect(ferramentas).toContain("'aceleriq_studio_draft'");
+    expect(ferramentas).not.toContain("aceleriq_studio_publish");
+  });
+});
+
+describe("consolidado para o segundo cerebro", () => {
+  const inicioDigest = servicos.indexOf("export async function operatorDigest");
+  const bloco = servicos.slice(inicioDigest);
+
+  it("sai agrupado por area e por agente, com evidencia", () => {
+    expect(bloco).toContain("por_area");
+    expect(bloco).toContain("evidencias");
+    expect(bloco).toContain("entregas_concluidas");
+  });
+
+  it("evidencia repetida nao entra, e vazia tambem nao", () => {
+    expect(bloco).toContain("!linha.evidencias.includes(ev)");
+  });
+
+  it("diz quando a leitura bateu no teto, em vez de fingir que e tudo", () => {
+    // Um consolidado truncado que se apresenta como completo e uma
+    // mentira educada.
+    expect(bloco).toContain("trilha_completa");
+    expect(bloco).toContain("eventos.length < READ_LIMITS.maxPageSize");
+  });
+
+  it("agente parado aparece, senao some do relatorio quem nao trabalhou", () => {
+    expect(bloco).toContain("agentes_sem_movimento");
+  });
+});
+
+describe("navegacao: o agente sabe onde as coisas ficam", () => {
+  it("o mapa do painel vai junto do catalogo", () => {
+    expect(ferramentas).toContain("MAPA_DO_PAINEL");
+    expect(ferramentas).toContain("mapa_do_painel: MAPA_DO_PAINEL");
+  });
+
+  it("cada area diz rota, para que serve e por onde o MCP chega", () => {
+    const mapa = ferramentas.slice(
+      ferramentas.indexOf("const MAPA_DO_PAINEL"),
+      ferramentas.indexOf("] as const;", ferramentas.indexOf("const MAPA_DO_PAINEL")),
+    );
+    const linhas = mapa.match(/\{ area: /g) ?? [];
+    expect(linhas.length).toBeGreaterThanOrEqual(12);
+    for (const campo of ["rota:", "para:", "pelo_mcp:"]) {
+      expect(mapa.split(campo).length - 1).toBe(linhas.length);
+    }
+    // O cofre entra no mapa com o aviso colado, nao solto.
+    expect(mapa).toContain("SEM senhas");
+  });
+});
+
 describe("o catalogo do MCP compila", () => {
   it("toda ferramenta usa um construtor que existe de verdade", () => {
     // Escrevi `makeWrite(...)` uma vez achando que existia. O `npm run
@@ -350,7 +432,8 @@ describe("cofre: ver sim, senha nao", () => {
   it("a senha nao entra no select — ausencia na origem, nao filtro depois", () => {
     // Filtrar depois deixaria um caminho em que a senha escapa. Aqui ela
     // simplesmente nao e buscada.
-    const bloco = servicos.slice(servicos.indexOf("export async function vaultOverview"));
+    const inicio = servicos.indexOf("export async function vaultOverview");
+    const bloco = servicos.slice(inicio, servicos.indexOf("export async function", inicio + 30));
     expect(bloco).toContain("id, title, category, url, username, notes");
     expect(bloco).not.toMatch(/select\([^)]*password/);
   });
@@ -365,7 +448,8 @@ describe("cofre: ver sim, senha nao", () => {
     expect(ferramentas).toContain("'aceleriq_vault_overview'");
     expect(ferramentas).not.toContain("aceleriq_vault_update");
     expect(ferramentas).not.toContain("aceleriq_vault_delete");
-    const bloco = servicos.slice(servicos.indexOf("export async function vaultOverview"));
+    const inicio = servicos.indexOf("export async function vaultOverview");
+    const bloco = servicos.slice(inicio, servicos.indexOf("export async function", inicio + 30));
     expect(bloco).not.toMatch(/\.(insert|update|upsert|delete)\(/);
   });
 });

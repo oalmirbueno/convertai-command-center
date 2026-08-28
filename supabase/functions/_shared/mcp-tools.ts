@@ -34,9 +34,12 @@ import {
 import {
   OPERATOR_EVENTS,
   operatorBoard,
+  operatorDigest,
   operatorOrganize,
   operatorRegister,
   operatorReport,
+  studioDraft,
+  studioRead,
   vaultOverview,
 } from './aceleriq-operators-services.ts';
 import {
@@ -288,7 +291,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.34.0',
+  version: '1.35.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -479,6 +482,7 @@ const capabilitiesTool: ToolDefinition = {
         nomes_visiveis: nomesVisiveis,
         como_destravar: comoDestravar,
       },
+      mapa_do_painel: MAPA_DO_PAINEL,
       grantedScopes: ctx.scopes,
       supportedScopes: ALL_SCOPES,
       counts,
@@ -2577,6 +2581,91 @@ const operatorOrganizeTool: ToolDefinition = {
   },
 };
 
+const studioReadTool = makeRead(
+  'aceleriq_studio_read',
+  'Documento do Estudio (leitura)',
+  'O documento do Estudio de um projeto: notas, blocos, se esta publicado e quando mudou. Se `publicado` for true, o cliente le este documento EM TEMPO REAL no painel dele.',
+  z.object({ project_id: UUID }).strict(),
+  {
+    type: 'object',
+    properties: { project_id: { type: 'string', description: 'UUID do projeto.' } },
+    required: ['project_id'],
+    additionalProperties: false,
+  },
+  (input) => studioRead(input),
+);
+
+const studioDraftTool: ToolDefinition = {
+  name: 'aceleriq_studio_draft',
+  title: 'Escrever no rascunho do Estudio',
+  description:
+    'Escreve notes e/ou doc_blocks no documento do Estudio de um projeto, ENQUANTO ele for rascunho. Se o documento ja estiver publicado a chamada e RECUSADA: documento publicado e lido pelo cliente em tempo real, entao altera-lo seria publicar, e publicacao continua sendo gesto humano. O campo `published` nunca e escrito por esta ferramenta, nem para true nem para false (despublicar tambem sumiria com o documento da tela do cliente).',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', description: 'UUID do projeto.' },
+      notes: { type: 'string', description: 'Texto do documento.' },
+      doc_blocks: { type: 'array', description: 'Blocos estruturados do documento.' },
+    },
+    required: ['project_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      project_id: UUID,
+      notes: z.string().max(200_000).optional(),
+      doc_blocks: z.array(z.unknown()).max(2000).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await studioDraft(parsed.data, ctx.keyId);
+  },
+};
+
+const operatorDigestTool = makeRead(
+  'aceleriq_operator_digest',
+  'Consolidado do trabalho dos agentes',
+  'O que os operadores internos fizeram num periodo, ja agrupado por area e por agente: entregas concluidas, travados, esperando insumo, aprovacoes pendentes e as evidencias. Serve para o Hermes redigir o resumo e salvar no segundo cerebro sem remontar a historia nem inventar o que nao aconteceu. Devolve FATO organizado, nao texto pronto. O campo `trilha_completa` diz se a leitura bateu no teto de pagina: quando for false, o periodo tem mais eventos do que couberam.',
+  z.object({ dias: limite(90, 1).optional() }).strict(),
+  {
+    type: 'object',
+    properties: { dias: { type: 'number', description: 'Janela em dias (1 a 90). Padrao 7.' } },
+    additionalProperties: false,
+  },
+  (input) => operatorDigest(input),
+);
+
+/**
+ * O mapa do painel, para o agente saber ONDE as coisas ficam.
+ *
+ * Sem isto, um agente que le "o cliente reclamou do relatorio" nao tem
+ * como saber que relatorio mora em /relatorios e a conversa com o cliente
+ * em /central. Cada area diz a rota, o que se resolve la e por qual
+ * ferramenta o MCP chega nela. Onde nao existe ferramenta, o campo diz
+ * isso em vez de deixar o agente adivinhar.
+ */
+const MAPA_DO_PAINEL = [
+  { area: 'Ciclo', rota: '/ciclo', para: 'A semana de cada cliente, etapa por etapa.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_board, aceleriq_operator_report' },
+  { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
+  { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
+  { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task' },
+  { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
+  { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
+  { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes.', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas)' },
+  { area: 'Financeiro', rota: '/financeiro', para: 'Caixa, mensalidades, custos, investimentos.', pelo_mcp: 'aceleriq_get_finance_dashboard e as demais aceleriq_*finance*' },
+  { area: 'Comercial', rota: '/comercial', para: 'Oportunidades, classes e qualificacao.', pelo_mcp: 'aceleriq_list_opportunities' },
+  { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
+  { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
+  { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance' },
+  { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
+  { area: 'Contratos', rota: '/config', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
+] as const;
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2610,6 +2699,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   financeAdsTool,
   financeHistoryTool,
   vaultOverviewTool,
+  studioReadTool,
+  studioDraftTool,
+  operatorDigestTool,
   operatorRegisterTool,
   operatorOrganizeTool,
   operatorReportTool,
