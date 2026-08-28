@@ -147,6 +147,165 @@ export type Database = {
           },
         ]
       }
+      ads_creative_daily: {
+        Row: {
+          actions: Json | null
+          ad_id: string
+          ad_name: string | null
+          campaign_id: string | null
+          captured_at: string
+          clicks: number | null
+          client_id: string
+          cost_per_action: Json | null
+          cpc: number | null
+          cpm: number | null
+          ctr: number | null
+          day: string
+          external_account_id: string
+          frequency: number | null
+          id: string
+          impressions: number | null
+          link_clicks: number | null
+          reach: number | null
+          spend: number | null
+        }
+        Insert: {
+          actions?: Json | null
+          ad_id: string
+          ad_name?: string | null
+          campaign_id?: string | null
+          captured_at?: string
+          clicks?: number | null
+          client_id: string
+          cost_per_action?: Json | null
+          cpc?: number | null
+          cpm?: number | null
+          ctr?: number | null
+          day: string
+          external_account_id: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          link_clicks?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Update: {
+          actions?: Json | null
+          ad_id?: string
+          ad_name?: string | null
+          campaign_id?: string | null
+          captured_at?: string
+          clicks?: number | null
+          client_id?: string
+          cost_per_action?: Json | null
+          cpc?: number | null
+          cpm?: number | null
+          ctr?: number | null
+          day?: string
+          external_account_id?: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          link_clicks?: number | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_creative_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_creative_daily_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_creatives: {
+        Row: {
+          ad_id: string
+          ad_name: string | null
+          adset_id: string | null
+          campaign_id: string | null
+          client_id: string
+          corpo: string | null
+          creative_id: string | null
+          destino: string | null
+          effective_status: string | null
+          external_account_id: string
+          id: string
+          image_url: string | null
+          raw: Json
+          status: string | null
+          thumbnail_url: string | null
+          titulo: string | null
+          updated_at: string
+          video_id: string | null
+        }
+        Insert: {
+          ad_id: string
+          ad_name?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          client_id: string
+          corpo?: string | null
+          creative_id?: string | null
+          destino?: string | null
+          effective_status?: string | null
+          external_account_id: string
+          id?: string
+          image_url?: string | null
+          raw?: Json
+          status?: string | null
+          thumbnail_url?: string | null
+          titulo?: string | null
+          updated_at?: string
+          video_id?: string | null
+        }
+        Update: {
+          ad_id?: string
+          ad_name?: string | null
+          adset_id?: string | null
+          campaign_id?: string | null
+          client_id?: string
+          corpo?: string | null
+          creative_id?: string | null
+          destino?: string | null
+          effective_status?: string | null
+          external_account_id?: string
+          id?: string
+          image_url?: string | null
+          raw?: Json
+          status?: string | null
+          thumbnail_url?: string | null
+          titulo?: string | null
+          updated_at?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_creatives_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_creatives_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ads_wallet: {
         Row: {
           balance: number | null
@@ -5382,6 +5541,7 @@ export type Database = {
         Returns: undefined
       }
       ads_contas_conhecidas: { Args: never; Returns: Json }
+      ads_creatives_tick: { Args: never; Returns: Json }
       ads_metrics_tick: { Args: never; Returns: Json }
       ads_oauth_consume_session: { Args: { _state: string }; Returns: Json }
       ads_oauth_create_session: { Args: never; Returns: Json }
@@ -5452,6 +5612,7 @@ export type Database = {
       }
       claim_notification_dispatch: { Args: never; Returns: boolean }
       collect_ads_metrics_now: { Args: never; Returns: Json }
+      collect_ads_now: { Args: never; Returns: Json }
       collect_social_metrics_now: { Args: never; Returns: Json }
       commercial_activity_reminders: { Args: never; Returns: number }
       complete_contract_signature: {
