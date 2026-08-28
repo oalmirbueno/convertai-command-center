@@ -497,6 +497,14 @@
       "remote_name": "operadores_internos",
       "remote_statements_sha256": "7c9e451877c202d83c4d3666ec476d10c5030224f8ae360a5318ab20b4ea603d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260827230000",
+      "path": "supabase/migrations/20260827230000_operador_acao_humana.sql",
+      "local_sha256": "3ceea172e935738e1f108b677157db7bef9657360bef24d8803cf99b7670d6f4",
+      "remote_name": "operador_acao_humana",
+      "remote_statements_sha256": "e19e412e976f62d04c46daa25532c1729871e9f60246e890517c6fe7602573f5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

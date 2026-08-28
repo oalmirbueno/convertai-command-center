@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Activity, AlertTriangle, Bot, CheckCircle2, ClipboardCopy, Clock,
-  FileCheck2, PauseCircle, ShieldAlert, XCircle,
+  FileCheck2, PauseCircle, RefreshCw, ShieldAlert, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
+import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
+import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 
 /**
  * Execução da equipe: o que os operadores internos (Hermes) estão fazendo,
@@ -56,6 +59,7 @@ type Operador = {
 };
 
 const VISOES = [
+  { id: "quadro", rotulo: "Quadro" },
   { id: "fila", rotulo: "Fila por operador" },
   { id: "in_progress", rotulo: "Em andamento" },
   { id: "done", rotulo: "Concluídas com evidência" },
@@ -63,6 +67,7 @@ const VISOES = [
   { id: "awaiting_input", rotulo: "Aguardando insumo" },
   { id: "blocked", rotulo: "Bloqueadas" },
   { id: "aprovacao", rotulo: "Aprovações pendentes" },
+  { id: "hierarquia", rotulo: "Hierarquia" },
   { id: "relatorios", rotulo: "Relatórios" },
 ] as const;
 
@@ -82,7 +87,11 @@ export default function AdminExecucao() {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
   const vinculoAlvo = searchParams.get("vinculo");
-  const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("fila");
+  const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("quadro");
+  const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
+  const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
+  const [atualizando, setAtualizando] = useState(false);
+  const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -346,6 +355,7 @@ export default function AdminExecucao() {
     return { abertura, excecoes, fechamento, semanal };
   }, [vinculos, runs, incidentes, tarefas, humanos, operadores, hoje]);
 
+
   const copiar = async (texto: string, rotulo: string) => {
     try {
       await navigator.clipboard.writeText(texto);
@@ -354,6 +364,123 @@ export default function AdminExecucao() {
       toast.error("Não foi possível copiar.");
     }
   };
+
+  /** As colunas do quadro, na ordem em que o trabalho anda. */
+  const COLUNAS = [
+    { id: "queued", titulo: "Na fila", cor: "bg-muted-foreground" },
+    { id: "in_progress", titulo: "Em andamento", cor: "bg-info" },
+    { id: "review", titulo: "Em revisão", cor: "bg-warning" },
+    { id: "awaiting_input", titulo: "Aguardando insumo", cor: "bg-muted-foreground" },
+    { id: "blocked", titulo: "Bloqueada", cor: "bg-destructive" },
+    { id: "done", titulo: "Concluída", cor: "bg-success" },
+  ] as const;
+
+  /**
+   * Atualizar de verdade: recarrega TODAS as consultas da área, não só a
+   * lista visível. Um botão que atualiza metade da tela é pior que
+   * nenhum, porque ensina a confiar num número que não mudou.
+   */
+  const atualizarTudo = async () => {
+    setAtualizando(true);
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] }),
+        queryClient.invalidateQueries({ queryKey: ["operador-runs"] }),
+        queryClient.invalidateQueries({ queryKey: ["operadores-internos"] }),
+        queryClient.invalidateQueries({ queryKey: ["operador-tarefas-disponiveis"] }),
+        queryClient.invalidateQueries({ queryKey: ["operador-tarefas"] }),
+        queryClient.invalidateQueries({ queryKey: ["agente-runs"] }),
+        queryClient.invalidateQueries({ queryKey: ["agente-trilha"] }),
+      ]);
+      toast.success("Quadro atualizado.");
+    } finally {
+      setAtualizando(false);
+    }
+  };
+
+  /**
+   * A mão humana no quadro. Passa pelo RPC, e não por update solto, para
+   * gravar a MESMA trilha imutável das ações do agente: se a mão humana
+   * escapasse da auditoria, "quem mudou isso?" ficaria sem resposta
+   * justamente nos casos que mais importam.
+   */
+  const moverVinculo = async (v: Vinculo, novoStatus: string) => {
+    if (v.status === novoStatus) return;
+    const { error } = await (supabase as any).rpc("operator_human_action", {
+      _link_id: v.id,
+      _new_status: novoStatus,
+      _note: null,
+      _resolve_approval: false,
+    });
+    if (error) {
+      toast.error(error.message || "Não foi possível mover.");
+      return;
+    }
+    if (novoStatus === "done") {
+      // A régua vale para todos: concluir sem evidência vira revisão, e o
+      // banco decide isso — a tela só conta o que aconteceu.
+      toast.success(v.last_evidence ? "Movido para concluída." : "Sem evidência: foi para revisão.");
+    } else {
+      toast.success("Movido.");
+    }
+    await queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+
+  const resolverAprovacao = async (v: Vinculo) => {
+    const { error } = await (supabase as any).rpc("operator_human_action", {
+      _link_id: v.id, _new_status: null, _note: null, _resolve_approval: true,
+    });
+    if (error) { toast.error(error.message || "Não foi possível resolver."); return; }
+    toast.success("Aprovação resolvida.");
+    await queryClient.invalidateQueries({ queryKey: ["operador-vinculos"] });
+  };
+
+  const itensDoCartao = (v: Vinculo): ItemDeMenu[] => {
+    const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+    const itens: ItemDeMenu[] = [
+      { rotulo: "Ver o agente", acao: () => setAgenteAberto(opDe(v.operator_id) ?? null) },
+      {
+        rotulo: "Copiar resumo",
+        acao: () => void copiar(
+          [t?.title || v.last_action || "(tarefa)", `operador: ${opDe(v.operator_id)?.display_name || "?"}`,
+           `status: ${STATUS_ROTULO[v.status] || v.status}`, v.last_evidence ? `evidencia: ${v.last_evidence}` : null,
+           v.next_step ? `proximo passo: ${v.next_step}` : null].filter(Boolean).join("\n"),
+          "Resumo",
+        ),
+      },
+    ];
+    if (v.kanban_task_id) {
+      itens.push({ rotulo: "Copiar ID da tarefa", acao: () => void copiar(String(v.kanban_task_id), "ID") });
+    }
+    itens.push({ separador: true });
+    for (const c of COLUNAS) {
+      if (c.id === v.status) continue;
+      itens.push({ rotulo: `Mover para ${c.titulo}`, acao: () => void moverVinculo(v, c.id) });
+    }
+    if (v.approval_required) {
+      itens.push({ separador: true });
+      itens.push({ rotulo: "Marcar aprovação como resolvida", acao: () => void resolverAprovacao(v) });
+    }
+    return itens;
+  };
+
+  /** Os nós do organograma, montados dos operadores reais. */
+  const nosDoOrganograma: NoDoOrganograma[] = useMemo(
+    () => operadores.map((o) => {
+      const n = numerosDoOperador(o.id);
+      return {
+        id: o.id,
+        nome: o.display_name,
+        papel: o.scope,
+        nivel: o.is_coordinator ? ("coordenador" as const) : ("operador" as const),
+        ativo: o.status === "active",
+        emAndamento: n.andamento,
+        feitas: n.feitas,
+        bloqueadas: n.bloqueadas,
+      };
+    }),
+    [operadores, vinculos],
+  );
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
     return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
@@ -389,6 +516,7 @@ export default function AdminExecucao() {
     return (
       <div
         ref={destacado ? destacadoRef : undefined}
+        onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={cn(
           "rounded-xl border bg-card p-3.5",
           destacado ? "border-primary ring-2 ring-primary/40" : "border-border",
@@ -461,12 +589,23 @@ export default function AdminExecucao() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
-      <div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
         <h1 className="text-lg font-bold text-foreground">Execução da equipe</h1>
         <p className="text-[12px] text-muted-foreground">
           Operadores internos executam e relatam; o responsável humano continua sendo quem responde.
           Atualizado {dataCurta(new Date(dataUpdatedAt || Date.now()).toISOString())}.
         </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void atualizarTudo()}
+          disabled={atualizando}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", atualizando && "animate-spin")} />
+          Atualizar
+        </button>
       </div>
 
       {/* O placar do dia: o que decide a atenção, em números. */}
@@ -505,7 +644,12 @@ export default function AdminExecucao() {
         {operadores.map((o) => {
           const n = numerosDoOperador(o.id);
           return (
-            <div key={o.id} className="rounded-xl border border-border bg-card p-3">
+            <button
+              key={o.id}
+              type="button"
+              onClick={() => setAgenteAberto(o)}
+              className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50"
+            >
               <div className="flex items-center gap-1.5">
                 <Bot className="h-3.5 w-3.5 text-primary" />
                 <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
@@ -534,7 +678,7 @@ export default function AdminExecucao() {
               <p className="mt-1 text-[9.5px] text-muted-foreground">
                 {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
               </p>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -573,7 +717,49 @@ export default function AdminExecucao() {
         ))}
       </div>
 
-      {visao === "relatorios" ? (
+      {visao === "quadro" ? (
+        /* O quadro: colunas com ROLAGEM PRÓPRIA. Sem isso, uma coluna
+           cheia empurra a página inteira e as outras somem de vista. */
+        <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
+          {COLUNAS.map((c) => {
+            const daColuna = vinculos.filter((v) => v.status === c.id);
+            return (
+              <div key={c.id} className="flex w-[250px] shrink-0 flex-col rounded-xl border border-border bg-card/60 p-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className={cn("h-1.5 w-1.5 rounded-full", c.cor)} />
+                  <p className="truncate text-[11px] font-bold uppercase tracking-wide text-foreground">{c.titulo}</p>
+                  <span className="ml-auto shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
+                    {daColuna.length}
+                  </span>
+                </div>
+                <div className="mt-2 max-h-[62vh] space-y-1.5 overflow-y-auto pr-0.5">
+                  {daColuna.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-border px-2 py-4 text-center text-[10px] text-muted-foreground">
+                      vazia
+                    </p>
+                  ) : (
+                    daColuna.map((v) => <Cartao key={v.id} v={v} />)
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : visao === "hierarquia" ? (
+        <OrganogramaAgentes
+          nos={nosDoOrganograma}
+          nomeDoDono={profile?.full_name || "Você"}
+          aoAbrir={(no) => {
+            const op = operadores.find((o) => o.id === no.id);
+            if (op) setAgenteAberto(op);
+            else toast.info(
+              no.nivel === "gateway"
+                ? "O Hermes é a porta de entrada: a conversa acontece no grupo dele."
+                : "Você está no topo: aprova, decide e recebe os relatórios.",
+            );
+          }}
+        />
+      ) : visao === "relatorios" ? (
         <div className="grid gap-3 md:grid-cols-2">
           {[
             { titulo: "Abertura do dia", texto: relatorio.abertura, icone: Activity },
@@ -690,6 +876,22 @@ export default function AdminExecucao() {
           Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
         </p>
       )}
+
+      {menuCartao && (
+        <MenuDeContexto
+          x={menuCartao.x}
+          y={menuCartao.y}
+          itens={itensDoCartao(menuCartao.v)}
+          aoFechar={() => setMenuCartao(null)}
+        />
+      )}
+
+      <PerfilDoAgente
+        operador={agenteAberto}
+        vinculos={vinculos}
+        tarefas={tarefas}
+        aoFechar={() => setAgenteAberto(null)}
+      />
     </div>
   );
 }

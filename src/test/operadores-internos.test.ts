@@ -273,6 +273,66 @@ describe("a area Execucao da equipe", () => {
     expect(servicos).toContain("NAO estao neste catalogo");
   });
 
+  it("o quadro tem colunas com rolagem PROPRIA", () => {
+    // Sem rolagem por coluna, uma coluna cheia empurra a pagina e as
+    // outras somem de vista — o quadro deixa de ser quadro.
+    expect(pagina).toContain('visao === "quadro"');
+    expect(pagina).toContain("max-h-[62vh] space-y-1.5 overflow-y-auto");
+    expect(pagina).toContain("overflow-x-auto");
+  });
+
+  it("a mao humana move o quadro pelo RPC, e entra na MESMA trilha", () => {
+    // Update solto na tabela deixaria a acao humana fora da auditoria
+    // justamente nos casos que mais importam.
+    expect(pagina).toContain('rpc("operator_human_action"');
+    expect(pagina).not.toMatch(/from\("operator_task_links"\)[\s\S]{0,80}\.update\(/);
+    const humana = readFileSync(
+      resolve(raiz, "supabase/migrations/20260827230000_operador_acao_humana.sql"), "utf8",
+    );
+    expect(humana).toContain("insert into public.operator_audit_log");
+    expect(humana).toContain("(humano)");
+    // A regua da evidencia vale para quem clica tambem.
+    expect(humana).toContain("_new_status = 'done' and coalesce(trim(_link.last_evidence)");
+    // E so a equipe move.
+    expect(humana).toContain("not_allowed: somente a equipe move o quadro");
+  });
+
+  it("entrar no agente mostra progresso, historico e o que melhorar", () => {
+    const perfil = readFileSync(
+      resolve(raiz, "src/components/execucao/PerfilDoAgente.tsx"), "utf8",
+    );
+    expect(perfil).toContain("Tudo o que ele fez");
+    expect(perfil).toContain("O que melhorar");
+    expect(perfil).toContain("operator_audit_log");
+    // Conselho sai de numero, nao de opiniao.
+    expect(perfil).toContain("numeros.semEvidencia > 0");
+    expect(perfil).toContain("numeros.falhas > 0");
+    // Taxa sem conclusao nenhuma nao inventa desempenho.
+    expect(perfil).toContain("feitas.length ? Math.round");
+  });
+
+  it("a hierarquia poe o dono no topo e nao promete disparo que nao existe", () => {
+    const organograma = readFileSync(
+      resolve(raiz, "src/components/execucao/OrganogramaAgentes.tsx"), "utf8",
+    );
+    expect(organograma).toContain('nivel: "dono"');
+    expect(organograma).toContain("Hermes");
+    expect(organograma).toContain("Hierarquia da operação");
+    // A honestidade do botao: o painel nao dispara o agente sozinho.
+    expect(organograma).toContain("O painel não dispara o agente sozinho");
+    expect(organograma).toContain("copiar o comando de acionamento");
+  });
+
+  it("atualizar recarrega TUDO, nao metade da tela", () => {
+    const bloco = pagina.slice(pagina.indexOf("const atualizarTudo"), pagina.indexOf("const moverVinculo"));
+    for (const chave of [
+      "operador-vinculos", "operador-runs", "operadores-internos",
+      "operador-tarefas-disponiveis", "agente-runs", "agente-trilha",
+    ]) {
+      expect(bloco, `atualizar esquece ${chave}`).toContain(chave);
+    }
+  });
+
   it("os relatorios saem dos MESMOS dados da tela", () => {
     // Gerados de vinculos+runs+tarefas ja carregados; nenhuma consulta
     // propria de relatorio que pudesse divergir do quadro.
