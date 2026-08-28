@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -5381,6 +5381,7 @@ export type Database = {
         Args: { p_file_id: string; p_mode: string }
         Returns: undefined
       }
+      ads_contas_conhecidas: { Args: never; Returns: Json }
       ads_metrics_tick: { Args: never; Returns: Json }
       archive_editorial_post: {
         Args: { p_expected_version: number; p_post_id: string }
@@ -5569,6 +5570,7 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      editorial_alerta_agendamento_atrasado: { Args: never; Returns: Json }
       editorial_autopublish_tick: { Args: never; Returns: Json }
       editorial_can_publish_client: {
         Args: { _client_id: string }
@@ -5586,6 +5588,7 @@ export type Database = {
         Args: { _post_id: string }
         Returns: string
       }
+      editorial_conferir_agendamentos: { Args: never; Returns: Json }
       editorial_content_type_for_delivery_type: {
         Args: { _delivery_type: string }
         Returns: string
@@ -5610,12 +5613,14 @@ export type Database = {
         Args: { _client_id: string; _file_id: string; _project_id: string }
         Returns: boolean
       }
+      editorial_limpar_alertas_resolvidos: { Args: never; Returns: number }
       editorial_lock_task_sync: { Args: never; Returns: undefined }
       editorial_production_status_for_task: {
         Args: { _task_status: string }
         Returns: string
       }
       editorial_reconcile_task_delivery_types: { Args: never; Returns: number }
+      editorial_reconciliar_publicados: { Args: never; Returns: Json }
       editorial_staff_can_access_client: {
         Args: { _client_id: string }
         Returns: boolean
@@ -6302,6 +6307,10 @@ export type Database = {
         Args: { _external_account_id?: string; _label?: string; _token: string }
         Returns: Json
       }
+      save_meta_ads_token_from_login: {
+        Args: { _label?: string; _token: string }
+        Returns: Json
+      }
       save_quiz_invitation: {
         Args: { p_responses: Json; p_token_hash_hex: string }
         Returns: Json
@@ -6356,7 +6365,9 @@ export type Database = {
         }
         Returns: Json
       }
+      social_metrics_ciclo: { Args: never; Returns: Json }
       social_metrics_tick: { Args: never; Returns: Json }
+      social_retrato_da_semana_corrente: { Args: never; Returns: Json }
       storage_client_from_path: { Args: { _name: string }; Returns: string }
       storage_object_read_allowed: {
         Args: { _bucket: string; _name: string }
