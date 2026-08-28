@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
@@ -10,6 +10,12 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
+import { Link2 as LinkIcon } from "lucide-react";
+import {
+  META_OAUTH_MESSAGE_TYPE,
+  startAdsOAuth,
+  type MetaOAuthPopupMessage,
+} from "@/lib/socialMetaOAuth";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -258,6 +264,60 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
 
   const comTrafego = (clients || []).filter((client: any) => hasService(client, "trafego"));
 
+  /**
+   * Conectar anúncios pelo mesmo login da Meta, e SÓ os anúncios.
+   *
+   * Porta separada de propósito: colher o acesso de carona na conexão de
+   * Instagram obrigaria a reconectar uma conta que já funciona. Se essa
+   * reconexão desse errado, ele perderia as duas coisas em vez de nenhuma.
+   */
+  const conectarPelaMeta = async () => {
+    setSalvando(true);
+    const janela = window.open(
+      "about:blank",
+      "aceleriq-meta-ads",
+      "popup=yes,width=620,height=760,resizable=yes,scrollbars=yes",
+    );
+    if (!janela) {
+      setSalvando(false);
+      toast.error("Autorize pop-ups para conectar com a Meta.");
+      return;
+    }
+    try {
+      const { authorization_url } = await startAdsOAuth();
+      janela.location.replace(authorization_url);
+      janela.focus();
+    } catch (error: unknown) {
+      janela.close();
+      setSalvando(false);
+      toast.error((error as { message?: string })?.message || "Não foi possível abrir a Meta.");
+    }
+  };
+
+  /* O popup avisa por mensagem quando termina. Escutar aqui é o que faz a
+     tela reagir sozinha, sem a pessoa ter que apertar atualizar. */
+  useEffect(() => {
+    const aoReceber = (evento: MessageEvent) => {
+      if (evento.origin !== window.location.origin) return;
+      const msg = evento.data as MetaOAuthPopupMessage | undefined;
+      if (!msg || msg.type !== META_OAUTH_MESSAGE_TYPE) return;
+      setSalvando(false);
+      if (msg.ok === false) {
+        toast.error(msg.error);
+        return;
+      }
+      if (msg.alvo !== "anuncios") return;
+      toast.success(
+        msg.contas.length > 0
+          ? `Conectado. A Meta devolveu ${msg.contas.length} conta(s) de anúncio.`
+          : "Conectado, mas a Meta não devolveu nenhuma conta de anúncio nesse acesso.",
+      );
+      onDone();
+    };
+    window.addEventListener("message", aoReceber);
+    return () => window.removeEventListener("message", aoReceber);
+  }, [onDone]);
+
   const salvarToken = async () => {
     setSalvando(true);
     try {
@@ -290,7 +350,20 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">1. Token de leitura</h2>
+        <h2 className="text-sm font-semibold text-foreground">1. Conexão com a Meta</h2>
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          O caminho curto: entre com a sua conta e autorize a leitura de anúncios.
+          Um acesso só cobre todas as contas que você administra, e nenhuma conexão
+          de Instagram é tocada.
+        </p>
+        <Button size="sm" className="mt-2.5 gap-2" onClick={conectarPelaMeta} disabled={salvando}>
+          <LinkIcon className="h-3.5 w-3.5" />
+          {salvando ? "Abrindo a Meta..." : "Conectar com a Meta"}
+        </Button>
+
+        <div className="my-3.5 h-px bg-border" />
+
+        <h3 className="text-[12px] font-semibold text-foreground">Ou cole um token</h3>
         <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
           Um token só, do Business Manager da Aceleriq, cobre todas as contas de anúncio
           que já estão sob a nossa gestão. Ele é guardado no cofre do banco e nunca mais

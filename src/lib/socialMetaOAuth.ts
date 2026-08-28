@@ -48,11 +48,27 @@ export interface FinishMetaOAuthInput {
   project_id: string;
 }
 
+export type AdsOAuthResult = {
+  ok: true;
+  contas: Array<{ numero: string; nome: string | null }>;
+};
+
 export type MetaOAuthPopupMessage =
   | ({
       type: typeof META_OAUTH_MESSAGE_TYPE;
       ok: true;
+      alvo?: "social";
     } & CompleteMetaOAuthResult)
+  // O retorno de anúncios volta pela MESMA rota, mas com outro conteúdo:
+  // não traz recursos de Instagram, traz as contas de anúncio. O campo
+  // `alvo` é o que deixa cada tela reconhecer o que é seu — sem ele, uma
+  // adivinharia pela forma do objeto, e adivinhação em união de tipos é
+  // como se descobre o engano só quando o usuário reclama.
+  | ({
+      type: typeof META_OAUTH_MESSAGE_TYPE;
+      ok: true;
+      alvo: "anuncios";
+    } & AdsOAuthResult)
   | {
       type: typeof META_OAUTH_MESSAGE_TYPE;
       ok: false;
@@ -260,6 +276,80 @@ export async function startMetaOAuth(input: StartMetaOAuthInput) {
   );
 
   return { authorization_url: metaAuthorizationUrl(payload.authorization_url) };
+}
+
+/* ─────────────── Conexão de anúncios: porta separada ─────────────────── */
+
+/**
+ * Como a tela de retorno sabe se aquele login era de anúncios.
+ *
+ * O popup do callback é outra janela, então sessionStorage não serve (é
+ * por aba). A marca vai em localStorage, presa ao `state` daquele login
+ * específico — e não a uma chave fixa, senão dois logins abertos ao mesmo
+ * tempo se confundiriam e um terminaria pelo caminho do outro.
+ */
+const MARCA_ANUNCIOS = "aceleriq-meta-oauth-anuncios:";
+
+export function marcarLoginDeAnuncios(state: string) {
+  try {
+    localStorage.setItem(MARCA_ANUNCIOS + state, "1");
+  } catch {
+    // Navegador com armazenamento bloqueado: o login ainda funciona, só
+    // volta pelo caminho do social e falha com mensagem clara. Melhor do
+    // que impedir a conexão inteira por causa de uma marca.
+  }
+}
+
+export function ehLoginDeAnuncios(state: string) {
+  try {
+    return localStorage.getItem(MARCA_ANUNCIOS + state) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function esquecerLoginDeAnuncios(state: string) {
+  try {
+    localStorage.removeItem(MARCA_ANUNCIOS + state);
+  } catch {
+    // Nada a fazer: a marca expira sozinha quando o state deixa de valer.
+  }
+}
+
+/** Abre o login SÓ para anúncios. Não encosta em nenhuma conexão social. */
+export async function startAdsOAuth() {
+  const payload = await invokeMetaOAuth(
+    { action: "ads_start" },
+    "Não foi possível iniciar a conexão de anúncios.",
+  );
+  const state = requiredText(
+    payload.state,
+    "A sessão de conexão de anúncios é inválida.",
+    4_096,
+  );
+  marcarLoginDeAnuncios(state);
+  return {
+    authorization_url: metaAuthorizationUrl(payload.authorization_url),
+    state,
+  };
+}
+
+export async function completeAdsOAuth(
+  input: CompleteMetaOAuthInput,
+): Promise<AdsOAuthResult> {
+  const payload = await invokeMetaOAuth(
+    {
+      action: "ads_complete",
+      code: requiredText(input.code, "Código de autorização ausente.", 4_096),
+      state: requiredText(input.state, "Estado de autorização ausente.", 4_096),
+    },
+    "Não foi possível concluir a conexão de anúncios.",
+  );
+  const contas = Array.isArray(payload.contas) ? payload.contas : [];
+  return {
+    ok: true,
+    contas: contas as AdsOAuthResult["contas"],
+  };
 }
 
 export async function completeMetaOAuth(

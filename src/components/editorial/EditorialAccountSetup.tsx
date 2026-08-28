@@ -321,6 +321,11 @@ export default function EditorialAccountSetup({
         return;
       }
 
+      // Conexão de anúncios volta pela mesma rota de callback e não é
+      // desta tela. Sem esta linha, ela cairia aqui e tentaria gravar
+      // contas de Instagram a partir de um retorno que não tem nenhuma.
+      if (message.alvo === "anuncios") return;
+
       const currentScope = scopeRef.current;
       const activeSession = {
         id: message.oauth_session_id,

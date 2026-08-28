@@ -23,8 +23,12 @@ const ACTIONS = new Set([
   "connect",
   "finish",
   "disconnect",
+  "ads_start",
+  "ads_complete",
 ]);
-type Action = "start" | "complete" | "connect" | "finish" | "disconnect";
+type Action =
+  | "start" | "complete" | "connect" | "finish" | "disconnect"
+  | "ads_start" | "ads_complete";
 type JsonRecord = Record<string, unknown>;
 
 type SupabaseRuntimeConfig = {
@@ -791,6 +795,114 @@ async function handleDisconnect(
   return { ok: true, success: true };
 }
 
+/**
+ * Conectar anuncios: porta propria, sem encostar no Instagram.
+ *
+ * O caminho anterior colhia o token de anuncios DE CARONA na conexao de
+ * rede social, o que obrigava a reconectar uma conta que ja funciona so
+ * para pegar outra coisa. Mexer no que esta de pe para conseguir o que
+ * ainda nao esta e um mau negocio: se a reconexao falha, perdem-se as
+ * duas coisas em vez de nenhuma.
+ *
+ * Aqui a sessao e propria (ads_oauth_*), o retorno NAO grava nenhum
+ * recurso de Instagram, e nenhuma concessao existente e tocada.
+ */
+async function handleAdsStart(
+  config: RuntimeConfig,
+  caller: SupabaseClient,
+  admin: SupabaseClient,
+): Promise<JsonRecord> {
+  await rpcOrThrow(
+    admin,
+    "social_meta_oauth_register_redirect_uri",
+    { _redirect_uri: config.metaRedirectUri },
+    "A configuração de callback da Meta não pôde ser validada.",
+  );
+  const data = await rpcOrThrow(
+    caller,
+    "ads_oauth_create_session",
+    {},
+    "Não foi possível iniciar a conexão de anúncios.",
+  );
+  const session = rpcRecord(data);
+  const state = requiredText(
+    session?.state,
+    "A sessão de conexão de anúncios é inválida.",
+    1_024,
+  );
+  return {
+    authorization_url: buildFacebookLoginUrl({
+      appId: config.metaAppId,
+      configId: config.metaLoginConfigId,
+      graphVersion: config.metaGraphVersion,
+      redirectUri: config.metaRedirectUri,
+      state,
+    }),
+    state,
+  };
+}
+
+async function handleAdsComplete(
+  body: JsonRecord,
+  config: RuntimeConfig,
+  admin: SupabaseClient,
+): Promise<JsonRecord> {
+  const code = requiredText(body.code, "Código de autorização ausente.", 4_096);
+  const state = requiredText(body.state, "Estado de autorização ausente.", 1_024);
+
+  // Uso unico: consumir aqui e o que impede o mesmo retorno de ser
+  // reapresentado por alguem que tenha visto a URL.
+  await rpcOrThrow(
+    admin,
+    "ads_oauth_consume_session",
+    { _state: state },
+    "A conexão de anúncios expirou. Comece de novo.",
+  );
+
+  const shortLived = await exchangeToken(config, {
+    redirect_uri: config.metaRedirectUri,
+    code,
+  });
+  const longLived = await exchangeToken(config, {
+    grant_type: "fb_exchange_token",
+    fb_exchange_token: requiredMetaToken(shortLived.access_token),
+  });
+  const userAccessToken = requiredMetaToken(longLived.access_token);
+
+  const permissionsPayload = await graphGet(config, "me/permissions", userAccessToken);
+  const permissions = missingMetaScopes(permissionsPayload.data);
+  if (!permissions.granted.includes("ads_read")) {
+    throw new ApiError(
+      "Você precisa autorizar a leitura de anúncios para conectar esta parte.",
+      422,
+      "META_ADS_PERMISSION_MISSING",
+      { granted: permissions.granted },
+    );
+  }
+
+  const contas = await graphGet(config, "me/adaccounts", userAccessToken, {
+    fields: "id,name,account_status",
+    limit: "200",
+  });
+
+  await rpcOrThrow(
+    admin,
+    "save_meta_ads_token_from_login",
+    { _token: userAccessToken, _label: "Token do login da Meta" },
+    "Não foi possível guardar o acesso de anúncios.",
+  );
+
+  return {
+    ok: true,
+    contas: Array.isArray(contas.data)
+      ? contas.data.map((c: JsonRecord) => ({
+        numero: String(c.id ?? "").replace(/^act_/i, ""),
+        nome: c.name ?? null,
+      }))
+      : [],
+  };
+}
+
 Deno.serve(async (req) => {
   const requestId = crypto.randomUUID();
   const origin = req.headers.get("origin");
@@ -825,7 +937,13 @@ Deno.serve(async (req) => {
     const action = actionValue as Action;
 
     let result: JsonRecord;
-    if (action === "start") {
+    if (action === "ads_start") {
+      const config = loadMetaConfig(supabaseConfig);
+      result = await handleAdsStart(config, caller, admin);
+    } else if (action === "ads_complete") {
+      const config = loadMetaConfig(supabaseConfig);
+      result = await handleAdsComplete(body, config, admin);
+    } else if (action === "start") {
       const config = loadMetaConfig(supabaseConfig);
       result = await handleStart(body, config, caller, admin);
     } else if (action === "complete") {

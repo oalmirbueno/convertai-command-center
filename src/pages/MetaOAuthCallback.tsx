@@ -1,3 +1,9 @@
+import type { AdsOAuthResult, CompleteMetaOAuthResult } from "@/lib/socialMetaOAuth";
+import {
+  completeAdsOAuth,
+  ehLoginDeAnuncios,
+  esquecerLoginDeAnuncios,
+} from "@/lib/socialMetaOAuth";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import {
@@ -10,15 +16,31 @@ import {
 
 type CallbackStatus = "loading" | "success" | "error";
 
-const metaOAuthCompletions = new Map<
-  string,
-  ReturnType<typeof completeMetaOAuth>
->();
+/** O que cada caminho devolve, já com a etiqueta de quem é o dono. */
+type RetornoDoLogin =
+  | ({ ok: true; alvo: "social" } & CompleteMetaOAuthResult)
+  | ({ ok: true; alvo: "anuncios" } & AdsOAuthResult);
 
+const metaOAuthCompletions = new Map<string, Promise<RetornoDoLogin>>();
+
+/**
+ * O retorno do login sabe de onde veio pela marca presa ao `state`.
+ *
+ * Conexão de anúncios e conexão de rede social voltam pela MESMA rota de
+ * callback, mas terminam em lugares diferentes: uma guarda o acesso de
+ * anúncios, a outra grava as contas de Instagram. Mandar o retorno de
+ * anúncios pelo caminho social faria a sessão não bater e a pessoa veria
+ * "expirou" sem ter expirado nada.
+ */
 function completeMetaOAuthOnce(code: string, state: string) {
   const existing = metaOAuthCompletions.get(state);
   if (existing) return existing;
-  const completion = completeMetaOAuth({ code, state });
+  const completion: Promise<RetornoDoLogin> = ehLoginDeAnuncios(state)
+    ? completeAdsOAuth({ code, state })
+      .finally(() => esquecerLoginDeAnuncios(state))
+      .then((r) => ({ ...r, alvo: "anuncios" as const }))
+    : completeMetaOAuth({ code, state })
+      .then((r) => ({ ...r, ok: true as const, alvo: "social" as const }));
   metaOAuthCompletions.set(state, completion);
   return completion;
 }
@@ -95,7 +117,7 @@ export default function MetaOAuthCallback() {
 
     void completeMetaOAuthOnce(code, state)
       .then((result) => {
-        finish({ type: META_OAUTH_MESSAGE_TYPE, ok: true, ...result });
+        finish({ type: META_OAUTH_MESSAGE_TYPE, ...result });
       })
       .catch((error: unknown) => {
         finish({
