@@ -305,7 +305,7 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("accepts the live 115-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(64);
+    const rows = remoteRows(65);
     expect(rows).toHaveLength(161);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
@@ -340,8 +340,8 @@ describe("production migration view", { timeout: 30000 }, () => {
       aliases: 96,
       appliedForward: 0,
       appliedAliases: 0,
-      pendingForward: 64,
-      files: 160,
+      pendingForward: 65,
+      files: 161,
     });
     expect(filenames).toHaveLength(161);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
@@ -359,19 +359,19 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("reconciles the live aliased ledger to sentinels only and zero pending forward", () => {
     const plan = loadProductionMigrationPlan();
-    const { outputDir, result } = buildFixture(64);
+    const { outputDir, result } = buildFixture(65);
     const filenames = readdirSync(outputDir).sort();
 
     expect(result).toEqual({
       aliases: 96,
-      appliedForward: 64,
+      appliedForward: 65,
       appliedAliases: 12,
       pendingForward: 0,
-      files: 160,
+      files: 161,
     });
     expect(filenames).toHaveLength(161);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
-      .toHaveLength(109);
+      .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
     // still be the fail-closed sentinel for the version already in the ledger.
     for (const entry of plan.forwardLedger.filter((item) => item.alias === null)) {
@@ -491,7 +491,7 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("keeps a future unaliased forward migration pending after the current package", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(64)));
+    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(65)));
     const future = { ...plan.forwardLedger.at(-1)! };
     const syntheticPlan = {
       ...plan,
@@ -632,7 +632,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       ],
     };
 
-    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(64)));
+    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(65)));
     const pending = validateRemoteLedger(syntheticPlan, live);
     expect(pending.pendingForward).toHaveLength(1);
     expect(pending.pendingForward[0].bytes).toEqual(canonical.bytes);
