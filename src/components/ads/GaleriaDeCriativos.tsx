@@ -34,6 +34,7 @@ export interface CriativoDeAnuncio {
   ctr: number | null;
   custo_no_link: number | null;
   dias_com_dado: number;
+  campanha?: string | null;
 }
 
 const dinheiro = (v: number) =>
@@ -42,7 +43,16 @@ const inteiro = (v: number) => v.toLocaleString("pt-BR");
 
 function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
   const [falhou, setFalhou] = useState(false);
-  const src = grande ? (c.image_url || c.thumbnail_url) : (c.thumbnail_url || c.image_url);
+  /*
+   * A ARTE vem primeiro, nos dois tamanhos, e não só na tela cheia.
+   *
+   * `thumbnail_url` da Meta traz `p64x64` na própria URL: são 64 pixels.
+   * Esticada num cartão de 230px vira um borrão, e foi isso que apareceu
+   * na primeira versão. A `image_url` é a peça em tamanho real — conferi
+   * uma delas: 697 por 697, servida pelo fbcdn sem bloqueio de origem.
+   * A miniatura fica como reserva, para quando a arte não vier.
+   */
+  const src = c.image_url || c.thumbnail_url;
 
   if (!src || falhou) {
     return (
@@ -69,6 +79,9 @@ function Miniatura({ c, grande }: { c: CriativoDeAnuncio; grande?: boolean }) {
       alt={c.ad_name || "Criativo"}
       loading="lazy"
       onError={() => setFalhou(true)}
+      /* O fbcdn devolve a imagem sem exigir origem, e mandar a nossa não
+         acrescenta nada além de vazar de onde o painel está sendo aberto. */
+      referrerPolicy="no-referrer"
       className={cn(
         "bg-secondary object-cover",
         grande ? "max-h-[60vh] w-auto object-contain" : "aspect-square w-full",
@@ -108,6 +121,25 @@ export default function GaleriaDeCriativos({
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [aberto]);
+
+  /* O total do período, para a grade ter um teto de leitura. Sem isto,
+     quem abre a tela vê vinte cartões e não sabe se aquilo é muito ou
+     pouco dinheiro. */
+  const resumo = useMemo(() => {
+    const comNumero = criativos.filter((c) => c.dias_com_dado > 0);
+    const gasto = criativos.reduce((t, c) => t + c.gasto, 0);
+    const cliquesNoLink = criativos.reduce((t, c) => t + c.cliques_no_link, 0);
+    return {
+      gasto,
+      pecas_com_numero: comNumero.length,
+      pecas_sem_numero: criativos.length - comNumero.length,
+      cliques_no_link: cliquesNoLink,
+      custo_medio: cliquesNoLink > 0 ? gasto / cliquesNoLink : null,
+      // A peça que mais gastou é a que mais decide o resultado do mês, e é
+      // a primeira coisa que alguém quer saber ao abrir a tela.
+      maior: [...comNumero].sort((a, b) => b.gasto - a.gasto)[0] ?? null,
+    };
+  }, [criativos]);
 
   const ordenados = useMemo(() => {
     const lista = [...criativos];
@@ -169,6 +201,34 @@ export default function GaleriaDeCriativos({
         </div>
       </header>
 
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border px-3.5 py-2.5 text-[11px]">
+        <span className="text-muted-foreground">
+          investido nas peças{" "}
+          <strong className="tabular-nums text-foreground">{dinheiro(resumo.gasto)}</strong>
+        </span>
+        <span className="text-muted-foreground">
+          cliques no link{" "}
+          <strong className="tabular-nums text-info">{inteiro(resumo.cliques_no_link)}</strong>
+        </span>
+        {resumo.custo_medio !== null && (
+          <span className="text-muted-foreground">
+            custo médio{" "}
+            <strong className="tabular-nums text-success">{dinheiro(resumo.custo_medio)}</strong>
+          </span>
+        )}
+        {resumo.maior && (
+          <span className="min-w-0 truncate text-muted-foreground">
+            maior gasto:{" "}
+            <strong className="text-foreground">{resumo.maior.ad_name || "peça sem nome"}</strong>
+          </span>
+        )}
+        {resumo.pecas_sem_numero > 0 && (
+          <span className="text-muted-foreground">
+            {resumo.pecas_sem_numero} sem número no período
+          </span>
+        )}
+      </div>
+
       <div className="grid gap-2.5 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {ordenados.map((c) => (
           <button
@@ -194,6 +254,9 @@ export default function GaleriaDeCriativos({
               <p className="truncate text-[11.5px] font-semibold text-foreground">
                 {c.ad_name || "Peça sem nome"}
               </p>
+              {c.campanha && (
+                <p className="truncate text-[9.5px] text-muted-foreground">{c.campanha}</p>
+              )}
               {c.dias_com_dado === 0 ? (
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   sem número no período
@@ -235,7 +298,8 @@ export default function GaleriaDeCriativos({
                 <p className="truncate text-sm font-semibold text-foreground">
                   {aberto.ad_name || "Peça sem nome"}
                 </p>
-                <p className="text-[10.5px] text-muted-foreground">
+                <p className="truncate text-[10.5px] text-muted-foreground">
+                  {aberto.campanha ? `${aberto.campanha} · ` : ""}
                   {aberto.effective_status?.toLowerCase() || "situação desconhecida"}
                   {aberto.dias_com_dado > 0 && ` · ${aberto.dias_com_dado} dias com número`}
                 </p>

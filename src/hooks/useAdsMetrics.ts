@@ -174,9 +174,21 @@ export function useAdsCreatives(clientId?: string, dias = 30) {
         numeros = numeros.eq("client_id", clientId);
       }
 
-      const [f, n] = await Promise.all([fichas, numeros]);
+      // O nome da campanha vem junto: o cartão diz "de qual campanha é
+      // esta peça", que é a primeira pergunta de quem olha vinte artes
+      // seguidas sem saber a qual frente cada uma pertence.
+      let campanhas = (supabase as any)
+        .from("ads_campaigns")
+        .select("campaign_id, name")
+        .limit(500);
+      if (clientId) campanhas = campanhas.eq("client_id", clientId);
+
+      const [f, n, k] = await Promise.all([fichas, numeros, campanhas]);
       if (f.error) throw f.error;
       if (n.error) throw n.error;
+      const nomeDaCampanha = new Map<string, string>(
+        ((k.data || []) as any[]).map((c) => [c.campaign_id, c.name]),
+      );
 
       const porPeca = new Map<string, any[]>();
       for (const linha of (n.data || []) as any[]) {
@@ -202,6 +214,9 @@ export function useAdsCreatives(clientId?: string, dias = 30) {
           titulo: peca.titulo,
           corpo: peca.corpo,
           effective_status: peca.effective_status ?? peca.status,
+          campanha: peca.campaign_id
+            ? nomeDaCampanha.get(peca.campaign_id) ?? null
+            : null,
           gasto,
           impressoes,
           cliques,

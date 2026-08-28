@@ -118,3 +118,33 @@ describe("a galeria mostra a peca e o numero", () => {
     expect(tela).toContain('queryKey: ["ads-creatives"]');
   });
 });
+
+describe("a arte aparece em tamanho de verdade", () => {
+  it("a grade usa image_url, e nao a miniatura de 64 pixels", () => {
+    // thumbnail_url da Meta traz `p64x64` na propria URL: sao 64 pixels,
+    // que esticados num cartao de 272px viram um borrao. Conferi uma
+    // image_url real da conta: 697 por 697.
+    expect(galeria).toContain("const src = c.image_url || c.thumbnail_url;");
+    expect(galeria).toContain("p64x64");
+  });
+
+  it("nao manda a origem do painel para o fbcdn", () => {
+    // A imagem vem sem exigir origem, e mandar a nossa so vazaria de onde
+    // o painel esta sendo aberto.
+    expect(galeria).toContain('referrerPolicy="no-referrer"');
+  });
+
+  it("o topo diz quanto foi investido nas pecas", () => {
+    // Sem um teto de leitura, quem abre a tela ve vinte cartoes e nao sabe
+    // se aquilo e muito ou pouco dinheiro.
+    expect(galeria).toContain("investido nas peças");
+    expect(galeria).toContain("custo médio");
+    expect(galeria).toContain("maior gasto:");
+  });
+
+  it("cada peca diz de qual campanha e", () => {
+    // Primeira pergunta de quem olha vinte artes seguidas.
+    expect(galeria).toContain("{c.campanha}");
+    expect(hook).toContain("nomeDaCampanha.get(peca.campaign_id)");
+  });
+});
