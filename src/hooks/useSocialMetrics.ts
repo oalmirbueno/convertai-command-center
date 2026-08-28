@@ -124,25 +124,6 @@ export async function collectSocialMetricsNow() {
   return data as { week_start: string; dispatched: number; parsed: number };
 }
 
-/**
- * Guarda o token do Business Manager que cobre TODAS as contas.
- *
- * Um token só, no lugar de conectar conta por conta. O grant de uma conta
- * específica continua ganhando dele, então ligar isto não desfaz nenhuma
- * conexão que já funciona.
- *
- * O token vai direto para o cofre do banco e nunca mais é devolvido por
- * leitura nenhuma — nem para a tela, nem para quem escreveu este código.
- */
-export async function saveMetaSocialToken(token: string, label = "Token da agência") {
-  const { data, error } = await (supabase as any).rpc("save_meta_social_token", {
-    _token: token,
-    _label: label,
-  });
-  if (error) throw error;
-  return data as { id: string; saved_at: string };
-}
-
 export function formatMetricNumber(value: number | null | undefined) {
   if (value == null) return "-";
   return new Intl.NumberFormat("pt-BR").format(value);
