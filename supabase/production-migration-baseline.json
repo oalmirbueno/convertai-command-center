@@ -561,6 +561,14 @@
       "remote_name": "o_alarme_se_desfaz_sozinho",
       "remote_statements_sha256": "cbd22ca0c9e0899209f9649ff49af2cc6ecba8ea4a7aed9249c0b99d0dac1c4c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828070000",
+      "path": "supabase/migrations/20260828070000_metricas_de_post_a_cada_meia_hora.sql",
+      "local_sha256": "b6bc630824edbc285c5d439d8ac2f2724a1753bd8bb2585bc3d8622fd1eb85ac",
+      "remote_name": "metricas_de_post_a_cada_meia_hora",
+      "remote_statements_sha256": "fc6106966075c986851b24c0a23ba5eb2b7100e99d91df92722e26d8dd2eb962",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
