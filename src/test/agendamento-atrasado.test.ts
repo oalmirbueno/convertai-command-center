@@ -137,3 +137,56 @@ describe("o painel aprende que o post ja saiu", () => {
     expect(codigo).not.toMatch(/delivery_mode\s*=\s*'automatic'/i);
   });
 });
+
+describe("o alarme que ficou errado se desfaz sozinho", () => {
+  const cura = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828060000_o_alarme_se_desfaz_sozinho.sql"), "utf8",
+  );
+  const codigo = cura.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+
+  it("aviso sobre publicacao que saiu da fila perde o assunto e vai embora", () => {
+    // Doze avisos passaram a dizer "nao foi ao ar" sobre posts publicados.
+    // O alarme avisa uma vez so, entao a mentira ficaria para sempre.
+    expect(codigo).toContain("delete from public.notifications n");
+    expect(codigo).toContain("n.notification_type = 'agendamento_atrasado'");
+    expect(codigo).toContain("p.status <> 'scheduled'");
+  });
+
+  it("o escopo do apagar e estreito: so este tipo, so este caso", () => {
+    // Apagar notificacao e destrutivo. Aqui e seguro porque o texto
+    // inteiro do aviso e "isto nao saiu", e isso deixou de ser verdade.
+    const del = codigo.slice(codigo.indexOf("delete from public.notifications"));
+    const ate = del.slice(0, del.indexOf("returning"));
+    expect(ate).toContain("notification_type = 'agendamento_atrasado'");
+    expect(ate).toContain("editorial_publications");
+    // Nenhum outro delete em notifications no arquivo.
+    expect((codigo.match(/delete from public\.notifications/g) ?? []).length).toBe(1);
+  });
+
+  it("reconcilia, limpa e SO ENTAO alarma", () => {
+    const c = codigo;
+    const rec = c.indexOf("editorial_reconciliar_publicados()");
+    const lim = c.indexOf("editorial_limpar_alertas_resolvidos()", rec);
+    const ale = c.indexOf("editorial_alerta_agendamento_atrasado()", lim);
+    expect(rec).toBeGreaterThan(-1);
+    expect(lim).toBeGreaterThan(rec);
+    expect(ale).toBeGreaterThan(lim);
+  });
+
+  it("o alarme espera 90 minutos, a coleta roda de 10 em 10", () => {
+    // A corrida que sobrava: post publicado 09:53 so aparece nas metricas
+    // as 10:03. Alarme aos 15 minutos falava antes de a reconciliacao ter
+    // como saber, e como ele nao se repete, o falso alarme ficava.
+    expect(codigo).toContain("p.scheduled_at < now() - interval '90 minutes'");
+    expect(cura).toContain("nove ciclos de coleta de folga");
+  });
+
+  it("a reconciliacao NAO espera 90 minutos: dar baixa cedo nao tem risco", () => {
+    // O risco todo estava em ACUSAR cedo, nunca em registrar cedo.
+    expect(cura).toContain("A reconciliacao continua a partir dos 15 minutos");
+  });
+
+  it("a limpeza dos que ja estao mentindo roda junto com a migration", () => {
+    expect(codigo).toContain("select public.editorial_limpar_alertas_resolvidos();");
+  });
+});

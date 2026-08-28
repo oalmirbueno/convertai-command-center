@@ -553,6 +553,14 @@
       "remote_name": "o_painel_aprende_o_que_ja_saiu",
       "remote_statements_sha256": "d0f0541104f568a85d4aa7361a259bd9e279d20a98a810c020de885ad09d7489",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828060000",
+      "path": "supabase/migrations/20260828060000_o_alarme_se_desfaz_sozinho.sql",
+      "local_sha256": "23a3fa0accf4109c0d92f9052c5e8ef25d39c6d68012e0d8189a0c7a3f3bb71c",
+      "remote_name": "o_alarme_se_desfaz_sozinho",
+      "remote_statements_sha256": "cbd22ca0c9e0899209f9649ff49af2cc6ecba8ea4a7aed9249c0b99d0dac1c4c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
