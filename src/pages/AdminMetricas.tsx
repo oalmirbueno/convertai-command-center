@@ -21,6 +21,7 @@ import {
   collectSocialMetricsNow,
   formatMetricNumber,
   useSocialClientIdentity,
+  saveMetaSocialToken,
   useSocialMetricsWeekly,
   useSocialPostMetrics,
   weekDeltaPct,
@@ -386,6 +387,28 @@ export default function AdminMetricas() {
   const { data: rows, isLoading } = useSocialMetricsWeekly();
   const queryClient = useQueryClient();
   const [collecting, setCollecting] = useState(false);
+  const [token, setToken] = useState("");
+  const [salvandoToken, setSalvandoToken] = useState(false);
+
+  /**
+   * Um token do Business Manager no lugar de conectar conta por conta.
+   *
+   * O texto sai do campo assim que e guardado: token que continua na tela
+   * e token que vaza pelo ombro de quem passa, por print de reuniao e pelo
+   * historico do navegador.
+   */
+  const salvarToken = async () => {
+    setSalvandoToken(true);
+    try {
+      await saveMetaSocialToken(token);
+      setToken("");
+      toast.success("Token guardado no cofre. Todas as contas passam a ser lidas por ele.");
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || "Não foi possível guardar.");
+    } finally {
+      setSalvandoToken(false);
+    }
+  };
   const [search, setSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClientId = searchParams.get("client") || "";
@@ -479,6 +502,33 @@ export default function AdminMetricas() {
           {collecting ? "Atualizando..." : "Atualizar agora"}
         </Button>
       </div>
+
+      <details className="rounded-xl border border-border bg-card">
+        <summary className="cursor-pointer px-3.5 py-2.5 text-[12px] font-semibold text-foreground">
+          Conexão da agência · um token para todas as contas
+        </summary>
+        <div className="border-t border-border px-3.5 py-3">
+          <p className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
+            Um token de Usuário do Sistema do Business Manager da Aceleriq lê todas
+            as contas de Instagram que já estão sob a nossa gestão, sem precisar
+            conectar uma por uma. Ele vai para o cofre do banco e nunca mais
+            aparece nesta tela. Conta que tenha conexão própria continua usando a
+            dela: ligar isto não desfaz nada que já funciona.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Cole aqui o token do Business Manager"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-border bg-secondary px-3 text-[12px] text-foreground placeholder:text-muted-foreground"
+            />
+            <Button size="sm" onClick={salvarToken} disabled={!token.trim() || salvandoToken}>
+              {salvandoToken ? "Guardando..." : "Guardar no cofre"}
+            </Button>
+          </div>
+        </div>
+      </details>
 
       {selectedClientId ? (
         <ClientMetricsDetail

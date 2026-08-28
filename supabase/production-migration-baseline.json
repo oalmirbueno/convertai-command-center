@@ -577,6 +577,14 @@
       "remote_name": "seguidores_do_dia_de_hoje",
       "remote_statements_sha256": "8cb899dee23f1d68cc8138219d492a2776b2ad3baebebb24f87998ca840a6a6c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828090000",
+      "path": "supabase/migrations/20260828090000_um_token_da_agencia_para_o_social.sql",
+      "local_sha256": "2da39075f2ea170ff0503d18ba1e0267bb8eef85142fd3d89666666090734a53",
+      "remote_name": "um_token_da_agencia_para_o_social",
+      "remote_statements_sha256": "c531e4ca2b4c43ec62b68c8ee4cf9ad8fdba53f9d07abce7db30ea00dea7350f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
