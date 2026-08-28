@@ -115,9 +115,109 @@ export function useAdsConnection() {
 }
 
 export async function collectAdsMetricsNow() {
-  const { data, error } = await (supabase as any).rpc("collect_ads_metrics_now", {});
+  // collect_ads_now colhe campanhas E criativos na mesma passada. Chamar só
+  // o de campanhas deixaria as peças paradas esperando o cron, e quem
+  // aperta "atualizar" quer ver a tela inteira mudar, não metade dela.
+  const { data, error } = await (supabase as any).rpc("collect_ads_now", {});
   if (error) throw error;
-  return data as { since: string; until: string; dispatched: number; parsed: number };
+  return data as {
+    campanhas: { dispatched: number; parsed: number };
+    criativos: { dispatched: number; parsed: number };
+  };
+}
+
+export interface CriativoBruto {
+  ad_id: string;
+  ad_name: string | null;
+  campaign_id: string | null;
+  thumbnail_url: string | null;
+  image_url: string | null;
+  video_id: string | null;
+  titulo: string | null;
+  corpo: string | null;
+  effective_status: string | null;
+  status: string | null;
+}
+
+/**
+ * Os criativos de um cliente, com o desempenho de cada peça somado.
+ *
+ * Duas consultas em vez de uma junção: a ficha da peça vive numa tabela e
+ * os números diários em outra, e trazer o produto das duas pelo banco
+ * repetiria a ficha uma vez por dia de dado. Somar aqui é mais barato e
+ * mantém a leitura simples.
+ */
+export function useAdsCreatives(clientId?: string, dias = 30) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["ads-creatives", user?.id, clientId ?? "all", dias],
+    queryFn: async () => {
+      const desde = new Date();
+      desde.setUTCDate(desde.getUTCDate() - (dias - 1));
+      const desdeIso = desde.toISOString().slice(0, 10);
+
+      let fichas = (supabase as any)
+        .from("ads_creatives")
+        .select(
+          "ad_id, ad_name, campaign_id, thumbnail_url, image_url, video_id, titulo, corpo, status, effective_status",
+        )
+        .order("updated_at", { ascending: false })
+        .limit(300);
+      let numeros = (supabase as any)
+        .from("ads_creative_daily")
+        .select("ad_id, day, spend, impressions, reach, clicks, link_clicks")
+        .gte("day", desdeIso)
+        .limit(2000);
+
+      if (clientId) {
+        fichas = fichas.eq("client_id", clientId);
+        numeros = numeros.eq("client_id", clientId);
+      }
+
+      const [f, n] = await Promise.all([fichas, numeros]);
+      if (f.error) throw f.error;
+      if (n.error) throw n.error;
+
+      const porPeca = new Map<string, any[]>();
+      for (const linha of (n.data || []) as any[]) {
+        const lista = porPeca.get(linha.ad_id);
+        if (lista) lista.push(linha);
+        else porPeca.set(linha.ad_id, [linha]);
+      }
+      const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0);
+
+      return ((f.data || []) as CriativoBruto[]).map((peca) => {
+        const seus = porPeca.get(peca.ad_id) ?? [];
+        const gasto = seus.reduce((t, l) => t + num(l.spend), 0);
+        const impressoes = seus.reduce((t, l) => t + num(l.impressions), 0);
+        const cliques = seus.reduce((t, l) => t + num(l.clicks), 0);
+        const cliquesNoLink = seus.reduce((t, l) => t + num(l.link_clicks), 0);
+        return {
+          ad_id: peca.ad_id,
+          ad_name: peca.ad_name,
+          campaign_id: peca.campaign_id,
+          thumbnail_url: peca.thumbnail_url,
+          image_url: peca.image_url,
+          video_id: peca.video_id,
+          titulo: peca.titulo,
+          corpo: peca.corpo,
+          effective_status: peca.effective_status ?? peca.status,
+          gasto,
+          impressoes,
+          cliques,
+          cliques_no_link: cliquesNoLink,
+          // Alcance NÃO soma: a mesma pessoa alcançada em dois dias não são
+          // duas pessoas. O maior dia é o piso honesto.
+          maior_alcance: seus.reduce((m, l) => Math.max(m, num(l.reach)), 0),
+          ctr: impressoes > 0 ? (cliques / impressoes) * 100 : null,
+          custo_no_link: cliquesNoLink > 0 ? gasto / cliquesNoLink : null,
+          dias_com_dado: seus.length,
+        };
+      });
+    },
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 }
 
 /** Guarda o token de leitura do Meta Ads. Só administrador; o token vai ao cofre. */

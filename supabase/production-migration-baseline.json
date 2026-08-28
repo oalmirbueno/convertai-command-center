@@ -601,6 +601,14 @@
       "remote_name": "gen_random_bytes_qualificado",
       "remote_statements_sha256": "7278c3c654c2c6aea1f67438dc2794f29b49a15b9d68392f82dfb43275600290",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828130000",
+      "path": "supabase/migrations/20260828130000_criativos_de_anuncio.sql",
+      "local_sha256": "2d0d932ec0c1964ece3578ed5433238cdde42796f94b4f0be380abfc73c6a601",
+      "remote_name": "criativos_de_anuncio",
+      "remote_statements_sha256": "a38de7b895ffd1999ed1caee72d06755d16cc892dfaf096e8e5eefe75099e95d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

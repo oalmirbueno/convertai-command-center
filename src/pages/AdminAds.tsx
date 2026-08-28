@@ -16,6 +16,7 @@ import {
   startAdsOAuth,
   type MetaOAuthPopupMessage,
 } from "@/lib/socialMetaOAuth";
+import GaleriaDeCriativos from "@/components/ads/GaleriaDeCriativos";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { hasService } from "@/lib/clientFlags";
 import {
   collectAdsMetricsNow,
+  useAdsCreatives,
   connectAdsAccount,
   saveMetaAdsToken,
   useAdsCampaigns,
@@ -126,6 +128,7 @@ function ClientAdsDetail({
   }, [rows, campaigns]);
 
   const carteira = useMemo(() => summarizeAccount(rows), [rows]);
+  const { data: criativos } = useAdsCreatives(clientId, 30);
 
   /**
    * Abre o relatório já preenchido com o que a Meta devolveu.
@@ -202,6 +205,11 @@ function ClientAdsDetail({
           )}
         </div>
       </div>
+
+      {/* Os criativos vêm ANTES das campanhas de propósito: a pergunta que
+          se faz olhando anúncio é "qual peça funcionou", e campanha é o
+          agregado que já estava disponível antes. */}
+      <GaleriaDeCriativos criativos={criativos || []} periodoDias={30} />
 
       {porCampanha.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
@@ -471,7 +479,9 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
             outro, e isso só apareceria no fim do mês.
           </p>
 
-          <div className="mt-3 space-y-1.5">
+          {/* Rolagem própria: uma carteira com vinte contas empurraria o
+              resto da tela para fora antes de alguém ligar a primeira. */}
+          <div className="mt-3 max-h-[22rem] space-y-1.5 overflow-y-auto pr-1">
             {contasDaMeta.map((conta) => {
               const jaLigada = (conexao?.contas || []).find(
                 (c) => c.external_id === conta.numero,
@@ -647,12 +657,17 @@ export default function AdminAds() {
     setColetando(true);
     try {
       const resultado = await collectAdsMetricsNow();
+      const lidas = resultado.campanhas.parsed + resultado.criativos.parsed;
+      const pedidas = resultado.campanhas.dispatched + resultado.criativos.dispatched;
       toast.success(
-        `Leitura disparada para ${resultado.dispatched} consulta(s). Os números chegam em alguns minutos.`,
+        lidas > 0
+          ? `Lidas ${lidas} resposta(s) da Meta, incluindo criativos. Os números já estão na tela.`
+          : `Leitura disparada (${pedidas} consulta[s]). Os números chegam em alguns minutos.`,
       );
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["ads-daily"] }),
         queryClient.invalidateQueries({ queryKey: ["ads-campaigns"] }),
+        queryClient.invalidateQueries({ queryKey: ["ads-creatives"] }),
         queryClient.invalidateQueries({ queryKey: ["ads-connection"] }),
       ]);
     } catch (error: unknown) {

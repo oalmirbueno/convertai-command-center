@@ -205,3 +205,123 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
     },
   };
 }
+
+/* ────────────────── Criativos: a peça, e como ela foi ─────────────────── */
+
+/** Soma segura de um campo numérico numa lista de dias. */
+function soma(linhas: Array<Record<string, unknown>>, campo: string) {
+  return linhas.reduce((t, l) => t + numero(l[campo]), 0);
+}
+
+/**
+ * Desempenho POR CRIATIVO, que é a pergunta que campanha não responde.
+ *
+ * Campanha diz quanto se gastou; criativo diz QUAL PEÇA fez o trabalho. É
+ * a diferença entre "a campanha rendeu" e "este vídeo rendeu, aquela arte
+ * não" — e só a segunda dá o que fazer na semana seguinte.
+ *
+ * O alcance do período NÃO é somado: a mesma pessoa alcançada em dois dias
+ * não são duas pessoas. Devolvo o maior dia, que é o piso honesto, com o
+ * nome do campo dizendo isso.
+ */
+export async function listAdsCreatives(opts: {
+  client_id?: string;
+  days?: number;
+  limit?: number;
+}) {
+  const dias = Math.min(Math.max(opts.days ?? 30, 1), 30);
+  const teto = Math.min(Math.max(opts.limit ?? 50, 1), READ_LIMITS.maxPageSize);
+  const desde = new Date();
+  desde.setUTCDate(desde.getUTCDate() - (dias - 1));
+  const desdeIso = desde.toISOString().slice(0, 10);
+
+  let fichas = db()
+    .from('ads_creatives')
+    .select(
+      'client_id, ad_id, ad_name, campaign_id, creative_id, thumbnail_url, image_url, video_id, titulo, corpo, status, effective_status, updated_at',
+    )
+    .order('updated_at', { ascending: false })
+    .limit(READ_LIMITS.maxPageSize);
+
+  let numeros = db()
+    .from('ads_creative_daily')
+    .select(
+      'client_id, ad_id, ad_name, campaign_id, day, spend, impressions, reach, clicks, link_clicks, ctr, cpc, cpm, frequency, actions',
+    )
+    .gte('day', desdeIso)
+    .order('day', { ascending: false })
+    .limit(READ_LIMITS.maxPageSize);
+
+  if (opts.client_id) {
+    if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+    fichas = fichas.eq('client_id', opts.client_id);
+    numeros = numeros.eq('client_id', opts.client_id);
+  }
+
+  const [{ data: fichaData, error: e1 }, { data: diaData, error: e2 }] = await Promise.all([
+    fichas,
+    numeros,
+  ]);
+  if (e1) throw new Error(e1.message);
+  if (e2) throw new Error(e2.message);
+
+  const dias_por_peca = new Map<string, Array<Record<string, unknown>>>();
+  for (const linha of (diaData || []) as Array<Record<string, unknown>>) {
+    const chave = String(linha.ad_id);
+    const lista = dias_por_peca.get(chave);
+    if (lista) lista.push(linha);
+    else dias_por_peca.set(chave, [linha]);
+  }
+
+  const pecas = ((fichaData || []) as Array<Record<string, unknown>>).map((f) => {
+    const seus = dias_por_peca.get(String(f.ad_id)) ?? [];
+    const gasto = soma(seus, 'spend');
+    const impressoes = soma(seus, 'impressions');
+    const cliques = soma(seus, 'clicks');
+    const cliquesNoLink = soma(seus, 'link_clicks');
+    return {
+      ad_id: f.ad_id,
+      nome: f.ad_name,
+      campaign_id: f.campaign_id,
+      // A miniatura EXPIRA no lado da Meta. Quem consumir isto deve tratar
+      // uma imagem que não carrega como normal, não como defeito.
+      miniatura: f.thumbnail_url,
+      imagem: f.image_url,
+      video_id: f.video_id,
+      titulo: f.titulo,
+      corpo: f.corpo,
+      situacao: f.effective_status ?? f.status,
+      dias_com_dado: seus.length,
+      gasto,
+      impressoes,
+      cliques,
+      cliques_no_link: cliquesNoLink,
+      // Alcance não soma: o maior dia é o piso honesto.
+      maior_alcance_em_um_dia: seus.reduce((m, l) => Math.max(m, numero(l.reach)), 0),
+      ctr_medio: impressoes > 0 ? Number(((cliques / impressoes) * 100).toFixed(4)) : null,
+      custo_por_clique_no_link: cliquesNoLink > 0
+        ? Number((gasto / cliquesNoLink).toFixed(4))
+        : null,
+    };
+  });
+
+  const comGasto = pecas.filter((p) => p.gasto > 0);
+  return {
+    periodo_dias: dias,
+    total_de_pecas: pecas.length,
+    pecas: pecas.slice(0, teto),
+    // O ranking existe para responder "o que repito na semana que vem?".
+    // Só entra peça que gastou: comparar custo de quem não gastou nada
+    // colocaria um zero enganoso no topo.
+    melhores_por_custo_no_link: [...comGasto]
+      .filter((p) => p.custo_por_clique_no_link !== null)
+      .sort((a, b) => (a.custo_por_clique_no_link! - b.custo_por_clique_no_link!))
+      .slice(0, 5)
+      .map((p) => ({ ad_id: p.ad_id, nome: p.nome, custo: p.custo_por_clique_no_link, gasto: p.gasto })),
+    maiores_gastos: [...comGasto]
+      .sort((a, b) => b.gasto - a.gasto)
+      .slice(0, 5)
+      .map((p) => ({ ad_id: p.ad_id, nome: p.nome, gasto: p.gasto, ctr: p.ctr_medio })),
+    sem_dado_no_periodo: pecas.filter((p) => p.dias_com_dado === 0).length,
+  };
+}

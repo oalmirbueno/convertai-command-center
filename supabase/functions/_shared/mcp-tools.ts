@@ -265,6 +265,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_social_metrics: 'reports:read',
   aceleriq_list_social_posts: 'reports:read',
   aceleriq_get_ads_campaigns: 'reports:read',
+  aceleriq_get_ads_creatives: 'reports:read',
   aceleriq_get_ads_performance: 'reports:read',
   aceleriq_get_report: 'reports:read',
   aceleriq_create_report_draft: 'reports:write',
@@ -293,7 +294,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.36.0',
+  version: '1.37.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1721,6 +1722,7 @@ const getWeeklyCycleTool: ToolDefinition = {
 // ─── Resultado real: Instagram e Meta Ads ──────────────────────────────────
 import {
   listAdsCampaigns as _listAdsCampaigns,
+  listAdsCreatives as _listAdsCreatives,
   listAdsPerformance as _listAdsPerformance,
   listSocialMetrics as _listSocialMetrics,
   listSocialPosts as _listSocialPosts,
@@ -1773,6 +1775,33 @@ const listSocialPostsTool: ToolDefinition = {
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     return await _listSocialPosts(parsed.data);
+  },
+};
+
+const getAdsCreativesTool: ToolDefinition = {
+  name: 'aceleriq_get_ads_creatives',
+  title: 'Meta Ads — desempenho por criativo',
+  description: 'O desempenho de cada PECA de anuncio, que e a pergunta que campanha nao responde: campanha diz quanto se gastou, criativo diz QUAL arte fez o trabalho. Traz nome, miniatura, imagem, titulo e texto de cada anuncio, mais gasto, impressoes, cliques, cliques no link, CTR medio e custo por clique no link no periodo, com dois rankings prontos. ATENCAO a duas coisas: o endereco da miniatura vem da Meta e EXPIRA, entao imagem que nao carrega e normal e nao defeito; e `maior_alcance_em_um_dia` NAO e a soma do alcance, porque a mesma pessoa alcancada em dois dias nao sao duas pessoas — somar daria um numero inventado.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      days: { type: 'number', description: 'Janela em dias (1 a 30). Padrao 30.' },
+      limit: { type: 'number', description: 'Quantas pecas devolver. Padrao 50.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      days: limite(30, 1).optional(),
+      limit: limite(200, 1).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _listAdsCreatives(parsed.data);
   },
 };
 
@@ -2663,7 +2692,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Comercial', rota: '/comercial', para: 'Oportunidades, classes e qualificacao.', pelo_mcp: 'aceleriq_list_opportunities' },
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
-  { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance' },
+  { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
   { area: 'Contratos', rota: '/config', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
@@ -2800,6 +2829,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getSocialMetricsTool,
   listSocialPostsTool,
   getAdsCampaignsTool,
+  getAdsCreativesTool,
   getAdsPerformanceTool,
   // Files v2 (Bloco B — v1.7.0)
   ...(FILE_WRITE_ENABLED ? [
