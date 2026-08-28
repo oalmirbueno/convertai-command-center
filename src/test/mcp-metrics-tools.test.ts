@@ -103,6 +103,14 @@ describe("a fronteira entre clientes continua fechada", () => {
   });
 
   it("client_id, quando vem, é validado como UUID", () => {
-    expect(servicos.match(/client_id must be a UUID/g)?.length).toBe(4);
+    // O número acompanha os serviços que aceitam client_id. Subiu para 5
+    // quando entrou a leitura de criativos, que também valida. A regra que
+    // este teste guarda não é o número: é que NENHUM serviço com client_id
+    // fique sem validação. Por isso a contagem é comparada com quantos
+    // realmente recebem o parâmetro, e não com um número solto.
+    const queRecebem = servicos.match(/client_id\?:\s*string/g)?.length ?? 0;
+    const queValidam = servicos.match(/client_id must be a UUID/g)?.length ?? 0;
+    expect(queValidam).toBe(5);
+    expect(queValidam).toBeGreaterThanOrEqual(queRecebem);
   });
 });
