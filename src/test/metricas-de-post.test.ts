@@ -59,3 +59,64 @@ describe("coleta de posts a cada meia hora", () => {
     expect(codigo).not.toMatch(/CREATE OR REPLACE FUNCTION public\.social_metrics_tick/);
   });
 });
+
+describe("seguidores do dia de hoje", () => {
+  const sql = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828080000_seguidores_do_dia_de_hoje.sql"), "utf8",
+  );
+  const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+
+  it("mira a semana CORRENTE, nao a fechada", () => {
+    // O robo antigo mirava date_trunc('week', now) - 7. Numero de
+    // seguidores e um valor de agora, e nunca era buscado para a semana
+    // em curso: os doze clientes exibiam o retrato de 24/08 no dia 28.
+    expect(codigo).toContain("date_trunc(\n    'week', (now() at time zone 'America/Sao_Paulo')::date::timestamp\n  )::date;");
+    expect(codigo).not.toContain(")::date - 7");
+  });
+
+  it("perfil a cada 30 minutos, alcance a cada 3 horas", () => {
+    expect(codigo).toContain("_kind = 'profile' and _idade < interval '30 minutes'");
+    expect(codigo).toContain("_kind <> 'profile' and _idade < interval '3 hours'");
+  });
+
+  it("o until da consulta nunca cai no futuro", () => {
+    // Semana corrente termina no domingo que ainda nao chegou. Pedir
+    // insight ate uma data futura e pedir dado que nao existe: o Graph
+    // recusa e a linha termina com erro gravado.
+    expect(codigo).toContain("least(_fim, (now() at time zone 'America/Sao_Paulo')::date)");
+    expect(codigo).toContain("_inicio, _fim_consulta)");
+  });
+
+  it("mas o week_end gravado continua sendo o domingo de verdade", () => {
+    // Senao a linha mentiria sobre qual semana ela representa.
+    expect(codigo).toContain("values (_acct.id, _acct.client_id, _kind, _rid, _inicio, _fim)");
+  });
+
+  it("nao despacha dois pedidos iguais em voo", () => {
+    expect(codigo).toContain("and r.kind = _kind");
+    expect(codigo).toContain("continue;");
+  });
+
+  it("conta sem token e pulada, nao e erro", () => {
+    expect(codigo).toContain("if _token is null then continue; end if;");
+  });
+
+  it("quem grava continua sendo o parse de sempre", () => {
+    // Caminho paralelo de escrita e o que um dia diverge do original.
+    // Esta funcao SO despacha: nao escreve em social_metrics_weekly.
+    expect(codigo).not.toMatch(/insert into public\.social_metrics_weekly/i);
+    expect(codigo).not.toMatch(/update public\.social_metrics_weekly/i);
+    expect(codigo).toContain("public.social_metrics_tick()");
+  });
+
+  it("a semana ja fechada nao e reescrita", () => {
+    // Numero de periodo encerrado nao muda, e reescrever seria apagar
+    // historico. Nenhum delete ou update em metricas antigas.
+    expect(codigo).not.toMatch(/delete from public\.social_metrics_weekly/i);
+  });
+
+  it("o cron passa a chamar o ciclo completo", () => {
+    expect(codigo).toContain("social_metrics_ciclo()");
+    expect(codigo).toContain("'social-metrics', '*/10 * * * *'");
+  });
+});

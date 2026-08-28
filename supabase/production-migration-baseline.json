@@ -569,6 +569,14 @@
       "remote_name": "metricas_de_post_a_cada_meia_hora",
       "remote_statements_sha256": "fc6106966075c986851b24c0a23ba5eb2b7100e99d91df92722e26d8dd2eb962",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828080000",
+      "path": "supabase/migrations/20260828080000_seguidores_do_dia_de_hoje.sql",
+      "local_sha256": "3be18e4c7437bd612560576b814d1de154083afba300df11fb7f846b868dab4d",
+      "remote_name": "seguidores_do_dia_de_hoje",
+      "remote_statements_sha256": "8cb899dee23f1d68cc8138219d492a2776b2ad3baebebb24f87998ca840a6a6c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
