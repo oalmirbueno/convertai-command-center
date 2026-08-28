@@ -5383,6 +5383,8 @@ export type Database = {
       }
       ads_contas_conhecidas: { Args: never; Returns: Json }
       ads_metrics_tick: { Args: never; Returns: Json }
+      ads_oauth_consume_session: { Args: { _state: string }; Returns: Json }
+      ads_oauth_create_session: { Args: never; Returns: Json }
       archive_editorial_post: {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json
