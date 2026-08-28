@@ -577,6 +577,14 @@
       "remote_name": "seguidores_do_dia_de_hoje",
       "remote_statements_sha256": "8cb899dee23f1d68cc8138219d492a2776b2ad3baebebb24f87998ca840a6a6c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828100000",
+      "path": "supabase/migrations/20260828100000_anuncios_pelo_mesmo_login.sql",
+      "local_sha256": "5327f4cd6f4ff8b9cfe1529a72f9eb2f766d2463c73ec747eb287629bc12eb26",
+      "remote_name": "anuncios_pelo_mesmo_login",
+      "remote_statements_sha256": "75717d680451aebad0fbe7c35efec690bcaece4a02a495aeaa578d28492767a5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

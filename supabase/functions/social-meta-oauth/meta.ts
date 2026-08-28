@@ -6,6 +6,24 @@ export const META_REQUIRED_SCOPES = [
   "instagram_content_publish",
 ] as const;
 
+/**
+ * Permissao PEDIDA, mas nao exigida.
+ *
+ * `ads_read` faz o mesmo login que conecta o Instagram trazer tambem as
+ * contas de anuncio. O dono pediu exatamente isso: "deixar igual o do
+ * social, que e facil e ja puxa" — em vez de criar usuario do sistema no
+ * Business Manager e colar token a mao, conta por conta.
+ *
+ * Fica em OPCIONAL, e nao em obrigatoria, por um motivo pratico: a
+ * configuracao do Facebook Login for Business e quem decide de verdade o
+ * que o usuario ve na tela de consentimento. Se `ads_read` nao estiver
+ * ligado la, exigi-la aqui faria TODA conexao de Instagram passar a
+ * falhar, inclusive as que funcionam hoje. Assim, quem ja usa continua
+ * usando; quem autorizar tambem os anuncios ganha o token de graca, no
+ * mesmo clique.
+ */
+export const META_OPTIONAL_SCOPES = ["ads_read"] as const;
+
 export type MetaPlatform = "facebook" | "instagram";
 
 export type SanitizedMetaResource = {
@@ -114,7 +132,10 @@ export function buildFacebookLoginUrl(input: {
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", input.state);
-  url.searchParams.set("scope", META_REQUIRED_SCOPES.join(","));
+  url.searchParams.set(
+    "scope",
+    [...META_REQUIRED_SCOPES, ...META_OPTIONAL_SCOPES].join(","),
+  );
   return url.toString();
 }
 

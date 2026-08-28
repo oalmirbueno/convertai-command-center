@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  META_OPTIONAL_SCOPES,
   META_REQUIRED_SCOPES,
   buildAllowedOrigins,
   buildFacebookLoginUrl,
@@ -75,8 +76,12 @@ describe("social Meta OAuth Edge helpers", () => {
     expect(url.searchParams.get("client_id")).toBe("123456");
     expect(url.searchParams.get("config_id")).toBe("789012");
     expect(url.searchParams.get("state")).toBe("opaque-state");
+    // A URL pede as obrigatorias E a opcional de anuncios: e assim que o
+    // mesmo login passa a trazer as contas de anuncio junto, sem usuario
+    // do sistema. A opcional entra na URL mas NAO na exigencia.
     expect(url.searchParams.get("scope")?.split(",")).toEqual([
       ...META_REQUIRED_SCOPES,
+      ...META_OPTIONAL_SCOPES,
     ]);
   });
 

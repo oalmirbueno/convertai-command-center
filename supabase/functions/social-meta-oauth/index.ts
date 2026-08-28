@@ -658,9 +658,48 @@ async function handleComplete(
     "Não foi possível salvar as contas encontradas na Meta.",
   );
 
+  // ─── Anuncios de brinde, no mesmo clique ────────────────────────────
+  //
+  // O token de usuario que acabamos de guardar tambem le contas de
+  // anuncio, SE a pessoa autorizou `ads_read`. Aproveitar isso aqui e o
+  // que dispensa o ritual do usuario do sistema no Business Manager.
+  //
+  // Falhar aqui NAO derruba a conexao do Instagram. A pessoa veio conectar
+  // rede social; se o lado dos anuncios nao vier junto, ela leva o que
+  // pediu e o resto fica para depois. Quebrar o principal por causa do
+  // acessorio seria trocar um problema por outro pior.
+  let anuncios: JsonRecord = { autorizado: false };
+  if (permissions.granted.includes("ads_read")) {
+    try {
+      const contas = await graphGet(
+        config,
+        "me/adaccounts",
+        userAccessToken,
+        { fields: "id,name,account_status", limit: "200" },
+      );
+      await rpcOrThrow(
+        admin,
+        "save_meta_ads_token_from_login",
+        { _token: userAccessToken, _label: "Token do login da Meta" },
+        "Nao foi possivel guardar o acesso de anuncios.",
+      );
+      anuncios = {
+        autorizado: true,
+        contas: Array.isArray(contas.data) ? contas.data.length : 0,
+      };
+    } catch (error) {
+      anuncios = {
+        autorizado: true,
+        guardado: false,
+        motivo: error instanceof Error ? error.message : "falha ao ler as contas de anuncio",
+      };
+    }
+  }
+
   return {
     oauth_session_id: oauthSessionId,
     resources: sanitizeMetaResources(resources),
+    anuncios,
   };
 }
 
