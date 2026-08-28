@@ -253,10 +253,34 @@ function ClientAdsDetail({
 }
 
 /** Ligar a conta de anúncios: o token da agência e o número de cada conta. */
+type ContaDaMeta = { numero: string; nome: string | null };
+
+/** Onde a lista de contas devolvida pela Meta descansa entre recarregamentos. */
+const CONTAS_DA_META = "aceleriq-contas-da-meta";
+
 function ConexaoAds({ onDone }: { onDone: () => void }) {
   const { data: conexao } = useAdsConnection();
   const { data: clients } = useClients();
   const [token, setToken] = useState("");
+  /**
+   * As contas que a Meta devolveu na conexao, para escolher quais entram.
+   *
+   * Fica em localStorage porque perder a lista num recarregar de pagina
+   * obrigaria a refazer o login so para ver de novo os mesmos nomes. Sao
+   * numero e nome de conta: nao ha segredo nenhum aqui, o acesso mesmo
+   * mora no cofre do banco.
+   */
+  const [contasDaMeta, setContasDaMeta] = useState<ContaDaMeta[]>(() => {
+    try {
+      const cru = localStorage.getItem(CONTAS_DA_META);
+      const lido = cru ? JSON.parse(cru) : null;
+      return Array.isArray(lido) ? (lido as ContaDaMeta[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [ligandoNumero, setLigandoNumero] = useState<string | null>(null);
+  const [donoEscolhido, setDonoEscolhido] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
   const [clientId, setClientId] = useState("");
   const [actId, setActId] = useState("");
@@ -307,9 +331,15 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
         return;
       }
       if (msg.alvo !== "anuncios") return;
+      setContasDaMeta(msg.contas);
+      try {
+        localStorage.setItem(CONTAS_DA_META, JSON.stringify(msg.contas));
+      } catch {
+        // Sem armazenamento a lista some ao recarregar, e só isso.
+      }
       toast.success(
         msg.contas.length > 0
-          ? `Conectado. A Meta devolveu ${msg.contas.length} conta(s) de anúncio.`
+          ? `Conectado. Escolha abaixo quais das ${msg.contas.length} contas quer monitorar.`
           : "Conectado, mas a Meta não devolveu nenhuma conta de anúncio nesse acesso.",
       );
       onDone();
@@ -329,6 +359,29 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
       toast.error((error as { message?: string })?.message || "Não foi possível guardar.");
     } finally {
       setSalvando(false);
+    }
+  };
+
+  /** Liga uma conta que veio da Meta ao cliente escolhido na linha dela. */
+  const ligarDaLista = async (conta: ContaDaMeta) => {
+    const cliente = donoEscolhido[conta.numero];
+    if (!cliente) {
+      toast.error("Escolha o cliente desta conta antes de ligar.");
+      return;
+    }
+    setLigandoNumero(conta.numero);
+    try {
+      await connectAdsAccount({
+        clientId: cliente,
+        actId: conta.numero,
+        displayName: conta.nome || `Conta ${conta.numero}`,
+      });
+      toast.success("Conta ligada. A primeira leitura chega em alguns minutos.");
+      onDone();
+    } catch (error: unknown) {
+      toast.error((error as { message?: string })?.message || "Não foi possível ligar a conta.");
+    } finally {
+      setLigandoNumero(null);
     }
   };
 
@@ -391,6 +444,94 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
           </Button>
         </div>
       </div>
+
+      {contasDaMeta.length > 0 && (
+        <div className="rounded-2xl border border-primary/40 bg-card p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-foreground">
+              Contas que a Meta devolveu
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setContasDaMeta([]);
+                try {
+                  localStorage.removeItem(CONTAS_DA_META);
+                } catch { /* nada a fazer */ }
+              }}
+              className="text-[10.5px] text-muted-foreground underline hover:text-foreground"
+            >
+              esconder esta lista
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            Escolha o cliente de cada conta que você quer monitorar. O que não for
+            ligado aqui simplesmente não é lido, e nada é decidido por conta própria:
+            conta ligada ao cliente errado poria o investimento de um no relatório de
+            outro, e isso só apareceria no fim do mês.
+          </p>
+
+          <div className="mt-3 space-y-1.5">
+            {contasDaMeta.map((conta) => {
+              const jaLigada = (conexao?.contas || []).find(
+                (c) => c.external_id === conta.numero,
+              );
+              return (
+                <div
+                  key={conta.numero}
+                  className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2"
+                >
+                  <div className="min-w-[180px] flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {conta.nome || `Conta ${conta.numero}`}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">act_{conta.numero}</p>
+                  </div>
+
+                  {jaLigada ? (
+                    <span className="text-[11px] font-semibold text-success">
+                      já monitorada
+                    </span>
+                  ) : (
+                    <>
+                      <select
+                        value={donoEscolhido[conta.numero] || ""}
+                        onChange={(e) =>
+                          setDonoEscolhido((antes) => ({
+                            ...antes,
+                            [conta.numero]: e.target.value,
+                          }))}
+                        className="h-8 min-w-[180px] rounded-lg border border-border bg-card px-2 text-[11.5px] text-foreground"
+                      >
+                        <option value="">Cliente...</option>
+                        {comTrafego.map((cliente: any) => (
+                          <option key={cliente.id} value={cliente.id}>
+                            {cliente.company_name || cliente.full_name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        onClick={() => void ligarDaLista(conta)}
+                        disabled={ligandoNumero === conta.numero || !donoEscolhido[conta.numero]}
+                      >
+                        {ligandoNumero === conta.numero ? "Ligando..." : "Monitorar"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {comTrafego.length === 0 && (
+            <p className="mt-2 text-[11px] text-warning">
+              Nenhum cliente do painel está marcado com o serviço de tráfego. Marque no
+              cadastro do cliente para ele aparecer nesta lista.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-card p-4">
         <h2 className="text-sm font-semibold text-foreground">2. Contas de anúncio</h2>

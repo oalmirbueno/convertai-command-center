@@ -142,3 +142,44 @@ describe("search_path vazio exige tudo qualificado", () => {
     expect(conserto).toContain("grant execute on function public.ads_oauth_create_session() to authenticated");
   });
 });
+
+describe("escolher quais contas monitorar", () => {
+  it("a lista devolvida pela Meta e MOSTRADA, nao descartada", () => {
+    // Antes eu jogava a lista fora e mostrava so a contagem num aviso, o
+    // que obrigava a digitar act_ numero a numero — justamente o trabalho
+    // que a conexao existia para evitar.
+    expect(tela).toContain("Contas que a Meta devolveu");
+    expect(tela).toContain("setContasDaMeta(msg.contas)");
+  });
+
+  it("cada conta tem seletor de cliente e botao proprio", () => {
+    expect(tela).toContain("donoEscolhido[conta.numero]");
+    expect(tela).toContain("ligarDaLista");
+    expect(tela).toContain("Monitorar");
+  });
+
+  it("nada e ligado sem alguem escolher o dono", () => {
+    // Conta no cliente errado poe o investimento de um no relatorio de
+    // outro, e isso so aparece no fim do mes.
+    expect(tela).toContain("Escolha o cliente desta conta antes de ligar.");
+    expect(tela).toContain("!donoEscolhido[conta.numero]");
+  });
+
+  it("conta ja monitorada aparece como tal, sem oferecer de novo", () => {
+    expect(tela).toContain("já monitorada");
+    expect(tela).toContain("c.external_id === conta.numero");
+  });
+
+  it("a lista sobrevive a um recarregar de pagina", () => {
+    // Perder a lista obrigaria a refazer o login so para rever os mesmos
+    // nomes. Sao numero e nome de conta: nao ha segredo, o acesso mora no
+    // cofre do banco.
+    expect(tela).toContain("localStorage.setItem(CONTAS_DA_META");
+    expect(tela).toContain("localStorage.getItem(CONTAS_DA_META)");
+  });
+
+  it("avisa quando nenhum cliente tem trafego marcado", () => {
+    // Sem isso a lista de clientes viria vazia e pareceria defeito.
+    expect(tela).toContain("Nenhum cliente do painel está marcado com o serviço de tráfego");
+  });
+});
