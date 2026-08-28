@@ -148,3 +148,44 @@ describe("a arte aparece em tamanho de verdade", () => {
     expect(hook).toContain("nomeDaCampanha.get(peca.campaign_id)");
   });
 });
+
+describe("busca, filtro e rolagem na galeria", () => {
+  it("o padrao mostra as pecas que RODARAM, nao todas", () => {
+    // Metade da carteira nunca rodou: 19 das 34 da Verzelo. Elas precisam
+    // existir em algum lugar, mas quem abre a tela para decidir verba esta
+    // olhando as que gastaram.
+    expect(galeria).toContain('useState<"rodaram" | "paradas" | "todas">("rodaram")');
+    expect(galeria).toContain('if (recorte === "rodaram" && c.gasto <= 0) return false;');
+  });
+
+  it("as paradas ficam a um clique, nunca escondidas", () => {
+    expect(galeria).toContain('{ id: "paradas", rotulo: "Paradas" }');
+    expect(galeria).toContain('if (recorte === "paradas" && c.gasto > 0) return false;');
+  });
+
+  it("a busca alcanca o TEXTO do anuncio, e nao so o nome", () => {
+    // Quem procura "revitalizacao" muitas vezes lembra da frase da peca,
+    // nao do nome que a equipe deu a ela.
+    expect(galeria).toContain("[c.ad_name, c.campanha, c.titulo, c.corpo]");
+  });
+
+  it("o seletor de campanha sai do proprio dado", () => {
+    // Campanha sem peca nao aparece, entao ninguem filtra por algo que
+    // devolveria vazio.
+    expect(galeria).toContain("for (const c of criativos) if (c.campanha) nomes.add(c.campanha);");
+  });
+
+  it("a grade rola sozinha, sem empurrar as campanhas para fora", () => {
+    expect(galeria).toContain('max-h-[38rem] overflow-y-auto');
+  });
+
+  it("o contador diz quantas de quantas", () => {
+    expect(galeria).toContain("{ordenados.length} de {criativos.length}");
+  });
+
+  it("recorte vazio explica para onde foram as pecas", () => {
+    // "Nada aqui" sem saida faz a pessoa achar que o painel perdeu o dado.
+    expect(galeria).toContain("Nada com esse recorte.");
+    expect(galeria).toContain('parada(s) em "Paradas"');
+  });
+});

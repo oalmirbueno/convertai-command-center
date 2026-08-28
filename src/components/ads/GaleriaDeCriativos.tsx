@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, ImageOff, Video, TrendingUp } from "lucide-react";
+import { X, ImageOff, Video, TrendingUp, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -110,6 +110,18 @@ export default function GaleriaDeCriativos({
 }) {
   const [aberto, setAberto] = useState<CriativoDeAnuncio | null>(null);
   const [ordem, setOrdem] = useState<"gasto" | "custo" | "ctr">("gasto");
+  const [busca, setBusca] = useState("");
+  const [campanhaFiltro, setCampanhaFiltro] = useState("");
+  /**
+   * O filtro que resolve o problema real desta carteira.
+   *
+   * Metade das peças nunca rodou: na Verzelo, dezenove das trinta e
+   * quatro. Elas PRECISAM aparecer em algum lugar, porque arte parada é
+   * trabalho que não virou resultado — mas quem abriu a tela para decidir
+   * verba está olhando as que rodaram. Por isso o padrão é "as que
+   * rodaram", com o resto a um clique.
+   */
+  const [recorte, setRecorte] = useState<"rodaram" | "paradas" | "todas">("rodaram");
 
   // Escape fecha. Quem abre uma imagem em tela cheia espera isso, e sem
   // ele a única saída é caçar o X com o mouse.
@@ -141,8 +153,31 @@ export default function GaleriaDeCriativos({
     };
   }, [criativos]);
 
+  /* As campanhas presentes, para o seletor. Sai do próprio dado: campanha
+     que não tem peça não aparece na lista, e assim ninguém filtra por algo
+     que devolveria vazio. */
+  const campanhas = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const c of criativos) if (c.campanha) nomes.add(c.campanha);
+    return [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [criativos]);
+
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return criativos.filter((c) => {
+      if (recorte === "rodaram" && c.gasto <= 0) return false;
+      if (recorte === "paradas" && c.gasto > 0) return false;
+      if (campanhaFiltro && c.campanha !== campanhaFiltro) return false;
+      if (!termo) return true;
+      // A busca alcança o texto do anúncio também: quem procura "revitalização"
+      // muitas vezes lembra da frase da peça, não do nome que a equipe deu.
+      return [c.ad_name, c.campanha, c.titulo, c.corpo]
+        .some((campo) => (campo || "").toLowerCase().includes(termo));
+    });
+  }, [criativos, busca, campanhaFiltro, recorte]);
+
   const ordenados = useMemo(() => {
-    const lista = [...criativos];
+    const lista = [...filtrados];
     if (ordem === "gasto") return lista.sort((a, b) => b.gasto - a.gasto);
     if (ordem === "ctr") return lista.sort((a, b) => (b.ctr ?? -1) - (a.ctr ?? -1));
     // Custo por clique: quem não tem custo vai para o fim, senão o "melhor"
@@ -152,7 +187,7 @@ export default function GaleriaDeCriativos({
       if (b.custo_no_link === null) return -1;
       return a.custo_no_link - b.custo_no_link;
     });
-  }, [criativos, ordem]);
+  }, [filtrados, ordem]);
 
   if (criativos.length === 0) {
     return (
@@ -229,6 +264,70 @@ export default function GaleriaDeCriativos({
         )}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5">
+        <div className="relative min-w-[190px] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome, campanha ou texto da peça"
+            className="h-8 w-full rounded-lg border border-border bg-secondary pl-8 pr-2 text-[11.5px] text-foreground placeholder:text-muted-foreground"
+          />
+        </div>
+
+        {campanhas.length > 1 && (
+          <select
+            value={campanhaFiltro}
+            onChange={(e) => setCampanhaFiltro(e.target.value)}
+            className="h-8 max-w-[220px] rounded-lg border border-border bg-secondary px-2 text-[11.5px] text-foreground"
+          >
+            <option value="">Todas as campanhas</option>
+            {campanhas.map((nome) => (
+              <option key={nome} value={nome}>{nome}</option>
+            ))}
+          </select>
+        )}
+
+        <div className="flex gap-1">
+          {([
+            { id: "rodaram", rotulo: "Rodaram" },
+            { id: "paradas", rotulo: "Paradas" },
+            { id: "todas", rotulo: "Todas" },
+          ] as const).map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => setRecorte(r.id)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[10.5px] font-semibold transition-colors",
+                recorte === r.id
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {r.rotulo}
+            </button>
+          ))}
+        </div>
+
+        <span className="text-[10.5px] tabular-nums text-muted-foreground">
+          {ordenados.length} de {criativos.length}
+        </span>
+      </div>
+
+      {ordenados.length === 0 ? (
+        <div className="p-6 text-center">
+          <p className="text-[12px] text-foreground">Nada com esse recorte.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {recorte === "rodaram" && resumo.pecas_sem_numero > 0
+              ? `Nenhuma peça com gasto aqui. Há ${resumo.pecas_sem_numero} parada(s) em "Paradas".`
+              : "Tente outro termo, ou volte para \"Todas\"."}
+          </p>
+        </div>
+      ) : (
+      /* Rolagem própria: cinquenta e oito peças empurrariam as campanhas
+         para fora da tela, e é lá embaixo que está o resto da leitura. */
+      <div className="max-h-[38rem] overflow-y-auto">
       <div className="grid gap-2.5 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {ordenados.map((c) => (
           <button
@@ -282,6 +381,8 @@ export default function GaleriaDeCriativos({
           </button>
         ))}
       </div>
+      </div>
+      )}
 
       {aberto && (
         <div
