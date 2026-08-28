@@ -710,3 +710,44 @@ describe("o despachante: alguem entrega a tarefa ao agente", () => {
     expect(ferramentas).toContain("'aceleriq_operator_assign'");
   });
 });
+
+describe("o cliente vive em profiles, e nao existe tabela clients", () => {
+  const conserto = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828030000_cliente_vive_em_profiles.sql"), "utf8",
+  );
+
+  it("nenhuma migration desta camada consulta uma tabela public.clients", () => {
+    // Escrevi `from public.clients` de cabeca, sem conferir. A tabela nunca
+    // existiu: projects.client_id aponta para profiles.id. E plpgsql so
+    // resolve nome de tabela na PRIMEIRA EXECUCAO, entao o SQL foi criado
+    // sem reclamar, a conferencia deu certo e a bomba ficou armada no
+    // unico caminho que a camada existe para servir. Este teste e a
+    // resposta a "por que ninguem viu": agora alguem ve.
+    const daCamada = [
+      "20260827200000_operadores_internos",
+      "20260827230000_operador_acao_humana",
+      "20260828000000_operador_conta_no_progresso",
+      "20260828020000_fila_do_operador",
+      "20260828030000_cliente_vive_em_profiles",
+    ];
+    for (const nome of daCamada) {
+      const sql = readFileSync(resolve(raiz, `supabase/migrations/${nome}.sql`), "utf8");
+      const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+      expect(codigo, `${nome} consulta public.clients, que nao existe`)
+        .not.toMatch(/(from|join|into|update)\s+public\.clients\b/i);
+    }
+  });
+
+  it("o conserto le o nome pela mesma regra da tela: empresa, senao pessoa", () => {
+    expect(conserto).toContain("coalesce(nullif(trim(p.company_name), ''), p.full_name)");
+    expect(conserto).toContain("from public.profiles p where p.id = _client_id");
+  });
+
+  it("o conserto reescreve a funcao inteira, nao so o trecho", () => {
+    // Recriar por completo e o que garante que a versao no banco e a que
+    // esta no arquivo, sem depender de qual migration rodou por ultimo.
+    expect(conserto).toContain("create or replace function public.operator_report_event");
+    expect(conserto).toContain("registrado_no_progresso");
+    expect(conserto).toContain("PRONTO PARA O CLIENTE");
+  });
+});

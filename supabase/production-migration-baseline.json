@@ -529,6 +529,14 @@
       "remote_name": "fila_do_operador",
       "remote_statements_sha256": "228d63082681021317cf07714f6471e4dae57088fcd4847e6419ad2de3ef540a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828030000",
+      "path": "supabase/migrations/20260828030000_cliente_vive_em_profiles.sql",
+      "local_sha256": "fd2cbfc1cb98c37a3de5b0b36a89d76bb004b5f9ce9d2c8ee19449c32517dcde",
+      "remote_name": "cliente_vive_em_profiles",
+      "remote_statements_sha256": "210871f21fca5a0b793568c50c646c60590497519d70f633ba49d3fa614e0c75",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
