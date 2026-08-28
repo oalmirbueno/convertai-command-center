@@ -593,6 +593,14 @@
       "remote_name": "conectar_anuncios_direto",
       "remote_statements_sha256": "e93a224241c3546b6290a1e3d931a0cfee8ddfa27edd8c830bd83cc81f275265",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828120000",
+      "path": "supabase/migrations/20260828120000_gen_random_bytes_qualificado.sql",
+      "local_sha256": "196301575e72b7b7632d849728d2285fb7f55081f04f189191d5eb58cc192c74",
+      "remote_name": "gen_random_bytes_qualificado",
+      "remote_statements_sha256": "7278c3c654c2c6aea1f67438dc2794f29b49a15b9d68392f82dfb43275600290",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

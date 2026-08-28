@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -95,5 +95,50 @@ describe("a porta de anuncios e independente", () => {
     // substitui.
     expect(tela).toContain("Ou cole um token");
     expect(tela).toContain("saveMetaAdsToken");
+  });
+});
+
+describe("search_path vazio exige tudo qualificado", () => {
+  const conserto = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828120000_gen_random_bytes_qualificado.sql"), "utf8",
+  );
+
+  it("gen_random_bytes vem com o esquema na frente", () => {
+    // pgcrypto mora em `extensions`. Com search_path vazio — que e o jeito
+    // certo de escrever SECURITY DEFINER — nada resolve sem qualificar, e
+    // a funcao estourava com "function gen_random_bytes does not exist"
+    // so na hora de executar.
+    expect(conserto).toContain("extensions.gen_random_bytes(32)");
+  });
+
+  it("a ULTIMA definicao de cada funcao e a que precisa estar qualificada", () => {
+    // A regra, e nao so o caso. Mas a regra certa: no banco vale a ultima
+    // definicao, entao e ela que tem de estar correta. Cobrar isso da
+    // migration antiga so faria o teste exigir que se reescrevesse
+    // historico ja aplicado, o que e pior do que o problema.
+    const dir = resolve(raiz, "supabase/migrations");
+    const porFuncao = new Map<string, { arquivo: string; corpo: string }>();
+    for (const arquivo of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+      const texto = readFileSync(resolve(dir, arquivo), "utf8");
+      const corpo = texto
+        .split(/\r?\n/)
+        .filter((l) => !l.trim().startsWith("--"))
+        .join("\n");
+      for (const m of corpo.matchAll(/create or replace function (public\.\w+)/g)) {
+        porFuncao.set(m[1], { arquivo, corpo });
+      }
+    }
+    for (const [nome, { arquivo, corpo }] of porFuncao) {
+      if (!corpo.includes("set search_path = ''")) continue;
+      const soltas = corpo.match(/(?<!\.)gen_random_bytes\s*\(/g) ?? [];
+      expect(soltas, `${nome} (em ${arquivo}) chama gen_random_bytes sem o esquema`)
+        .toHaveLength(0);
+    }
+  });
+
+  it("o conserto recria a funcao inteira, com as regras intactas", () => {
+    expect(conserto).toContain("somente administrador pode conectar anuncios");
+    expect(conserto).toContain("created_at < now() - interval '1 hour'");
+    expect(conserto).toContain("grant execute on function public.ads_oauth_create_session() to authenticated");
   });
 });
