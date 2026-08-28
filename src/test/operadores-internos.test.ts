@@ -583,3 +583,57 @@ describe("a area Execucao da equipe", () => {
     expect(bloco).not.toContain("supabase");
   });
 });
+
+describe("no telefone, as opcoes correm para o lado", () => {
+  it("a faixa rola em vez de empilhar, e volta a quebrar no desktop", () => {
+    // Dez visoes em flex-wrap viravam quatro fileiras num aparelho de
+    // 375px e comiam a tela antes do conteudo comecar. Medido na bancada:
+    // 1 fileira e 44px de altura no telefone, 2 fileiras e 70px no
+    // desktop, sem estourar a pagina em nenhum dos dois.
+    expect(pagina).toContain("overflow-x-auto");
+    expect(pagina).toContain("scrollbar-hidden");
+    expect(pagina).toContain("md:flex-wrap");
+    expect(pagina).toContain("md:overflow-visible");
+  });
+
+  it("cada aba mostra quantos itens tem, senao arrastar e as cegas", () => {
+    expect(pagina).toContain("const contagemDaVisao");
+    expect(pagina).toContain("contagemDaVisao[x.id]");
+    // Relatorios nao e lista de vinculos: numero ali seria invencao.
+    expect(pagina).toContain("relatorios: 0");
+  });
+
+  it("a aba escolhida por notificacao e trazida para a tela", () => {
+    // Sem isso, tocar no aviso mudava uma visao que estava fora da faixa
+    // e parecia que nada tinha acontecido.
+    expect(pagina).toContain('abasRef.current[visao]?.scrollIntoView');
+    expect(pagina).toContain('inline: "center"');
+  });
+});
+
+describe("a hierarquia se le como estrutura, nao como grade", () => {
+  it("os niveis se ligam por tronco, senao e so cartao solto com titulo", () => {
+    expect(organograma).toContain("const Tronco");
+    expect(organograma).toContain("bg-gradient-to-b from-border");
+  });
+
+  it("cada grupo de funcao e uma caixa com nome, contagem e regua", () => {
+    expect(organograma).toContain("rounded-lg border border-border/60 bg-muted/20");
+    expect(organograma).toContain('doGrupo.length === 1 ? "agente" : "agentes"');
+  });
+
+  it("o cabecalho resume o time em numeros", () => {
+    expect(organograma).toContain("const ativos =");
+    expect(organograma).toContain("const trabalhando =");
+    expect(organograma).toContain("em andamento");
+  });
+
+  it("o cartao tem rosto, e as iniciais aguentam nome de uma palavra so", () => {
+    expect(organograma).toContain("function iniciais");
+    expect(organograma).toContain("partes.length === 1");
+  });
+
+  it("numero zerado nao vira selo: so aparece o que existe", () => {
+    expect(organograma).toContain("].filter((n) => n.valor > 0)");
+  });
+});

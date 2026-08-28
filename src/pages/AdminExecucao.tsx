@@ -95,6 +95,7 @@ export default function AdminExecucao() {
   const [atualizando, setAtualizando] = useState(false);
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
+  const abasRef = useRef<Record<string, HTMLButtonElement | null>>({});
 
   /**
    * A flag, com a distinção que faltava: DESLIGADA e NÃO-CONSEGUI-LER são
@@ -273,6 +274,39 @@ export default function AdminExecucao() {
     const t = setTimeout(() => destacadoRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
     return () => clearTimeout(t);
   }, [vinculoAlvo, vinculos]);
+
+  /**
+   * Quantos itens tem cada visao, para o numero aparecer na propria aba.
+   *
+   * Numa faixa que corre para o lado, metade das abas fica fora da tela; o
+   * numero ao lado do rotulo e o que faz valer a pena arrastar ate ela, em
+   * vez de arrastar para descobrir que estava vazia.
+   */
+  const contagemDaVisao = useMemo(() => {
+    const conta = (fn: (v: Vinculo) => boolean) => vinculos.filter(fn).length;
+    return {
+      quadro: vinculos.length,
+      fila: conta((v) => ["queued", "in_progress"].includes(v.status)),
+      in_progress: conta((v) => v.status === "in_progress"),
+      done: conta((v) => v.status === "done"),
+      review: conta((v) => v.status === "review"),
+      awaiting_input: conta((v) => v.status === "awaiting_input"),
+      blocked: conta((v) => v.status === "blocked"),
+      aprovacao: conta((v) => v.approval_required && v.status !== "done"),
+      hierarquia: operadores.length,
+      // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
+      relatorios: 0,
+    } as Record<string, number>;
+  }, [vinculos, operadores]);
+
+  /**
+   * Quando a visao muda sozinha (notificacao apontando para um vinculo), a
+   * aba escolhida pode estar fora da faixa visivel no telefone. Trazer ela
+   * para a tela evita a impressao de que nada aconteceu ao tocar no aviso.
+   */
+  useEffect(() => {
+    abasRef.current[visao]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [visao]);
 
   const filtrados = useMemo(() => {
     if (visao === "fila") return vinculos.filter((v) => ["queued", "in_progress"].includes(v.status));
@@ -710,22 +744,38 @@ export default function AdminExecucao() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1.5">
-        {VISOES.map((x) => (
-          <button
-            key={x.id}
-            type="button"
-            onClick={() => setVisao(x.id)}
-            className={cn(
-              "h-8 rounded-full border px-3 text-[11.5px] font-semibold transition-colors",
-              visao === x.id
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border bg-card text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {x.rotulo}
-          </button>
-        ))}
+      {/* No telefone as dez visoes empilhavam em cinco fileiras e comiam a
+          tela antes do conteudo comecar. Vira faixa que corre para o lado,
+          e volta a quebrar em linhas no desktop, onde ha largura de sobra.
+          Mesmo padrao da Central, para as duas areas se comportarem igual. */}
+      <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 scrollbar-hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
+        {VISOES.map((x) => {
+          const quantos = contagemDaVisao[x.id] ?? null;
+          return (
+            <button
+              key={x.id}
+              type="button"
+              ref={(el) => { abasRef.current[x.id] = el; }}
+              onClick={() => setVisao(x.id)}
+              className={cn(
+                "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-semibold transition-colors",
+                visao === x.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {x.rotulo}
+              {quantos !== null && quantos > 0 && (
+                <span className={cn(
+                  "rounded-full px-1.5 text-[10px] tabular-nums",
+                  visao === x.id ? "bg-primary/15" : "bg-muted",
+                )}>
+                  {quantos}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {visao === "quadro" ? (
