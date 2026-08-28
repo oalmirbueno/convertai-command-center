@@ -5943,6 +5943,15 @@ export type Database = {
         }
         Returns: number
       }
+      operator_assign_task: {
+        Args: {
+          _actor: string
+          _kanban_task_id: string
+          _note?: string
+          _operator_slug: string
+        }
+        Returns: Json
+      }
       operator_expire_stale_runs: { Args: never; Returns: number }
       operator_human_action: {
         Args: {
