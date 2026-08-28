@@ -2534,39 +2534,48 @@ const vaultOverviewTool = makeRead(
   (input) => vaultOverview(input),
 );
 
-const operatorOrganizeTool = makeWrite(
-  'aceleriq_operator_organize',
-  'Organizar o agente no organograma',
-  'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui.',
-  z.object({
-    slug: z.string().min(2).max(40),
-    display_name: z.string().min(1).max(80).optional(),
-    role: z.string().min(1).max(80).optional(),
-    area: z.string().min(1).max(60).optional(),
-    parent_slug: z.string().max(40).optional(),
-    display_order: limite(999, 0).optional(),
-    scope: z.string().min(1).max(300).optional(),
-    status: z.enum(['active', 'paused', 'retired']).optional(),
-    is_coordinator: z.boolean().optional(),
-  }).strict(),
-  {
+const operatorOrganizeTool: ToolDefinition = {
+  name: 'aceleriq_operator_organize',
+  title: 'Organizar o agente no organograma',
+  description:
+    'Edita como um operador interno aparece e onde ele fica na hierarquia: display_name, role, area (a funcao que agrupa a piramide), parent_slug (quem coordena), display_order, scope, status (active/paused/retired) e is_coordinator. O slug NAO muda: ele e a identidade que a auditoria referencia, e troca-lo renomearia o passado. Ciclo e barrado: um agente nao pode coordenar quem ja o coordena. Nada de humano e tocado por aqui - assigned_to continua intocavel.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
     type: 'object',
     properties: {
       slug: { type: 'string', description: 'Slug do operador a organizar.' },
-      display_name: { type: 'string', description: 'Nome exibido.' },
-      role: { type: 'string', description: 'Papel descrito.' },
-      area: { type: 'string', description: 'Funcao que agrupa no organograma (ex.: Conteudo, Trafego, Dados).' },
-      parent_slug: { type: 'string', description: 'Slug de quem coordena. String vazia solta o agente para responder direto ao Hermes.' },
+      display_name: { type: 'string', maxLength: 80, description: 'Nome exibido.' },
+      role: { type: 'string', maxLength: 80, description: 'Papel descrito.' },
+      area: { type: 'string', maxLength: 60, description: 'Funcao que agrupa no organograma (ex.: Conteudo, Trafego, Dados).' },
+      parent_slug: { type: 'string', maxLength: 40, description: 'Slug de quem coordena. String vazia solta o agente para responder direto ao Hermes.' },
       display_order: { type: 'number', description: 'Ordem dentro do grupo (menor aparece antes).' },
-      scope: { type: 'string', description: 'Escopo de atuacao.' },
+      scope: { type: 'string', maxLength: 300, description: 'Escopo de atuacao.' },
       status: { type: 'string', enum: ['active', 'paused', 'retired'] },
       is_coordinator: { type: 'boolean', description: 'Se coordena outros agentes.' },
     },
     required: ['slug'],
     additionalProperties: false,
   },
-  (input, ctx) => operatorOrganize(input, ctx.actor),
-);
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      slug: z.string().min(2).max(40),
+      display_name: z.string().min(1).max(80).optional(),
+      role: z.string().min(1).max(80).optional(),
+      area: z.string().min(1).max(60).optional(),
+      parent_slug: z.string().max(40).optional(),
+      display_order: limite(999, 0).optional(),
+      scope: z.string().min(1).max(300).optional(),
+      status: z.enum(['active', 'paused', 'retired']).optional(),
+      is_coordinator: z.boolean().optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorOrganize(parsed.data, ctx.keyId);
+  },
+};
 
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,

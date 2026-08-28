@@ -329,6 +329,23 @@ describe("o dono sabe de tudo", () => {
   });
 });
 
+describe("o catalogo do MCP compila", () => {
+  it("toda ferramenta usa um construtor que existe de verdade", () => {
+    // Escrevi `makeWrite(...)` uma vez achando que existia. O `npm run
+    // typecheck` nao pega: as edge functions sao Deno e ficam fora do
+    // tsconfig. So o deploy quebraria — depois de o dono ja ter colado o
+    // SQL e publicado. Esta checagem custa milissegundos e fecha a porta.
+    const usados = new Set(
+      [...ferramentas.matchAll(/=\s*(make[A-Z]\w*)\(/g)].map((m) => m[1]),
+    );
+    expect(usados.size).toBeGreaterThan(0);
+    for (const nome of usados) {
+      expect(ferramentas, `${nome} e usado mas nao existe`)
+        .toMatch(new RegExp(`(function|const)\\s+${nome}\\b`));
+    }
+  });
+});
+
 describe("cofre: ver sim, senha nao", () => {
   it("a senha nao entra no select — ausencia na origem, nao filtro depois", () => {
     // Filtrar depois deixaria um caminho em que a senha escapa. Aqui ela
