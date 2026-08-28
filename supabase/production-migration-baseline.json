@@ -521,6 +521,14 @@
       "remote_name": "hierarquia_e_notificacao_de_tudo",
       "remote_statements_sha256": "61f09a97f47748c5821073d9c7243b0b0b7fb68e6223fd2acfbfcf1bb61e55a0",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828020000",
+      "path": "supabase/migrations/20260828020000_fila_do_operador.sql",
+      "local_sha256": "229d938bd30ed14d14f23f6f6da284a4fbb5a9c8a066df4edf4288aa156162b3",
+      "remote_name": "fila_do_operador",
+      "remote_statements_sha256": "228d63082681021317cf07714f6471e4dae57088fcd4847e6419ad2de3ef540a",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

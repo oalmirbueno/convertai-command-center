@@ -92,6 +92,7 @@ export default function AdminExecucao() {
   const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("quadro");
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
+  const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
@@ -443,6 +444,34 @@ export default function AdminExecucao() {
    * escapasse da auditoria, "quem mudou isso?" ficaria sem resposta
    * justamente nos casos que mais importam.
    */
+  /**
+   * Entrega uma tarefa do Kanban a um agente.
+   *
+   * Era aqui que o ciclo travava: o botao antigo copiava o UUID para
+   * alguem colar no grupo do Hermes. Isso nao e integracao, e digitacao —
+   * e enquanto dependesse disso, o quadro ia continuar zerado. Agora o
+   * painel coloca a tarefa na fila do agente, e ele puxa de la.
+   *
+   * `assigned_to` nao e tocado: oferecer trabalho a um agente nao tira a
+   * tarefa de quem responde por ela.
+   */
+  const encaminharParaAgente = async (tarefaId: string, slug: string, nome: string) => {
+    const { data, error } = await (supabase as any).rpc("operator_assign_task", {
+      _operator_slug: slug,
+      _kanban_task_id: tarefaId,
+      _actor: profile?.full_name || "equipe",
+      _note: null,
+    });
+    if (error) {
+      toast.error(error.message || "Não foi possível encaminhar.");
+      return;
+    }
+    toast.success(
+      data?.ja_existia ? `Já estava na fila de ${nome}.` : `Na fila de ${nome}.`,
+    );
+    await atualizarTudo();
+  };
+
   const moverVinculo = async (v: Vinculo, novoStatus: string) => {
     if (v.status === novoStatus) return;
     const { error } = await (supabase as any).rpc("operator_human_action", {
@@ -897,11 +926,14 @@ export default function AdminExecucao() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => void copiar(String(t.id), "ID da tarefa")}
-                        title="Copiar o ID para o operador reportar nesta tarefa"
-                        className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                        onClick={(e) => setMenuEncaminhar({
+                          x: e.clientX, y: e.clientY,
+                          tarefaId: String(t.id), titulo: String(t.title),
+                        })}
+                        title="Colocar esta tarefa na fila de um agente"
+                        className="shrink-0 rounded-lg border border-primary/40 bg-primary/5 px-2 py-1 text-[10px] font-semibold text-primary hover:bg-primary/10"
                       >
-                        copiar ID
+                        encaminhar
                       </button>
                     </div>
                   );
@@ -936,6 +968,27 @@ export default function AdminExecucao() {
           <XCircle className="h-3.5 w-3.5" />
           Concluída sem evidência não deveria existir aqui: o banco rebaixa para revisão na gravação.
         </p>
+      )}
+
+      {menuEncaminhar && (
+        <MenuDeContexto
+          x={menuEncaminhar.x}
+          y={menuEncaminhar.y}
+          itens={[
+            { rotulo: `Para quem vai "${menuEncaminhar.titulo.slice(0, 28)}"?` },
+            { separador: true },
+            ...operadores
+              .filter((o) => o.status === "active")
+              .map((o) => ({
+                rotulo: o.display_name,
+                atalho: o.area ?? undefined,
+                acao: () => void encaminharParaAgente(
+                  menuEncaminhar.tarefaId, o.slug, o.display_name,
+                ),
+              })),
+          ]}
+          aoFechar={() => setMenuEncaminhar(null)}
+        />
       )}
 
       {menuCartao && (

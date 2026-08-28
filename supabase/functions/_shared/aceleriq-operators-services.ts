@@ -617,3 +617,137 @@ export async function operatorDigest(opts: { dias?: number }) {
       .map((o) => ({ agente: o.display_name, area: o.area })),
   };
 }
+
+/* ─────────────────── O despachante: da tarefa ao agente ───────────────── */
+
+/** Oferece uma tarefa do Kanban a um operador. Nao toca em assigned_to. */
+export async function operatorAssign(input: {
+  operator: string;
+  kanban_task_id: string;
+  note?: string;
+}, actor: string) {
+  if (!isUuid(input.kanban_task_id)) throw new Error('kanban_task_id must be a UUID');
+
+  const { data, error } = await comPrazo(db().rpc('operator_assign_task', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _kanban_task_id: input.kanban_task_id,
+    _actor: actor,
+    _note: texto(input.note),
+  }));
+  if (error) throw new Error(`operator_assign_task: ${error.message}`);
+  return data;
+}
+
+/**
+ * A fila de um operador: o que foi oferecido a ele e ainda nao terminou.
+ *
+ * Esta e a ponta que faltava para o ciclo girar sozinho. Antes, para o
+ * agente reportar uma tarefa ele precisava ja saber o UUID dela, o que na
+ * pratica significava um humano colando identificador no grupo. Agora ele
+ * pergunta "o que e meu?" e recebe tudo o que precisa para comecar,
+ * inclusive uma sugestao de `run_key` — porque chave inventada na hora e
+ * como duas execucoes da mesma tarefa colidem sem ninguem entender por que.
+ */
+export async function operatorQueue(opts: { operator?: string; limit?: number }) {
+  const limit = Math.min(Math.max(Number(opts.limit) || 25, 1), READ_LIMITS.maxPageSize);
+
+  let q = db().from('operator_task_links')
+    .select('id, operator_id, kanban_task_id, status, next_step, block_reason, approval_required, created_at, agent_run_id')
+    .in('status', ['queued', 'in_progress', 'awaiting_input', 'review'])
+    .order('created_at', { ascending: true })
+    .limit(limit);
+
+  let opFiltrado: Record<string, unknown> | null = null;
+  if (opts.operator) {
+    const { data: op } = await comPrazo(
+      db().from('internal_operators')
+        .select('id, slug, display_name, scope')
+        .eq('slug', String(opts.operator).trim().toLowerCase())
+        .maybeSingle(),
+    );
+    if (!op) {
+      throw new Error(
+        `operator_not_found: "${opts.operator}" nao existe. Use aceleriq_operator_board para ver os slugs validos.`,
+      );
+    }
+    opFiltrado = op as Record<string, unknown>;
+    q = q.eq('operator_id', opFiltrado.id as string);
+  }
+
+  const { data: links, error } = await comPrazo(q);
+  if (error) throw new Error(`operator_task_links: ${error.message}`);
+
+  const linhas = (links ?? []) as Array<Record<string, unknown>>;
+  if (linhas.length === 0) {
+    return {
+      operador: opFiltrado?.slug ?? null,
+      total: 0,
+      itens: [],
+      nada_na_fila: 'Nenhuma tarefa oferecida no momento. Fila vazia nao e erro: e fila vazia.',
+    };
+  }
+
+  const idsDeTarefa = [...new Set(linhas.map((l) => l.kanban_task_id).filter(Boolean))] as string[];
+  const idsDeOperador = [...new Set(linhas.map((l) => l.operator_id))] as string[];
+
+  const [{ data: tarefas }, { data: ops }] = await Promise.all([
+    idsDeTarefa.length
+      ? comPrazo(db().from('tasks')
+          .select('id, title, description, status, due_date, priority, project_id, assigned_to')
+          .in('id', idsDeTarefa))
+      : Promise.resolve({ data: [] as unknown[] }),
+    comPrazo(db().from('internal_operators').select('id, slug, display_name').in('id', idsDeOperador)),
+  ]);
+
+  const porTarefa = new Map(
+    ((tarefas ?? []) as Array<Record<string, unknown>>).map((t) => [t.id as string, t]),
+  );
+  const porOperador = new Map(
+    ((ops ?? []) as Array<Record<string, unknown>>).map((o) => [o.id as string, o]),
+  );
+
+  // O projeto leva ao cliente: tasks nao tem client_id.
+  const idsDeProjeto = [...new Set(
+    [...porTarefa.values()].map((t) => t.project_id).filter(Boolean),
+  )] as string[];
+  const { data: projetos } = idsDeProjeto.length
+    ? await comPrazo(db().from('projects').select('id, name, client_id').in('id', idsDeProjeto))
+    : { data: [] as unknown[] };
+  const porProjeto = new Map(
+    ((projetos ?? []) as Array<Record<string, unknown>>).map((p) => [p.id as string, p]),
+  );
+
+  return {
+    operador: opFiltrado?.slug ?? null,
+    total: linhas.length,
+    itens: linhas.map((l) => {
+      const t = porTarefa.get(l.kanban_task_id as string);
+      const p = t ? porProjeto.get(t.project_id as string) : null;
+      const o = porOperador.get(l.operator_id as string);
+      return {
+        link_id: l.id,
+        operador: o?.slug ?? null,
+        kanban_task_id: l.kanban_task_id,
+        titulo: t?.title ?? '(tarefa nao encontrada)',
+        descricao: t?.description ?? null,
+        prazo: t?.due_date ?? null,
+        prioridade: t?.priority ?? null,
+        projeto: p?.name ?? null,
+        client_id: p?.client_id ?? null,
+        status: l.status,
+        proximo_passo: l.next_step,
+        motivo_do_bloqueio: l.block_reason,
+        precisa_aprovacao: l.approval_required === true,
+        // Reaproveitar a chave que ja existe e o que torna o relato
+        // idempotente: repetir o mesmo evento nao duplica nada.
+        run_key: l.agent_run_id ?? `link:${l.id}`,
+        // O humano que responde pela tarefa continua sendo este. O agente
+        // executa; a conta e dele.
+        responsavel_humano: t?.assigned_to ?? null,
+      };
+    }),
+    como_usar: 'Para cada item, chame aceleriq_operator_report com o run_key indicado: '
+      + 'started ao pegar, progress durante, e done COM evidencia ao terminar. '
+      + 'done sem evidencia e rebaixado para revisao, de proposito.',
+  };
+}

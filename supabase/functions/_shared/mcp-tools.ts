@@ -34,8 +34,10 @@ import {
 import {
   OPERATOR_EVENTS,
   operatorBoard,
+  operatorAssign,
   operatorDigest,
   operatorOrganize,
+  operatorQueue,
   operatorRegister,
   operatorReport,
   studioDraft,
@@ -291,7 +293,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.35.0',
+  version: '1.36.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2650,10 +2652,10 @@ const operatorDigestTool = makeRead(
  */
 const MAPA_DO_PAINEL = [
   { area: 'Ciclo', rota: '/ciclo', para: 'A semana de cada cliente, etapa por etapa.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
-  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_board, aceleriq_operator_report' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
-  { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task' },
+  { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
   { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
   { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
   { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes.', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas)' },
@@ -2665,6 +2667,53 @@ const MAPA_DO_PAINEL = [
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
   { area: 'Contratos', rota: '/config', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
+
+const operatorQueueTool = makeRead(
+  'aceleriq_operator_queue',
+  'A fila do operador',
+  'O que foi oferecido a um operador e ainda nao terminou, com tudo que ele precisa para comecar: titulo, descricao, prazo, prioridade, projeto, cliente e o run_key a usar no relato. E a ponta que faz o ciclo girar sem ninguem colar UUID a mao: o agente pergunta "o que e meu?" em vez de precisar saber o identificador de antemao. Omita `operator` para ver a fila da casa inteira. Fila vazia nao e erro.',
+  z.object({ operator: z.string().min(2).max(40).optional(), limit: limite(200, 1).optional() }).strict(),
+  {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador. Sem isto, devolve a fila de todos.' },
+      limit: { type: 'number', description: 'Maximo de itens (1 a 200). Padrao 25.' },
+    },
+    additionalProperties: false,
+  },
+  (input) => operatorQueue(input),
+);
+
+const operatorAssignTool: ToolDefinition = {
+  name: 'aceleriq_operator_assign',
+  title: 'Oferecer tarefa do Kanban a um operador',
+  description:
+    'Coloca uma tarefa do Kanban na fila de um operador interno, para que ele possa puxa-la com aceleriq_operator_queue e reportar com aceleriq_operator_report. Idempotente por (operador, tarefa). Se a tarefa ja estiver viva com OUTRO operador, a chamada e recusada dizendo com quem — dois agentes na mesma tarefa geram trabalho duplicado e evidencia contraditoria. NAO altera o assigned_to: oferecer trabalho a um agente nao tira a tarefa de quem responde por ela, e a resposta devolve o responsavel humano intocado como prova disso.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que vai executar.' },
+      kanban_task_id: { type: 'string', description: 'UUID da tarefa no Kanban.' },
+      note: { type: 'string', description: 'Instrucao curta do que se espera. Vira o proximo passo do vinculo.' },
+    },
+    required: ['operator', 'kanban_task_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      kanban_task_id: UUID,
+      note: z.string().max(500).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorAssign(parsed.data, ctx.keyId);
+  },
+};
 
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
@@ -2702,6 +2751,8 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   studioReadTool,
   studioDraftTool,
   operatorDigestTool,
+  operatorQueueTool,
+  operatorAssignTool,
   operatorRegisterTool,
   operatorOrganizeTool,
   operatorReportTool,

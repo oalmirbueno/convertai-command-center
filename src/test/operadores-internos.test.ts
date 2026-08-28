@@ -492,9 +492,14 @@ describe("a area Execucao da equipe", () => {
     expect(pagina).toContain("Esperando um operador");
   });
 
-  it("o vazio ensina: mostra as tarefas reais com o id para copiar", () => {
-    expect(pagina).toContain("copiar ID");
+  it("o vazio ensina: mostra as tarefas reais e um jeito de despachar", () => {
+    // A ancora mudou porque a tela mudou para melhor: antes o botao
+    // copiava o UUID para alguem colar no grupo; agora encaminha de
+    // verdade. A REGRA continua a mesma — o vazio nao pode ser so um
+    // vazio, tem que mostrar o trabalho real que esta esperando alguem.
     expect(pagina).toContain("semOperador");
+    expect(pagina).toContain("Esperando um operador");
+    expect(pagina).toContain("Colocar esta tarefa na fila de um agente");
   });
 
   it("nao-consegui-ler nao e mais confundido com desligada", () => {
@@ -635,5 +640,73 @@ describe("a hierarquia se le como estrutura, nao como grade", () => {
 
   it("numero zerado nao vira selo: so aparece o que existe", () => {
     expect(organograma).toContain("].filter((n) => n.valor > 0)");
+  });
+});
+
+describe("o despachante: alguem entrega a tarefa ao agente", () => {
+  const fila = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828020000_fila_do_operador.sql"), "utf8",
+  );
+
+  it("existe um caminho para OFERECER tarefa, fora do proprio relato", () => {
+    // A causa do quadro zerado: ate aqui so operator_report_event criava
+    // vinculo, entao o agente precisava ja saber o UUID da tarefa.
+    expect(fila).toContain("create or replace function public.operator_assign_task");
+    expect(fila).toContain("'queued'");
+    expect(fila).toContain("'painel'");
+  });
+
+  it("oferecer trabalho ao agente NAO tira a tarefa do humano", () => {
+    // A regra mais importante da camada, valendo tambem no despacho.
+    expect(fila).not.toMatch(/update\s+public\.tasks|set\s+assigned_to/i);
+    // E a resposta devolve o humano intocado, como prova de quem chamou.
+    expect(fila).toContain("responsavel_humano_intocado");
+  });
+
+  it("tarefa inexistente e recusada, em vez de virar fila fantasma", () => {
+    expect(fila).toContain("task_not_found:");
+  });
+
+  it("dois agentes na mesma tarefa e recusado, dizendo com quem esta", () => {
+    expect(fila).toContain("ja_atribuida:");
+    expect(fila).toContain("_dono.display_name");
+  });
+
+  it("oferecer duas vezes devolve o mesmo vinculo", () => {
+    expect(fila).toContain("'ja_existia', true");
+  });
+
+  it("a fila do agente traz o que ele precisa para comecar", () => {
+    const bloco = servicos.slice(servicos.indexOf("export async function operatorQueue"));
+    for (const campo of ["titulo", "descricao", "prazo", "prioridade", "projeto", "client_id", "run_key"]) {
+      expect(bloco, `fila sem ${campo}`).toContain(campo);
+    }
+    // O run_key vem pronto: chave inventada na hora e como duas execucoes
+    // da mesma tarefa colidem sem ninguem entender por que.
+    expect(bloco).toContain("l.agent_run_id ?? `link:${l.id}`");
+    // E o cliente sai pelo projeto, porque tasks nao tem client_id.
+    expect(bloco).toContain("from('projects')");
+  });
+
+  it("fila vazia e dita como fila vazia, nao como erro", () => {
+    expect(servicos).toContain("Fila vazia nao e erro: e fila vazia.");
+  });
+
+  it("slug errado ensina onde achar os validos", () => {
+    expect(servicos).toContain("aceleriq_operator_board para ver os slugs validos");
+  });
+
+  it("o painel encaminha de verdade, em vez de copiar UUID para colar", () => {
+    // O botao antigo copiava o ID para alguem colar no grupo. Isso nao e
+    // integracao, e digitacao, e enquanto dependesse disso o quadro ia
+    // continuar zerado.
+    expect(pagina).toContain('rpc("operator_assign_task"');
+    expect(pagina).toContain("encaminhar");
+    expect(pagina).not.toContain('copiar(String(t.id), "ID da tarefa")');
+  });
+
+  it("as duas pontas estao no catalogo do MCP", () => {
+    expect(ferramentas).toContain("'aceleriq_operator_queue'");
+    expect(ferramentas).toContain("'aceleriq_operator_assign'");
   });
 });
