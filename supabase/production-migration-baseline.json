@@ -545,6 +545,14 @@
       "remote_name": "agendamento_que_nao_saiu",
       "remote_statements_sha256": "7d28b3770ac8edd7a9720d6340116ce3ece0df21fa6bf7c6ad8f78544cee4d00",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828050000",
+      "path": "supabase/migrations/20260828050000_o_painel_aprende_o_que_ja_saiu.sql",
+      "local_sha256": "435cabb52568de94815a066d34bd98c07a8bdd0929e65e9bf86f8fbeafc6c4ff",
+      "remote_name": "o_painel_aprende_o_que_ja_saiu",
+      "remote_statements_sha256": "d0f0541104f568a85d4aa7361a259bd9e279d20a98a810c020de885ad09d7489",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

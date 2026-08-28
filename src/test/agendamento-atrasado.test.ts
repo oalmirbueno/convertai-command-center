@@ -69,3 +69,71 @@ describe("atraso de publicacao deixa de ser silencioso", () => {
     expect(semComentario).toContain("*/15 * * * *");
   });
 });
+
+describe("o painel aprende que o post ja saiu", () => {
+  const rec = readFileSync(
+    resolve(raiz, "supabase/migrations/20260828050000_o_painel_aprende_o_que_ja_saiu.sql"), "utf8",
+  );
+  const codigo = rec.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+
+  it("olha os posts REAIS da conta, nao adivinha", () => {
+    // O painel ja colhe media_id, permalink e hora de cada post publicado.
+    // Reconciliar e cruzar agendamento vencido com essa realidade.
+    expect(codigo).toContain("from public.social_post_metrics m");
+    expect(codigo).toContain("m.external_account_id = _pub.external_account_id");
+  });
+
+  it("a janela e apertada: meia hora antes, seis horas depois", () => {
+    // Publicados 3 a 4 minutos depois do horario marcado, no caso real.
+    // Janela larga demais alcancaria o post do dia seguinte.
+    expect(codigo).toContain("_pub.scheduled_at - interval '30 minutes'");
+    expect(codigo).toContain("_pub.scheduled_at + interval '6 hours'");
+  });
+
+  it("DUVIDA NAO VIRA ESCRITA: dois candidatos e nao mexe", () => {
+    // Chutar qual post pertence a qual agendamento gravaria o link errado
+    // no historico do cliente. E registro publicado e imutavel: sem volta.
+    expect(codigo).toContain("if _quantos > 1 then");
+    expect(codigo).toContain("_ambiguos := _ambiguos + 1;");
+    expect(codigo).toContain("continue;");
+  });
+
+  it("post ja reivindicado por outro agendamento nao conta duas vezes", () => {
+    expect(codigo).toContain("q.permalink = m.permalink");
+  });
+
+  it("sem endereco publico valido nao ha baixa", () => {
+    expect(codigo).toContain("'^https?://[^[:space:]]+$'");
+  });
+
+  it("status, endereco e hora vao juntos: publicado e imutavel", () => {
+    const upd = codigo.slice(codigo.indexOf("update public.editorial_publications"));
+    expect(upd.slice(0, 260)).toContain("status = 'published'");
+    expect(upd.slice(0, 260)).toContain("permalink =");
+    expect(upd.slice(0, 260)).toContain("published_at =");
+  });
+
+  it("o aviso sai pelo recibo de sempre, nao por um caminho paralelo", () => {
+    // Caminho paralelo e o que um dia diverge do original e passa a mentir.
+    expect(codigo).toContain("update public.editorial_publication_internal");
+    expect(codigo).toContain("set published_by = _quem");
+  });
+
+  it("reconcilia ANTES de alarmar, senao o alarme mente e nao se repete", () => {
+    const ordem = codigo.indexOf("editorial_reconciliar_publicados()");
+    const alarme = codigo.lastIndexOf("editorial_alerta_agendamento_atrasado()");
+    expect(ordem).toBeGreaterThan(-1);
+    expect(alarme).toBeGreaterThan(ordem);
+    expect(codigo).toContain("editorial_conferir_agendamentos");
+  });
+
+  it("o alarme afirma que o painel CONFERIU a conta", () => {
+    expect(codigo).toContain("o painel conferiu a conta e nao achou nenhum post");
+    expect(codigo).toContain("MAIS DE UM post na conta nessa janela");
+  });
+
+  it("continua sem ligar automacao de ninguem", () => {
+    expect(codigo).not.toMatch(/automation_enabled\s*=\s*true/i);
+    expect(codigo).not.toMatch(/delivery_mode\s*=\s*'automatic'/i);
+  });
+});
