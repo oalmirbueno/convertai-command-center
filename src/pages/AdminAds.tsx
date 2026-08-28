@@ -17,6 +17,7 @@ import {
   type MetaOAuthPopupMessage,
 } from "@/lib/socialMetaOAuth";
 import GaleriaDeCriativos from "@/components/ads/GaleriaDeCriativos";
+import { resumirCriativos } from "@/lib/adsCreativeReport";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -143,17 +144,29 @@ function ClientAdsDetail({
       .map(({ resumo }) => `· ${resumo.name}: ${clientCampaignLine(resumo)}`)
       .join("\n");
 
+    // O trecho das peças entra no MESMO relatório, e não num relatório
+    // paralelo: quem lê quer uma página, não duas que precisam ser
+    // conferidas uma contra a outra.
+    const pecas = resumirCriativos(criativos || []);
+
     const parametros = new URLSearchParams({
       cliente: clientId,
       titulo: `Anúncios · ${clientName}`,
       inicio: dias[0] || "",
       fim: dias[dias.length - 1] || "",
-      resumo: `Resumo dos anúncios no período:\n${linhas}`,
-      destaques: porCampanha[0] ? clientCampaignSentence(porCampanha[0].resumo) : "",
+      resumo: `Resumo dos anúncios no período:\n${linhas}`
+        + (pecas.texto ? `\n\nCriativos:\n${pecas.texto}` : ""),
+      destaques: [
+        porCampanha[0] ? clientCampaignSentence(porCampanha[0].resumo) : "",
+        pecas.destaque,
+      ].filter(Boolean).join(" "),
       metricas: JSON.stringify({
         ad_spend: Number(carteira.investido.toFixed(2)),
         reach: carteira.alcance,
         ...(carteira.resultados != null ? { results: carteira.resultados } : {}),
+        ...(pecas.total > 0
+          ? { creatives_total: pecas.total, creatives_running: pecas.rodaram }
+          : {}),
       }),
     });
     navigate(`/relatorios/novo?${parametros.toString()}`);
