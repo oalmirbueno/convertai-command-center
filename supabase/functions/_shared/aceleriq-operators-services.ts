@@ -38,6 +38,23 @@ async function comPrazo<T>(p: PromiseLike<T>, ms = READ_LIMITS.queryTimeoutMs): 
   ]);
 }
 
+/**
+ * O endereço exato do registro no painel.
+ *
+ * Um relatório que diz "concluído" e não diz ONDE obriga quem lê a
+ * procurar. O link leva ao vínculo e carrega a run, para a tela abrir já
+ * no registro certo em vez de numa lista.
+ *
+ * Origem configurável porque preview e produção não moram no mesmo
+ * endereço, e link com domínio errado é pior que link nenhum: parece que
+ * funciona até alguém clicar.
+ */
+export function deepLinkDoVinculo(linkId?: string | null, runId?: string | null) {
+  if (!linkId) return null;
+  const base = (Deno.env.get('PAINEL_ORIGIN') ?? 'https://aceleriq.online').replace(/\/+$/, '');
+  return `${base}/execucao?vinculo=${linkId}${runId ? `&run=${runId}` : ''}`;
+}
+
 export const OPERATOR_EVENTS = [
   'started', 'progress', 'done', 'failed', 'blocked', 'review', 'awaiting_input', 'heartbeat',
 ] as const;
@@ -191,8 +208,10 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
 
   const [ops, links, runs] = await Promise.all([
     comPrazo(db().from('internal_operators')
-      .select('id, slug, display_name, role, status, scope, is_coordinator, last_run_at')
-      .order('is_coordinator', { ascending: true })),
+      // A HIERARQUIA vai junto: sem area e parent_slug, quem le o quadro
+      // nao tem como conferir o organograma que acabou de configurar.
+      .select('id, slug, display_name, role, status, scope, is_coordinator, last_run_at, area, parent_slug, display_order')
+      .order('display_order', { ascending: true })),
     comPrazo(db().from('operator_task_links')
       .select('*')
       .order('updated_at', { ascending: false })
@@ -216,12 +235,23 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
   if (opts.status) vinculos = vinculos.filter((l) => l.status === opts.status);
 
   // Contexto humano: tarefa, projeto, cliente e o responsável de gente.
-  const taskIds = [...new Set(vinculos.map((l) => texto(l.kanban_task_id)).filter(Boolean))] as string[];
+  //
+  // O id da tarefa pode ter chegado por kanban_task_id OU painel_task_id:
+  // ignorar o segundo devolvia tarefa nula num vinculo que TEM tarefa.
+  const taskIds = [...new Set(
+    vinculos.flatMap((l) => [texto(l.kanban_task_id), texto(l.painel_task_id)]).filter(Boolean),
+  )] as string[];
   const tarefas = new Map<string, Record<string, unknown>>();
+  let falhaAoEnriquecer: string | null = null;
   if (taskIds.length > 0) {
-    const { data: rows } = await comPrazo(db().from('tasks')
+    const { data: rows, error } = await comPrazo(db().from('tasks')
       .select('id, title, status, due_date, assigned_to, project:projects(name, client_id, client:profiles(full_name, company_name))')
       .in('id', taskIds));
+    // Erro AQUI nao pode virar silencio: sem esta linha, uma consulta que
+    // falha devolve tarefa, projeto e cliente nulos, e quem le conclui
+    // "nao tem dado" quando a verdade e "nao consegui buscar". Foi
+    // exatamente esse null que apareceu no aceite.
+    if (error) falhaAoEnriquecer = error.message;
     for (const t of (rows ?? []) as Array<Record<string, unknown>>) tarefas.set(String(t.id), t);
   }
   const humanIds = [...new Set(
@@ -306,20 +336,36 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       incidentes: incidentes.length,
     },
     tarefas_disponiveis: disponiveis,
+    ...(falhaAoEnriquecer
+      ? {
+        aviso: 'Nao consegui ler as tarefas para preencher titulo, projeto, cliente e '
+          + `responsavel humano dos vinculos: ${falhaAoEnriquecer}. Os campos abaixo vem `
+          + 'nulos por FALHA DE LEITURA, e nao por ausencia de dado.',
+      }
+      : {}),
     operadores: operadores.map((o) => ({
       slug: o.slug, nome: o.display_name, funcao: o.role, situacao: o.status,
       escopo: o.scope, coordenador: o.is_coordinator === true, ultima_execucao: o.last_run_at,
+      // A hierarquia, para conferir o organograma sem outra chamada.
+      area: o.area ?? null,
+      responde_a: o.parent_slug ?? null,
+      ordem: o.display_order ?? null,
     })),
     vinculos: vinculos.map((l) => {
-      const t = l.kanban_task_id ? tarefas.get(String(l.kanban_task_id)) : undefined;
+      const idDaTarefa = texto(l.kanban_task_id) ?? texto(l.painel_task_id);
+      const t = idDaTarefa ? tarefas.get(idDaTarefa) : undefined;
       const projeto = (t?.project ?? null) as Record<string, unknown> | null;
       const cliente = (projeto?.client ?? null) as Record<string, unknown> | null;
       const op = porId.get(String(l.operator_id));
+      const runDoVinculo = execucoes.find((r) => String(r.task_link_id) === String(l.id));
       return {
         id: l.id,
         operador: op?.slug ?? null,
         tarefa: t?.title ?? null,
         kanban_task_id: l.kanban_task_id,
+        // Para onde clicar. Sem isto o relatorio diz "concluido" e obriga
+        // quem le a procurar o registro na mao.
+        deep_link: deepLinkDoVinculo(texto(l.id), texto(runDoVinculo?.id)),
         projeto: projeto?.name ?? null,
         cliente: cliente ? (texto(cliente.company_name) ?? texto(cliente.full_name)) : null,
         // O responsável HUMANO, sempre visível e nunca alterado por aqui.
@@ -566,6 +612,8 @@ export async function operatorDigest(opts: { dias?: number }) {
   const porAgente = new Map<string, {
     agente: string; area: string; entregas: number; travados: number;
     esperando: number; aprovacoes: number; evidencias: string[];
+    // As chaves de execucao ja contadas como entrega, por agente.
+    chavesEntregues: Set<string>;
   }>();
 
   for (const e of eventos) {
@@ -578,12 +626,32 @@ export async function operatorDigest(opts: { dias?: number }) {
         agente: (op.display_name as string) ?? chave,
         area: (op.area as string) ?? 'Sem area definida',
         entregas: 0, travados: 0, esperando: 0, aprovacoes: 0, evidencias: [],
+        chavesEntregues: new Set<string>(),
       };
       porAgente.set(chave, linha);
     }
     const st = e.new_status as string | null;
     if (st === 'done') {
-      linha.entregas += 1;
+      /*
+       * UMA ENTREGA POR EXECUCAO, e nao por evento.
+       *
+       * A trilha e append-only de proposito: reportar `done` duas vezes
+       * grava duas linhas, e isso esta certo — o segundo relato aconteceu
+       * e some-lo seria apagar historico. O erro era CONTAR essas linhas
+       * como duas entregas: o trabalho foi um so.
+       *
+       * A prova esta no banco: project_memory tem UMA linha para aquele
+       * run_key, porque a gravacao da entrega ja e idempotente. Era o
+       * relatorio que discordava do proprio registro.
+       *
+       * Sem run_key (evento antigo, antes da chave), cai no id do evento:
+       * pior contar uma vez a mais do que perder a entrega.
+       */
+      const chaveDaExecucao = (e.run_key as string | null) ?? `evento:${String(e.occurred_at)}`;
+      if (!linha.chavesEntregues.has(chaveDaExecucao)) {
+        linha.chavesEntregues.add(chaveDaExecucao);
+        linha.entregas += 1;
+      }
       const ev = typeof e.evidence === 'string' ? e.evidence.trim() : '';
       // So evidencia de verdade entra, e sem repetir: a lista serve para
       // provar, nao para encher.
@@ -597,9 +665,12 @@ export async function operatorDigest(opts: { dias?: number }) {
 
   const porArea = new Map<string, unknown[]>();
   for (const linha of porAgente.values()) {
+    // O Set nao vai para a resposta: e ferramenta de contagem, e sairia
+    // como objeto vazio no JSON, confundindo quem le.
+    const { chavesEntregues, ...visivel } = linha;
     const atual = porArea.get(linha.area);
-    if (atual) atual.push(linha);
-    else porArea.set(linha.area, [linha]);
+    if (atual) atual.push(visivel);
+    else porArea.set(linha.area, [visivel]);
   }
 
   const entregas = [...porAgente.values()].reduce((s, l) => s + l.entregas, 0);
@@ -608,6 +679,9 @@ export async function operatorDigest(opts: { dias?: number }) {
     desde,
     total_de_eventos: eventos.length,
     entregas_concluidas: entregas,
+    como_contamos: 'entregas_concluidas conta EXECUCOES (run_key) que terminaram, e nao linhas '
+      + 'da trilha. Reportar o mesmo done duas vezes grava dois eventos, porque a trilha e '
+      + 'append-only, mas continua sendo UMA entrega.',
     // A trilha e cortada no teto de leitura. Dizer isso e o que separa um
     // consolidado de uma mentira educada.
     trilha_completa: eventos.length < READ_LIMITS.maxPageSize,
@@ -726,6 +800,7 @@ export async function operatorQueue(opts: { operator?: string; limit?: number })
       const o = porOperador.get(l.operator_id as string);
       return {
         link_id: l.id,
+        deep_link: deepLinkDoVinculo(String(l.id), null),
         operador: o?.slug ?? null,
         kanban_task_id: l.kanban_task_id,
         titulo: t?.title ?? '(tarefa nao encontrada)',
