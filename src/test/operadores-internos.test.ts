@@ -779,3 +779,65 @@ describe("o cliente vive em profiles, e nao existe tabela clients", () => {
     expect(conserto).toContain("PRONTO PARA O CLIENTE");
   });
 });
+
+describe("a Central deixa de ser uma parede de cartoes", () => {
+  const perfil = readFileSync(
+    resolve(raiz, "src/components/execucao/PerfilDoAgente.tsx"), "utf8",
+  );
+
+  it("os agentes sao agrupados por AREA, nao jogados numa grade", () => {
+    // Catorze cartoes em quatro colunas viravam uma parede: o olho nao
+    // tinha onde parar e nada dizia quem trabalha com quem.
+    expect(pagina).toContain("const agrupadosPorArea");
+    expect(pagina).toContain('o.area?.trim() || "Sem área definida"');
+  });
+
+  it("o cartao diz a funcao e a quem responde", () => {
+    expect(pagina).toContain("{o.role}");
+    expect(pagina).toContain("responde a ");
+    expect(pagina).toContain("o.parent_slug");
+  });
+
+  it("evidencia tem numero proprio no cartao", () => {
+    // E o que separa "feito" de "disse que fez".
+    expect(pagina).toContain("comEvidencia: meus.filter((v) => Boolean(v.last_evidence)).length");
+    expect(pagina).toContain("com evidência");
+  });
+
+  it("o perfil do agente abre CENTRALIZADO, e nao como gaveta", () => {
+    expect(perfil).toContain("<Dialog open={Boolean(operador)}");
+    expect(perfil).not.toContain('side="right"');
+  });
+
+  it("o perfil lista as tarefas, e nao so o quanto sao", () => {
+    // Contava quantas eram e nao mostrava nenhuma: quem abria ficava com
+    // o numero e sem o assunto.
+    expect(perfil).toContain("Tarefas deste agente");
+    expect(perfil).toContain("tarefas.get(String(v.kanban_task_id))");
+  });
+
+  it("o que trava vem primeiro, o que terminou por ultimo", () => {
+    // Ordenar por data deixaria o bloqueio no meio do monte.
+    expect(perfil).toContain('const ORDEM_DO_ESTADO = [');
+    expect(perfil).toContain('"blocked", "awaiting_input", "review", "in_progress", "queued", "done",');
+  });
+
+  it("evidencia com endereco vira link; sem endereco, vira texto", () => {
+    // String.raw porque a barra invertida sobrevive: numa string comum o
+    // JavaScript come cada `\` e a comparação passa a procurar outra coisa.
+    expect(perfil).toContain(
+      String.raw`/^https?:\/\//.test(String(v.last_evidence).trim())`,
+    );
+    expect(perfil).toContain('target="_blank"');
+    expect(perfil).toContain('rel="noreferrer noopener"');
+  });
+
+  it("concluida sem evidencia e denunciada na propria lista", () => {
+    expect(perfil).toContain('v.status === "done" && !v.last_evidence');
+    expect(perfil).toContain("concluída sem evidência");
+  });
+
+  it("da para abrir a tarefa no Kanban a partir do agente", () => {
+    expect(perfil).toContain("/kanban?task=${tarefaId}");
+  });
+});

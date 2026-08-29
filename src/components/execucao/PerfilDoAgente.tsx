@@ -2,8 +2,13 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { AlertTriangle, ClipboardCopy, History, Lightbulb, TrendingUp } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AlertTriangle, ClipboardCopy, History, Lightbulb, ListChecks, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -28,6 +33,31 @@ type Operador = {
   status: string;
   is_coordinator: boolean;
   last_run_at: string | null;
+};
+
+/* A ordem em que os estados pedem atenção: o que trava vem primeiro, o
+   que já terminou por último. Lista ordenada por data deixaria o bloqueio
+   no meio do monte. */
+const ORDEM_DO_ESTADO = [
+  "blocked", "awaiting_input", "review", "in_progress", "queued", "done",
+];
+
+const TOM_DO_ESTADO: Record<string, string> = {
+  blocked: "bg-destructive",
+  awaiting_input: "bg-warning",
+  review: "bg-warning",
+  in_progress: "bg-info",
+  queued: "bg-muted-foreground",
+  done: "bg-success",
+};
+
+const ROTULO_DO_ESTADO: Record<string, string> = {
+  blocked: "bloqueada",
+  awaiting_input: "aguardando insumo",
+  review: "em revisão",
+  in_progress: "em andamento",
+  queued: "na fila",
+  done: "concluída",
 };
 
 const quando = (iso?: string | null) =>
@@ -176,17 +206,21 @@ export default function PerfilDoAgente({
   };
 
   return (
-    <Sheet open={Boolean(operador)} onOpenChange={(aberto) => !aberto && aoFechar()}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+    /* CENTRALIZADO, e nao mais gaveta lateral.
+       A gaveta jogava o conteudo para a borda e, no telefone, cobria a
+       tela inteira sem parecer uma janela. Centralizado, a pessoa ve onde
+       o painel continua atras e entende que aquilo fecha. */
+    <Dialog open={Boolean(operador)} onOpenChange={(aberto) => !aberto && aoFechar()}>
+      <DialogContent className="flex max-h-[88vh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
         {operador && (
           <>
             <div className="shrink-0 border-b border-border px-4 pb-3 pt-[max(1.5rem,calc(env(safe-area-inset-top)+0.75rem))]">
-              <SheetTitle className="pr-12 text-left text-[17px] font-bold leading-tight text-foreground">
+              <DialogTitle className="pr-12 text-left text-[17px] font-bold leading-tight text-foreground">
                 {operador.display_name}
-              </SheetTitle>
-              <SheetDescription className="text-left text-[11.5px] text-muted-foreground">
+              </DialogTitle>
+              <DialogDescription className="text-left text-[11.5px] text-muted-foreground">
                 {operador.role} · {operador.scope}
-              </SheetDescription>
+              </DialogDescription>
               <p className="mt-1 text-[10.5px] text-muted-foreground">
                 {operador.last_run_at ? `última execução ${quando(operador.last_run_at)}` : "sem execução ainda"}
               </p>
@@ -217,6 +251,97 @@ export default function PerfilDoAgente({
                   ))}
                 </div>
               </div>
+
+              {/* AS TAREFAS, que era o que faltava.
+                  O perfil sabia contar quantas eram e nao mostrava
+                  nenhuma: quem abria para entender o que o agente fez
+                  ficava com o numero e sem o assunto. Aqui vem o titulo, o
+                  cliente, o estado, a evidencia clicavel e o caminho para
+                  abrir a tarefa no Kanban. */}
+              {meus.length > 0 && (
+                <div>
+                  <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <ListChecks className="h-3 w-3" /> Tarefas deste agente
+                    <span className="tabular-nums text-muted-foreground/70">{meus.length}</span>
+                  </p>
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                    {[...meus]
+                      .sort((a, b) => ORDEM_DO_ESTADO.indexOf(a.status) - ORDEM_DO_ESTADO.indexOf(b.status))
+                      .map((v) => {
+                        const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+                        const tarefaId = v.kanban_task_id || v.painel_task_id;
+                        return (
+                          <div key={v.id} className="rounded-lg border border-border bg-card p-2.5">
+                            <div className="flex items-start gap-2">
+                              <span className={cn(
+                                "mt-1 h-1.5 w-1.5 shrink-0 rounded-full",
+                                TOM_DO_ESTADO[v.status] ?? "bg-muted-foreground",
+                              )} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[11.5px] font-semibold text-foreground">
+                                  {t?.title || v.last_action || "(tarefa sem título)"}
+                                </p>
+                                <p className="mt-0.5 text-[9.5px] text-muted-foreground">
+                                  {ROTULO_DO_ESTADO[v.status] ?? v.status}
+                                  {t?.project?.client && ` · ${t.project.client.company_name || t.project.client.full_name}`}
+                                  {v.updated_at && ` · ${quando(v.updated_at)}`}
+                                </p>
+                              </div>
+                              {tarefaId && (
+                                <a
+                                  href={`/kanban?task=${tarefaId}`}
+                                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-[9.5px] font-semibold text-muted-foreground hover:text-foreground"
+                                >
+                                  abrir
+                                </a>
+                              )}
+                            </div>
+
+                            {v.last_evidence && (
+                              <p className="mt-1.5 truncate text-[10px]">
+                                {/^https?:\/\//.test(String(v.last_evidence).trim()) ? (
+                                  <a
+                                    href={String(v.last_evidence).trim()}
+                                    target="_blank"
+                                    rel="noreferrer noopener"
+                                    className="text-info underline underline-offset-2"
+                                  >
+                                    evidência: {String(v.last_evidence).trim()}
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    evidência: {String(v.last_evidence)}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+
+                            {v.status === "done" && !v.last_evidence && (
+                              <p className="mt-1.5 text-[10px] text-warning">
+                                concluída sem evidência
+                              </p>
+                            )}
+                            {v.block_reason && (
+                              <p className="mt-1 text-[10px] text-destructive">
+                                bloqueio: {v.block_reason}
+                              </p>
+                            )}
+                            {v.next_step && (
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                próximo passo: {v.next_step}
+                              </p>
+                            )}
+                            {v.approval_required && v.status !== "done" && (
+                              <p className="mt-1 text-[10px] font-semibold text-warning">
+                                precisa da sua aprovação
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
 
               {/* O que melhorar: cada linha sai de um número acima. */}
               <div>
@@ -321,7 +446,7 @@ export default function PerfilDoAgente({
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

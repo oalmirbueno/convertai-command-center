@@ -258,6 +258,11 @@ export default function AdminExecucao() {
       andamento: meus.filter((v) => v.status === "in_progress").length,
       feitas: meus.filter((v) => v.status === "done").length,
       bloqueadas: meus.filter((v) => v.status === "blocked").length,
+      revisao: meus.filter((v) => v.status === "review").length,
+      aguardando: meus.filter((v) => v.status === "awaiting_input").length,
+      // Evidência é o que separa "feito" de "disse que fez".
+      comEvidencia: meus.filter((v) => Boolean(v.last_evidence)).length,
+      aprovacoes: meus.filter((v) => v.approval_required && v.status !== "done").length,
       total: meus.length,
     };
   };
@@ -532,6 +537,26 @@ export default function AdminExecucao() {
     return itens;
   };
 
+  /**
+   * Os agentes agrupados pela área que o organograma define.
+   *
+   * A ordem dentro de cada bloco vem do display_order, que é o mesmo
+   * número que o Hermes controla por operator_organize: quem manda na
+   * apresentação é o dado, e não a ordem em que o banco devolveu.
+   */
+  const agrupadosPorArea = useMemo(() => {
+    const porArea = new Map<string, Operador[]>();
+    for (const o of operadores) {
+      const chave = o.area?.trim() || "Sem área definida";
+      const atual = porArea.get(chave);
+      if (atual) atual.push(o);
+      else porArea.set(chave, [o]);
+    }
+    return [...porArea.entries()].sort(([a], [b]) =>
+      a === "Sem área definida" ? 1 : b === "Sem área definida" ? -1 : a.localeCompare(b, "pt-BR"),
+    );
+  }, [operadores]);
+
   /** Os nós do organograma, montados dos operadores reais. */
   const nosDoOrganograma: NoDoOrganograma[] = useMemo(
     () => operadores.map((o) => {
@@ -713,9 +738,33 @@ export default function AdminExecucao() {
         </p>
       </div>
 
-      {/* Os operadores do piloto, sem e-mail e sem senha: outra entidade. */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {operadores.map((o) => {
+      {/* Os operadores, agrupados por AREA.
+          Catorze cartoes numa grade de quatro colunas viravam uma parede:
+          o olho nao tinha onde parar e nada dizia quem trabalha com quem.
+          Agora cada area e um bloco com o seu proprio cabecalho, e a ordem
+          vem do display_order que o Hermes controla. */}
+      <div className="space-y-3">
+      {agrupadosPorArea.map(([area, doGrupo]) => (
+        <section key={area} className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary px-3 py-2">
+            <span className="h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
+            <h3 className="text-[10.5px] font-bold uppercase tracking-wider text-foreground">{area}</h3>
+            <span className="rounded-md bg-card px-1.5 py-0.5 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
+              {doGrupo.length}
+            </span>
+            {(() => {
+              const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
+              const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
+              return (
+                <span className="ml-auto flex gap-2.5 text-[9.5px] tabular-nums">
+                  {emAndamento > 0 && <span className="text-info">{emAndamento} em andamento</span>}
+                  {feitas > 0 && <span className="text-success">{feitas} feitas</span>}
+                </span>
+              );
+            })()}
+          </div>
+          <div className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3">
+        {doGrupo.map((o) => {
           const n = numerosDoOperador(o.id);
           return (
             <button
@@ -735,7 +784,15 @@ export default function AdminExecucao() {
                   o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
                 )} />
               </div>
-              <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
+              {/* Função primeiro, escopo depois: o escopo é comprido e o
+                  cargo é o que identifica a peça de relance. */}
+              <p className="mt-0.5 text-[10px] font-medium text-foreground/80">{o.role}</p>
+              <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
+              {o.parent_slug && (
+                <p className="mt-0.5 truncate text-[9.5px] text-muted-foreground/80">
+                  responde a {operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug}
+                </p>
+              )}
               {/* Números por operador: "quanto cada um tem na mão" era a
                   pergunta que o cartão não respondia. */}
               <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px]">
@@ -743,9 +800,15 @@ export default function AdminExecucao() {
                   <span className="text-muted-foreground/70">nenhuma tarefa ainda</span>
                 ) : (
                   <>
-                    <span className="text-info">{n.andamento} em andamento</span>
-                    <span className="text-success">{n.feitas} feitas</span>
+                    {n.andamento > 0 && <span className="text-info">{n.andamento} em andamento</span>}
+                    {n.feitas > 0 && <span className="text-success">{n.feitas} feitas</span>}
                     {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
+                    {n.revisao > 0 && <span className="text-warning">{n.revisao} em revisão</span>}
+                    {/* Evidência é o que separa "feito" de "disse que fez",
+                        e por isso vale um número próprio no cartão. */}
+                    {n.comEvidencia > 0 && (
+                      <span className="text-muted-foreground">{n.comEvidencia} com evidência</span>
+                    )}
                   </>
                 )}
               </div>
@@ -755,6 +818,9 @@ export default function AdminExecucao() {
             </button>
           );
         })}
+          </div>
+        </section>
+      ))}
       </div>
 
       {incidentes.length > 0 && (
