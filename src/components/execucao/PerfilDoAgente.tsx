@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -91,6 +91,26 @@ export default function PerfilDoAgente({
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: Boolean(operador?.id),
+  });
+
+  const queryClient = useQueryClient();
+  const pausar = useMutation({
+    mutationFn: async ({ pausarAgora, motivo }: { pausarAgora: boolean; motivo: string }) => {
+      const { data, error } = await (supabase as any).rpc("operator_pausar", {
+        _slug: operador!.slug,
+        _pausar: pausarAgora,
+        _motivo: motivo || null,
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["operadores-internos"] });
+      toast.success(vars.pausarAgora
+        ? `${operador?.display_name} pausado. O banco recusa trabalho dele até reativar.`
+        : `${operador?.display_name} reativado.`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
   });
 
   const { data: trilha = [] } = useQuery({
@@ -221,9 +241,42 @@ export default function PerfilDoAgente({
               <DialogDescription className="text-left text-[11.5px] text-muted-foreground">
                 {operador.role} · {operador.scope}
               </DialogDescription>
-              <p className="mt-1 text-[10.5px] text-muted-foreground">
-                {operador.last_run_at ? `última execução ${quando(operador.last_run_at)}` : "sem execução ainda"}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="text-[10.5px] text-muted-foreground">
+                  {operador.last_run_at ? `última execução ${quando(operador.last_run_at)}` : "sem execução ainda"}
+                </p>
+                {operador.status !== "active" && (
+                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                    {operador.status === "paused" ? "pausado" : operador.status}
+                  </span>
+                )}
+                {/* Pausa POR OPERADOR: ate aqui so existia a chave geral da
+                    camada. Pausado, o banco recusa assign, report,
+                    participacao e aprovacao dele — com erro que diz
+                    "pausado", nao "nao existe". */}
+                <button
+                  type="button"
+                  disabled={pausar.isPending}
+                  onClick={() => {
+                    const pausando = operador.status === "active";
+                    const motivo = window.prompt(
+                      pausando
+                        ? `Pausar ${operador.display_name}? Motivo (fica na trilha):`
+                        : `Reativar ${operador.display_name}? Motivo (opcional):`,
+                    );
+                    if (motivo === null) return; // cancelou
+                    pausar.mutate({ pausarAgora: pausando, motivo });
+                  }}
+                  className={cn(
+                    "rounded-lg border px-2 py-0.5 text-[10px] font-semibold transition-colors disabled:opacity-50",
+                    operador.status === "active"
+                      ? "border-warning/50 text-warning hover:bg-warning/10"
+                      : "border-success/50 text-success hover:bg-success/10",
+                  )}
+                >
+                  {operador.status === "active" ? "pausar operador" : "reativar"}
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">

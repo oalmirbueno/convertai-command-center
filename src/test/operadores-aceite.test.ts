@@ -65,7 +65,8 @@ describe("deep-link: onde clicar", () => {
   });
 
   it("o board e a fila devolvem o deep_link", () => {
-    expect((servicos.match(/deep_link: deepLinkDoVinculo/g) ?? []).length).toBe(2);
+    // board, fila e aprovacoes pendentes: tres emissores, um montador.
+    expect((servicos.match(/deep_link: deepLinkDoVinculo/g) ?? []).length).toBe(3);
   });
 });
 

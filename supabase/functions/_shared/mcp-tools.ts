@@ -35,6 +35,9 @@ import {
   OPERATOR_EVENTS,
   operatorBoard,
   operatorAssign,
+  operatorDiary,
+  operatorProposeAssignee,
+  operatorRequestApproval,
   operatorDigest,
   operatorOrganize,
   operatorQueue,
@@ -294,7 +297,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.39.0',
+  version: '1.40.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2681,7 +2684,7 @@ const operatorDigestTool = makeRead(
  */
 const MAPA_DO_PAINEL = [
   { area: 'Ciclo', rota: '/ciclo', para: 'A semana de cada cliente, etapa por etapa.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
-  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board' },
+  { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
@@ -2744,6 +2747,145 @@ const operatorAssignTool: ToolDefinition = {
   },
 };
 
+const operatorDiaryTool: ToolDefinition = {
+  name: 'aceleriq_operator_diary',
+  title: 'Diario da execucao: ler instrucoes e participar',
+  description:
+    'O caderno de contexto de um vinculo de execucao. SEM body, lista as entradas — inclusive as do Almir: instrucao, decisao e correcao humanas MANDAM, leia antes de continuar. COM body (e operator + entry_type), escreve uma entrada assinada pelo operador. pedido_insumo e pedido_revisao notificam o dono do painel e param o trabalho ate a resposta; comentario e contexto so registram. Nada daqui vai para cliente ou canal externo: e conversa interna, na trilha.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      link_id: { type: 'string', description: 'UUID do vinculo (operator_task_links.id).' },
+      operator: { type: 'string', description: 'Slug do operador que assina (obrigatorio para escrever).' },
+      entry_type: { type: 'string', description: 'comentario, instrucao, decisao, contexto, evidencia, correcao, pedido_revisao, pedido_insumo ou resposta_insumo.' },
+      title: { type: 'string', description: 'Titulo curto da entrada.' },
+      body: { type: 'string', description: 'O texto. Presente = escrever; ausente = listar.' },
+      limit: { type: 'number', description: 'Ao listar, quantas entradas (max 100).' },
+    },
+    required: ['link_id'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      link_id: UUID,
+      operator: z.string().min(2).max(40).optional(),
+      entry_type: z.enum(['comentario', 'instrucao', 'decisao', 'contexto', 'evidencia',
+        'correcao', 'pedido_revisao', 'pedido_insumo', 'resposta_insumo']).optional(),
+      title: z.string().max(200).optional(),
+      body: z.string().max(8000).optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorDiary(parsed.data);
+  },
+};
+
+const operatorRequestApprovalTool: ToolDefinition = {
+  name: 'aceleriq_operator_request_approval',
+  title: 'Pedir aprovacao humana com explicacao completa',
+  description:
+    'Cria um pedido de aprovacao EXPLICADO para uma acao que exige humano: publicar, agendar, enviar mensagem, contatar cliente, gastar, alterar financeiro, alterar responsavel e afins. Exige o_que e por_que; payload fica congelado por versao — a acao executada depois tem que ser EXATAMENTE o payload aprovado, e mudanca de plano e outra aprovacao com versao nova. O dono do painel e notificado com deep-link. NADA e executado por esta chamada: ela so pergunta.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que pede.' },
+      link_id: { type: 'string', description: 'UUID do vinculo de execucao que originou o pedido.' },
+      action_kind: { type: 'string', description: 'publicar, agendar, enviar_mensagem, contatar_cliente, criar_proposta, enviar_contrato, ativar_campanha, alterar_orcamento, gastar, alterar_financeiro, alterar_permissoes, exportar_dados, excluir_dados, mudar_estrategia, alterar_responsavel ou promover_autonomia.' },
+      o_que: { type: 'string', description: 'O que sera feito, em uma frase concreta.' },
+      por_que: { type: 'string', description: 'Por que fazer; qual problema resolve.' },
+      payload: { type: 'object', description: 'A acao exata, em dados: destino, conteudo, valores. E o que sera executado se aprovado.' },
+      dados_usados: { type: 'string', description: 'Quais dados serao usados.' },
+      destino: { type: 'string', description: 'Para onde os dados ou a acao vao.' },
+      impacto: { type: 'string', description: 'Impacto esperado.' },
+      risco: { type: 'string', description: 'O que pode dar errado.' },
+      custo_previsto: { type: 'number', description: 'Custo em reais, quando houver.' },
+      prazo: { type: 'string', description: 'Data-limite (YYYY-MM-DD), quando houver.' },
+      reversivel: { type: 'boolean', description: 'A acao pode ser desfeita? Default true.' },
+      evidencia: { type: 'string', description: 'URL ou texto que fundamenta a recomendacao.' },
+      valid_until: { type: 'string', description: 'Validade do pedido (ISO); depois disso considere expirado.' },
+    },
+    required: ['operator', 'link_id', 'action_kind', 'o_que', 'por_que'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      link_id: UUID,
+      action_kind: z.enum(['publicar', 'agendar', 'enviar_mensagem', 'contatar_cliente',
+        'criar_proposta', 'enviar_contrato', 'ativar_campanha', 'alterar_orcamento',
+        'gastar', 'alterar_financeiro', 'alterar_permissoes', 'exportar_dados',
+        'excluir_dados', 'mudar_estrategia', 'alterar_responsavel', 'promover_autonomia']),
+      o_que: z.string().min(10).max(2000),
+      por_que: z.string().min(10).max(2000),
+      payload: z.record(z.unknown()).optional(),
+      dados_usados: z.string().max(2000).optional(),
+      destino: z.string().max(500).optional(),
+      impacto: z.string().max(1000).optional(),
+      risco: z.string().max(1000).optional(),
+      custo_previsto: z.number().min(0).optional(),
+      prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      reversivel: z.boolean().optional(),
+      evidencia: z.string().max(2000).optional(),
+      valid_until: z.string().max(40).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorRequestApproval(parsed.data);
+  },
+};
+
+const operatorProposeAssigneeTool: ToolDefinition = {
+  name: 'aceleriq_operator_propose_assignee',
+  title: 'Propor responsavel humano para uma tarefa',
+  description:
+    'Registra uma PROPOSTA de responsavel humano, com justificativa e evidencias. NAO altera assigned_to: a unica escrita no responsavel acontece quando um admin aprova a proposta no painel. Uma proposta pendente por tarefa. Aceita o id do perfil ou o nome exato; nome ambiguo e recusado listando os candidatos. O dono do painel recebe a sugestao com deep-link.',
+  scopes: ['aceleriq:write'],
+  annotations: { readOnlyHint: false, idempotentHint: false, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que sugere.' },
+      kanban_task_id: { type: 'string', description: 'UUID da tarefa no Kanban.' },
+      suggested_profile_id: { type: 'string', description: 'UUID do perfil sugerido.' },
+      suggested_name: { type: 'string', description: 'Nome exato do perfil, se nao tiver o id.' },
+      justificativa: { type: 'string', description: 'Por que esta pessoa.' },
+      evidencias: { type: 'array', items: { type: 'string' }, description: 'URLs ou trechos que sustentam.' },
+      confianca: { type: 'number', description: 'De 0 a 1.' },
+      prazo: { type: 'string', description: 'Prazo relevante (YYYY-MM-DD).' },
+      impacto: { type: 'string', description: 'Impacto de ninguem assumir.' },
+    },
+    required: ['operator', 'kanban_task_id', 'justificativa'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      kanban_task_id: UUID,
+      suggested_profile_id: UUID.optional(),
+      suggested_name: z.string().min(2).max(120).optional(),
+      justificativa: z.string().min(10).max(2000),
+      evidencias: z.array(z.string().max(500)).max(10).optional(),
+      confianca: z.number().min(0).max(1).optional(),
+      prazo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      impacto: z.string().max(1000).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await operatorProposeAssignee(parsed.data);
+  },
+};
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2786,6 +2928,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   operatorOrganizeTool,
   operatorReportTool,
   operatorBoardTool,
+  operatorDiaryTool,
+  operatorRequestApprovalTool,
+  operatorProposeAssigneeTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

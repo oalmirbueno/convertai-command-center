@@ -11,6 +11,12 @@ import {
 import { cn } from "@/lib/utils";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
+import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
+import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
+import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
+import {
+  ROTULO_CATEGORIA, ROTULO_ORIGEM, categoriaDaTarefa, origemDaExecucao, passaNoFiltro,
+} from "@/lib/execucaoBadges";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 
@@ -93,11 +99,21 @@ export default function AdminExecucao() {
   const { profile } = useAuth();
   const [searchParams] = useSearchParams();
   const vinculoAlvo = searchParams.get("vinculo");
+  const aprovacaoAlvo = searchParams.get("aprovacao");
+  const propostaAlvo = searchParams.get("proposta");
+  const abaAlvo = searchParams.get("aba");
   const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("quadro");
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
+  const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string } | null>(null);
+  // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
+  // lista sem recorte. Busca e livre; cliente e prazo sao os dois cortes
+  // que o dono realmente usa para decidir onde olhar primeiro.
+  const [busca, setBusca] = useState("");
+  const [filtroCliente, setFiltroCliente] = useState("");
+  const [filtroPrazo, setFiltroPrazo] = useState<"todas" | "vencidas" | "semana">("todas");
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
   const abasRef = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -283,6 +299,17 @@ export default function AdminExecucao() {
     };
   };
 
+  // A notificacao de aprovacao/proposta cai direto no painel certo, e
+  // ?aba=diario abre a conversa do vinculo — o deep-link do MCP e este.
+  useEffect(() => {
+    if (aprovacaoAlvo || propostaAlvo) setVisao("aprovacao");
+  }, [aprovacaoAlvo, propostaAlvo]);
+  useEffect(() => {
+    if (abaAlvo === "diario" && vinculoAlvo) {
+      setDiarioAberto({ linkId: vinculoAlvo });
+    }
+  }, [abaAlvo, vinculoAlvo]);
+
   // A notificação abre direto o vínculo: rola até ele e destaca.
   useEffect(() => {
     if (!vinculoAlvo || vinculos.length === 0) return;
@@ -330,13 +357,59 @@ export default function AdminExecucao() {
     abasRef.current[visao]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [visao]);
 
+  // O filtro roda ANTES das visoes: quadro, fila e listas enxergam o
+  // mesmo recorte, senao o numero da aba discorda do conteudo dela.
+  const vinculosVisiveis = useMemo(() => {
+    if (!busca.trim() && !filtroCliente && filtroPrazo === "todas") return vinculos;
+    return vinculos.filter((v) => {
+      const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+      const cliente = t?.project?.client;
+      return passaNoFiltro({
+        busca,
+        cliente: filtroCliente,
+        prazo: filtroPrazo,
+        hoje,
+        titulo: t?.title ?? v.last_action,
+        nomeCliente: cliente ? (cliente.company_name || cliente.full_name) : null,
+        nomeProjeto: t?.project?.name ?? null,
+        nomeOperador: opDe(v.operator_id)?.display_name ?? null,
+        dueDate: t?.due_date ?? null,
+        statusFinal: v.status === "done",
+      });
+    });
+  }, [vinculos, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
+
+  const clientesDoQuadro = useMemo(() => {
+    const nomes = new Set<string>();
+    for (const t of tarefas.values()) {
+      const c = t?.project?.client;
+      if (c) nomes.add(c.company_name || c.full_name);
+    }
+    for (const t of disponiveis) {
+      const c = (t as any).project?.client;
+      if (c) nomes.add(c.company_name || c.full_name);
+    }
+    return [...nomes].sort();
+  }, [tarefas, disponiveis]);
+
   const filtrados = useMemo(() => {
-    if (visao === "fila") return vinculos.filter((v) => ["queued", "in_progress"].includes(v.status));
-    if (visao === "aprovacao") return vinculos.filter((v) => v.approval_required && v.status !== "done");
-    if (visao === "done") return vinculos.filter((v) => v.status === "done");
+    if (visao === "fila") return vinculosVisiveis.filter((v) => ["queued", "in_progress"].includes(v.status));
+    if (visao === "aprovacao") return vinculosVisiveis.filter((v) => v.approval_required && v.status !== "done");
+    if (visao === "done") return vinculosVisiveis.filter((v) => v.status === "done");
     if (visao === "relatorios") return [];
-    return vinculos.filter((v) => v.status === visao);
-  }, [vinculos, visao]);
+    return vinculosVisiveis.filter((v) => v.status === visao);
+  }, [vinculosVisiveis, visao]);
+
+  const nomesDeAgentes = useMemo(
+    () => new Map(operadores.map((o) => [o.id, o.display_name])),
+    [operadores],
+  );
+  const titulosDeTarefas = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const [id, t] of tarefas) if (t?.title) m.set(id, String(t.title));
+    for (const t of disponiveis) if ((t as any).title) m.set(String((t as any).id), String((t as any).title));
+    return m;
+  }, [tarefas, disponiveis]);
 
   const incidentes = useMemo(
     () => runs.filter((r) => ["failed", "timeout"].includes(String(r.status))),
@@ -699,15 +772,39 @@ export default function AdminExecucao() {
                 .filter(Boolean).join(" · ") || "sem projeto"}
             </p>
           </div>
-          <span className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-            v.status === "done" ? "bg-success/15 text-success"
-              : v.status === "blocked" ? "bg-destructive/15 text-destructive"
-              : v.status === "review" ? "bg-warning/15 text-warning"
-              : "bg-secondary text-muted-foreground",
-          )}>
-            {STATUS_ROTULO[v.status] || v.status}
-          </span>
+          <div className="flex shrink-0 flex-wrap justify-end gap-1">
+            {/* ORIGEM: isso depende de mim? CATEGORIA: que trabalho e este?
+                Sao os dois badges que faltavam para "em revisao" nao
+                parecer "arte final publicada". */}
+            {(() => {
+              const origem = origemDaExecucao(v);
+              return origem !== "interno" && (
+                <span className={cn(
+                  "rounded-full px-2 py-0.5 text-[10px] font-bold",
+                  origem === "aguardando_almir" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive",
+                )}>
+                  {ROTULO_ORIGEM[origem]}
+                </span>
+              );
+            })()}
+            {(() => {
+              const cat = categoriaDaTarefa(t?.title);
+              return cat !== "geral" && (
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  {ROTULO_CATEGORIA[cat]}
+                </span>
+              );
+            })()}
+            <span className={cn(
+              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+              v.status === "done" ? "bg-success/15 text-success"
+                : v.status === "blocked" ? "bg-destructive/15 text-destructive"
+                : v.status === "review" ? "bg-warning/15 text-warning"
+                : "bg-secondary text-muted-foreground",
+            )}>
+              {STATUS_ROTULO[v.status] || v.status}
+            </span>
+          </div>
         </div>
 
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
@@ -731,7 +828,9 @@ export default function AdminExecucao() {
           <p className="mt-1.5 text-[11.5px] text-foreground/85">{v.last_action}</p>
         )}
         {v.last_evidence && (
-          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+          /* Evidencia INTEIRA: truncar e esconder exatamente a parte que
+             prova (ou nao prova) a entrega. */
+          <p className="mt-1 break-all text-[11px] text-muted-foreground">
             evidência: {v.last_evidence.startsWith("http")
               ? <a className="text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
               : v.last_evidence}
@@ -745,11 +844,25 @@ export default function AdminExecucao() {
             bloqueio: {v.block_reason}
           </p>
         )}
-        {v.approval_required && (
-          <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning">
-            <ShieldAlert className="h-3 w-3" /> aprovação necessária
-          </p>
-        )}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {v.approval_required && (
+            <button
+              type="button"
+              onClick={() => setVisao("aprovacao")}
+              className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning hover:bg-warning/25"
+            >
+              <ShieldAlert className="h-3 w-3" /> aprovação necessária — decidir
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}
+            className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+            title="Conversar com o agente nesta execução: instrução, contexto, correção"
+          >
+            diário
+          </button>
+        </div>
       </div>
     );
   };
@@ -972,6 +1085,43 @@ export default function AdminExecucao() {
         </div>
       )}
 
+      {/* A barra de recorte: busca, cliente e prazo. Aplica antes das
+          visoes para numero e conteudo nunca discordarem. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar tarefa, cliente, projeto ou agente…"
+          className="h-8 w-full max-w-xs rounded-lg border border-border bg-card px-2.5 text-[11.5px] text-foreground placeholder:text-muted-foreground/60"
+        />
+        <select
+          value={filtroCliente}
+          onChange={(e) => setFiltroCliente(e.target.value)}
+          className="h-8 rounded-lg border border-border bg-card px-2 text-[11.5px] text-foreground"
+        >
+          <option value="">todos os clientes</option>
+          {clientesDoQuadro.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select
+          value={filtroPrazo}
+          onChange={(e) => setFiltroPrazo(e.target.value as typeof filtroPrazo)}
+          className="h-8 rounded-lg border border-border bg-card px-2 text-[11.5px] text-foreground"
+        >
+          <option value="todas">qualquer prazo</option>
+          <option value="vencidas">vencidas</option>
+          <option value="semana">próximos 7 dias</option>
+        </select>
+        {(busca || filtroCliente || filtroPrazo !== "todas") && (
+          <button
+            type="button"
+            onClick={() => { setBusca(""); setFiltroCliente(""); setFiltroPrazo("todas"); }}
+            className="text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+          >
+            limpar ({vinculosVisiveis.length}/{vinculos.length})
+          </button>
+        )}
+      </div>
+
       {/* No telefone as dez visoes empilhavam em cinco fileiras e comiam a
           tela antes do conteudo comecar. Vira faixa que corre para o lado,
           e volta a quebrar em linhas no desktop, onde ha largura de sobra.
@@ -1011,7 +1161,7 @@ export default function AdminExecucao() {
            cheia empurra a página inteira e as outras somem de vista. */
         <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
           {COLUNAS.map((c) => {
-            const daColuna = vinculos.filter((v) => v.status === c.id);
+            const daColuna = vinculosVisiveis.filter((v) => v.status === c.id);
             return (
               <div key={c.id} className="flex w-[250px] shrink-0 flex-col rounded-xl border border-border bg-card/60 p-2.5">
                 <div className="flex items-center gap-1.5">
@@ -1146,6 +1296,32 @@ export default function AdminExecucao() {
             </div>
           )}
         </div>
+      ) : visao === "aprovacao" ? (
+        <div className="space-y-4">
+          {/* Primeiro os pedidos EXPLICADOS (tabela nova), depois as
+              propostas de responsavel, e por ultimo os vinculos que so
+              carregam o selo antigo — visiveis para nada ficar invisivel
+              enquanto o agente ainda nao migrou para o pedido explicado. */}
+          <AprovacoesExplicadas
+            nomesDeAgentes={nomesDeAgentes}
+            titulosDeTarefas={titulosDeTarefas}
+            destaqueId={aprovacaoAlvo}
+            aoAbrirDiario={(linkId) => setDiarioAberto({ linkId })}
+          />
+          <PropostasDeResponsavel
+            nomesDeAgentes={nomesDeAgentes}
+            titulosDeTarefas={titulosDeTarefas}
+            destaqueId={propostaAlvo}
+          />
+          {filtrados.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Vínculos marcados com o selo · {filtrados.length}
+              </p>
+              <div className="space-y-2">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
+            </div>
+          )}
+        </div>
       ) : filtrados.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
           <PauseCircle className="mx-auto h-5 w-5 text-muted-foreground" />
@@ -1204,6 +1380,14 @@ export default function AdminExecucao() {
         vinculos={vinculos}
         tarefas={tarefas}
         aoFechar={() => setAgenteAberto(null)}
+      />
+
+      <DiarioDaExecucao
+        linkId={diarioAberto?.linkId ?? null}
+        titulo={diarioAberto?.titulo}
+        nomesDeAgentes={nomesDeAgentes}
+        aberto={Boolean(diarioAberto)}
+        aoFechar={() => setDiarioAberto(null)}
       />
     </div>
   );

@@ -224,6 +224,25 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
   if (ops.error) throw new Error(`internal_operators: ${ops.error.message}`);
   if (links.error) throw new Error(`operator_task_links: ${links.error.message}`);
 
+  // Aprovacoes e propostas pendentes viajam NO quadro: o agente que nao
+  // as ve escolhe trabalho novo enquanto ha decisao humana esperando — e
+  // o dono do painel abre a tela sem saber que tem pergunta para ele.
+  const [aprovacoes, propostas] = await Promise.all([
+    comPrazo(db().from('operator_approvals')
+      .select('id, operator_id, task_link_id, kanban_task_id, action_kind, o_que, por_que, '
+        + 'impacto, risco, custo_previsto, prazo, reversivel, payload_version, status, '
+        + 'valid_until, created_at')
+      .in('status', ['pendente', 'adiado'])
+      .order('created_at', { ascending: false })
+      .limit(50)),
+    comPrazo(db().from('assignment_proposals')
+      .select('id, kanban_task_id, suggested_assignee, operator_id, justificativa, '
+        + 'confianca, status, created_at')
+      .eq('status', 'pendente')
+      .order('created_at', { ascending: false })
+      .limit(50)),
+  ]);
+
   const operadores = (ops.data ?? []) as Array<Record<string, unknown>>;
   const porId = new Map(operadores.map((o) => [String(o.id), o]));
 
@@ -362,6 +381,39 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
         ].filter(Boolean).join(' '),
       }
       : {}),
+    // Falha de leitura vira aviso, nunca lista vazia calada — mesma regra
+    // do enriquecimento de tarefas, pelos mesmos motivos.
+    aprovacoes_pendentes: aprovacoes.error
+      ? { falha: aprovacoes.error.message }
+      : ((aprovacoes.data ?? []) as unknown as Array<Record<string, unknown>>).map((a) => ({
+        approval_id: a.id,
+        operador: porId.get(String(a.operator_id))?.slug ?? null,
+        acao: a.action_kind,
+        o_que: a.o_que,
+        por_que: a.por_que,
+        impacto: a.impacto,
+        risco: a.risco,
+        custo_previsto: a.custo_previsto,
+        prazo: a.prazo,
+        reversivel: a.reversivel,
+        payload_version: a.payload_version,
+        status: a.status,
+        valida_ate: a.valid_until,
+        link_id: a.task_link_id,
+        deep_link: deepLinkDoVinculo(texto(a.task_link_id), null),
+        regra: 'nao execute a acao ate esta aprovacao estar aprovado; o payload aprovado e o unico executavel',
+      })),
+    propostas_de_responsavel_pendentes: propostas.error
+      ? { falha: propostas.error.message }
+      : ((propostas.data ?? []) as unknown as Array<Record<string, unknown>>).map((p) => ({
+        proposal_id: p.id,
+        operador: porId.get(String(p.operator_id))?.slug ?? null,
+        kanban_task_id: p.kanban_task_id,
+        sugerido: p.suggested_assignee,
+        justificativa: p.justificativa,
+        confianca: p.confianca,
+        status: p.status,
+      })),
     operadores: operadores.map((o) => ({
       slug: o.slug, nome: o.display_name, funcao: o.role, situacao: o.status,
       escopo: o.scope, coordenador: o.is_coordinator === true, ultima_execucao: o.last_run_at,
@@ -844,4 +896,189 @@ export async function operatorQueue(opts: { operator?: string; limit?: number })
       + 'started ao pegar, progress durante, e done COM evidencia ao terminar. '
       + 'done sem evidencia e rebaixado para revisao, de proposito.',
   };
+}
+
+/**
+ * O diario da execucao: onde o agente le as instrucoes do Almir e escreve
+ * as proprias entradas.
+ *
+ * Sem body, LISTA — e listar e o que fecha o ciclo de participacao: uma
+ * instrucao humana que o agente nunca le e um bilhete na gaveta. Com
+ * body, ESCREVE via RPC, que valida operador vivo, audita e decide se
+ * notifica (pedido_insumo e pedido_revisao notificam; comentario nao —
+ * diario nao e spam).
+ */
+export async function operatorDiary(input: {
+  link_id: string;
+  operator?: string;
+  entry_type?: string;
+  title?: string;
+  body?: string;
+  attachments?: unknown[];
+  limit?: number;
+}) {
+  if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
+
+  if (texto(input.body)) {
+    if (!texto(input.operator)) {
+      throw new Error('para escrever no diario informe operator (slug do operador que assina)');
+    }
+    const { data, error } = await comPrazo(db().rpc('operator_participar', {
+      _operator_slug: String(input.operator).trim().toLowerCase(),
+      _link_id: input.link_id,
+      _entry_type: texto(input.entry_type) ?? 'comentario',
+      _body: String(input.body),
+      _title: texto(input.title),
+      _attachments: Array.isArray(input.attachments) ? input.attachments : [],
+    }));
+    if (error) throw new Error(`operator_participar: ${error.message}`);
+    return data;
+  }
+
+  const limit = Math.min(Math.max(Number(input.limit) || 50, 1), READ_LIMITS.maxPageSize);
+  const { data, error } = await comPrazo(db().from('operator_participations')
+    .select('id, entry_type, title, body, attachments, author_kind, author_id, operator_id, created_at')
+    .eq('task_link_id', input.link_id)
+    .order('created_at', { ascending: true })
+    .limit(limit));
+  if (error) throw new Error(`operator_participations: ${error.message}`);
+
+  const linhas = (data ?? []) as Array<Record<string, unknown>>;
+
+  // Nome de autor resolvido aqui para o leitor nao receber UUID cru.
+  const humanos = [...new Set(linhas.map((l) => texto(l.author_id)).filter(Boolean))] as string[];
+  const agentes = [...new Set(linhas.map((l) => texto(l.operator_id)).filter(Boolean))] as string[];
+  const [perfis, ops] = await Promise.all([
+    humanos.length
+      ? comPrazo(db().from('profiles').select('id, full_name').in('id', humanos))
+      : Promise.resolve({ data: [], error: null }),
+    agentes.length
+      ? comPrazo(db().from('internal_operators').select('id, slug, display_name').in('id', agentes))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  const nomeHumano = new Map(((perfis.data ?? []) as Array<Record<string, unknown>>)
+    .map((p) => [String(p.id), texto(p.full_name) ?? 'pessoa']));
+  const nomeAgente = new Map(((ops.data ?? []) as Array<Record<string, unknown>>)
+    .map((o) => [String(o.id), texto(o.display_name) ?? texto(o.slug) ?? 'operador']));
+
+  return {
+    link_id: input.link_id,
+    total: linhas.length,
+    entradas: linhas.map((l) => ({
+      id: l.id,
+      quando: l.created_at,
+      tipo: l.entry_type,
+      autor: l.author_kind === 'humano'
+        ? (nomeHumano.get(String(l.author_id)) ?? 'pessoa')
+        : (nomeAgente.get(String(l.operator_id)) ?? 'operador'),
+      autor_kind: l.author_kind,
+      titulo: l.title,
+      texto: l.body,
+      anexos: l.attachments,
+    })),
+    como_usar: 'Entradas do tipo instrucao, decisao e correcao vem do humano e MANDAM: '
+      + 'leia antes de continuar a tarefa. Para responder, chame de novo com operator, '
+      + 'entry_type e body. resposta_insumo fecha um pedido_insumo seu.',
+  };
+}
+
+/**
+ * O agente pede aprovacao COM a explicacao completa — ou nao pede.
+ *
+ * O RPC recusa pedido sem "o que" e "por que", congela o payload por
+ * versao e notifica os admins com deep-link. A resposta repete a regra
+ * de ouro para o proprio agente: nada executa ate um humano aprovar, e o
+ * executado tem que ser exatamente o payload aprovado.
+ */
+export async function operatorRequestApproval(input: {
+  operator: string;
+  link_id: string;
+  action_kind: string;
+  o_que: string;
+  por_que: string;
+  payload?: Record<string, unknown>;
+  dados_usados?: string;
+  destino?: string;
+  impacto?: string;
+  risco?: string;
+  custo_previsto?: number;
+  prazo?: string;
+  reversivel?: boolean;
+  evidencia?: string;
+  valid_until?: string;
+}) {
+  if (!isUuid(input.link_id)) throw new Error('link_id must be a UUID');
+  const { data, error } = await comPrazo(db().rpc('operator_request_approval', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _link_id: input.link_id,
+    _action_kind: String(input.action_kind || '').trim(),
+    _o_que: String(input.o_que || ''),
+    _por_que: String(input.por_que || ''),
+    _payload: input.payload ?? {},
+    _dados_usados: texto(input.dados_usados),
+    _destino: texto(input.destino),
+    _impacto: texto(input.impacto),
+    _risco: texto(input.risco),
+    _custo_previsto: typeof input.custo_previsto === 'number' ? input.custo_previsto : null,
+    _prazo: texto(input.prazo),
+    _reversivel: input.reversivel !== false,
+    _evidencia: texto(input.evidencia),
+    _valid_until: texto(input.valid_until),
+  }));
+  if (error) throw new Error(`operator_request_approval: ${error.message}`);
+  return data;
+}
+
+/**
+ * O agente propoe um responsavel humano; assigned_to nao se move daqui.
+ *
+ * A escrita em tasks.assigned_to mora exclusivamente no RPC de decisao,
+ * atras de um admin. Aqui aceita-se o id do perfil ou o nome exato —
+ * nome ambiguo e recusado listando os candidatos, porque chutar pessoa
+ * em proposta de responsabilidade e pior que falhar.
+ */
+export async function operatorProposeAssignee(input: {
+  operator: string;
+  kanban_task_id: string;
+  suggested_profile_id?: string;
+  suggested_name?: string;
+  justificativa: string;
+  evidencias?: unknown[];
+  confianca?: number;
+  prazo?: string;
+  impacto?: string;
+}) {
+  if (!isUuid(input.kanban_task_id)) throw new Error('kanban_task_id must be a UUID');
+
+  let alvo = texto(input.suggested_profile_id);
+  if (alvo && !isUuid(alvo)) throw new Error('suggested_profile_id must be a UUID');
+  if (!alvo) {
+    const nome = texto(input.suggested_name);
+    if (!nome) throw new Error('informe suggested_profile_id ou suggested_name');
+    const { data, error } = await comPrazo(db().from('profiles')
+      .select('id, full_name')
+      .ilike('full_name', nome)
+      .limit(5));
+    if (error) throw new Error(`profiles: ${error.message}`);
+    const achados = (data ?? []) as Array<Record<string, unknown>>;
+    if (achados.length === 0) throw new Error(`nenhum perfil com o nome "${nome}"`);
+    if (achados.length > 1) {
+      throw new Error('nome ambiguo; use suggested_profile_id. Candidatos: '
+        + achados.map((p) => `${p.full_name} (${p.id})`).join('; '));
+    }
+    alvo = String(achados[0].id);
+  }
+
+  const { data, error } = await comPrazo(db().rpc('operator_propor_responsavel', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _kanban_task_id: input.kanban_task_id,
+    _suggested_assignee: alvo,
+    _justificativa: String(input.justificativa || ''),
+    _evidencias: Array.isArray(input.evidencias) ? input.evidencias : [],
+    _confianca: typeof input.confianca === 'number' ? input.confianca : null,
+    _prazo: texto(input.prazo),
+    _impacto: texto(input.impacto),
+  }));
+  if (error) throw new Error(`operator_propor_responsavel: ${error.message}`);
+  return data;
 }

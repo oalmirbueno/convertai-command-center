@@ -617,6 +617,14 @@
       "remote_name": "operadores_hierarquia_e_vinculo_unico",
       "remote_statements_sha256": "12398fe461a4afc2abae60a6eba2e30faf7cee1d6fd655e1e820133df94e5f74",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260829010000",
+      "path": "supabase/migrations/20260829010000_participacao_aprovacao_e_propostas.sql",
+      "local_sha256": "a6dbffe698d2a02cece0c8b9a6d234158d469c3cc13fb1b3ebb430065dd843b6",
+      "remote_name": "participacao_aprovacao_e_propostas",
+      "remote_statements_sha256": "d535ccf06d8b2ed305ad3d4169435b35d425980326d02b535d187688d70a8c5b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

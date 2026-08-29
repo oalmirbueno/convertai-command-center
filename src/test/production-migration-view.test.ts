@@ -130,12 +130,12 @@ describe("production migration view", { timeout: 30000 }, () => {
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(77);
-    expect(plan.forwardMigrations).toHaveLength(77);
+    expect(plan.manifest.forward_migrations).toHaveLength(78);
+    expect(plan.forwardMigrations).toHaveLength(78);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(77);
+    expect(plan.forwardLedger).toHaveLength(78);
     expect(versions).toHaveLength(173);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
@@ -305,11 +305,11 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("accepts the live 115-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(77);
+    const rows = remoteRows(78);
     expect(rows).toHaveLength(173);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
-    expect(reconciliation.appliedForward).toHaveLength(77);
+    expect(reconciliation.appliedForward).toHaveLength(78);
     expect(reconciliation.appliedAliases).toHaveLength(12);
 
     const normalizedAlias = structuredClone(rows);
@@ -340,7 +340,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       aliases: 96,
       appliedForward: 0,
       appliedAliases: 0,
-      pendingForward: 77,
+      pendingForward: 78,
       files: 173,
     });
     expect(filenames).toHaveLength(173);
@@ -359,12 +359,12 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("reconciles the live aliased ledger to sentinels only and zero pending forward", () => {
     const plan = loadProductionMigrationPlan();
-    const { outputDir, result } = buildFixture(77);
+    const { outputDir, result } = buildFixture(78);
     const filenames = readdirSync(outputDir).sort();
 
     expect(result).toEqual({
       aliases: 96,
-      appliedForward: 77,
+      appliedForward: 78,
       appliedAliases: 12,
       pendingForward: 0,
       files: 173,
@@ -491,7 +491,7 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("keeps a future unaliased forward migration pending after the current package", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(77)));
+    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(78)));
     const future = { ...plan.forwardLedger.at(-1)! };
     const syntheticPlan = {
       ...plan,
@@ -508,7 +508,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     };
 
     const reconciliation = validateRemoteLedger(syntheticPlan, rows);
-    expect(reconciliation.appliedForward).toHaveLength(77);
+    expect(reconciliation.appliedForward).toHaveLength(78);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward).toHaveLength(1);
     expect(reconciliation.pendingForward[0].version).toBe("20260809120000");
@@ -632,7 +632,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       ],
     };
 
-    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(77)));
+    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(78)));
     const pending = validateRemoteLedger(syntheticPlan, live);
     expect(pending.pendingForward).toHaveLength(1);
     expect(pending.pendingForward[0].bytes).toEqual(canonical.bytes);
