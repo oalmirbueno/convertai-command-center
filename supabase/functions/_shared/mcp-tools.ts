@@ -2775,7 +2775,7 @@ const operatorDiaryTool: ToolDefinition = {
         'correcao', 'pedido_revisao', 'pedido_insumo', 'resposta_insumo']).optional(),
       title: z.string().max(200).optional(),
       body: z.string().max(8000).optional(),
-      limit: z.number().int().min(1).max(100).optional(),
+      limit: limite(100),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) {

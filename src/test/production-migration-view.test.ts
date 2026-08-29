@@ -136,7 +136,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
     expect(plan.forwardLedger).toHaveLength(78);
-    expect(versions).toHaveLength(173);
+    expect(versions).toHaveLength(174);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
@@ -145,7 +145,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(65);
+    expect(unaliased).toHaveLength(66);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
@@ -170,7 +170,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(173);
+    expect(sqlValues.split("\n")).toHaveLength(174);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -192,7 +192,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     const cliSplit = entries.filter(
       (entry) => entry.remote_hash_mode === "supabase_cli_split",
     );
-    expect(cliSplit).toHaveLength(72);
+    expect(cliSplit).toHaveLength(73);
     const hardening = cliSplit.find((entry) => entry.version === "20260809044000")!;
     const hardeningSource = plan.forwardMigrations.find(
       (source) => source.version === hardening.version,
@@ -306,7 +306,7 @@ describe("production migration view", { timeout: 30000 }, () => {
   it("accepts the live 115-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
     const rows = remoteRows(78);
-    expect(rows).toHaveLength(173);
+    expect(rows).toHaveLength(174);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
     expect(reconciliation.appliedForward).toHaveLength(78);
@@ -341,9 +341,9 @@ describe("production migration view", { timeout: 30000 }, () => {
       appliedForward: 0,
       appliedAliases: 0,
       pendingForward: 78,
-      files: 173,
+      files: 174,
     });
-    expect(filenames).toHaveLength(173);
+    expect(filenames).toHaveLength(174);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -367,9 +367,9 @@ describe("production migration view", { timeout: 30000 }, () => {
       appliedForward: 78,
       appliedAliases: 12,
       pendingForward: 0,
-      files: 173,
+      files: 174,
     });
-    expect(filenames).toHaveLength(173);
+    expect(filenames).toHaveLength(174);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
@@ -399,7 +399,7 @@ describe("production migration view", { timeout: 30000 }, () => {
 
     expect(result.appliedForward).toBe(2);
     expect(result.appliedAliases).toBe(2);
-    expect(result.pendingForward).toBe(75);
+    expect(result.pendingForward).toBe(76);
     for (const applied of plan.forwardLedger.slice(0, 2)) {
       expect(readFileSync(
         join(outputDir, `${applied.version}_production_ledger_sentinel.sql`),
@@ -414,7 +414,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(173);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(174);
   });
 
   it("applies canonical-only migrations when the shadow files are excluded in CI", () => {
