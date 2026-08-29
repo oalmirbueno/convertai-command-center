@@ -621,9 +621,9 @@
     {
       "version": "20260829010000",
       "path": "supabase/migrations/20260829010000_participacao_aprovacao_e_propostas.sql",
-      "local_sha256": "a6dbffe698d2a02cece0c8b9a6d234158d469c3cc13fb1b3ebb430065dd843b6",
+      "local_sha256": "dd5aab22e436a36d1e8a879175840622025028b0b1111cd0d370afd9729e969f",
       "remote_name": "participacao_aprovacao_e_propostas",
-      "remote_statements_sha256": "d535ccf06d8b2ed305ad3d4169435b35d425980326d02b535d187688d70a8c5b",
+      "remote_statements_sha256": "f6bf9adb5aeb0d3261cbc1e370dd5eca7e08f33b26f73be0909b4a720164d490",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
