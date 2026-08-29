@@ -5,13 +5,14 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  Activity, AlertTriangle, Bot, CheckCircle2, ClipboardCopy, Clock,
+  Activity, AlertTriangle, Bot, CheckCircle2, ChevronRight, ClipboardCopy, Clock,
   FileCheck2, PauseCircle, RefreshCw, ShieldAlert, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
+import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
 
 /**
  * Execução da equipe: o que os operadores internos (Hermes) estão fazendo,
@@ -81,6 +82,9 @@ const STATUS_ROTULO: Record<string, string> = {
   awaiting_input: "aguardando insumo",
   blocked: "bloqueada",
 };
+
+/** Onde as áreas recolhidas ficam guardadas entre visitas. */
+const AREAS_FECHADAS = "aceleriq-execucao-areas-fechadas";
 
 const dataCurta = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
@@ -544,6 +548,40 @@ export default function AdminExecucao() {
    * número que o Hermes controla por operator_organize: quem manda na
    * apresentação é o dado, e não a ordem em que o banco devolveu.
    */
+  /**
+   * Quais áreas ficam abertas.
+   *
+   * Guardo as FECHADAS, e não as abertas: assim uma área que o Hermes
+   * cadastrar amanhã nasce visível em vez de escondida por um estado que
+   * não a conhecia.
+   *
+   * O padrão fecha quem não tem tarefa nenhuma. É o que encurta a tela sem
+   * esconder trabalho: nove áreas paradas viravam nove blocos de rolagem
+   * antes de chegar no que está andando.
+   */
+  const [areasFechadas, setAreasFechadas] = useState<Set<string>>(() => {
+    try {
+      const cru = localStorage.getItem(AREAS_FECHADAS);
+      const lido = cru ? JSON.parse(cru) : null;
+      return new Set(Array.isArray(lido) ? (lido as string[]) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const [escolheuSozinho, setEscolheuSozinho] = useState(false);
+
+  const alternarArea = (area: string, todas?: string[]) => {
+    setEscolheuSozinho(true);
+    setAreasFechadas((antes) => {
+      const proximo = new Set(antes);
+      const decidido = alternarFechadas(proximo, area, todas);
+      try {
+        localStorage.setItem(AREAS_FECHADAS, JSON.stringify([...decidido]));
+      } catch { /* sem armazenamento, vale só nesta sessão */ }
+      return decidido;
+    });
+  };
+
   const agrupadosPorArea = useMemo(() => {
     const porArea = new Map<string, Operador[]>();
     for (const o of operadores) {
@@ -556,6 +594,24 @@ export default function AdminExecucao() {
       a === "Sem área definida" ? 1 : b === "Sem área definida" ? -1 : a.localeCompare(b, "pt-BR"),
     );
   }, [operadores]);
+
+  /**
+   * Está fechada?
+   *
+   * Enquanto a pessoa não mexeu, vale o padrão: área sem tarefa nenhuma
+   * nasce recolhida. Depois do primeiro clique, manda a escolha dela — até
+   * para reabrir uma área vazia, se for isso que quiser.
+   */
+  const estaFechada = (area: string) =>
+    areaComecaFechada(
+      area,
+      agrupadosPorArea.map(([nome, doGrupo]) => ({
+        area: nome,
+        tarefas: doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).total, 0),
+      })),
+      areasFechadas,
+      escolheuSozinho,
+    );
 
   /** Os nós do organograma, montados dos operadores reais. */
   const nosDoOrganograma: NoDoOrganograma[] = useMemo(
@@ -738,6 +794,21 @@ export default function AdminExecucao() {
         </p>
       </div>
 
+      {/* Recolher tudo de uma vez, para quem quer só a lista de nomes. */}
+      {agrupadosPorArea.length > 1 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => alternarArea("", agrupadosPorArea.map(([a]) => a))}
+            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+          >
+            {agrupadosPorArea.every(([a]) => estaFechada(a))
+              ? "expandir todas as áreas"
+              : "recolher todas as áreas"}
+          </button>
+        </div>
+      )}
+
       {/* Os operadores, agrupados por AREA.
           Catorze cartoes numa grade de quatro colunas viravam uma parede:
           o olho nao tinha onde parar e nada dizia quem trabalha com quem.
@@ -746,7 +817,22 @@ export default function AdminExecucao() {
       <div className="space-y-3">
       {agrupadosPorArea.map(([area, doGrupo]) => (
         <section key={area} className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary px-3 py-2">
+          <button
+            type="button"
+            onClick={() => alternarArea(area)}
+            aria-expanded={!estaFechada(area)}
+            className={cn(
+              "flex w-full flex-wrap items-center gap-2 bg-secondary px-3 py-2 text-left transition-colors hover:bg-secondary/80",
+              !estaFechada(area) && "border-b border-border",
+            )}
+          >
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+                !estaFechada(area) && "rotate-90",
+              )}
+              aria-hidden
+            />
             <span className="h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <h3 className="text-[10.5px] font-bold uppercase tracking-wider text-foreground">{area}</h3>
             <span className="rounded-md bg-card px-1.5 py-0.5 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
@@ -762,7 +848,8 @@ export default function AdminExecucao() {
                 </span>
               );
             })()}
-          </div>
+          </button>
+          {!estaFechada(area) && (
           <div className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {doGrupo.map((o) => {
           const n = numerosDoOperador(o.id);
@@ -819,6 +906,7 @@ export default function AdminExecucao() {
           );
         })}
           </div>
+          )}
         </section>
       ))}
       </div>
