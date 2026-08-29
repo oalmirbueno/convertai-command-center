@@ -169,18 +169,27 @@ export default function AdminExecucao() {
     refetchInterval: 30_000,
   });
 
+  // Os dois campos: um vinculo criado pelo painel_task_id tem tarefa, e
+  // ignora-lo devolvia uma linha sem contexto nenhum.
   const taskIds = useMemo(
-    () => [...new Set(vinculos.map((v) => v.kanban_task_id).filter(Boolean))] as string[],
+    () => [...new Set(
+      vinculos.flatMap((v) => [v.kanban_task_id, (v as any).painel_task_id]).filter(Boolean),
+    )] as string[],
     [vinculos],
   );
   const { data: tarefas = new Map() } = useQuery({
     queryKey: ["operador-tarefas", taskIds.join(",")],
     queryFn: async () => {
       if (taskIds.length === 0) return new Map();
-      const { data } = await (supabase as any)
+      // FK nomeada: projects aponta para profiles por client_id E por
+      // created_by, e sem escolher o caminho a consulta inteira e recusada.
+      const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, due_date, assigned_to, project:projects(name, client:profiles(full_name, company_name))")
+        .select("id, title, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("id", taskIds);
+      // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
+      // sem projeto nem cliente, como se o dado nao existisse.
+      if (error) throw new Error(error.message);
       const mapa = new Map<string, any>();
       for (const t of data || []) mapa.set(String(t.id), t);
       return mapa;
@@ -216,13 +225,16 @@ export default function AdminExecucao() {
   const { data: disponiveis = [] } = useQuery({
     queryKey: ["operador-tarefas-disponiveis"],
     queryFn: async () => {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, status, due_date, assigned_to, project:projects(name, client:profiles(full_name, company_name))")
+        .select("id, title, status, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("status", ["backlog", "todo", "doing", "review"])
         .is("deleted_at", null)
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(200);
+      // "Nenhuma tarefa esperando" e uma afirmacao forte. Nao pode sair de
+      // uma consulta que falhou.
+      if (error) throw new Error(error.message);
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: flag === "on",

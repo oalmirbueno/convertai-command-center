@@ -101,3 +101,69 @@ describe("a hierarquia sai no proprio quadro", () => {
     expect(servicos).toContain("order('display_order', { ascending: true })");
   });
 });
+
+/**
+ * O EMBED AMBÍGUO, que explicava quatro sintomas de uma vez.
+ *
+ * `projects` aponta para `profiles` DUAS vezes — `client_id` e
+ * `created_by`. Um embed que não escolhe o caminho faz o PostgREST recusar
+ * a consulta INTEIRA, e não apenas o pedaço ambíguo.
+ *
+ * Como as duas consultas descartavam o `error`, a recusa virava lista
+ * vazia e mapa vazio. Daí saíam, todos da mesma raiz: vínculo sem título,
+ * sem projeto, sem cliente e sem responsável; `tarefas_disponiveis` vazio
+ * com 606 tarefas abertas no banco; e a tela desenhando linha sem
+ * contexto.
+ *
+ * O resto do repositório já nomeava a FK. Só o código novo não nomeava.
+ */
+describe("o caminho da relacao vai nomeado", () => {
+  const tela = readFileSync(resolve(raiz, "src/pages/AdminExecucao.tsx"), "utf8");
+
+  it("nenhum embed de profiles sai sem escolher a FK", () => {
+    // A forma ambígua é `profiles(` sem o `!constraint` antes do parêntese.
+    for (const [nome, texto] of [["servico", servicos], ["tela", tela]] as const) {
+      const ambiguos = texto.match(/profiles\(/g) ?? [];
+      expect(ambiguos, `${nome} tem embed de profiles sem FK nomeada`).toHaveLength(0);
+    }
+  });
+
+  it("usa exatamente os nomes que existem no banco", () => {
+    // Conferidos em pg_constraint: projects_client_id_fkey (client_id) e
+    // tasks_project_id_fkey (project_id). Nome errado quebra tudo de novo,
+    // então eles ficam pinados aqui.
+    for (const texto of [servicos, tela]) {
+      expect(texto).toContain("projects!tasks_project_id_fkey");
+      expect(texto).toContain("profiles!projects_client_id_fkey");
+    }
+  });
+});
+
+describe("consulta que falha nao vira lista vazia", () => {
+  const tela = readFileSync(resolve(raiz, "src/pages/AdminExecucao.tsx"), "utf8");
+
+  it("a lista de tarefas abertas carrega o erro", () => {
+    expect(servicos).toContain("const { data: abertas, error: erroAbertas }");
+    expect(servicos).toContain("falhaAoEnriquecer || erroAbertas");
+  });
+
+  it("o aviso diz que o vazio e falha, e nao ausencia", () => {
+    expect(servicos).toContain("esta vazia por FALHA DE LEITURA, e nao");
+  });
+
+  it("a tela levanta o erro em vez de desenhar vazio", () => {
+    // Duas consultas: o mapa das tarefas e a lista de disponíveis.
+    expect(tela.match(/if \(error\) throw new Error\(error\.message\);/g) ?? [])
+      .toHaveLength(2);
+  });
+});
+
+describe("tarefa ja vinculada nao reaparece como disponivel", () => {
+  it("conta os dois campos de id", () => {
+    // Só o kanban_task_id deixava uma tarefa já vinculada pelo outro campo
+    // voltar à lista — convite ao vínculo gêmeo que acabamos de reparar.
+    expect(servicos).toContain(
+      "flatMap((l) => [texto(l.kanban_task_id), texto(l.painel_task_id)])",
+    );
+  });
+});

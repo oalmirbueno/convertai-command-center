@@ -245,7 +245,10 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
   let falhaAoEnriquecer: string | null = null;
   if (taskIds.length > 0) {
     const { data: rows, error } = await comPrazo(db().from('tasks')
-      .select('id, title, status, due_date, assigned_to, project:projects(name, client_id, client:profiles(full_name, company_name))')
+      // A FK vai NOMEADA: projects aponta para profiles duas vezes
+      // (client_id e created_by). Sem escolher o caminho, o PostgREST
+      // recusa a consulta inteira e o vinculo volta sem contexto.
+      .select('id, title, status, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client_id, client:profiles!projects_client_id_fkey(full_name, company_name))')
       .in('id', taskIds));
     // Erro AQUI nao pode virar silencio: sem esta linha, uma consulta que
     // falha devolve tarefa, projeto e cliente nulos, e quem le conclui
@@ -279,11 +282,12 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
    */
   const jaVinculadas = new Set(
     ((links.data ?? []) as Array<Record<string, unknown>>)
-      .map((l) => texto(l.kanban_task_id)).filter(Boolean) as string[],
+      .flatMap((l) => [texto(l.kanban_task_id), texto(l.painel_task_id)])
+      .filter(Boolean) as string[],
   );
-  const { data: abertas } = await comPrazo(
+  const { data: abertas, error: erroAbertas } = await comPrazo(
     db().from('tasks')
-      .select('id, title, status, due_date, assigned_to, project:projects(name, client:profiles(full_name, company_name))')
+      .select('id, title, status, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))')
       .in('status', ['backlog', 'todo', 'doing', 'review'])
       .is('deleted_at', null)
       .order('due_date', { ascending: true })
@@ -336,11 +340,26 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       incidentes: incidentes.length,
     },
     tarefas_disponiveis: disponiveis,
-    ...(falhaAoEnriquecer
+    /*
+     * O AVISO EXISTE PORQUE VAZIO E AMBIGUO.
+     *
+     * Uma lista vazia pode significar duas coisas opostas: nao ha o que
+     * mostrar, ou nao consegui olhar. Quem le precisa saber qual das duas,
+     * e a diferenca entre "sem trabalho pendente" e "consulta quebrada"
+     * muda a decisao de quem esta do outro lado.
+     */
+    ...(falhaAoEnriquecer || erroAbertas
       ? {
-        aviso: 'Nao consegui ler as tarefas para preencher titulo, projeto, cliente e '
-          + `responsavel humano dos vinculos: ${falhaAoEnriquecer}. Os campos abaixo vem `
-          + 'nulos por FALHA DE LEITURA, e nao por ausencia de dado.',
+        aviso: [
+          falhaAoEnriquecer
+            && 'Nao consegui ler as tarefas para preencher titulo, projeto, cliente e '
+              + `responsavel humano dos vinculos: ${falhaAoEnriquecer}. Esses campos vem `
+              + 'nulos por FALHA DE LEITURA, e nao por ausencia de dado.',
+          erroAbertas
+            && `Nao consegui listar as tarefas abertas do Kanban: ${erroAbertas.message}. `
+              + 'A lista tarefas_disponiveis esta vazia por FALHA DE LEITURA, e nao '
+              + 'porque nao existam tarefas.',
+        ].filter(Boolean).join(' '),
       }
       : {}),
     operadores: operadores.map((o) => ({
