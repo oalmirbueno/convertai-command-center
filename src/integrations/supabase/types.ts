@@ -6151,6 +6151,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      operator_reconciliar_vinculos_gemeos: { Args: never; Returns: Json }
       operator_report_event: {
         Args: {
           _action?: string
