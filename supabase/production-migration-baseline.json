@@ -609,6 +609,14 @@
       "remote_name": "criativos_de_anuncio",
       "remote_statements_sha256": "a38de7b895ffd1999ed1caee72d06755d16cc892dfaf096e8e5eefe75099e95d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260828140000",
+      "path": "supabase/migrations/20260828140000_operadores_hierarquia_e_vinculo_unico.sql",
+      "local_sha256": "0b244130c7729a768fa91ab168bc1b3a82d03b673029f5493be4d7fe48bbc72a",
+      "remote_name": "operadores_hierarquia_e_vinculo_unico",
+      "remote_statements_sha256": "12398fe461a4afc2abae60a6eba2e30faf7cee1d6fd655e1e820133df94e5f74",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
