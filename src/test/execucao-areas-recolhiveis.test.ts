@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   alternarFechadas,
@@ -94,5 +96,42 @@ describe("alternar", () => {
     const antes = new Set(["A"]);
     alternarFechadas(antes, "B");
     expect([...antes]).toEqual(["A"]);
+  });
+});
+
+describe("recolhido nao ocupa o mesmo espaco que aberto", () => {
+  const pagina = readFileSync(
+    resolve(__dirname, "../pages/AdminExecucao.tsx"), "utf8",
+  );
+
+  it("area fechada e uma pastilha, nao uma barra de largura inteira", () => {
+    // A primeira versao recolhia cada area numa <section> de largura
+    // cheia: nove barras quase vazias empilhadas, ~540px de rolagem para
+    // nao dizer nada. Medido depois da troca: 27px, tudo numa linha.
+    expect(pagina).toContain("rounded-full border px-2.5 py-1 text-[11px] font-semibold");
+    expect(pagina).toContain("AS AREAS COMO FAIXA");
+  });
+
+  it("so a area ABERTA vira bloco", () => {
+    expect(pagina).toContain("agrupadosPorArea.filter(([area]) => !estaFechada(area)).map");
+  });
+
+  it("o ponto colorido so aparece onde HA movimento", () => {
+    // Pintar todas faria a cor deixar de significar alguma coisa.
+    expect(pagina).toContain("const temMovimento = emAndamento + feitas + bloqueadas > 0;");
+    expect(pagina).toContain("{temMovimento && (");
+  });
+
+  it("bloqueio grita mais alto que andamento na pastilha", () => {
+    expect(pagina).toContain(
+      'bloqueadas > 0 ? "bg-destructive" : emAndamento > 0 ? "bg-info" : "bg-success"',
+    );
+  });
+
+  it("Kanban vazio nao vira uma faixa de tres zeros", () => {
+    // "0 tarefas abertas · 0 com operador · 0 ainda sem" dizia a mesma
+    // coisa tres vezes e ocupava o mesmo espaco de algo para fazer.
+    expect(pagina).toContain("numeros.kanbanAbertas === 0 ? (");
+    expect(pagina).toContain("Nenhuma tarefa aberta no Kanban agora");
   });
 });

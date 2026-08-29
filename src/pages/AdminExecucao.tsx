@@ -782,62 +782,97 @@ export default function AdminExecucao() {
         ))}
       </div>
 
-      {/* A ponte com o Kanban: quantas tarefas existem esperando alguém. */}
+      {/* A ponte com o Kanban.
+          Com o Kanban vazio, a versão anterior escrevia "0 tarefas abertas
+          · 0 com operador · 0 ainda sem": três zeros dizendo a mesma coisa
+          e ocupando uma faixa inteira. Nada para ler não merece o mesmo
+          espaço que algo para fazer. */}
       <div className="rounded-xl border border-border bg-card px-3.5 py-2.5">
         <p className="text-[12px] text-foreground">
-          <strong className="tabular-nums">{numeros.kanbanAbertas}</strong> tarefas abertas no Kanban ·{" "}
-          <strong className="tabular-nums">{numeros.kanbanAbertas - numeros.semOperador.length}</strong> com operador ·{" "}
-          <strong className="tabular-nums">{numeros.semOperador.length}</strong> ainda sem
+          {numeros.kanbanAbertas === 0 ? (
+            <span className="text-muted-foreground">
+              Nenhuma tarefa aberta no Kanban agora. Quando houver, ela aparece aqui
+              para encaminhar a um agente.
+            </span>
+          ) : (
+            <>
+              <strong className="tabular-nums">{numeros.kanbanAbertas}</strong>{" "}
+              {numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban ·{" "}
+              <strong className="tabular-nums">{numeros.kanbanAbertas - numeros.semOperador.length}</strong> com operador ·{" "}
+              <strong className="tabular-nums">{numeros.semOperador.length}</strong> ainda sem
+            </>
+          )}
           {numeros.aprovacoes > 0 && (
             <> · <span className="font-semibold text-warning">{numeros.aprovacoes} esperando sua aprovação</span></>
           )}
         </p>
       </div>
 
-      {/* Recolher tudo de uma vez, para quem quer só a lista de nomes. */}
-      {agrupadosPorArea.length > 1 && (
-        <div className="flex justify-end">
+      {/* AS AREAS COMO FAIXA, e nao como pilha.
+          Minha versao anterior recolhia cada area numa barra de largura
+          inteira: nove barras quase vazias empilhadas, que polui mais do
+          que o problema que eu tinha ido resolver. Recolhido nao pode
+          ocupar o mesmo espaco que aberto.
+          Agora fechada e uma pastilha, e as nove cabem em duas linhas.
+          Aberta vira bloco, logo abaixo. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {agrupadosPorArea.map(([area, doGrupo]) => {
+          const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
+          const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
+          const bloqueadas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).bloqueadas, 0);
+          const temMovimento = emAndamento + feitas + bloqueadas > 0;
+          const aberta = !estaFechada(area);
+          return (
+            <button
+              key={area}
+              type="button"
+              onClick={() => alternarArea(area)}
+              aria-expanded={aberta}
+              title={`${doGrupo.length} ${doGrupo.length === 1 ? "agente" : "agentes"}`}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                aberta
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {/* O ponto so aparece onde HA movimento: pintar todas faria a
+                  cor deixar de significar alguma coisa. */}
+              {temMovimento && (
+                <span className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  bloqueadas > 0 ? "bg-destructive" : emAndamento > 0 ? "bg-info" : "bg-success",
+                )} aria-hidden />
+              )}
+              {area}
+              <span className={cn(
+                "rounded-full px-1.5 text-[10px] tabular-nums",
+                aberta ? "bg-primary/20" : "bg-muted",
+              )}>
+                {doGrupo.length}
+              </span>
+            </button>
+          );
+        })}
+
+        {agrupadosPorArea.length > 1 && (
           <button
             type="button"
             onClick={() => alternarArea("", agrupadosPorArea.map(([a]) => a))}
-            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
+            className="ml-auto text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
           >
-            {agrupadosPorArea.every(([a]) => estaFechada(a))
-              ? "expandir todas as áreas"
-              : "recolher todas as áreas"}
+            {agrupadosPorArea.every(([a]) => estaFechada(a)) ? "abrir todas" : "fechar todas"}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Os operadores, agrupados por AREA.
-          Catorze cartoes numa grade de quatro colunas viravam uma parede:
-          o olho nao tinha onde parar e nada dizia quem trabalha com quem.
-          Agora cada area e um bloco com o seu proprio cabecalho, e a ordem
-          vem do display_order que o Hermes controla. */}
-      <div className="space-y-3">
-      {agrupadosPorArea.map(([area, doGrupo]) => (
+      {/* So as areas ABERTAS viram bloco. Fechada ja disse o que tinha a
+          dizer na pastilha acima. */}
+      {agrupadosPorArea.filter(([area]) => !estaFechada(area)).map(([area, doGrupo]) => (
         <section key={area} className="overflow-hidden rounded-xl border border-border bg-card">
-          <button
-            type="button"
-            onClick={() => alternarArea(area)}
-            aria-expanded={!estaFechada(area)}
-            className={cn(
-              "flex w-full flex-wrap items-center gap-2 bg-secondary px-3 py-2 text-left transition-colors hover:bg-secondary/80",
-              !estaFechada(area) && "border-b border-border",
-            )}
-          >
-            <ChevronRight
-              className={cn(
-                "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
-                !estaFechada(area) && "rotate-90",
-              )}
-              aria-hidden
-            />
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-secondary px-3 py-2">
             <span className="h-3.5 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
             <h3 className="text-[10.5px] font-bold uppercase tracking-wider text-foreground">{area}</h3>
-            <span className="rounded-md bg-card px-1.5 py-0.5 text-[9.5px] font-semibold tabular-nums text-muted-foreground">
-              {doGrupo.length}
-            </span>
             {(() => {
               const emAndamento = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).andamento, 0);
               const feitas = doGrupo.reduce((t, o) => t + numerosDoOperador(o.id).feitas, 0);
@@ -848,68 +883,66 @@ export default function AdminExecucao() {
                 </span>
               );
             })()}
-          </button>
-          {!estaFechada(area) && (
-          <div className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3">
-        {doGrupo.map((o) => {
-          const n = numerosDoOperador(o.id);
-          return (
             <button
-              key={o.id}
               type="button"
-              onClick={() => setAgenteAberto(o)}
-              className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50"
+              onClick={() => alternarArea(area)}
+              className="rounded-md px-1.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
             >
-              <div className="flex items-center gap-1.5">
-                <Bot className="h-3.5 w-3.5 text-primary" />
-                <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
-                {o.is_coordinator && (
-                  <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">coordenador</span>
-                )}
-                <span className={cn(
-                  "ml-auto h-2 w-2 rounded-full",
-                  o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
-                )} />
-              </div>
-              {/* Função primeiro, escopo depois: o escopo é comprido e o
-                  cargo é o que identifica a peça de relance. */}
-              <p className="mt-0.5 text-[10px] font-medium text-foreground/80">{o.role}</p>
-              <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
-              {o.parent_slug && (
-                <p className="mt-0.5 truncate text-[9.5px] text-muted-foreground/80">
-                  responde a {operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug}
-                </p>
-              )}
-              {/* Números por operador: "quanto cada um tem na mão" era a
-                  pergunta que o cartão não respondia. */}
-              <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px]">
-                {n.total === 0 ? (
-                  <span className="text-muted-foreground/70">nenhuma tarefa ainda</span>
-                ) : (
-                  <>
-                    {n.andamento > 0 && <span className="text-info">{n.andamento} em andamento</span>}
-                    {n.feitas > 0 && <span className="text-success">{n.feitas} feitas</span>}
-                    {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
-                    {n.revisao > 0 && <span className="text-warning">{n.revisao} em revisão</span>}
-                    {/* Evidência é o que separa "feito" de "disse que fez",
-                        e por isso vale um número próprio no cartão. */}
-                    {n.comEvidencia > 0 && (
-                      <span className="text-muted-foreground">{n.comEvidencia} com evidência</span>
-                    )}
-                  </>
-                )}
-              </div>
-              <p className="mt-1 text-[9.5px] text-muted-foreground">
-                {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
-              </p>
+              fechar
             </button>
-          );
-        })}
           </div>
-          )}
+          <div className="grid gap-2 p-2.5 sm:grid-cols-2 xl:grid-cols-3">
+            {doGrupo.map((o) => {
+              const n = numerosDoOperador(o.id);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => setAgenteAberto(o)}
+                  className="rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Bot className="h-3.5 w-3.5 text-primary" />
+                    <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
+                    {o.is_coordinator && (
+                      <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">coordenador</span>
+                    )}
+                    <span className={cn(
+                      "ml-auto h-2 w-2 rounded-full",
+                      o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
+                    )} />
+                  </div>
+                  <p className="mt-0.5 text-[10px] font-medium text-foreground/80">{o.role}</p>
+                  <p className="mt-0.5 line-clamp-2 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
+                  {o.parent_slug && (
+                    <p className="mt-0.5 truncate text-[9.5px] text-muted-foreground/80">
+                      responde a {operadores.find((p) => p.slug === o.parent_slug)?.display_name ?? o.parent_slug}
+                    </p>
+                  )}
+                  <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px]">
+                    {n.total === 0 ? (
+                      <span className="text-muted-foreground/70">nenhuma tarefa ainda</span>
+                    ) : (
+                      <>
+                        {n.andamento > 0 && <span className="text-info">{n.andamento} em andamento</span>}
+                        {n.feitas > 0 && <span className="text-success">{n.feitas} feitas</span>}
+                        {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
+                        {n.revisao > 0 && <span className="text-warning">{n.revisao} em revisão</span>}
+                        {n.comEvidencia > 0 && (
+                          <span className="text-muted-foreground">{n.comEvidencia} com evidência</span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <p className="mt-1 text-[9.5px] text-muted-foreground">
+                    {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </section>
       ))}
-      </div>
 
       {incidentes.length > 0 && (
         <div className="rounded-xl border border-destructive/30 bg-secondary p-3">
