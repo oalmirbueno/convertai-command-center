@@ -657,6 +657,14 @@
       "remote_name": "agente_termina_e_o_kanban_anda",
       "remote_statements_sha256": "69d99ef777bdabc8814e27cccb583392449cb93b462b7202e227147336b384c5",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901020000",
+      "path": "supabase/migrations/20260901020000_o_alarme_para_de_gritar_em_loop.sql",
+      "local_sha256": "578f2cfba29390897e5ac8be3b2e26084b89c8a28d28d61267b31738eeffd672",
+      "remote_name": "o_alarme_para_de_gritar_em_loop",
+      "remote_statements_sha256": "34ed8b6638dfddac2a950e96384d1f333cf834a7a086b4ed51f192cf9a7dbcdc",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

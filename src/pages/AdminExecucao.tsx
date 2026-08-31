@@ -1348,7 +1348,7 @@ export default function AdminExecucao() {
                     {numeros.semOperador.length > 0 && ` Há ${numeros.semOperador.length} esperando alguém.`}
                   </p>
                 ) : (
-                  <div className="space-y-2">{doOperador.map((v) => <Cartao key={v.id} v={v} />)}</div>
+                  <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">{doOperador.map((v) => <Cartao key={v.id} v={v} />)}</div>
                 )}
               </div>
             );
@@ -1426,7 +1426,7 @@ export default function AdminExecucao() {
               <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                 Vínculos marcados com o selo · {filtrados.length}
               </p>
-              <div className="space-y-2">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
+              <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
             </div>
           )}
         </div>
@@ -1443,7 +1443,7 @@ export default function AdminExecucao() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
+        <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>
       )}
 
       {visao === "done" && filtrados.some((v) => !v.last_evidence) && (

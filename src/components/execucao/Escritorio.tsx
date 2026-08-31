@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Bot, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Bot, ChevronDown, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -167,6 +167,27 @@ export default function Escritorio({
 
   const areas = useMemo(() => agruparPorArea(agentes, porAgente), [agentes, porAgente]);
 
+  /*
+   * Área sem trabalho nasce recolhida.
+   *
+   * Nove áreas abertas de uma vez, a maioria sem nada acontecendo, é o que
+   * fazia a tela parecer cheia sem informar. Recolhido continua contando
+   * quantos agentes tem — some o cartão, não o fato.
+   *
+   * Guardo as ABERTAS por escolha: uma área que ganhar trabalho amanhã
+   * abre sozinha, em vez de ficar escondida por um estado que não a
+   * conhecia.
+   */
+  const [abertasPelaPessoa, setAbertasPelaPessoa] = useState<Set<string>>(new Set());
+  const estaAberta = (area: string, urgencia: number) =>
+    abertasPelaPessoa.has(area) || urgencia < 90;
+  const alternar = (area: string) => setAbertasPelaPessoa((atual) => {
+    const proximo = new Set(atual);
+    if (proximo.has(area)) proximo.delete(area);
+    else proximo.add(area);
+    return proximo;
+  });
+
   const esperandoVoce = useMemo(
     () => trabalhos.filter(
       (t) => t.approval_required || ["blocked", "awaiting_input", "review"].includes(t.status),
@@ -191,16 +212,29 @@ export default function Escritorio({
         </p>
       </div>
 
-      {areas.map(({ area, agentes: doGrupo }) => (
+      {areas.map(({ area, agentes: doGrupo, urgencia }) => {
+        const aberta = estaAberta(area, urgencia);
+        return (
         <div key={area} className="space-y-2">
           {/* O nome da área, discreto: separa sem competir com os cartões. */}
-          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => alternar(area)}
+            aria-expanded={aberta}
+            className="flex w-full items-center gap-2 text-left"
+          >
+            <ChevronDown className={cn(
+              "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
+              !aberta && "-rotate-90",
+            )} />
             <span className="h-3 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
-            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground">{area}</p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">{area}</span>
             <span className="text-[10px] text-muted-foreground">
               {doGrupo.length} {doGrupo.length === 1 ? "agente" : "agentes"}
+              {!aberta && urgencia >= 90 && " · sem trabalho agora"}
             </span>
-          </div>
+          </button>
+          {aberta && (
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {doGrupo.map((a) => {
@@ -319,8 +353,10 @@ export default function Escritorio({
           );
         })}
       </div>
+          )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
