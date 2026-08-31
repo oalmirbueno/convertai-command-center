@@ -89,3 +89,34 @@ describe("o recolher do Escritório obedece", () => {
     expect(esc).toContain("alternar(area, urgencia)");
   });
 });
+
+describe("conta que não mede não pode parecer OK", () => {
+  const comp = ler("src/components/admin/SaudeDasContas.tsx");
+
+  it("nomeia o motivo, em vez de um rótulo genérico", () => {
+    // Cada motivo pede uma ação diferente; um rótulo só faria o dono
+    // adivinhar qual.
+    expect(comp).toContain("nunca foi conectada");
+    expect(comp).toContain("o token venceu");
+    expect(comp).toContain("nenhum post capturado ainda");
+  });
+
+  it("as quebradas aparecem primeiro", () => {
+    expect(comp).toContain("Number(a.conectada) - Number(b.conectada) || a.posts - b.posts");
+  });
+
+  it("falha de leitura não marca ninguém como bom nem ruim", () => {
+    expect(comp).toContain("Nenhuma conta está marcada como boa ou ruim");
+  });
+
+  it("explica o buraco de insights sem esconder", () => {
+    // Todo post sem insights é anterior a 29/06: a coleta começou depois
+    // deles e o histórico nunca foi preenchido para trás.
+    expect(comp).toContain("anteriores a 29/06");
+  });
+
+  it("está montado na tela de métricas", () => {
+    const pagina = ler("src/pages/AdminMetricas.tsx");
+    expect(pagina).toContain("<SaudeDasContas />");
+  });
+});

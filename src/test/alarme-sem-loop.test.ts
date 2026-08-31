@@ -70,11 +70,16 @@ describe("o Escritório recolhe o que está parado", () => {
   it("área sem trabalho nasce recolhida", () => {
     // Nove áreas abertas, a maioria sem nada acontecendo, é o que fazia a
     // tela parecer cheia sem informar.
-    expect(esc).toContain("abertasPelaPessoa.has(area) || urgencia < 90");
+    expect(esc).toContain("escolhas[area] ?? urgencia < 90");
   });
 
-  it("guarda as ABERTAS, para área nova não nascer escondida", () => {
-    expect(esc).toContain("const [abertasPelaPessoa, setAbertasPelaPessoa]");
+  it("a escolha da pessoa vence o padrão, nos dois sentidos", () => {
+    // A primeira versão guardava só as ABERTAS e combinava com o padrão
+    // por OU: numa área COM trabalho o padrão ganhava sempre e o clique de
+    // recolher não fazia nada. O padrão agora só decide onde ninguém
+    // escolheu — assim uma área nova também não nasce escondida.
+    expect(esc).toContain("const [escolhas, setEscolhas]");
+    expect(esc).not.toContain("abertasPelaPessoa");
   });
 
   it("recolhido continua contando os agentes", () => {

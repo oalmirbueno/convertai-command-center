@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
+import SaudeDasContas from "@/components/admin/SaudeDasContas";
 import {
   collectSocialMetricsNow,
   formatMetricNumber,
@@ -479,6 +480,11 @@ export default function AdminMetricas() {
           {collecting ? "Atualizando..." : "Atualizar agora"}
         </Button>
       </div>
+
+      {/* Saber QUAIS contas medem vem antes de ler o que elas mediram: uma
+          conta nunca conectada some do gráfico igual a um perfil parado, e
+          são coisas diferentes. */}
+      {!selectedClientId && <SaudeDasContas />}
 
       {selectedClientId ? (
         <ClientMetricsDetail
