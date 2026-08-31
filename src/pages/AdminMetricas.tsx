@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import SaudeDasContas from "@/components/admin/SaudeDasContas";
+import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
+import IdentidadeDoCliente from "@/components/admin/IdentidadeDoCliente";
 import {
   collectSocialMetricsNow,
   formatMetricNumber,
@@ -72,7 +74,10 @@ function ClientMetricsDetail({
   rows: SocialMetricsWeek[];
   onBack: () => void;
 }) {
-  const { data: posts } = useSocialPostMetrics(clientId, 25);
+  // 200 e nao 25: agora que a coleta pagina, limitar aqui esconderia
+  // justamente os posts que passaram a existir.
+  const { data: posts } = useSocialPostMetrics(clientId, 200);
+  const [abaDoCliente, setAbaDoCliente] = useState<"desempenho" | "identidade">("desempenho");
   const { data: identity } = useSocialClientIdentity(clientId);
   const latest = rows[0];
   const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
@@ -99,6 +104,35 @@ function ClientMetricsDetail({
         <ArrowLeft className="h-3.5 w-3.5" /> Todos os clientes
       </button>
 
+      {/* Duas leituras diferentes, e por isso duas abas: desempenho responde
+          "como foi", identidade responde "como a marca é". */}
+      <div className="flex gap-1 border-b border-border">
+        {([
+          { id: "desempenho", rotulo: "Desempenho" },
+          { id: "identidade", rotulo: "Identidade" },
+        ] as const).map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            onClick={() => setAbaDoCliente(x.id)}
+            className={`relative px-3 pb-2 pt-1 text-[13px] font-semibold transition-colors ${
+              abaDoCliente === x.id ? "text-primary" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {x.rotulo}
+            {abaDoCliente === x.id && (
+              <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {abaDoCliente === "identidade" && (
+        <IdentidadeDoCliente clientId={clientId} clientName={clientName} />
+      )}
+
+      {abaDoCliente === "desempenho" && (
+      <>
       <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -376,6 +410,8 @@ function ClientMetricsDetail({
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -386,6 +422,9 @@ export default function AdminMetricas() {
   const { data: clients } = useClients();
   const { data: rows, isLoading } = useSocialMetricsWeekly();
   const queryClient = useQueryClient();
+  // Uma consulta so para a grade inteira: uma por cartao seria N chamadas
+  // para desenhar a mesma tela.
+  const { data: identidades } = useIdentidadesDosClientes();
   const [collecting, setCollecting] = useState(false);
   const [search, setSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -526,10 +565,23 @@ export default function AdminMetricas() {
                   onClick={() => openClient(clientId)}
                   className="group rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {clientNames.get(clientId) || "Cliente"}
-                    </p>
+                  <div className="flex items-center gap-2.5">
+                    {/* A marca antes do nome: o olho acha antes da palavra. */}
+                    <LogoDoCliente
+                      url={identidades?.get(clientId)?.profile_picture_url}
+                      nome={clientNames.get(clientId)}
+                      tamanho={36}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        {clientNames.get(clientId) || "Cliente"}
+                      </p>
+                      {identidades?.get(clientId)?.username && (
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          @{identidades.get(clientId)!.username}
+                        </p>
+                      )}
+                    </div>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                   </div>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">

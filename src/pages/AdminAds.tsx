@@ -21,6 +21,7 @@ import { resumirCriativos } from "@/lib/adsCreativeReport";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import CampanhasAtivas from "@/components/ads/CampanhasAtivas";
+import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -628,6 +629,7 @@ export default function AdminAds() {
   const { profile } = useAuth();
   const isStaff = ["admin", "manager", "design", "traffic"].includes(profile?.role || "");
   const queryClient = useQueryClient();
+  const { data: identidades } = useIdentidadesDosClientes();
   const [params, setParams] = useSearchParams();
   const [busca, setBusca] = useState("");
   const [coletando, setColetando] = useState(false);
@@ -798,8 +800,15 @@ export default function AdminAds() {
                   }}
                   className="group rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-foreground">
+                  <div className="flex items-center gap-2.5">
+                    {/* Mesma marca da grade de Métricas: reconhecer o cliente
+                        não pode depender de qual tela se está olhando. */}
+                    <LogoDoCliente
+                      url={identidades?.get(clientId)?.profile_picture_url}
+                      nome={nomes.get(clientId)}
+                      tamanho={36}
+                    />
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
                       {nomes.get(clientId) || "Cliente"}
                     </p>
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
