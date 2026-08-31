@@ -112,3 +112,13 @@ describe("promover acontece antes de publicar, no mesmo minuto", () => {
     expect(migracao).toContain("'* * * * *'");
   });
 });
+
+describe("recuperar um atrasado exige horario novo", () => {
+  it("a transicao recusa passado, entao a janela precisa de um horario presente", () => {
+    // Sem isto a janela de 6 horas seria decorativa: o horario de um post
+    // atrasado so envelhece, e ele ficaria preso para sempre.
+    expect(migracao).toContain("_quando := greatest(_pub.scheduled_at, now() + interval '1 minute')");
+    expect(migracao).toContain("'scheduled_at', _quando,");
+    expect(migracao).toContain("_pub.version, _quando, _pub.tz");
+  });
+});

@@ -44,6 +44,7 @@ declare
   _assets jsonb;
   _fingerprint text;
   _admin uuid;
+  _quando timestamptz;
   _promovidos integer := 0;
   _ignorados integer := 0;
   _falhas jsonb := '[]'::jsonb;
@@ -89,6 +90,13 @@ begin
      limit 100
   loop
     begin
+      -- A transicao recusa horario no passado. Sem esta linha a janela de
+      -- atraso seria decorativa: um post que perdesse o minuto ficaria
+      -- preso para sempre, porque o horario dele so envelhece. Recuperar
+      -- um atrasado significa dar a ele um horario NOVO — e o original
+      -- continua na trilha, no evento de criacao.
+      _quando := greatest(_pub.scheduled_at, now() + interval '1 minute');
+
       -- O snapshot de entrega, que faltava. Sem ele, um save posterior
       -- volta a abortar com "delivery snapshot is unresolved" e a
       -- publicacao trava de novo pelo mesmo motivo.
@@ -100,7 +108,7 @@ begin
       _fingerprint := encode(sha256(convert_to(jsonb_build_object(
         'delivery_mode', _pub.delivery_mode,
         'asset_file_ids', _assets,
-        'scheduled_at', _pub.scheduled_at,
+        'scheduled_at', _quando,
         'scheduled_timezone', _pub.tz
       )::text, 'UTF8')), 'hex');
 
@@ -114,7 +122,7 @@ begin
       -- A transicao OFICIAL: ela dispara os guards, grava o evento e
       -- mantem a versao. Escrever o status na mao pularia tudo isso.
       perform public.transition_editorial_publication_unlocked(
-        _pub.id, 'schedule', _pub.version, _pub.scheduled_at, _pub.tz
+        _pub.id, 'schedule', _pub.version, _quando, _pub.tz
       );
       _promovidos := _promovidos + 1;
     exception when others then
