@@ -625,6 +625,14 @@
       "remote_name": "participacao_aprovacao_e_propostas",
       "remote_statements_sha256": "f6bf9adb5aeb0d3261cbc1e370dd5eca7e08f33b26f73be0909b4a720164d490",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260830010000",
+      "path": "supabase/migrations/20260830010000_aliquota_por_mes_e_pagamento_de_custo_fixo.sql",
+      "local_sha256": "a323c736f410fa6b67750e38e06277b79fd20ab18783f865cdfef71db571ec2f",
+      "remote_name": "aliquota_por_mes_e_pagamento_de_custo_fixo",
+      "remote_statements_sha256": "06012dc249ab2d6d51597ed97f8f4cbbf75a53e6bc96cbd88a913ca2bbf5d895",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

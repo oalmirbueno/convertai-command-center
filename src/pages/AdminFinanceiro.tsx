@@ -1137,7 +1137,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="fixedcosts" className="space-y-6">
-            <FixedCosts monthlyOperationalRevenue={ladderRevenue} />
+            <FixedCosts monthlyOperationalRevenue={ladderRevenue} grossReceivedThisMonth={monthGrossReceived} />
           </TabsContent>
         )}
 
