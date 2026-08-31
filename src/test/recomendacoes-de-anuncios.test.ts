@@ -164,9 +164,14 @@ describe("a tela das campanhas ativas", () => {
     expect(comp).toContain("consolida o dia com algumas horas de atraso");
   });
 
-  it("está montada na página de anúncios", () => {
+  it("está montada nos dois caminhos da página de anúncios", () => {
+    // Passou a ter DOIS pontos de montagem, de propósito: dentro do
+    // cliente (só as campanhas dele) e na lista geral (com o nome do
+    // cliente em cada uma). Um só não atendia os dois casos.
     const pagina = readFileSync(
       resolve(__dirname, "../..", "src/pages/AdminAds.tsx"), "utf8");
-    expect(pagina).toContain("<CampanhasAtivas clientId={clienteAberto || undefined} />");
+    expect(pagina).toContain("<CampanhasAtivas clientId={clienteAberto} />");
+    expect(pagina).toContain("nomesDeClientes={nomes}");
+    expect((pagina.match(/<CampanhasAtivas/g) ?? [])).toHaveLength(2);
   });
 });

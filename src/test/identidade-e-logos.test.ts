@@ -109,10 +109,13 @@ describe("a logo do cliente na lista", () => {
     expect(iniciaisDe(null)).toBe("?");
   });
 
-  it("uma consulta só para a grade inteira", () => {
-    // Uma por cartão seria N chamadas para desenhar a mesma tela.
+  it("busca uma vez para a grade toda, e não uma vez por cartão", () => {
+    // Agora são três consultas fixas — identidades, contagem de posts e
+    // nomes — em vez de N chamadas, uma por cartão. O número de clientes
+    // deixou de mudar o número de chamadas, que é o ponto.
     expect(comp).toContain("useIdentidadesDosClientes");
-    expect(comp).toContain("porCliente.has(linha.client_id)");
+    expect(comp).toContain("escolherIdentidadePrincipal");
+    expect(comp).not.toContain("porCliente.has(linha.client_id)");
   });
 
   it("a CDN da Meta exige referrer vazio", () => {
