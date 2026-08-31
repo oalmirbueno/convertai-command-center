@@ -426,16 +426,29 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   }, [commentText]);
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setCommentText(e.target.value);
-    setTimeout(() => {
-      const ctx = getMentionContext();
-      if (ctx) {
-        setMentionQuery(ctx.query);
-        setMentionIndex(0);
-      } else {
-        setMentionQuery(null);
-      }
-    }, 0);
+    const valor = e.target.value;
+    const cursor = e.target.selectionStart;
+    setCommentText(valor);
+
+    /*
+     * O texto vem do EVENTO, não do estado.
+     *
+     * Antes isto chamava getMentionContext() dentro de um setTimeout, e
+     * essa função é memoizada em [commentText] — ou seja, o timeout
+     * executava a versão presa ao texto ANTERIOR. Ao digitar "@", a
+     * função ainda lia o texto sem o "@", o padrão não casava e o menu
+     * nunca abria. Era por isso que mencionar não funcionava.
+     *
+     * Lendo do evento não há defasagem: o valor é o que está na tela.
+     */
+    const antes = valor.slice(0, cursor);
+    const casou = antes.match(/@(\w*)$/);
+    if (casou) {
+      setMentionQuery(casou[1]);
+      setMentionIndex(0);
+    } else {
+      setMentionQuery(null);
+    }
   };
 
   const insertMention = (member: any) => {

@@ -822,9 +822,24 @@ export default function AdminExecucao() {
     return (
       <div
         ref={destacado ? destacadoRef : undefined}
+        /* Clicar ABRE a tarefa. O cartão só tinha menu de botão direito:
+           quem clicava normalmente não via nada acontecer, e a conclusão
+           natural era que o quadro estava quebrado. */
+        onClick={() => {
+          const id = v.kanban_task_id ?? (v as any).painel_task_id;
+          if (id) setTarefaAberta(tarefas.get(String(id)) ?? { id });
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          const id = v.kanban_task_id ?? (v as any).painel_task_id;
+          if (id) setTarefaAberta(tarefas.get(String(id)) ?? { id });
+        }}
         onContextMenu={(e) => { e.preventDefault(); setMenuCartao({ x: e.clientX, y: e.clientY, v }); }}
         className={cn(
-          "rounded-xl border bg-card p-3.5",
+          "cursor-pointer rounded-xl border bg-card p-3.5 transition-colors hover:border-primary/50",
           destacado ? "border-primary ring-2 ring-primary/40" : "border-border",
         )}
       >
@@ -914,7 +929,7 @@ export default function AdminExecucao() {
           {v.approval_required && (
             <button
               type="button"
-              onClick={() => setVisao("aprovacao")}
+              onClick={(e) => { e.stopPropagation(); setVisao("aprovacao"); }}
               className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning hover:bg-warning/25"
             >
               <ShieldAlert className="h-3 w-3" /> aprovação necessária — decidir
@@ -922,7 +937,7 @@ export default function AdminExecucao() {
           )}
           <button
             type="button"
-            onClick={() => setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined })}
+            onClick={(e) => { e.stopPropagation(); setDiarioAberto({ linkId: v.id, titulo: t?.title || v.last_action || undefined }); }}
             className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
             title="Conversar com o agente nesta execução: instrução, contexto, correção"
           >

@@ -178,15 +178,23 @@ export default function Escritorio({
    * abre sozinha, em vez de ficar escondida por um estado que não a
    * conhecia.
    */
-  const [abertasPelaPessoa, setAbertasPelaPessoa] = useState<Set<string>>(new Set());
+  const [escolhas, setEscolhas] = useState<Record<string, boolean>>({});
+
+  /*
+   * A escolha da pessoa vale nos DOIS sentidos.
+   *
+   * Minha versão anterior só guardava as áreas ABERTAS, e o padrão
+   * ("tem trabalho → aberta") era um OU. Numa área com trabalho o padrão
+   * ganhava sempre e o clique de recolher não fazia nada — o botão
+   * existia e não obedecia, que é pior do que não existir.
+   *
+   * Agora `escolhas` guarda true/false explícito; o padrão só decide onde
+   * ninguém escolheu, para uma área nova não nascer escondida.
+   */
   const estaAberta = (area: string, urgencia: number) =>
-    abertasPelaPessoa.has(area) || urgencia < 90;
-  const alternar = (area: string) => setAbertasPelaPessoa((atual) => {
-    const proximo = new Set(atual);
-    if (proximo.has(area)) proximo.delete(area);
-    else proximo.add(area);
-    return proximo;
-  });
+    escolhas[area] ?? urgencia < 90;
+  const alternar = (area: string, urgencia: number) =>
+    setEscolhas((atual) => ({ ...atual, [area]: !(atual[area] ?? urgencia < 90) }));
 
   const esperandoVoce = useMemo(
     () => trabalhos.filter(
@@ -219,7 +227,7 @@ export default function Escritorio({
           {/* O nome da área, discreto: separa sem competir com os cartões. */}
           <button
             type="button"
-            onClick={() => alternar(area)}
+            onClick={() => alternar(area, urgencia)}
             aria-expanded={aberta}
             className="flex w-full items-center gap-2 text-left"
           >
