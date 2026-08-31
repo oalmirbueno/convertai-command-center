@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Bot, CheckCircle2, Clock, ExternalLink, FileText, Loader2,
-  PauseCircle, ShieldAlert, XCircle,
+  Ban, Bot, CheckCircle2, Clock, ExternalLink, FileText, Loader2,
+  PauseCircle, ShieldAlert, UserPlus, XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +56,55 @@ const ehImagem = (url: string) => /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(url)
 const ehLink = (t?: string | null) => Boolean(t && /^https?:\/\//i.test(t.trim()));
 
 export default function ContextoDoAgente({ taskId }: { taskId: string }) {
+  const qc = useQueryClient();
+
+  /*
+   * A proposta de responsável, decidida AQUI.
+   *
+   * Ela já existia, mas morava no painel de aprovações — longe do card
+   * onde a pergunta nasce. Quem está olhando a tarefa é quem sabe de quem
+   * ela é; obrigar a trocar de tela para responder isso é o que faz a
+   * sugestão do agente envelhecer sem resposta.
+   */
+  const { data: propostas = [] } = useQuery({
+    queryKey: ["proposta-da-tarefa", taskId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("assignment_proposals")
+        .select("id, suggested_assignee, justificativa, confianca, operator_id, created_at")
+        .eq("kanban_task_id", taskId)
+        .eq("status", "pendente");
+      if (error) throw new Error(error.message);
+      const linhas = (data || []) as Array<Record<string, any>>;
+      if (linhas.length === 0) return [];
+      const { data: perfis } = await (supabase as any)
+        .from("profiles").select("id, full_name")
+        .in("id", linhas.map((l) => l.suggested_assignee));
+      const nome = new Map(((perfis || []) as any[]).map((p) => [p.id, p.full_name]));
+      return linhas.map((l) => ({ ...l, nome_sugerido: nome.get(l.suggested_assignee) || "pessoa" }));
+    },
+    enabled: Boolean(taskId),
+  });
+
+  const decidir = useMutation({
+    mutationFn: async ({ id, decisao }: { id: string; decisao: string }) => {
+      const { error } = await (supabase as any).rpc("assignment_proposal_decidir", {
+        _proposal_id: id, _decisao: decisao, _nota: null,
+      });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_d, vars) => {
+      for (const k of [["proposta-da-tarefa", taskId], ["contexto-do-agente", taskId],
+                       ["propostas-responsavel"], ["tasks"], ["operador-tarefas"]]) {
+        qc.invalidateQueries({ queryKey: k as any });
+      }
+      toast.success(vars.decisao === "aprovada"
+        ? "Responsável definido e a pessoa foi avisada"
+        : "Sugestão recusada. Nada mudou na tarefa.");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : String(e)),
+  });
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["contexto-do-agente", taskId],
     queryFn: async () => {
@@ -127,12 +177,52 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
   if (isLoading) {
     return <p className="py-3 text-center text-[11px] text-muted-foreground">carregando o contexto…</p>;
   }
-  if (!data || !temTrabalho) return null;
+  // A proposta pode existir SEM vínculo: o agente pode sugerir um dono
+  // para uma tarefa que ele nem pegou. Sumir com ela aqui esconderia
+  // justamente a pergunta que espera resposta.
+  if ((!data || !temTrabalho) && propostas.length === 0) return null;
 
   return (
     <div className="space-y-3">
-      {data.links.map((l: any) => {
-        const op = data.operadores.get(l.operator_id);
+      {/* A sugestão do agente, respondível em um clique. */}
+      {propostas.map((p: any) => (
+        <div key={p.id} className="rounded-xl border border-info/40 bg-info/[0.06] p-3">
+          <p className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-info">
+            <UserPlus className="h-3 w-3" /> O agente sugere um responsável
+          </p>
+          <p className="mt-1.5 text-[12.5px] text-foreground">
+            <strong>{p.nome_sugerido}</strong> deveria responder por esta tarefa
+            {typeof p.confianca === "number" && (
+              <span className="text-muted-foreground"> · confiança {(p.confianca * 100).toFixed(0)}%</span>
+            )}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-[11.5px] leading-relaxed text-foreground/85">
+            {p.justificativa}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              disabled={decidir.isPending}
+              onClick={() => decidir.mutate({ id: p.id, decisao: "aprovada" })}
+              className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-success px-2.5 text-[11px] font-semibold text-white disabled:opacity-50"
+            >
+              {decidir.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+              Aprovar e designar
+            </button>
+            <button
+              type="button"
+              disabled={decidir.isPending}
+              onClick={() => decidir.mutate({ id: p.id, decisao: "rejeitada" })}
+              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-destructive/50 px-2.5 text-[11px] font-semibold text-destructive disabled:opacity-50"
+            >
+              <Ban className="h-3 w-3" /> Recusar
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {(data?.links ?? []).map((l: any) => {
+        const op = data?.operadores?.get(l.operator_id);
         const Icone = ICONE_ESTADO[l.status] || Bot;
         return (
           <div key={l.id} className="rounded-xl border border-border bg-card p-3.5">
@@ -225,13 +315,13 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
       {/* O QUE FOI PARA O HISTÓRICO DO CLIENTE.
           A entrega já era gravada aqui, e ninguém via: registro invisível
           é indistinguível de registro inexistente. */}
-      {data.memoria.length > 0 && (
+      {(data?.memoria?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-info/30 bg-info/[0.05] p-3">
           <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-info">
-            <FileText className="h-3 w-3" /> Registrado no histórico do cliente ({data.memoria.length})
+            <FileText className="h-3 w-3" /> Registrado no histórico do cliente ({data?.memoria?.length ?? 0})
           </p>
           <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
-            {data.memoria.map((m: any) => (
+            {(data?.memoria ?? []).map((m: any) => (
               <div key={m.id} className="rounded-lg bg-background/60 px-2.5 py-1.5">
                 <p className="text-[10px] text-muted-foreground">
                   {m.kind} · {quando(m.created_at)}
@@ -247,13 +337,13 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
       )}
 
       {/* O que você escreveu, junto do que o agente respondeu. */}
-      {data.diario.length > 0 && (
+      {(data?.diario?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-border bg-card p-3">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Conversa desta tarefa ({data.diario.length})
+            Conversa desta tarefa ({data?.diario?.length ?? 0})
           </p>
           <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
-            {data.diario.map((d: any) => (
+            {(data?.diario ?? []).map((d: any) => (
               <div key={d.id} className={cn(
                 "rounded-lg px-2.5 py-1.5",
                 d.author_kind === "humano" ? "bg-primary/[0.07]" : "bg-secondary/50",
@@ -271,13 +361,13 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
       )}
 
       {/* O histórico completo, recolhido: quem quer auditar abre. */}
-      {data.trilha.length > 0 && (
+      {(data?.trilha?.length ?? 0) > 0 && (
         <details className="rounded-xl border border-border bg-card p-3">
           <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Histórico completo ({data.trilha.length})
+            Histórico completo ({data?.trilha?.length ?? 0})
           </summary>
           <div className="mt-2 max-h-52 space-y-1 overflow-y-auto pr-1">
-            {data.trilha.map((e: any) => (
+            {(data?.trilha ?? []).map((e: any) => (
               <div key={e.id} className="flex flex-wrap items-baseline gap-x-2 border-b border-border/50 pb-1 last:border-0">
                 <span className="text-[10px] tabular-nums text-muted-foreground">{quando(e.occurred_at)}</span>
                 <span className="text-[11px] text-foreground/90">{e.action}</span>

@@ -74,6 +74,38 @@ export function ordenarEscritorio(
   });
 }
 
+/**
+ * As áreas, ordenadas pela urgência de quem está dentro delas.
+ *
+ * Agrupar por área sem ordenar por urgência traria de volta o problema
+ * que o Escritório resolve: a área que trava o dia ficaria no meio da
+ * lista, em ordem alfabética, ao lado de uma área ociosa.
+ *
+ * Área sem nome vira "Sem área": inventar um rótulo bonito esconderia
+ * que o organograma está incompleto.
+ */
+export function agruparPorArea(
+  agentes: readonly AgenteNoEscritorio[],
+  porAgente: Map<string, TrabalhoDoAgente[]>,
+): Array<{ area: string; agentes: AgenteNoEscritorio[]; urgencia: number }> {
+  const mapa = new Map<string, AgenteNoEscritorio[]>();
+  for (const a of ordenarEscritorio(agentes, porAgente)) {
+    const area = (a.area || "").trim() || "Sem área";
+    const atual = mapa.get(area);
+    if (atual) atual.push(a);
+    else mapa.set(area, [a]);
+  }
+  return [...mapa.entries()]
+    .map(([area, lista]) => {
+      const pesos = lista.map((a) => {
+        const e = estadoQueManda(porAgente.get(a.id) ?? []);
+        return e === null ? 90 : (PESO as Record<string, number>)[e];
+      });
+      return { area, agentes: lista, urgencia: Math.min(...pesos, 90) };
+    })
+    .sort((a, b) => a.urgencia - b.urgencia || a.area.localeCompare(b.area));
+}
+
 const FRASE: Record<string, string> = {
   blocked: "travado, precisa de você",
   awaiting_input: "esperando algo seu",
@@ -133,7 +165,7 @@ export default function Escritorio({
     return m;
   }, [trabalhos]);
 
-  const ordenados = useMemo(() => ordenarEscritorio(agentes, porAgente), [agentes, porAgente]);
+  const areas = useMemo(() => agruparPorArea(agentes, porAgente), [agentes, porAgente]);
 
   const esperandoVoce = useMemo(
     () => trabalhos.filter(
@@ -159,8 +191,19 @@ export default function Escritorio({
         </p>
       </div>
 
+      {areas.map(({ area, agentes: doGrupo }) => (
+        <div key={area} className="space-y-2">
+          {/* O nome da área, discreto: separa sem competir com os cartões. */}
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-1 shrink-0 rounded-full bg-primary" aria-hidden />
+            <p className="text-[10px] font-bold uppercase tracking-wider text-foreground">{area}</p>
+            <span className="text-[10px] text-muted-foreground">
+              {doGrupo.length} {doGrupo.length === 1 ? "agente" : "agentes"}
+            </span>
+          </div>
+
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-        {ordenados.map((a) => {
+        {doGrupo.map((a) => {
           const meus = porAgente.get(a.id) ?? [];
           const estado = estadoQueManda(meus);
           const pausado = a.status !== "active";
@@ -276,6 +319,8 @@ export default function Escritorio({
           );
         })}
       </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  estadoQueManda, ordenarEscritorio,
+  agruparPorArea, estadoQueManda, ordenarEscritorio,
   type AgenteNoEscritorio, type TrabalhoDoAgente,
 } from "@/components/execucao/Escritorio";
 
@@ -104,8 +104,11 @@ describe("o contexto do agente no card do Kanban", () => {
     expect(ctx).toContain("próximo passo:");
   });
 
-  it("some sozinho quando nenhum agente pegou a tarefa", () => {
-    expect(ctx).toContain("if (!data || !temTrabalho) return null;");
+  it("some quando não há NEM trabalho NEM proposta", () => {
+    // A guarda mudou de propósito: antes bastava não haver vínculo para a
+    // seção sumir, e isso escondia a sugestão de responsável numa tarefa
+    // que nenhum agente pegou.
+    expect(ctx).toContain("if ((!data || !temTrabalho) && propostas.length === 0) return null;");
   });
 
   it("está montado no card do Kanban", () => {
@@ -177,5 +180,68 @@ describe("o registro no histórico do cliente fica visível", () => {
 
   it("mostra a seção quando há registro", () => {
     expect(ctx).toContain("Registrado no histórico do cliente");
+  });
+});
+
+describe("as áreas no Escritório", () => {
+  it("a área que trava o dia vem primeiro, não a alfabética", () => {
+    // Agrupar sem ordenar por urgência traria de volta o problema que o
+    // Escritório resolve: a área travada no meio da lista.
+    const agentes = [
+      { id: "1", display_name: "A", role: "r", area: "Zulu", status: "active" },
+      { id: "2", display_name: "B", role: "r", area: "Alfa", status: "active" },
+    ];
+    const porAgente = new Map<string, TrabalhoDoAgente[]>([
+      ["1", [trabalho("1", "blocked")]],
+      ["2", [trabalho("2", "in_progress")]],
+    ]);
+    expect(agruparPorArea(agentes, porAgente).map((g) => g.area)).toEqual(["Zulu", "Alfa"]);
+  });
+
+  it("área vazia vira 'Sem área', e não some", () => {
+    // Inventar um rótulo bonito esconderia que o organograma está incompleto.
+    const grupos = agruparPorArea(
+      [{ id: "1", display_name: "A", role: "r", area: "  ", status: "active" }],
+      new Map(),
+    );
+    expect(grupos[0].area).toBe("Sem área");
+  });
+
+  it("empate de urgência resolve alfabeticamente", () => {
+    const agentes = [
+      { id: "1", display_name: "A", role: "r", area: "Zulu", status: "active" },
+      { id: "2", display_name: "B", role: "r", area: "Alfa", status: "active" },
+    ];
+    const porAgente = new Map<string, TrabalhoDoAgente[]>([
+      ["1", [trabalho("1", "review")]],
+      ["2", [trabalho("2", "review")]],
+    ]);
+    expect(agruparPorArea(agentes, porAgente).map((g) => g.area)).toEqual(["Alfa", "Zulu"]);
+  });
+
+  it("cada agente aparece uma vez só", () => {
+    const agentes = [
+      { id: "1", display_name: "A", role: "r", area: "X", status: "active" },
+      { id: "2", display_name: "B", role: "r", area: "X", status: "active" },
+      { id: "3", display_name: "C", role: "r", area: "Y", status: "active" },
+    ];
+    const grupos = agruparPorArea(agentes, new Map());
+    expect(grupos.flatMap((g) => g.agentes.map((a) => a.id)).sort()).toEqual(["1", "2", "3"]);
+  });
+});
+
+describe("a proposta de responsável é respondida no card", () => {
+  const ctx = ler("src/components/execucao/ContextoDoAgente.tsx");
+
+  it("decide pelo RPC, com aprovar e recusar", () => {
+    expect(ctx).toContain('rpc("assignment_proposal_decidir"');
+    expect(ctx).toContain('decisao: "aprovada"');
+    expect(ctx).toContain('decisao: "rejeitada"');
+  });
+
+  it("sobrevive quando não há vínculo de agente", () => {
+    // O agente pode sugerir um dono para uma tarefa que ele nem pegou;
+    // sumir com a proposta esconderia a pergunta que espera resposta.
+    expect(ctx).toContain("if ((!data || !temTrabalho) && propostas.length === 0) return null;");
   });
 });
