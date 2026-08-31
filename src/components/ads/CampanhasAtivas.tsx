@@ -35,7 +35,16 @@ const ICONE: Record<Gravidade, typeof AlertTriangle> = {
   baixa: Lightbulb,
 };
 
-export default function CampanhasAtivas({ clientId }: { clientId?: string }) {
+export default function CampanhasAtivas({
+  clientId,
+  nomesDeClientes,
+  aoAbrirCliente,
+}: {
+  clientId?: string;
+  /** client_id -> nome. Sem isto a lista mistura campanhas de todo mundo. */
+  nomesDeClientes?: Map<string, string>;
+  aoAbrirCliente?: (clientId: string) => void;
+}) {
   const hoje = new Date().toISOString().slice(0, 10);
 
   const { data, error, isLoading, dataUpdatedAt } = useQuery({
@@ -55,7 +64,7 @@ export default function CampanhasAtivas({ clientId }: { clientId?: string }) {
       if (erroDias) throw new Error(erroDias.message);
 
       return {
-        campanhas: (campanhas || []) as CampanhaAtiva[],
+        campanhas: (campanhas || []) as Array<CampanhaAtiva & { client_id: string }>,
         dias: (dias || []) as DiaDaCampanha[],
       };
     },
@@ -70,6 +79,12 @@ export default function CampanhasAtivas({ clientId }: { clientId?: string }) {
       (c) => (c.effective_status || "").toUpperCase() === "ACTIVE"),
     [data],
   );
+
+  /** De qual cliente é uma campanha: o aviso sem dono não diz onde agir. */
+  const nomeDoClienteDaCampanha = (campaignId: string) => {
+    const c = (data?.campanhas ?? []).find((x) => x.campaign_id === campaignId);
+    return c ? nomesDeClientes?.get((c as any).client_id) ?? null : null;
+  };
 
   const recomendacoes = useMemo(
     () => data ? recomendar(data.campanhas, data.dias, hoje) : [],
@@ -166,7 +181,14 @@ export default function CampanhasAtivas({ clientId }: { clientId?: string }) {
                     )} />
                     {r.titulo}
                   </p>
-                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">{r.campanha}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {!clientId && nomeDoClienteDaCampanha(r.campaign_id) && (
+                      <span className="font-semibold text-foreground/80">
+                        {nomeDoClienteDaCampanha(r.campaign_id)} ·{" "}
+                      </span>
+                    )}
+                    {r.campanha}
+                  </p>
                   {/* O NÚMERO. Sem ele o aviso vira palpite. */}
                   <p className="mt-1 text-[11.5px] text-foreground/90">{r.porque}</p>
                   <p className="mt-1 text-[11px] text-muted-foreground">{r.acao}</p>
@@ -190,13 +212,30 @@ export default function CampanhasAtivas({ clientId }: { clientId?: string }) {
               return (
                 <div
                   key={c.campaign_id}
+                  role={aoAbrirCliente ? "button" : undefined}
+                  tabIndex={aoAbrirCliente ? 0 : undefined}
+                  onClick={() => aoAbrirCliente?.((c as any).client_id)}
+                  onKeyDown={(e) => {
+                    if (!aoAbrirCliente || (e.key !== "Enter" && e.key !== " ")) return;
+                    e.preventDefault();
+                    aoAbrirCliente((c as any).client_id);
+                  }}
                   className={cn(
                     "rounded-lg border p-2.5",
+                    aoAbrirCliente && "cursor-pointer transition-colors hover:border-primary/50",
                     temAviso ? "border-warning/40 bg-warning/[0.04]" : "border-border bg-secondary/40",
                   )}
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
+                    {/* DE QUEM É a campanha. Sem isto a lista geral vira um
+                        monte de nomes soltos e ninguém sabe a qual conta
+                        pertencem. */}
+                    {!clientId && nomesDeClientes?.get((c as any).client_id) && (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9.5px] font-semibold text-primary">
+                        {nomesDeClientes.get((c as any).client_id)}
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
                       {c.name || c.campaign_id}
                     </span>

@@ -738,12 +738,11 @@ export default function AdminAds() {
         />
       )}
 
-      {/* O que está no ar AGORA e o que fazer com isso, antes de qualquer
-          acumulado. Número sem recomendação é relatório; recomendação sem
-          número é palpite — aqui os dois andam juntos. */}
-      <CampanhasAtivas clientId={clienteAberto || undefined} />
-
       {clienteAberto ? (
+        <>
+        {/* Dentro do cliente, o AGORA dele: entrar no detalhe não pode
+            fazer as campanhas ativas sumirem. */}
+        <CampanhasAtivas clientId={clienteAberto} />
         <ClientAdsDetail
           clientId={clienteAberto}
           clientName={nomes.get(clienteAberto) || "Cliente"}
@@ -755,6 +754,7 @@ export default function AdminAds() {
             setParams(proximo, { replace: true });
           }}
         />
+        </>
       ) : isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando campanhas...</p>
       ) : semConta ? (
@@ -830,6 +830,19 @@ export default function AdminAds() {
               );
             })}
           </div>
+
+          {/* O que está no ar AGORA vem DEPOIS dos clientes: os cartões são
+              a porta de entrada, e o painel de campanhas é o detalhe. Cada
+              campanha diz de qual cliente é e abre o cliente ao clique —
+              sem isso a lista geral era um monte de nome solto. */}
+          <CampanhasAtivas
+            nomesDeClientes={nomes}
+            aoAbrirCliente={(id) => {
+              const proximo = new URLSearchParams(params);
+              proximo.set("cliente", id);
+              setParams(proximo, { replace: true });
+            }}
+          />
         </>
       )}
     </div>

@@ -520,11 +520,6 @@ export default function AdminMetricas() {
         </Button>
       </div>
 
-      {/* Saber QUAIS contas medem vem antes de ler o que elas mediram: uma
-          conta nunca conectada some do gráfico igual a um perfil parado, e
-          são coisas diferentes. */}
-      {!selectedClientId && <SaudeDasContas />}
-
       {selectedClientId ? (
         <ClientMetricsDetail
           clientId={selectedClientId}
@@ -615,6 +610,10 @@ export default function AdminMetricas() {
               );
             })}
           </div>
+
+          {/* A saúde das contas vem DEPOIS dos cartões: eles são o que a
+              pessoa veio ver. Diagnóstico é consulta, não abertura. */}
+          <SaudeDasContas />
         </>
       )}
     </div>
