@@ -371,7 +371,11 @@ export function useTeamMembers(queryEnabled = true) {
       const { data, error } = await supabase
         .from("profiles")
         .select(PROFILE_SAFE_SELECT)
-        .in("id", userIds);
+        .in("id", userIds)
+        // Desativado sai da equipe ATIVA, mas continua no histórico: quem
+        // participou da trilha não pode ser apagado sem tornar o registro
+        // mentiroso, então some daqui em vez de sumir do passado.
+        .is("deleted_at", null);
       if (error) throw error;
 
       return (data || []).map((p: any) => ({

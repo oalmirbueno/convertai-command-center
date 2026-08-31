@@ -272,6 +272,63 @@ Deno.serve(async (req) => {
       });
     }
 
+    /**
+     * Desativar em vez de excluir.
+     *
+     * A exclusão recusa quem tem histórico editorial — e está certa: a
+     * trilha é append-only e apagar o autor a tornaria mentirosa. Mas a
+     * própria mensagem de recusa mandava "desative os acessos", e essa
+     * ação não existia. O dono ficava sem saída: não podia excluir nem
+     * desativar, e o membro seguia na lista.
+     *
+     * Desativar tira o acesso e some da equipe ativa. O histórico fica
+     * inteiro, com o nome de quem fez.
+     */
+    if (action === "deactivate" || action === "reactivate") {
+      const { user_id } = payload;
+      const desativando = action === "deactivate";
+      if (!user_id) throw new Error("Missing user_id");
+      if (!UUID_PATTERN.test(user_id)) throw new Error("Invalid user_id");
+      if (desativando && user_id === caller.id) {
+        throw new Error("Você não pode desativar a própria conta");
+      }
+
+      if (desativando) {
+        // Mesmo cuidado da exclusão: nunca deixar a casa sem administrador.
+        const { data: alvo, error: erroAlvo } = await adminClient
+          .from("user_roles").select("role").eq("user_id", user_id);
+        if (erroAlvo) throw new Error("Failed to verify target role");
+        if (alvo?.some(({ role }) => role === "admin")) {
+          throw new Error("Rebaixe o administrador antes de desativar esta conta");
+        }
+      }
+
+      const { error: profileError } = await adminClient
+        .from("profiles")
+        .update({ deleted_at: desativando ? new Date().toISOString() : null })
+        .eq("id", user_id);
+      if (profileError) throw new Error(profileError.message || "Failed to update profile");
+
+      // O acesso cai de verdade: sem isso a pessoa continuaria entrando,
+      // apenas invisível na lista — pior que não desativar.
+      const { error: banError } = await adminClient.auth.admin.updateUserById(
+        user_id,
+        { ban_duration: desativando ? "876000h" : "none" },
+      );
+      if (banError) {
+        // O perfil já mudou; avisar alto em vez de fingir sucesso.
+        console.error("manage-team ban failed", { user_id, error: banError.message });
+        throw new Error(
+          "Perfil marcado, mas não consegui bloquear o acesso: " + banError.message,
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, deactivated: desativando }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     if (action === "update_password") {
       const { user_id, password } = payload;
       if (!user_id || !password) throw new Error("Missing user_id or password");

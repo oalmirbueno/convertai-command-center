@@ -649,6 +649,14 @@
       "remote_name": "agendado_aprovado_vai_ao_ar",
       "remote_statements_sha256": "ef5d81e3c3e0f34699f847029fe51cdfc48cde5207559d22a76d1263e3379e7a",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901010000",
+      "path": "supabase/migrations/20260901010000_agente_termina_e_o_kanban_anda.sql",
+      "local_sha256": "55a2476e10b187404a9243fa39bbccc42822a2842889209feacb2d80af3db20d",
+      "remote_name": "agente_termina_e_o_kanban_anda",
+      "remote_statements_sha256": "69d99ef777bdabc8814e27cccb583392449cb93b462b7202e227147336b384c5",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

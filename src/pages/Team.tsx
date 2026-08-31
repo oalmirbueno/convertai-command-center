@@ -144,8 +144,28 @@ export default function Team() {
     if (!removeMember) return;
     setRemoving(true);
     try {
-      await callManageTeam({ action: "delete", user_id: removeMember.id });
-      toast.success("Membro removido com sucesso");
+      /*
+       * Excluir primeiro, desativar se houver histórico.
+       *
+       * A exclusão recusa quem participou da trilha editorial — e está
+       * certa: apagar o autor tornaria o histórico mentiroso. Antes o dono
+       * batia nessa recusa e ficava sem saída nenhuma. Agora a recusa vira
+       * a saída correta: o acesso cai, o nome some da equipe ativa, e o
+       * que a pessoa fez continua registrado.
+       */
+      try {
+        await callManageTeam({ action: "delete", user_id: removeMember.id });
+        toast.success("Membro removido com sucesso");
+      } catch (err: any) {
+        const temHistorico = /hist[oó]rico editorial|editorial_history_conflict/i
+          .test(String(err?.message || ""));
+        if (!temHistorico) throw err;
+        await callManageTeam({ action: "deactivate", user_id: removeMember.id });
+        toast.success(
+          `${removeMember.full_name} foi desativado: perdeu o acesso e saiu da equipe. ` +
+          "O histórico do que ele fez continua registrado, porque apagá-lo tornaria a trilha falsa.",
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setRemoveMember(null);
     } catch (err: any) {
@@ -238,6 +258,7 @@ export default function Team() {
                   </button>
                   {m.role !== "admin" && (
                     <button onClick={() => setRemoveMember(m)}
+                      title="Remove da equipe. Se a pessoa tiver histórico, ela é desativada em vez de apagada."
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
