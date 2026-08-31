@@ -80,6 +80,8 @@ interface Props {
   readOnly?: boolean;
 }
 
+import ContextoDoAgente from "@/components/execucao/ContextoDoAgente";
+
 export default function TaskDetailDrawer({ task, onClose, teamMembers, projects, readOnly = false }: Props) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -1036,6 +1038,13 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               </div>
             )}
           </div>
+
+          {/* ═══ O trabalho do agente nesta tarefa ═══
+              Antes o card mostrava título, prazo e responsável, e nada
+              sobre quem de fato estava mexendo nele: o trabalho acontecia
+              num lugar e o registro em outro. Some sozinho quando nenhum
+              agente pegou a tarefa. */}
+          <ContextoDoAgente taskId={task.id} />
 
           {/* ═══ Comments / Activity section ═══ */}
           <div className="space-y-3">

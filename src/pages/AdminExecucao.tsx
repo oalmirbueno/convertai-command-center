@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/OrganogramaAgentes";
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
+import Escritorio from "@/components/execucao/Escritorio";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
 import {
@@ -68,6 +69,7 @@ type Operador = {
 };
 
 const VISOES = [
+  { id: "escritorio", rotulo: "Escritório" },
   { id: "quadro", rotulo: "Quadro" },
   { id: "fila", rotulo: "Fila por operador" },
   { id: "in_progress", rotulo: "Em andamento" },
@@ -102,7 +104,7 @@ export default function AdminExecucao() {
   const aprovacaoAlvo = searchParams.get("aprovacao");
   const propostaAlvo = searchParams.get("proposta");
   const abaAlvo = searchParams.get("aba");
-  const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("quadro");
+  const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("escritorio");
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
@@ -396,7 +398,7 @@ export default function AdminExecucao() {
     if (visao === "fila") return vinculosVisiveis.filter((v) => ["queued", "in_progress"].includes(v.status));
     if (visao === "aprovacao") return vinculosVisiveis.filter((v) => v.approval_required && v.status !== "done");
     if (visao === "done") return vinculosVisiveis.filter((v) => v.status === "done");
-    if (visao === "relatorios") return [];
+    if (visao === "relatorios" || visao === "escritorio") return [];
     return vinculosVisiveis.filter((v) => v.status === visao);
   }, [vinculosVisiveis, visao]);
 
@@ -1156,7 +1158,19 @@ export default function AdminExecucao() {
         })}
       </div>
 
-      {visao === "quadro" ? (
+      {visao === "escritorio" ? (
+        <Escritorio
+          agentes={operadores}
+          trabalhos={vinculosVisiveis as any}
+          tarefas={tarefas}
+          humanos={humanos}
+          aoAbrirAgente={(a) => {
+            const op = operadores.find((o) => o.id === a.id);
+            if (op) setAgenteAberto(op);
+          }}
+          aoAbrirTarefa={(id) => window.open(`/kanban?task=${id}`, "_blank")}
+        />
+      ) : visao === "quadro" ? (
         /* O quadro: colunas com ROLAGEM PRÓPRIA. Sem isso, uma coluna
            cheia empurra a página inteira e as outras somem de vista. */
         <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
