@@ -665,6 +665,14 @@
       "remote_name": "o_alarme_para_de_gritar_em_loop",
       "remote_statements_sha256": "34ed8b6638dfddac2a950e96384d1f333cf834a7a086b4ed51f192cf9a7dbcdc",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901030000",
+      "path": "supabase/migrations/20260901030000_todos_os_posts_e_nao_so_os_25.sql",
+      "local_sha256": "82ef49e676d2311408f4aaf4251aa708388afe84ab18e0a4fe0ec376c217db80",
+      "remote_name": "todos_os_posts_e_nao_so_os_25",
+      "remote_statements_sha256": "73fa25622c63eb90645ec3fa0c77abf0d03fc62542d678a4e08c5c44022f4041",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -20,6 +20,7 @@ import GaleriaDeCriativos from "@/components/ads/GaleriaDeCriativos";
 import { resumirCriativos } from "@/lib/adsCreativeReport";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import CampanhasAtivas from "@/components/ads/CampanhasAtivas";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -734,6 +735,11 @@ export default function AdminAds() {
           }}
         />
       )}
+
+      {/* O que está no ar AGORA e o que fazer com isso, antes de qualquer
+          acumulado. Número sem recomendação é relatório; recomendação sem
+          número é palpite — aqui os dois andam juntos. */}
+      <CampanhasAtivas clientId={clienteAberto || undefined} />
 
       {clienteAberto ? (
         <ClientAdsDetail
