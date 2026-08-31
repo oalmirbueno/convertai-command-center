@@ -645,9 +645,9 @@
     {
       "version": "20260831020000",
       "path": "supabase/migrations/20260831020000_agendado_aprovado_vai_ao_ar.sql",
-      "local_sha256": "99c4af3fb8929efec709e465d4a212a97d83a31ea40206b22e5130ec4c64fea3",
+      "local_sha256": "65ab285282b2b4a93aec1b75e08f16a2f189abe8e8385dd641bcd69bb4624b37",
       "remote_name": "agendado_aprovado_vai_ao_ar",
-      "remote_statements_sha256": "b9590c80d8b550d6f4c451318e20ed30f0fb0f9c0c99a77f4659634846d3b7a8",
+      "remote_statements_sha256": "ef5d81e3c3e0f34699f847029fe51cdfc48cde5207559d22a76d1263e3379e7a",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

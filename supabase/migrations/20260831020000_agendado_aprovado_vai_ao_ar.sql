@@ -68,7 +68,7 @@ begin
     json_build_object('sub', _admin::text, 'role', 'authenticated')::text, true);
 
   for _pub in
-    select p.id, p.client_id, p.project_id, p.version, p.scheduled_at,
+    select p.id, p.post_id, p.client_id, p.project_id, p.version, p.scheduled_at,
            coalesce(p.scheduled_timezone, 'America/Sao_Paulo') as tz,
            coalesce(p.delivery_mode, 'manual') as delivery_mode,
            po.title
@@ -118,6 +118,21 @@ begin
         (_pub.id, _pub.client_id, _fingerprint, _pub.delivery_mode,
          jsonb_array_length(_assets))
       on conflict (publication_id) do nothing;
+
+      -- CRIAR O SNAPSHOT MUDA A IMPRESSAO DE APROVACAO.
+      --
+      -- A funcao original de captura recalcula isto no fim, e diz por que:
+      -- "recalculate inside the same transaction so scheduling and every
+      -- later transition see the complete immutable approved version".
+      -- Sem esta linha o post publica no Instagram e a BAIXA no painel
+      -- falha com "requires ready content and approved immutable files" —
+      -- post no ar, painel achando que nao saiu. Foi exatamente o que
+      -- aconteceu na primeira tentativa desta correcao.
+      update public.editorial_post_internal
+         set approval_fingerprint = public.editorial_compute_approval_fingerprint(_pub.post_id),
+             updated_by = coalesce(auth.uid(), updated_by)
+       where post_id = _pub.post_id
+         and approval_fingerprint is not null;
 
       -- A transicao OFICIAL: ela dispara os guards, grava o evento e
       -- mantem a versao. Escrever o status na mao pularia tudo isso.

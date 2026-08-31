@@ -122,3 +122,25 @@ describe("recuperar um atrasado exige horario novo", () => {
     expect(migracao).toContain("_pub.version, _quando, _pub.tz");
   });
 });
+
+describe("criar o snapshot nao pode invalidar a aprovacao", () => {
+  it("a impressao de aprovacao e recalculada junto", () => {
+    // Sem isto o post publica no Instagram e a BAIXA no painel falha com
+    // "requires ready content and approved immutable files": post no ar,
+    // painel achando que nao saiu. Aconteceu na primeira tentativa desta
+    // correcao, e a funcao original ja avisava disso num comentario.
+    expect(migracao).toContain("editorial_compute_approval_fingerprint(_pub.post_id)");
+    expect(migracao).toContain("and approval_fingerprint is not null");
+  });
+
+  it("o recalculo vem ANTES da transicao, nao depois", () => {
+    const posRecalc = migracao.indexOf("editorial_compute_approval_fingerprint(_pub.post_id)");
+    const posTransicao = migracao.indexOf("transition_editorial_publication_unlocked(\n        _pub.id, 'schedule'");
+    expect(posRecalc).toBeGreaterThan(0);
+    expect(posTransicao).toBeGreaterThan(posRecalc);
+  });
+
+  it("o post_id e carregado no cursor para o recalculo existir", () => {
+    expect(migracao).toContain("select p.id, p.post_id, p.client_id");
+  });
+});
