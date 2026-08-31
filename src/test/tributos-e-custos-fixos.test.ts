@@ -260,3 +260,34 @@ describe("as saidas realizadas e o pro-labore no fluxo", () => {
     expect(fluxo).toContain('max-h-[300px] divide-y divide-border overflow-y-auto');
   });
 });
+
+describe("o pró-labore proporcional em um clique", () => {
+  const fluxo = ler("src/components/finance/CashFlow.tsx");
+
+  it("está no menu de Novo lançamento", () => {
+    expect(fluxo).toContain("Lançar pró-labore proporcional");
+    expect(fluxo).toContain("void lancarProLaboreProporcional()");
+  });
+
+  it("AJUSTA quando já existe, em vez de criar um segundo", () => {
+    // Criar outro daria DOIS pró-labores somando no fluxo, e o dono só
+    // descobriria no fechamento do mês.
+    expect(fluxo).toContain("const molde = proLaboreView.molde;");
+    expect(fluxo).toContain("sem criar uma segunda retirada");
+    expect(fluxo).toContain('.eq("id", molde.id)');
+  });
+
+  it("não faz nada quando já está no valor certo", () => {
+    // Gravar por gravar sujaria a trilha com uma alteração que não alterou.
+    expect(fluxo).toContain("Math.abs(atual - valor) < 0.01");
+  });
+
+  it("o rótulo muda conforme o caso, para o clique não surpreender", () => {
+    expect(fluxo).toContain("Ajustar pró-labore para");
+  });
+
+  it("recusa quando não há receita para calcular", () => {
+    // Zero proporcional não é decisão: é falta de base.
+    expect(fluxo).toContain("Sem receita operacional no mês para calcular o proporcional");
+  });
+});

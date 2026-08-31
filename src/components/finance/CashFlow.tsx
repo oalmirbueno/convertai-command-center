@@ -12,7 +12,7 @@ import {
 import {
   Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Download,
   Edit3, Trash2, Calendar, Filter, Sparkles, ArrowUpRight, ArrowDownRight,
-  Briefcase,
+  Briefcase, PiggyBank,
 } from "lucide-react";
 import NewIncomeModal from "./NewIncomeModal";
 import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
@@ -523,10 +523,42 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     };
   }, [expenses, monthReceivedGross, financeSettings]);
 
-  /** Lança o pró-labore do mês já no valor proporcional. */
+  /**
+   * Lança o pró-labore do mês no valor proporcional — olhando o que já existe.
+   *
+   * "Já soma com base no que já está": se houver um pró-labore recorrente,
+   * criar outro daria DOIS pró-labores somando no fluxo, e o dono só
+   * descobriria no fechamento. Então quando já existe, esta ação AJUSTA o
+   * valor em vez de criar; quando não existe, cria.
+   */
   const lancarProLaboreProporcional = async () => {
     const valor = Math.round(proLaboreView.proporcional * 100) / 100;
-    if (valor <= 0) { toast.error("Sem receita operacional no mês para calcular o proporcional"); return; }
+    if (valor <= 0) {
+      toast.error("Sem receita operacional no mês para calcular o proporcional");
+      return;
+    }
+
+    const molde = proLaboreView.molde;
+    if (molde) {
+      const atual = Number(molde.amount) || 0;
+      if (Math.abs(atual - valor) < 0.01) {
+        toast.info(`O pró-labore já está em ${fmt(valor)}, que é o proporcional de hoje.`);
+        return;
+      }
+      const { error } = await supabase.from("expenses")
+        .update({
+          amount: valor,
+          notes: `Ajustado ao proporcional da receita operacional de ${fmt(proLaboreView.operacional)}`,
+        })
+        .eq("id", molde.id);
+      if (error) return toast.error(error.message);
+      toast.success(
+        `Pró-labore ajustado de ${fmt(atual)} para ${fmt(valor)} — sem criar uma segunda retirada.`,
+      );
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      return;
+    }
+
     const hoje = new Date();
     const venc = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-10`;
     const { error } = await supabase.from("expenses").insert({
@@ -1469,6 +1501,19 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
               title="Despesa"
               desc="Custo operacional recorrente ou avulso. Conta como despesa no DRE."
               onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "expense", data: {} }); }}
+            />
+            {/* O pró-labore em um clique: o valor já sai calculado pela
+                escada, e a ação sabe se é para criar ou só ajustar. */}
+            <LauncherChoice
+              icon={<PiggyBank className="w-4 h-4" />}
+              tone="success"
+              title={proLaboreView.molde
+                ? `Ajustar pró-labore para ${fmt(proLaboreView.proporcional)}`
+                : `Lançar pró-labore proporcional · ${fmt(proLaboreView.proporcional)}`}
+              desc={proLaboreView.molde
+                ? `Hoje está em ${fmt(proLaboreView.atual)}. Ajusta o valor da retirada que já existe, sem criar uma segunda.`
+                : `Calculado pela escada sobre ${fmt(proLaboreView.operacional)} de receita operacional. Entra como saída mensal, vencendo no dia 10.`}
+              onClick={() => { setLauncherOpen(false); void lancarProLaboreProporcional(); }}
             />
             <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 flex items-start gap-2 mt-1">
               <Briefcase className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
