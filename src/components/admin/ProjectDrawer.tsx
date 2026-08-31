@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { ProjectPipelineChecklist } from "./ProjectPipeline";
@@ -143,14 +143,15 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   };
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[420px] max-w-[90vw] bg-card border-l border-border p-0 overflow-y-auto" side="right">
+    // Central, como todo pop-up do painel.
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-h-[88dvh] max-w-lg overflow-y-auto border-border bg-card p-0">
         <div className="p-5 space-y-5">
           {/* Header */}
-          <SheetHeader className="space-y-1">
-            <SheetTitle className="text-base font-semibold text-foreground pr-6">{project.name}</SheetTitle>
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="pr-6 text-base font-semibold text-foreground">{project.name}</DialogTitle>
             <p className="text-xs text-muted-foreground">{project.client?.company_name || project.client?.full_name}</p>
-          </SheetHeader>
+          </DialogHeader>
 
           {/* Status pills */}
           <div className="space-y-2">
@@ -315,7 +316,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
           />
 
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

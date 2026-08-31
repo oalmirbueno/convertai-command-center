@@ -14,6 +14,8 @@ import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
+import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
+import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
 import {
@@ -69,6 +71,23 @@ type Operador = {
   last_run_at: string | null;
 };
 
+/**
+ * As abas de cima, e as visões dentro de cada uma.
+ *
+ * Onze visões numa faixa só viravam uma fileira de pastilhas em que tudo
+ * pesava igual — e nada dizia onde começar. Quatro abas separam por
+ * PERGUNTA: quem está trabalhando, o que está andando, o que espera
+ * decisão minha, e o que já virou relatório.
+ *
+ * A aba não é decoração: ela é a resposta a "onde eu olho agora".
+ */
+const ABAS = [
+  { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
+  { id: "trabalho", rotulo: "Trabalho", visoes: ["quadro", "fila", "in_progress", "done", "review"] },
+  { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "awaiting_input", "blocked"] },
+  { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
+] as const;
+
 const VISOES = [
   { id: "escritorio", rotulo: "Escritório" },
   { id: "quadro", rotulo: "Quadro" },
@@ -106,6 +125,13 @@ export default function AdminExecucao() {
   const propostaAlvo = searchParams.get("proposta");
   const abaAlvo = searchParams.get("aba");
   const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("escritorio");
+  const [aba, setAba] = useState<(typeof ABAS)[number]["id"]>("pessoas");
+  // A tarefa aberta DENTRO da Execução, em pop-up central. Antes isto era
+  // window.open numa aba nova: o app inteiro recarregava, e a sensação era
+  // de reiniciar em vez de navegar.
+  const [tarefaAberta, setTarefaAberta] = useState<any | null>(null);
+  const { data: equipe = [] } = useTeamMembers();
+  const { data: projetos = [] } = useProjects();
   const [agenteAberto, setAgenteAberto] = useState<Operador | null>(null);
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
@@ -396,6 +422,31 @@ export default function AdminExecucao() {
     }
     return [...nomes].sort();
   }, [tarefas, disponiveis]);
+
+  /** As visões da aba atual: a faixa de baixo só mostra o que pertence a ela. */
+  const visoesDaAba = useMemo(() => {
+    const alvo = ABAS.find((a) => a.id === aba);
+    return VISOES.filter((v) => (alvo?.visoes as readonly string[] | undefined)?.includes(v.id));
+  }, [aba]);
+
+  /*
+   * A aba SEGUE a visão, e não o contrário.
+   *
+   * Um deep-link de notificação (?aprovacao=...) muda a visão direto. Sem
+   * isto a aba ficaria em "Escritório" mostrando conteúdo de "Precisa de
+   * você" — a aba diria uma coisa e a tela outra, que é pior do que não
+   * ter aba nenhuma.
+   */
+  useEffect(() => {
+    const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(visao));
+    if (dona && dona.id !== aba) setAba(dona.id);
+  }, [visao]);
+
+  const irParaAba = (id: (typeof ABAS)[number]["id"]) => {
+    setAba(id);
+    const primeira = ABAS.find((a) => a.id === id)?.visoes[0];
+    if (primeira) setVisao(primeira as (typeof VISOES)[number]["id"]);
+  };
 
   const filtrados = useMemo(() => {
     if (visao === "fila") return vinculosVisiveis.filter((v) => ["queued", "in_progress"].includes(v.status));
@@ -1137,12 +1188,42 @@ export default function AdminExecucao() {
         )}
       </div>
 
+      {/* AS ABAS: separam por pergunta, e ficam acima de tudo. */}
+      <div className="flex gap-1 overflow-x-auto border-b border-border pb-0 scrollbar-hidden">
+        {ABAS.map((x) => {
+          const ativa = aba === x.id;
+          const quantos = x.visoes.reduce((s, v) => s + (contagemDaVisao[v] ?? 0), 0);
+          return (
+            <button
+              key={x.id}
+              type="button"
+              onClick={() => irParaAba(x.id)}
+              className={cn(
+                "relative shrink-0 px-3 pb-2 pt-1 text-[13px] font-semibold transition-colors",
+                ativa ? "text-primary" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {x.rotulo}
+              {quantos > 0 && (
+                <span className={cn(
+                  "ml-1.5 rounded-full px-1.5 text-[10px] tabular-nums",
+                  ativa ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+                )}>
+                  {quantos}
+                </span>
+              )}
+              {ativa && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary" />}
+            </button>
+          );
+        })}
+      </div>
+
       {/* No telefone as dez visoes empilhavam em cinco fileiras e comiam a
           tela antes do conteudo comecar. Vira faixa que corre para o lado,
           e volta a quebrar em linhas no desktop, onde ha largura de sobra.
           Mesmo padrao da Central, para as duas areas se comportarem igual. */}
       <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 scrollbar-hidden md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-        {VISOES.map((x) => {
+        {visoesDaAba.map((x) => {
           const quantos = contagemDaVisao[x.id] ?? null;
           return (
             <button
@@ -1181,7 +1262,7 @@ export default function AdminExecucao() {
             const op = operadores.find((o) => o.id === a.id);
             if (op) setAgenteAberto(op);
           }}
-          aoAbrirTarefa={(id) => window.open(`/kanban?task=${id}`, "_blank")}
+          aoAbrirTarefa={(id) => setTarefaAberta(tarefas.get(String(id)) ?? { id })}
         />
       ) : visao === "quadro" ? (
         /* O quadro: colunas com ROLAGEM PRÓPRIA. Sem isso, uma coluna
@@ -1408,6 +1489,17 @@ export default function AdminExecucao() {
         tarefas={tarefas}
         aoFechar={() => setAgenteAberto(null)}
       />
+
+      {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem
+          sair da Execução. */}
+      {tarefaAberta && (
+        <TaskDetailDrawer
+          task={tarefaAberta}
+          teamMembers={equipe as any[]}
+          projects={projetos as any[]}
+          onClose={() => setTarefaAberta(null)}
+        />
+      )}
 
       <DefinirResponsavel
         taskId={responsavelAberto?.taskId ?? null}

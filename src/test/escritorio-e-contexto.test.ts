@@ -245,3 +245,58 @@ describe("a proposta de responsável é respondida no card", () => {
     expect(ctx).toContain("if ((!data || !temTrabalho) && propostas.length === 0) return null;");
   });
 });
+
+describe("as abas de cima da Execução", () => {
+  const pagina = ler("src/pages/AdminExecucao.tsx");
+
+  it("nenhuma visão fica órfã de aba", () => {
+    // Uma visão fora de toda aba viraria conteúdo inalcançável: a faixa de
+    // baixo só mostra o que pertence à aba atual.
+    const blocoAbas = pagina.slice(pagina.indexOf("const ABAS = ["), pagina.indexOf("const VISOES = ["));
+    const blocoVisoes = pagina.slice(pagina.indexOf("const VISOES = ["));
+    const idsVisoes = [...blocoVisoes.slice(0, blocoVisoes.indexOf("] as const;"))
+      .matchAll(/\{ id: "([a-z_]+)"/g)].map((m) => m[1]);
+    const cobertas = new Set([...blocoAbas.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]));
+    expect(idsVisoes.length).toBeGreaterThan(0);
+    for (const v of idsVisoes) expect(cobertas.has(v), `visão "${v}" sem aba`).toBe(true);
+  });
+
+  it("a aba segue a visão, para deep-link não mentir", () => {
+    // Notificação abre ?aprovacao=... e muda a visão direto; sem isto a aba
+    // diria uma coisa e a tela outra.
+    expect(pagina).toContain("const dona = ABAS.find((a) => (a.visoes as readonly string[]).includes(visao));");
+  });
+
+  it("a faixa de baixo lista só as visões da aba", () => {
+    expect(pagina).toContain("{visoesDaAba.map((x) => {");
+  });
+});
+
+describe("todo pop-up é central", () => {
+  it("a tarefa abre dentro da Execução, sem recarregar o app", () => {
+    const pagina = ler("src/pages/AdminExecucao.tsx");
+    // window.open abria aba nova e recarregava tudo: a sensação era de
+    // reiniciar, não de navegar.
+    expect(pagina).not.toContain("window.open(");
+    expect(pagina).toContain("setTarefaAberta(tarefas.get(String(id))");
+    expect(pagina).toContain("<TaskDetailDrawer");
+  });
+
+  it("o card da tarefa é centralizado, e não uma gaveta lateral", () => {
+    const drawer = ler("src/components/admin/TaskDetailDrawer.tsx");
+    // Só o CONTÊINER importa: há um justify-end legítimo no overlay das
+    // miniaturas de anexo, e reprovar por ele seria testar a coisa errada.
+    const container = drawer.slice(drawer.indexOf('<div className="fixed inset-0 z-50'));
+    const abertura = container.slice(0, container.indexOf("{/* Header */}"));
+    expect(abertura).toContain("flex items-center justify-center");
+    expect(abertura).not.toContain("slide-in-from-right");
+    expect(abertura).not.toContain("justify-end");
+  });
+
+  it("projetos deixou de ser gaveta lateral", () => {
+    const proj = ler("src/components/admin/ProjectDrawer.tsx");
+    expect(proj).not.toContain("SheetContent");
+    expect(proj).not.toContain('side="right"');
+    expect(proj).toContain("<DialogContent");
+  });
+});

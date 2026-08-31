@@ -646,15 +646,16 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const checkPercent = totalCheck > 0 ? Math.round((checkedCount / totalCheck) * 100) : 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+    /* CENTRAL, e não lateral.
+       A gaveta que entra pela direita empurra a leitura para um canto e
+       fica estreita justo onde há mais conteúdo — contexto do agente,
+       entrega, checklist e comentários. Central é o padrão de todos os
+       pop-ups do painel: um só lugar para o olho procurar. */
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
-        className="relative bg-card border-l border-border w-full max-w-lg animate-in slide-in-from-right duration-200 flex flex-col"
-        style={{
-          height: "100dvh",
-          paddingTop: "env(safe-area-inset-top)",
-          paddingBottom: "env(safe-area-inset-bottom)",
-        }}
+        className="relative flex w-full max-w-2xl flex-col rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+        style={{ maxHeight: "min(88dvh, 900px)" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
