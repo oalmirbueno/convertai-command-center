@@ -109,11 +109,13 @@ describe("o layout que estava bagunçado", () => {
     expect(posCampanhas).toBeGreaterThan(posCartoes);
   });
 
-  it("cada campanha diz de qual cliente é", () => {
-    // Sem isso a lista geral era um monte de nome solto.
+  it("dá para saber de qual cliente é cada campanha", () => {
+    // A primeira versão punha uma etiqueta miúda em cada linha; o
+    // agrupamento por cliente resolve melhor e tornou a etiqueta
+    // redundante. O que não pode voltar é a lista anônima.
     const comp = ler("src/components/ads/CampanhasAtivas.tsx");
-    expect(comp).toContain("nomesDeClientes?.get((c as any).client_id)");
-    expect(comp).toContain("{!clientId && nomesDeClientes?.get");
+    expect(comp).toContain("porCliente.map((grupo)");
+    expect(comp).toContain("grupo.nome");
   });
 
   it("dá para clicar na campanha e abrir o cliente", () => {
@@ -125,5 +127,38 @@ describe("o layout que estava bagunçado", () => {
   it("entrar no cliente não faz as campanhas sumirem", () => {
     const pagina = ler("src/pages/AdminAds.tsx");
     expect(pagina).toContain("<CampanhasAtivas clientId={clienteAberto} />");
+  });
+});
+
+describe("os anúncios dizem de quem é o que", () => {
+  const comp = ler("src/components/ads/CampanhasAtivas.tsx");
+
+  it("'No ar agora' declara o escopo dos números", () => {
+    // Três totais sem escopo fazem quem lê achar que é de um cliente só —
+    // e decidir errado por isso.
+    expect(comp).toContain("todos os clientes ·");
+    expect(comp).toContain('nomesDeClientes?.get(clientId) ?? "este cliente"');
+  });
+
+  it("as campanhas são agrupadas por cliente, e não etiquetadas uma a uma", () => {
+    // Uma lista corrida com etiqueta miúda ainda obriga a ler linha por
+    // linha para saber de quem é.
+    expect(comp).toContain("porCliente.map((grupo)");
+    expect(comp).toContain("grupo.campanhas.map((c)");
+  });
+
+  it("o cabeçalho do grupo traz a logo e o gasto do cliente", () => {
+    expect(comp).toContain("<LogoDoCliente");
+    expect(comp).toContain("em 14 dias");
+  });
+
+  it("o cliente que gasta mais aparece primeiro", () => {
+    // Quem consome mais dinheiro merece o primeiro olhar.
+    expect(comp).toContain("b.gasto - a.gasto || a.nome.localeCompare(b.nome)");
+  });
+
+  it("a etiqueta miúda saiu de dentro da linha", () => {
+    // O cabeçalho do grupo já diz de quem é; repetir em cada linha é ruído.
+    expect(comp).not.toContain("DE QUEM É a campanha");
   });
 });

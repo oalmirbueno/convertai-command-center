@@ -5,6 +5,7 @@ import {
   Activity, AlertTriangle, Clock, Flame, Lightbulb, MousePointerClick, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import {
   recomendar, resumirCampanha,
   type CampanhaAtiva, type DiaDaCampanha, type Gravidade,
@@ -46,6 +47,7 @@ export default function CampanhasAtivas({
   aoAbrirCliente?: (clientId: string) => void;
 }) {
   const hoje = new Date().toISOString().slice(0, 10);
+  const { data: identidades } = useIdentidadesDosClientes();
 
   const { data, error, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ["campanhas-ativas", clientId ?? "todas"],
@@ -91,6 +93,38 @@ export default function CampanhasAtivas({
     [data, hoje],
   );
 
+  /**
+   * As campanhas ativas agrupadas por CLIENTE.
+   *
+   * Uma lista corrida com uma etiqueta pequena em cada linha ainda obriga
+   * a ler linha por linha para saber de quem é. Agrupar responde a
+   * pergunta antes dela ser feita — e é ela que o dono fez: "não consigo
+   * entender qual campanha está ativa de qual cliente".
+   *
+   * A ordem é por gasto de 14 dias: quem consome mais dinheiro merece o
+   * primeiro olhar.
+   */
+  const porCliente = useMemo(() => {
+    const grupos = new Map<string, typeof ativas>();
+    for (const c of ativas) {
+      const id = (c as any).client_id as string;
+      const atual = grupos.get(id);
+      if (atual) atual.push(c);
+      else grupos.set(id, [c]);
+    }
+    return [...grupos.entries()]
+      .map(([id, lista]) => ({
+        clientId: id,
+        nome: nomesDeClientes?.get(id) ?? "Cliente",
+        campanhas: lista,
+        gasto: lista.reduce(
+          (s, c) => s + resumirCampanha(data?.dias ?? [], c.campaign_id, 14, hoje).gasto, 0),
+      }))
+      .sort((a, b) => b.gasto - a.gasto || a.nome.localeCompare(b.nome));
+  }, [ativas, nomesDeClientes, data, hoje]);
+
+  const clientesAtivos = porCliente;
+
   const totalHoje = useMemo(() => {
     if (!data) return { gasto: 0, impressoes: 0, cliques: 0 };
     const doDia = data.dias.filter((d) => String(d.day).slice(0, 10) === hoje);
@@ -121,6 +155,13 @@ export default function CampanhasAtivas({
           <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <Activity className="h-3.5 w-3.5 text-success" /> No ar agora
           </p>
+          {/* DE QUEM são estes números. Três totais sem escopo fazem quem lê
+              achar que é de um cliente só — e decidir errado por isso. */}
+          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-foreground">
+            {clientId
+              ? (nomesDeClientes?.get(clientId) ?? "este cliente")
+              : `todos os clientes · ${clientesAtivos.length}`}
+          </span>
           <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">
             {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"}
           </span>
@@ -205,8 +246,31 @@ export default function CampanhasAtivas({
           <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <TrendingUp className="h-3.5 w-3.5 text-info" /> Campanhas ativas · últimos 14 dias
           </p>
-          <div className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
-            {ativas.map((c) => {
+          <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+            {porCliente.map((grupo) => (
+              <div key={grupo.clientId} className="space-y-1.5">
+                {/* O cliente como cabeçalho, e não como etiqueta miúda. */}
+                {!clientId && (
+                  <button
+                    type="button"
+                    onClick={() => aoAbrirCliente?.(grupo.clientId)}
+                    className="flex w-full items-center gap-2 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary"
+                  >
+                    <LogoDoCliente
+                      url={identidades?.get(grupo.clientId)?.profile_picture_url}
+                      nome={grupo.nome}
+                      tamanho={22}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
+                      {grupo.nome}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {grupo.campanhas.length} ativa{grupo.campanhas.length > 1 ? "s" : ""}
+                      {grupo.gasto > 0 && ` · ${dinheiro(grupo.gasto)} em 14 dias`}
+                    </span>
+                  </button>
+                )}
+            {grupo.campanhas.map((c) => {
               const r = resumirCampanha(data!.dias, c.campaign_id, 14, hoje);
               const temAviso = recomendacoes.some((x) => x.campaign_id === c.campaign_id);
               return (
@@ -228,14 +292,6 @@ export default function CampanhasAtivas({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
-                    {/* DE QUEM É a campanha. Sem isto a lista geral vira um
-                        monte de nomes soltos e ninguém sabe a qual conta
-                        pertencem. */}
-                    {!clientId && nomesDeClientes?.get((c as any).client_id) && (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[9.5px] font-semibold text-primary">
-                        {nomesDeClientes.get((c as any).client_id)}
-                      </span>
-                    )}
                     <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
                       {c.name || c.campaign_id}
                     </span>
@@ -270,6 +326,8 @@ export default function CampanhasAtivas({
                 </div>
               );
             })}
+              </div>
+            ))}
           </div>
         </div>
       )}
