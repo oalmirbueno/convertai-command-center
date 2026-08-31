@@ -17,7 +17,8 @@ import {
 import NewIncomeModal from "./NewIncomeModal";
 import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
 import { useFinanceBoxes, boxesTotal, EMPTY_BOXES, type FinanceBoxes } from "@/hooks/useFinanceBoxes";
-import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
+import { DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier } from "@/lib/directorPlan";
+import { proximoVencimento } from "@/lib/tributos";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -474,6 +475,74 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
       .sort((a: any, b: any) => (parseDate(a.due_date)!.getTime()) - (parseDate(b.due_date)!.getTime()));
   }, [expenses]);
 
+  /**
+   * As saídas JÁ REALIZADAS — o espelho de "Recebidas".
+   *
+   * A tela tinha "A pagar" e "Todas as despesas", e nenhuma respondia
+   * "quanto saiu de verdade": a lista de todas mistura pago com previsto,
+   * e o previsto é justamente o que ainda não aconteceu.
+   */
+  const paidOutList = useMemo(() => {
+    return (expenses || [])
+      .filter((e: any) => e.status === "paid" && e.paid_date)
+      .sort((a: any, b: any) => String(b.paid_date).localeCompare(String(a.paid_date)));
+  }, [expenses]);
+
+  const paidOutThisMonth = useMemo(() => {
+    const k = monthKey(new Date());
+    return paidOutList
+      .filter((e: any) => String(e.paid_date).slice(0, 7) === k)
+      .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  }, [paidOutList]);
+
+  /**
+   * O pró-labore, já configurado pelo proporcional ao faturamento.
+   *
+   * A escada do Plano Diretor lê a receita OPERACIONAL — o bruto menos o
+   * imposto. Usar o bruto inflaria a retirada em toda a faixa, porque a
+   * parte do governo nunca foi receita da agência.
+   */
+  const proLaboreView = useMemo(() => {
+    const operacional = monthReceivedGross * (1 - DEFAULT_TAX_RATE);
+    const proporcional = interpolateProLabore(operacional);
+    const atual = financeSettings?.currentProLabore ?? 0;
+    const pagos = (expenses || [])
+      .filter((e: any) => /pr[oó][\s_-]?labore/i.test(`${e.description || ""} ${e.notes || ""}`))
+      .sort((a: any, b: any) => String(b.paid_date || b.due_date || "").localeCompare(String(a.paid_date || a.due_date || "")));
+    const molde = pagos.find((e: any) => e.recurrence === "monthly");
+    return {
+      operacional,
+      proporcional,
+      atual,
+      proximoDegrau: nextProLaboreTier(operacional),
+      linhas: pagos,
+      molde,
+      realizadoNoAno: pagos
+        .filter((e: any) => e.status === "paid" && String(e.paid_date || "").slice(0, 4) === String(new Date().getFullYear()))
+        .reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0),
+    };
+  }, [expenses, monthReceivedGross, financeSettings]);
+
+  /** Lança o pró-labore do mês já no valor proporcional. */
+  const lancarProLaboreProporcional = async () => {
+    const valor = Math.round(proLaboreView.proporcional * 100) / 100;
+    if (valor <= 0) { toast.error("Sem receita operacional no mês para calcular o proporcional"); return; }
+    const hoje = new Date();
+    const venc = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-10`;
+    const { error } = await supabase.from("expenses").insert({
+      description: "Pró-labore Almir",
+      category: "salarios",
+      amount: valor,
+      due_date: venc,
+      status: "pending",
+      recurrence: "monthly",
+      notes: `Proporcional à receita operacional de ${fmt(proLaboreView.operacional)}`,
+    });
+    if (error) return toast.error(error.message);
+    toast.success(`Pró-labore de ${fmt(valor)} lançado com vencimento em ${new Date(`${venc}T12:00:00`).toLocaleDateString("pt-BR")}`);
+    qc.invalidateQueries({ queryKey: ["expenses"] });
+  };
+
   const accountsReceivable = useMemo(() => {
     const out: any[] = [];
     (billingFiltered || []).filter((b: any) => b.status === "pending").forEach((b: any) => {
@@ -567,15 +636,42 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     qc.invalidateQueries({ queryKey: ["expenses"] });
   };
 
+  /**
+   * Pagar e reabrir passam pelo MESMO caminho dos Custos Fixos.
+   *
+   * Antes esta tela virava o `status` da própria linha. Num custo
+   * recorrente isso congela o MOLDE naquele mês: ele para de projetar os
+   * meses seguintes e o custo fixo some da previsão sem ninguém notar — e
+   * as duas telas passam a discordar sobre o mesmo custo.
+   *
+   * Agora o banco decide: pontual paga no lugar, recorrente gera a saída
+   * real e rola o vencimento. Reabrir estorna, devolvendo o vencimento ao
+   * mês pago em vez de deixar a saída solta.
+   */
   const togglePaid = async (e: any) => {
-    const newStatus = e.status === "paid" ? "pending" : "paid";
-    const { error } = await supabase
-      .from("expenses")
-      .update({ status: newStatus, paid_date: newStatus === "paid" ? new Date().toISOString().slice(0, 10) : null })
-      .eq("id", e.id);
-    if (error) return toast.error(error.message);
-    toast.success(newStatus === "paid" ? "Marcado como pago" : "Reaberto");
-    qc.invalidateQueries({ queryKey: ["expenses"] });
+    try {
+      if (e.status === "paid") {
+        const { data, error } = await (supabase as any).rpc("expense_estornar", { _pagamento_id: e.id });
+        if (error) throw new Error(error.message);
+        toast.success(data?.molde_devolvido
+          ? "Estornado · o vencimento voltou para o mês pago"
+          : "Reaberto");
+      } else {
+        const { data, error } = await (supabase as any).rpc("expense_pagar", {
+          _expense_id: e.id,
+          _pago_em: new Date().toISOString().slice(0, 10),
+          _valor: null,
+          _proximo_vencimento: null,
+        });
+        if (error) throw new Error(error.message);
+        toast.success(data?.proximo_vencimento
+          ? `Pago · próximo vencimento ${new Date(`${data.proximo_vencimento}T12:00:00`).toLocaleDateString("pt-BR")}`
+          : "Marcado como pago");
+      }
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+    } catch (err: any) {
+      toast.error(err.message || "Não consegui registrar");
+    }
   };
 
   const deleteExpense = async (id: string) => {
@@ -1051,6 +1147,12 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
             <TabsTrigger value="exp" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
               Todas as despesas ({expenses.length})
             </TabsTrigger>
+            <TabsTrigger value="done" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              Realizadas ({paidOutList.length})
+            </TabsTrigger>
+            <TabsTrigger value="pro" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              Pró-labore
+            </TabsTrigger>
             <TabsTrigger value="inv" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
               Investimentos ({investorEntries.length})
             </TabsTrigger>
@@ -1186,6 +1288,125 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
                 );
               });
             })()}
+          </div>
+        </TabsContent>
+
+        {/* SAÍDAS JÁ REALIZADAS · o espelho de "Recebidas" */}
+        <TabsContent value="done" className="m-0">
+          <div className="flex flex-wrap items-center gap-3 border-b border-border bg-secondary/40 px-4 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              Neste mês saiu <strong className="font-mono text-destructive">{fmt(paidOutThisMonth)}</strong>
+            </p>
+            <p className="ml-auto text-[11px] text-muted-foreground">
+              Histórico completo <strong className="font-mono text-foreground">{fmt(allTimePaidOut)}</strong>
+            </p>
+          </div>
+          <div className="max-h-[420px] divide-y divide-border overflow-y-auto">
+            {paidOutList.length === 0 && (
+              <div className="p-10 text-center text-[12px] text-muted-foreground">
+                Nenhuma saída realizada ainda. Pagar um custo em Custos Fixos registra a saída aqui.
+              </div>
+            )}
+            {paidOutList.map((e: any) => {
+              const cm = catMeta(e.category);
+              return (
+                <div key={e.id} className="flex items-center justify-between p-4 transition-colors hover:bg-secondary/30">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
+                      style={{ background: `${cm.color}22`, color: cm.color }}>
+                      <TrendingDown className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {cm.label} · pago em {parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}
+                        {e.due_date && ` · venc. ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
+                        {e.parent_expense_id && " · custo fixo"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <span className="font-mono text-[13px] font-semibold text-destructive">{fmt(Number(e.amount))}</span>
+                    <button onClick={() => togglePaid(e)}
+                      title="Estornar: apaga a saída e devolve o vencimento ao mês pago"
+                      className="cursor-pointer rounded-md border border-border bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground">
+                      Estornar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        {/* PRÓ-LABORE · já configurado pelo proporcional ao faturamento */}
+        <TabsContent value="pro" className="m-0">
+          <div className="space-y-3 p-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {[
+                { l: "Receita operacional do mês", v: fmt(proLaboreView.operacional), s: `${fmt(monthReceivedGross)} bruto − imposto`, c: "text-foreground" },
+                { l: "Proporcional pela escada", v: fmt(proLaboreView.proporcional), s: proLaboreView.proximoDegrau ? `próximo degrau ${fmt(proLaboreView.proximoDegrau.proLabore)} em ${fmt(proLaboreView.proximoDegrau.revenue)}` : "topo da escada", c: "text-success" },
+                { l: "Configurado hoje", v: fmt(proLaboreView.atual), s: proLaboreView.molde ? `lançado, vence ${parseDate(proLaboreView.molde.due_date)?.toLocaleDateString("pt-BR")}` : "ainda não lançado como saída", c: "text-info" },
+              ].map((k) => (
+                <div key={k.l} className="rounded-xl border border-border bg-secondary/30 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{k.l}</p>
+                  <p className={`mt-1 font-mono text-lg font-semibold ${k.c}`}>{k.v}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{k.s}</p>
+                </div>
+              ))}
+            </div>
+
+            {!proLaboreView.molde && proLaboreView.proporcional > 0 && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-success/30 bg-success/5 p-3">
+                <p className="flex-1 text-[12px] text-muted-foreground">
+                  O pró-labore ainda não é uma saída recorrente. Lançar já no proporcional
+                  de <strong className="font-mono text-foreground">{fmt(proLaboreView.proporcional)}</strong> coloca ele no fluxo,
+                  com vencimento no dia 10.
+                </p>
+                <button onClick={lancarProLaboreProporcional}
+                  className="cursor-pointer rounded-lg border-none bg-success/15 px-3 py-1.5 text-[11px] font-semibold text-success hover:bg-success/25">
+                  Lançar {fmt(proLaboreView.proporcional)}/mês
+                </button>
+              </div>
+            )}
+
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              A escada lê a receita <strong>operacional</strong> — o bruto menos o imposto. Usar o bruto
+              inflaria a retirada em toda a faixa, porque a parte do governo nunca foi receita da agência.
+              O reajuste nunca é automático: o valor só muda quando você confirma.
+              {" "}Retirado no ano: <strong className="font-mono text-foreground">{fmt(proLaboreView.realizadoNoAno)}</strong>.
+            </p>
+
+            <div className="max-h-[300px] divide-y divide-border overflow-y-auto rounded-xl border border-border">
+              {proLaboreView.linhas.length === 0 && (
+                <div className="p-8 text-center text-[12px] text-muted-foreground">
+                  Nenhuma retirada registrada ainda.
+                </div>
+              )}
+              {proLaboreView.linhas.map((e: any) => (
+                <div key={e.id} className="flex items-center justify-between px-4 py-3 transition-colors hover:bg-secondary/30">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-medium text-foreground">{e.description}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {e.status === "paid"
+                        ? `retirado em ${parseDate(e.paid_date)?.toLocaleDateString("pt-BR")}`
+                        : `previsto para ${parseDate(e.due_date)?.toLocaleDateString("pt-BR")}`}
+                      {e.recurrence === "monthly" && " · mensal"}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-3">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] ${e.status === "paid" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
+                      {e.status === "paid" ? "Retirado" : "Previsto"}
+                    </span>
+                    <span className="font-mono text-[13px] font-semibold text-foreground">{fmt(Number(e.amount))}</span>
+                    <button onClick={() => togglePaid(e)}
+                      className="cursor-pointer rounded-md border border-border bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground">
+                      {e.status === "paid" ? "Estornar" : "Pagar"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
 

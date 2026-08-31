@@ -199,3 +199,64 @@ describe("a tela financeira", () => {
     expect(tributaria).toContain("presumido no piso");
   });
 });
+
+describe("um so jeito de pagar nas duas telas", () => {
+  const estorno = ler("supabase/migrations/20260831010000_pagamento_unico_e_estorno.sql");
+  const fluxo = ler("src/components/finance/CashFlow.tsx");
+
+  it("o Fluxo deixou de virar o status na propria linha", () => {
+    // Era o defeito: marcar o MOLDE como pago o congela naquele mes e ele
+    // para de projetar os meses seguintes — o custo fixo some da previsao.
+    expect(fluxo).not.toContain('.update({ status: newStatus, paid_date:');
+    expect(fluxo).toContain('rpc("expense_pagar"');
+    expect(fluxo).toContain('rpc("expense_estornar"');
+  });
+
+  it("despesa pontual paga no lugar, sem criar linha nova", () => {
+    // Era o caminho que faltava e que obrigava o Fluxo a ter modelo proprio.
+    expect(estorno).toContain("'pontual', true");
+  });
+
+  it("o pagamento guarda de qual molde veio", () => {
+    // Sem o vinculo, estornar deixaria o vencimento rolado para sempre.
+    expect(estorno).toContain("parent_expense_id");
+    expect(estorno).toContain("_molde.id)");
+  });
+
+  it("o estorno devolve o vencimento ao mes pago", () => {
+    expect(estorno).toContain("set due_date = _pago.due_date");
+    expect(estorno).toContain("delete from public.expenses where id = _pago.id");
+  });
+
+  it("pagamento antigo sem molde apenas reabre", () => {
+    // As 18 saidas que ja existiam nasceram antes da regra; forcar um
+    // vinculo nelas seria inventar historia.
+    expect(estorno).toContain("if _pago.parent_expense_id is null then");
+  });
+});
+
+describe("as saidas realizadas e o pro-labore no fluxo", () => {
+  const fluxo = ler("src/components/finance/CashFlow.tsx");
+
+  it("a aba Realizadas existe e so mostra o que saiu", () => {
+    expect(fluxo).toContain("Realizadas (");
+    expect(fluxo).toContain('e.status === "paid" && e.paid_date');
+  });
+
+  it("a aba de pro-labore usa a receita OPERACIONAL, nao a bruta", () => {
+    // Usar o bruto inflaria a retirada em toda a faixa: a parte do governo
+    // nunca foi receita da agencia.
+    expect(fluxo).toContain("monthReceivedGross * (1 - DEFAULT_TAX_RATE)");
+    expect(fluxo).toContain("interpolateProLabore(operacional)");
+  });
+
+  it("lanca o pro-labore ja no valor proporcional", () => {
+    expect(fluxo).toContain("lancarProLaboreProporcional");
+    expect(fluxo).toContain("proLaboreView.proporcional");
+  });
+
+  it("as duas listas novas tem rolagem propria", () => {
+    expect(fluxo).toContain('max-h-[420px] divide-y divide-border overflow-y-auto');
+    expect(fluxo).toContain('max-h-[300px] divide-y divide-border overflow-y-auto');
+  });
+});

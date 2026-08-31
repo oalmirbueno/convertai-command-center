@@ -633,6 +633,14 @@
       "remote_name": "aliquota_por_mes_e_pagamento_de_custo_fixo",
       "remote_statements_sha256": "06012dc249ab2d6d51597ed97f8f4cbbf75a53e6bc96cbd88a913ca2bbf5d895",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260831010000",
+      "path": "supabase/migrations/20260831010000_pagamento_unico_e_estorno.sql",
+      "local_sha256": "2c3ec83b15e8c2aaf183f26a800bc71100c72825f6b566a2424d7dc5dfb9d489",
+      "remote_name": "pagamento_unico_e_estorno",
+      "remote_statements_sha256": "afd8ead6aff042500272ebef6cd0eacf425139848eb1ac2838e7a16d3ab5cb12",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
