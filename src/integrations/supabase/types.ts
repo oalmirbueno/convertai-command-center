@@ -449,6 +449,89 @@ export type Database = {
         }
         Relationships: []
       }
+      assignment_proposals: {
+        Row: {
+          confianca: number | null
+          created_at: string
+          current_assignee: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          evidencias: Json
+          id: string
+          impacto: string | null
+          justificativa: string
+          kanban_task_id: string
+          operator_id: string
+          prazo: string | null
+          status: string
+          suggested_assignee: string
+        }
+        Insert: {
+          confianca?: number | null
+          created_at?: string
+          current_assignee?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidencias?: Json
+          id?: string
+          impacto?: string | null
+          justificativa: string
+          kanban_task_id: string
+          operator_id: string
+          prazo?: string | null
+          status?: string
+          suggested_assignee: string
+        }
+        Update: {
+          confianca?: number | null
+          created_at?: string
+          current_assignee?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          evidencias?: Json
+          id?: string
+          impacto?: string | null
+          justificativa?: string
+          kanban_task_id?: string
+          operator_id?: string
+          prazo?: string | null
+          status?: string
+          suggested_assignee?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_proposals_current_assignee_fkey"
+            columns: ["current_assignee"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_proposals_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_proposals_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignment_proposals_suggested_assignee_fkey"
+            columns: ["suggested_assignee"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing: {
         Row: {
           amount: number
@@ -3375,6 +3458,106 @@ export type Database = {
           },
         ]
       }
+      operator_approvals: {
+        Row: {
+          action_kind: string
+          created_at: string
+          custo_previsto: number | null
+          dados_usados: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          destino: string | null
+          evidencia: string | null
+          id: string
+          impacto: string | null
+          kanban_task_id: string | null
+          o_que: string
+          operator_id: string
+          payload: Json
+          payload_version: number
+          por_que: string
+          prazo: string | null
+          reversivel: boolean
+          risco: string | null
+          status: string
+          task_link_id: string | null
+          valid_until: string | null
+        }
+        Insert: {
+          action_kind: string
+          created_at?: string
+          custo_previsto?: number | null
+          dados_usados?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          destino?: string | null
+          evidencia?: string | null
+          id?: string
+          impacto?: string | null
+          kanban_task_id?: string | null
+          o_que: string
+          operator_id: string
+          payload?: Json
+          payload_version?: number
+          por_que: string
+          prazo?: string | null
+          reversivel?: boolean
+          risco?: string | null
+          status?: string
+          task_link_id?: string | null
+          valid_until?: string | null
+        }
+        Update: {
+          action_kind?: string
+          created_at?: string
+          custo_previsto?: number | null
+          dados_usados?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          destino?: string | null
+          evidencia?: string | null
+          id?: string
+          impacto?: string | null
+          kanban_task_id?: string | null
+          o_que?: string
+          operator_id?: string
+          payload?: Json
+          payload_version?: number
+          por_que?: string
+          prazo?: string | null
+          reversivel?: boolean
+          risco?: string | null
+          status?: string
+          task_link_id?: string | null
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_approvals_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_approvals_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_approvals_task_link_id_fkey"
+            columns: ["task_link_id"]
+            isOneToOne: false
+            referencedRelation: "operator_task_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       operator_audit_log: {
         Row: {
           action: string
@@ -3427,6 +3610,70 @@ export type Database = {
             columns: ["operator_id"]
             isOneToOne: false
             referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_participations: {
+        Row: {
+          attachments: Json
+          author_id: string | null
+          author_kind: string
+          body: string
+          created_at: string
+          entry_type: string
+          id: string
+          kanban_task_id: string | null
+          operator_id: string | null
+          task_link_id: string | null
+          title: string | null
+        }
+        Insert: {
+          attachments?: Json
+          author_id?: string | null
+          author_kind: string
+          body: string
+          created_at?: string
+          entry_type: string
+          id?: string
+          kanban_task_id?: string | null
+          operator_id?: string | null
+          task_link_id?: string | null
+          title?: string | null
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string | null
+          author_kind?: string
+          body?: string
+          created_at?: string
+          entry_type?: string
+          id?: string
+          kanban_task_id?: string | null
+          operator_id?: string | null
+          task_link_id?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_participations_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_participations_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_participations_task_link_id_fkey"
+            columns: ["task_link_id"]
+            isOneToOne: false
+            referencedRelation: "operator_task_links"
             referencedColumns: ["id"]
           },
         ]
@@ -5553,6 +5800,10 @@ export type Database = {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json
       }
+      assignment_proposal_decidir: {
+        Args: { _decisao: string; _nota?: string; _proposal_id: string }
+        Returns: Json
+      }
       audit_dossies_duplicados: {
         Args: never
         Returns: {
@@ -6111,6 +6362,10 @@ export type Database = {
         }
         Returns: number
       }
+      operator_approval_decidir: {
+        Args: { _approval_id: string; _decisao: string; _nota?: string }
+        Returns: Json
+      }
       operator_assign_task: {
         Args: {
           _actor: string
@@ -6151,6 +6406,34 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      operator_participar: {
+        Args: {
+          _attachments?: Json
+          _body: string
+          _entry_type: string
+          _link_id: string
+          _operator_slug: string
+          _title?: string
+        }
+        Returns: Json
+      }
+      operator_pausar: {
+        Args: { _motivo?: string; _pausar: boolean; _slug: string }
+        Returns: Json
+      }
+      operator_propor_responsavel: {
+        Args: {
+          _confianca?: number
+          _evidencias?: Json
+          _impacto?: string
+          _justificativa: string
+          _kanban_task_id: string
+          _operator_slug: string
+          _prazo?: string
+          _suggested_assignee: string
+        }
+        Returns: Json
+      }
       operator_reconciliar_vinculos_gemeos: { Args: never; Returns: Json }
       operator_report_event: {
         Args: {
@@ -6170,6 +6453,26 @@ export type Database = {
           _painel_task_id?: string
           _run_key: string
           _timeout_seconds?: number
+        }
+        Returns: Json
+      }
+      operator_request_approval: {
+        Args: {
+          _action_kind: string
+          _custo_previsto?: number
+          _dados_usados?: string
+          _destino?: string
+          _evidencia?: string
+          _impacto?: string
+          _link_id: string
+          _o_que: string
+          _operator_slug: string
+          _payload: Json
+          _por_que: string
+          _prazo?: string
+          _reversivel?: boolean
+          _risco?: string
+          _valid_until?: string
         }
         Returns: Json
       }
