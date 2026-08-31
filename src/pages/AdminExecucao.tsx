@@ -13,6 +13,7 @@ import OrganogramaAgentes, { type NoDoOrganograma } from "@/components/execucao/
 import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
+import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
 import PropostasDeResponsavel from "@/components/execucao/PropostasDeResponsavel";
 import {
@@ -110,6 +111,8 @@ export default function AdminExecucao() {
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
   const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string } | null>(null);
+  const [responsavelAberto, setResponsavelAberto] = useState<
+    { taskId: string; titulo?: string; atual?: string | null } | null>(null);
   // Os filtros do centro de comando: 606 tarefas abertas nao cabem numa
   // lista sem recorte. Busca e livre; cliente e prazo sao os dois cortes
   // que o dono realmente usa para decidir onde olhar primeiro.
@@ -614,6 +617,16 @@ export default function AdminExecucao() {
       },
     ];
     if (v.kanban_task_id) {
+      // A conta da tarefa e de gente. Antes so dava para mexer nisso no
+      // Kanban, e aqui o dono via "sem responsavel" sem ter o que fazer.
+      itens.push({
+        rotulo: t?.assigned_to ? "Trocar responsável humano" : "Definir responsável humano",
+        acao: () => setResponsavelAberto({
+          taskId: String(v.kanban_task_id),
+          titulo: t?.title,
+          atual: t?.assigned_to ?? null,
+        }),
+      });
       itens.push({ rotulo: "Copiar ID da tarefa", acao: () => void copiar(String(v.kanban_task_id), "ID") });
     }
     itens.push({ separador: true });
@@ -1394,6 +1407,14 @@ export default function AdminExecucao() {
         vinculos={vinculos}
         tarefas={tarefas}
         aoFechar={() => setAgenteAberto(null)}
+      />
+
+      <DefinirResponsavel
+        taskId={responsavelAberto?.taskId ?? null}
+        tituloDaTarefa={responsavelAberto?.titulo}
+        responsavelAtual={responsavelAberto?.atual}
+        aberto={Boolean(responsavelAberto)}
+        aoFechar={() => setResponsavelAberto(null)}
       />
 
       <DiarioDaExecucao

@@ -73,13 +73,14 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
           operadores: new Map<string, any>(),
           trilha: [] as Array<Record<string, any>>,
           diario: [] as Array<Record<string, any>>,
+          memoria: [] as Array<Record<string, any>>,
         };
       }
 
       const ids = links.map((l) => l.id);
       const opIds = [...new Set(links.map((l) => l.operator_id))];
 
-      const [ops, trilha, diario] = await Promise.all([
+      const [ops, trilha, diario, memoria] = await Promise.all([
         (supabase as any).from("internal_operators")
           .select("id, slug, display_name, role, area, status").in("id", opIds),
         (supabase as any).from("operator_audit_log")
@@ -90,6 +91,14 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
           .select("id, entry_type, title, body, author_kind, created_at")
           .in("task_link_id", ids)
           .order("created_at", { ascending: false }).limit(20),
+        // O que ficou registrado no histórico do cliente. Existe desde
+        // sempre e ninguém via: uma entrega que não aparece em lugar
+        // nenhum é indistinguível de uma que não aconteceu.
+        (supabase as any).from("project_memory")
+          .select("id, kind, title, content, created_at, metadata")
+          .eq("source", "operador")
+          .contains("metadata", { kanban_task_id: taskId })
+          .order("created_at", { ascending: false }).limit(10),
       ]);
 
       return {
@@ -97,6 +106,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
         operadores: new Map(((ops.data || []) as any[]).map((o) => [o.id, o])),
         trilha: (trilha.data || []) as Array<Record<string, any>>,
         diario: (diario.data || []) as Array<Record<string, any>>,
+        memoria: (memoria.data || []) as Array<Record<string, any>>,
       };
     },
     enabled: Boolean(taskId),
@@ -211,6 +221,30 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
           </div>
         );
       })}
+
+      {/* O QUE FOI PARA O HISTÓRICO DO CLIENTE.
+          A entrega já era gravada aqui, e ninguém via: registro invisível
+          é indistinguível de registro inexistente. */}
+      {data.memoria.length > 0 && (
+        <div className="rounded-xl border border-info/30 bg-info/[0.05] p-3">
+          <p className="mb-1.5 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-info">
+            <FileText className="h-3 w-3" /> Registrado no histórico do cliente ({data.memoria.length})
+          </p>
+          <div className="max-h-40 space-y-1.5 overflow-y-auto pr-1">
+            {data.memoria.map((m: any) => (
+              <div key={m.id} className="rounded-lg bg-background/60 px-2.5 py-1.5">
+                <p className="text-[10px] text-muted-foreground">
+                  {m.kind} · {quando(m.created_at)}
+                </p>
+                <p className="text-[11.5px] font-semibold text-foreground">{m.title}</p>
+                <p className="mt-0.5 whitespace-pre-wrap break-words text-[11px] text-foreground/85">
+                  {m.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* O que você escreveu, junto do que o agente respondeu. */}
       {data.diario.length > 0 && (

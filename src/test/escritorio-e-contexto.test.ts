@@ -128,3 +128,54 @@ describe("o Escritório é a porta de entrada", () => {
     expect(pagina).toContain("trabalhos={vinculosVisiveis as any}");
   });
 });
+
+describe("definir responsável humano pela Execução", () => {
+  const comp = ler("src/components/execucao/DefinirResponsavel.tsx");
+  const pagina = ler("src/pages/AdminExecucao.tsx");
+
+  it("só oferece gente da casa", () => {
+    // Oferecer um cliente como responsável interno é erro fácil de cometer
+    // e caro de desfazer.
+    expect(comp).toContain('.neq("role", "client")');
+  });
+
+  it("desativado não recebe tarefa nova", () => {
+    expect(comp).toContain('.is("deleted_at", null)');
+  });
+
+  it("escreve em assigned_to, e só a partir de um clique humano", () => {
+    expect(comp).toContain('.from("tasks").update({ assigned_to: novoId })');
+    // O agente nunca passa por aqui: quando ele acha que a tarefa é de
+    // alguém, ele PROPÕE.
+    expect(comp).not.toContain("operator_");
+  });
+
+  it("dá para deixar sem responsável", () => {
+    expect(comp).toContain("Deixar sem responsável");
+    expect(comp).toContain("definir.mutate(null)");
+  });
+
+  it("falha de leitura não vira lista vazia", () => {
+    expect(comp).toContain("está ilegível");
+  });
+
+  it("está no menu do cartão da Execução", () => {
+    expect(pagina).toContain("Definir responsável humano");
+    expect(pagina).toContain("<DefinirResponsavel");
+  });
+});
+
+describe("o registro no histórico do cliente fica visível", () => {
+  const ctx = ler("src/components/execucao/ContextoDoAgente.tsx");
+
+  it("lê a memória de projeto daquela tarefa", () => {
+    // A entrega já era gravada e ninguém via: registro invisível é
+    // indistinguível de registro inexistente.
+    expect(ctx).toContain('.from("project_memory")');
+    expect(ctx).toContain('.contains("metadata", { kanban_task_id: taskId })');
+  });
+
+  it("mostra a seção quando há registro", () => {
+    expect(ctx).toContain("Registrado no histórico do cliente");
+  });
+});
