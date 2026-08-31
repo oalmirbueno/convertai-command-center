@@ -641,6 +641,14 @@
       "remote_name": "pagamento_unico_e_estorno",
       "remote_statements_sha256": "afd8ead6aff042500272ebef6cd0eacf425139848eb1ac2838e7a16d3ab5cb12",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260831020000",
+      "path": "supabase/migrations/20260831020000_agendado_aprovado_vai_ao_ar.sql",
+      "local_sha256": "020b6e634389bc53d52fdd8384a0ce9530410dc3771a2ccecc1677fbcffdf3fa",
+      "remote_name": "agendado_aprovado_vai_ao_ar",
+      "remote_statements_sha256": "a0f99dc45136819ab8027f183c37a250a15a1c23cd6f3d8b908da889006ded18",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
