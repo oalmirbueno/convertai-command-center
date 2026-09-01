@@ -16,6 +16,7 @@ import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import { falarComoGente } from "@/lib/falarComoGente";
 import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
+import OQueFoiFeito from "@/components/execucao/OQueFoiFeito";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
@@ -87,6 +88,7 @@ const ABAS = [
   { id: "pessoas", rotulo: "Escritório", visoes: ["escritorio", "hierarquia"] },
   { id: "trabalho", rotulo: "Trabalho", visoes: ["quadro", "fila", "in_progress", "done", "review"] },
   { id: "decisoes", rotulo: "Precisa de você", visoes: ["aprovacao", "awaiting_input", "blocked"] },
+  { id: "feito", rotulo: "O que foi feito", visoes: [] },
   { id: "relatorios", rotulo: "Relatórios", visoes: ["relatorios"] },
 ] as const;
 
@@ -1239,7 +1241,11 @@ export default function AdminExecucao() {
       <div className="flex gap-1 overflow-x-auto border-b border-border pb-0 scrollbar-hidden">
         {ABAS.map((x) => {
           const ativa = aba === x.id;
-          const quantos = x.visoes.reduce((s, v) => s + (contagemDaVisao[v] ?? 0), 0);
+          // A aba "O que foi feito" nao tem visao nenhuma, e uma lista vazia
+          // faz o TypeScript inferir never[]. O tipo explicito resolve sem
+          // obrigar a aba a inventar uma visao que ela nao tem.
+          const quantos = (x.visoes as readonly string[])
+            .reduce((s, id) => s + (contagemDaVisao[id] ?? 0), 0);
           return (
             <button
               key={x.id}
@@ -1540,6 +1546,7 @@ export default function AdminExecucao() {
       {/* O espelho de "precisa de você": o que já saiu das suas mãos e agora
           espera o agente. Sem isto, autorizar parecia concluir. */}
       {aba === "decisoes" && <OrdensAutorizadas />}
+      {aba === "feito" && <OQueFoiFeito />}
 
       {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem
           sair da Execução. */}

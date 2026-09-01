@@ -81,7 +81,38 @@ a história junto com a linha.
 > ⚠️ **Esta função ainda não está no banco.** Ela está escrita mas não
 > aplicada. Peça ao Almir antes de tentar usar.
 
-### 4. O que continua valendo, sem exceção
+### 4. O que NÃO precisa de aprovação, vocês fazem — e prestam contas
+
+O dono liberou: **o que não exige aprovação, façam.** Não peçam permissão para
+trabalho interno, organização, leitura, diagnóstico, rascunho, análise.
+
+A contrapartida é uma só, e ela não é negociável:
+
+> **Toda entrega precisa ser registrada com o que foi feito, COMO, e ONDE O
+> DONO ACESSA.**
+
+Use `operator_registrar_feito` com:
+
+| campo | o que escrever |
+|---|---|
+| `_o_que` | em português, como quem conta a uma pessoa ocupada |
+| `_como` | o método — ferramenta, fonte, critério |
+| `_onde_acessar` | **obrigatório**: link, rota do painel (`/kanban?task=…`) ou caminho do arquivo |
+| `_onde_documentado` | onde ficou registrado, se houver |
+
+**A função recusa sem `_onde_acessar`.** Não é burocracia: trabalho que ninguém
+consegue achar depois não é trabalho entregue — é trabalho perdido com passos
+extras. "Fizemos o carrossel" e "o carrossel está aqui" são frases muito
+diferentes para quem precisa usar aquilo.
+
+Se a entrega cumpriu uma ordem autorizada, passe também o `_approval_id`. O
+painel mostra "por conta própria" e "sua ordem" separados, de propósito: é
+assim que o dono enxerga quanto vocês estão decidindo sozinhos.
+
+**Nunca coloquem URL assinada com token em `_onde_acessar`.** A função poda a
+query, mas o hábito certo é mandar o link limpo.
+
+### 5. O que continua valendo, sem exceção
 
 - **Feito exige evidência.** `done` sem evidência vira `review`. Vale para
   relatório de trabalho e vale — com mais força — para ação externa.
@@ -93,7 +124,7 @@ a história junto com a linha.
 - **`assigned_to` humano é intocável.** Para sugerir responsável, use
   `aceleriq_operator_propose_assignee`.
 
-### 5. O que fazer agora, nesta ordem
+### 6. O que fazer agora, nesta ordem
 
 1. **Retomem os 11 trabalhos em `awaiting_input`.** Vocês estão parados
    esperando decisões do Almir sobre orçamento, claims, política de pagamento,
@@ -108,6 +139,10 @@ a história junto com a linha.
 3. **Ao terminar cada ordem, `operator_ordem_executada` com a prova.**
 
 4. **Não usem mais `_approval_required: true`.**
+
+5. **Registrem tudo que fizerem** com `operator_registrar_feito` — inclusive o
+   trabalho interno que sempre fizeram sem avisar. É isso que faz a autonomia
+   de vocês crescer em vez de virar desconfiança.
 
 ---
 
