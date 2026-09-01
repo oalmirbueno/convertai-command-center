@@ -78,8 +78,8 @@ por quê. Uma vez autorizado, a tarefa é marcada **cancelada com o motivo
 dentro** — nunca apagada. A trilha é o que sustenta tudo isso; apagar levaria
 a história junto com a linha.
 
-> ⚠️ **Esta função ainda não está no banco.** Ela está escrita mas não
-> aplicada. Peça ao Almir antes de tentar usar.
+> ⚠️ **Confirmem com o Almir antes de usar.** Esta função depende de um SQL
+> que ele aplica à mão; se ainda não estiver no banco, a chamada vai falhar.
 
 ### 4. O que NÃO precisa de aprovação, vocês fazem — e prestam contas
 
