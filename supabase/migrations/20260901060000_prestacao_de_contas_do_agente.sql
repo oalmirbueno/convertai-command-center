@@ -107,6 +107,7 @@ declare
   _client uuid;
   _link uuid;
   _id uuid;
+  _proj uuid;
 begin
   select * into _op from public.internal_operators where slug = lower(trim(_operator_slug));
   if not found then raise exception 'operator_not_found: % nao existe', _operator_slug; end if;
@@ -130,7 +131,7 @@ begin
   end if;
 
   if _kanban_task_id is not null then
-    select pj.client_id into _client from public.tasks t
+    select pj.client_id, pj.id into _client, _proj from public.tasks t
       join public.projects pj on pj.id = t.project_id where t.id = _kanban_task_id;
     select l.id into _link from public.operator_task_links l
       where l.operator_id = _op.id and l.kanban_task_id = _kanban_task_id
@@ -152,8 +153,45 @@ begin
             then 'entrega autonoma registrada' else 'entrega de ordem registrada' end,
           btrim(_onde_acessar), _run_key);
 
+  -- A SINCRONIZACAO, em uma escrita so.
+  --
+  -- Ciclo, Central e Dossie ja leem project_memory — e nenhum dos tres
+  -- conhecia a camada de agentes. Em vez de ensinar cada tela a ler mais
+  -- uma tabela (tres lugares para esquecer de atualizar depois), a entrega
+  -- passa pela espinha que os tres ja consultam. Uma escrita, tres telas.
+  --
+  -- kind 'entrega' e source 'operador' sao os mesmos que o caminho antigo
+  -- (done com evidencia) ja usava: historico velho e novo ficam na mesma
+  -- prateleira em vez de virarem duas verdades.
+  if _client is not null then
+    insert into public.project_memory
+      (client_id, project_id, kind, source, title, content, tags, metadata)
+    values (
+      _client, _proj, 'entrega', 'operador',
+      btrim(_o_que),
+      btrim(_o_que) || E'
+
+Como: ' || btrim(_como)
+        || E'
+Onde acessar: ' || btrim(_onde_acessar)
+        || coalesce(E'
+Documentado em: ' || nullif(btrim(coalesce(_onde_documentado, '')), ''), '')
+        || E'
+Agente: ' || _op.display_name,
+      array['operador', _op.slug, case when _approval_id is null then 'autonoma' else 'ordem' end],
+      jsonb_build_object(
+        'delivery_id', _id, 'operator_slug', _op.slug, 'run_key', _run_key,
+        'onde_acessar', btrim(_onde_acessar), 'autonoma', (_approval_id is null),
+        'kanban_task_id', _kanban_task_id,
+        -- client_visible false: e leitura interna. Entrega vira conversa com
+        -- o cliente por decisao de gente, nao por efeito colateral.
+        'client_visible', false)
+    );
+  end if;
+
   return jsonb_build_object('ok', true, 'delivery_id', _id,
-    'autonoma', (_approval_id is null), 'client_id', _client);
+    'autonoma', (_approval_id is null), 'client_id', _client,
+    'na_memoria_do_cliente', (_client is not null));
 end;
 $$;
 

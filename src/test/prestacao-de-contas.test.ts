@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { comoAbrir } from "@/components/execucao/OQueFoiFeito";
+import { extrairAcesso, primeiraLinha } from "@/components/admin/EntregasNoDossie";
 
 /**
  * "Tem que me dizer o que foi feito, como, e como eu acesso e documento,
@@ -113,5 +114,87 @@ describe("a tela de o que foi feito", () => {
     // resolve sem obrigar a aba a inventar uma visão que ela não tem.
     expect(ler("src/pages/AdminExecucao.tsx"))
       .toContain("(x.visoes as readonly string[])");
+  });
+});
+
+describe("a sincronização com Ciclo, Central e Dossiê", () => {
+  it("a entrega passa pela espinha que os três já leem", () => {
+    // Ensinar cada tela a ler mais uma tabela seriam três lugares para
+    // esquecer de atualizar depois. Uma escrita, três telas.
+    expect(migracao).toContain("insert into public.project_memory");
+    expect(migracao).toContain("Uma escrita, tres telas");
+  });
+
+  it("usa o mesmo kind e source do caminho antigo", () => {
+    // Histórico velho e novo na mesma prateleira, em vez de duas verdades.
+    expect(migracao).toContain("'entrega', 'operador'");
+  });
+
+  it("o link de acesso vai junto, no texto e no metadata", () => {
+    expect(migracao).toContain("Onde acessar: ");
+    expect(migracao).toContain("'onde_acessar', btrim(_onde_acessar)");
+  });
+
+  it("não vaza para o cliente por efeito colateral", () => {
+    expect(migracao).toContain("'client_visible', false");
+    expect(migracao).toContain("por decisao de gente, nao por efeito colateral");
+  });
+
+  it("trabalho sem cliente não inventa cliente", () => {
+    expect(migracao).toContain("if _client is not null then");
+  });
+});
+
+describe("as entregas dentro do dossiê", () => {
+  const comp = ler("src/components/admin/EntregasNoDossie.tsx");
+
+  it("NÃO entra no conjunto que escolhe o texto do dossiê", () => {
+    // Uma entrega de terça competindo para ser a descrição do cliente
+    // trocaria a identidade dele pelo último recado.
+    const kinds = ler("src/lib/contextoDoCliente.ts");
+    const bloco = kinds.slice(kinds.indexOf("CONTEXTO_KINDS = new Set(["),
+                              kinds.indexOf("]);"));
+    expect(bloco).not.toContain('"entrega"');
+    expect(comp).toContain("NÃO entra em CONTEXTO_KINDS de propósito");
+  });
+
+  it("resgata o acesso das entregas antigas pelo texto", () => {
+    // As gravadas antes dos campos existirem não têm metadata.
+    expect(comp).toContain("?? extrairAcesso(e.content)");
+  });
+
+  it("só mostra a etiqueta quando sabe de verdade", () => {
+    // Entrega antiga não tem a marca; inventar "por conta" seria afirmar
+    // uma autonomia que ninguém registrou.
+    expect(comp).toContain('typeof e.metadata?.autonoma === "boolean"');
+    expect(comp).toContain("{temMarca && (");
+  });
+
+  it("falha de leitura não vira 'nada entregue'", () => {
+    expect(comp).toContain("Isso não significa que nada foi entregue");
+  });
+
+  it("está montado no dossiê", () => {
+    expect(ler("src/components/admin/DossieDoCliente.tsx"))
+      .toContain("<EntregasNoDossie clientId={clientId} />");
+  });
+});
+
+describe("o resgate do acesso em entrega antiga", () => {
+  const CONTEUDO = "Carrossel pronto\n\nComo: montado no Canva"
+    + "\nOnde acessar: https://drive.google.com/x\nAgente: Helena";
+
+  it("acha o link dentro do texto", () => {
+    expect(extrairAcesso(CONTEUDO)).toBe("https://drive.google.com/x");
+  });
+
+  it("sem a linha, devolve nulo em vez de chutar", () => {
+    expect(extrairAcesso("Só um texto qualquer")).toBeNull();
+    expect(extrairAcesso(null)).toBeNull();
+  });
+
+  it("a primeira linha é o que foi feito", () => {
+    expect(primeiraLinha(CONTEUDO)).toBe("Carrossel pronto");
+    expect(primeiraLinha("")).toBe("");
   });
 });

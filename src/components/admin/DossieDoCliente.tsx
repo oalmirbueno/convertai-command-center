@@ -6,6 +6,7 @@ import {
   CONTEXTO_KINDS, dossieMaisRecente, idadeEmPalavras,
 } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
+import EntregasNoDossie from "@/components/admin/EntregasNoDossie";
 
 /**
  * O dossiê do cliente, com o texto inteiro.
@@ -279,6 +280,10 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
           </div>
         </div>
       )}
+
+      {/* A outra metade do dossiê: quem é o cliente E o que já foi feito
+          para ele. Vem da mesma memória que o Ciclo e a Central leem. */}
+      <EntregasNoDossie clientId={clientId} />
     </div>
   );
 }
