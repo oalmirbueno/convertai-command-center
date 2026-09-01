@@ -697,6 +697,14 @@
       "remote_name": "prestacao_de_contas_do_agente",
       "remote_statements_sha256": "bfe902688c7af723d5e4d5c6cdff2e4d78cae519cfe78567c2ce89763ada359d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901070000",
+      "path": "supabase/migrations/20260901070000_ordem_autorizada_pecas_aplicadas_a_mao.sql",
+      "local_sha256": "a7f2a527f6e211aba95eda771e7b12bc57a6ab35d05d5add59667b27b5277b6e",
+      "remote_name": "ordem_autorizada_pecas_aplicadas_a_mao",
+      "remote_statements_sha256": "718e051bc4ad0cde22c9a8b902c9c3e650d978e85cbd19a6a70fa0a048441a34",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
