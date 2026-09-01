@@ -693,9 +693,9 @@
     {
       "version": "20260901060000",
       "path": "supabase/migrations/20260901060000_prestacao_de_contas_do_agente.sql",
-      "local_sha256": "75d1e42185680249d76bdeb12399386d6131fbae4af421c45b4bafdaf5b152cf",
+      "local_sha256": "75764b1a1ed30a0c0471c0b4cd1ec9cb387c008553107116d07526b56f872138",
       "remote_name": "prestacao_de_contas_do_agente",
-      "remote_statements_sha256": "83cf99408786cba72603b81c1aab58d6d5820b57f212f722f43fb9415320a35b",
+      "remote_statements_sha256": "bfe902688c7af723d5e4d5c6cdff2e4d78cae519cfe78567c2ce89763ada359d",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
