@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * O plano da semana: as três etapas que giram, CONGELADAS por cliente e
+ * O plano da semana: as quatro etapas que giram, CONGELADAS por cliente e
  * semana a partir das pendências reais.
  *
  * A peça que faltava. O motor de pendências existia, mas as etapas do

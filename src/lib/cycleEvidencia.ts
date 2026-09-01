@@ -64,11 +64,19 @@ function provaDaEtapaFixa(
     return null;
   }
 
-  if (step === 4) {
-    // Painel atualizado: o diário é a prova de que alguém passou por lá.
-    if (diario === null) return null;
-    return diario === 0 ? "diário escrito hoje" : `diário escrito há ${diario} ${diario === 1 ? "dia" : "dias"}`;
-  }
+  /*
+   * O passo 4 NÃO prova mais por fato, e isto anda junto com ele ter
+   * virado etapa girante (2026-09-01).
+   *
+   * A prova fixa é chaveada por (área, passo) e não sabe se o passo é
+   * fixo. Se ficasse aqui, o passo 4 exibindo "Escalar o criativo
+   * campeão" seria marcado como feito porque alguém escreveu no diário —
+   * um falso positivo silencioso, do tipo que derruba a confiança em
+   * todas as outras provas da tela.
+   *
+   * Como etapa girante, o 4 passa a provar pela regra das girantes:
+   * quando a pendência que o gerou some da lista real.
+   */
 
   if (step === 6) {
     if (area === "social") {

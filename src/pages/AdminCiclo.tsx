@@ -255,7 +255,7 @@ export default function AdminCiclo() {
   };
 
   /**
-   * O plano congelado da semana: as três etapas que giram, escolhidas da
+   * O plano congelado da semana: as quatro etapas que giram, escolhidas da
    * REALIDADE no momento em que a semana começa a ser trabalhada.
    * Congeladas porque a marcação guarda só o número da etapa — rótulo que
    * muda no meio da semana faria o histórico mentir.
@@ -659,7 +659,7 @@ export default function AdminCiclo() {
     }
     return totalSteps + (isOnboarding(client) ? ONBOARDING_STEPS.length : 0);
   };
-  // Cada cliente tem a sua semana: três etapas fixas e três que giram.
+  // Cada cliente tem a sua semana: DUAS etapas fixas e quatro que giram.
   const stepLabelOf = (client: any, step: number) => {
     if (ehAvulso(client)) {
       const servico = servicoDoCard(client);

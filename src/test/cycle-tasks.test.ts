@@ -61,18 +61,30 @@ describe("fase do cliente na jornada", () => {
 describe("etapas da semana", () => {
   const opcoes = { services: { social: true, trafego: true } };
 
-  it("mantém fixo o esqueleto do trabalho", () => {
+  it("as DUAS pontas do trabalho ficam fixas", () => {
+    // Eram três (1, 4 e 6). Em 2026-09-01 o dono escolheu duas: o passo 4
+    // ("painel atualizado") passou a girar, porque manter o painel em dia
+    // é consequência do trabalho e não uma quarta parte dele.
+    //
+    // Ficam PRODUZIR (1) e COLOCAR NA RUA (6): as únicas que valem em toda
+    // semana, para todo cliente, sem depender do que está pegando fogo.
     const etapas = stepsForWeek("social", "acerbi", "2026-08-17", opcoes);
-    expect(etapas.filter((e) => e.fixed).map((e) => e.step)).toEqual([1, 4, 6]);
+    expect(etapas.filter((e) => e.fixed).map((e) => e.step)).toEqual([1, 6]);
     expect(etapas[0].label).toMatch(/conteúdo da semana/i);
-    expect(etapas[3].label).toMatch(/painel atualizado/i);
     expect(etapas[5].label).toMatch(/agendad/i);
   });
 
-  it("as três giradas trazem fase e propósito", () => {
+  it("o passo 4 gira, e por isso não é mais fixo", () => {
+    const etapas = stepsForWeek("social", "acerbi", "2026-08-17", opcoes);
+    const quatro = etapas.find((e) => e.step === 4)!;
+    expect(quatro.fixed).toBe(false);
+    expect(quatro.label).not.toMatch(/painel atualizado/i);
+  });
+
+  it("as QUATRO giradas trazem fase e propósito", () => {
     const giradas = stepsForWeek("social", "acerbi", "2026-08-17", opcoes)
       .filter((e) => !e.fixed);
-    expect(giradas).toHaveLength(3);
+    expect(giradas).toHaveLength(4);
     for (const etapa of giradas) {
       expect(etapa.phase).toBeDefined();
       // Toda tarefa existe para gerar resultado ou mostrar o trabalho.
@@ -131,7 +143,7 @@ describe("etapas da semana", () => {
         const giradas = stepsForWeek("social", cliente, semana, opcoes)
           .filter((e) => !e.fixed)
           .map((e) => e.label);
-        expect(new Set(giradas).size).toBe(3);
+        expect(new Set(giradas).size).toBe(4);
       }
     }
   });

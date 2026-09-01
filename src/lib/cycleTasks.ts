@@ -77,15 +77,24 @@ export interface CycleStepSlot {
 }
 
 /** O esqueleto: acontece toda semana, para todo cliente. */
+/**
+ * As DUAS etapas fixas da semana (2026-09-01, escolha do dono).
+ *
+ * Eram três — 1, 4 e 6. O passo 4 ("painel atualizado") passou a girar,
+ * porque manter o painel em dia é consequência do trabalho e não uma
+ * quarta parte dele; o que muda de semana para semana é o que se faz.
+ *
+ * Ficam fixas as duas pontas do que a agência entrega: PRODUZIR (1) e
+ * COLOCAR NA RUA (6). São as únicas que valem em toda semana, para todo
+ * cliente, sem depender do que está pegando fogo.
+ */
 const CORE: Record<CycleArea, Record<number, string>> = {
   social: {
     1: "Conteúdo da semana criado (artes e legendas)",
-    4: "Painel atualizado (arquivos, agenda e diário)",
     6: "Posts agendados (publicação automática armada)",
   },
   trafego: {
     1: "Criativos da semana prontos",
-    4: "Painel atualizado (registro e leitura para o cliente)",
     6: "Anúncios no ar ou programados",
   },
 };
@@ -186,8 +195,20 @@ const CATALOG: Record<CycleArea, CycleTask[]> = {
   ],
 };
 
-/** Posições que giram, na ordem em que aparecem no ciclo. */
-export const ROTATING_SLOTS = [2, 3, 5];
+/**
+ * Posições que giram — e a ORDEM aqui é índice no plano congelado.
+ *
+ * O 4 entra no FIM, e não na posição numérica dele. `ROTATING_SLOTS
+ * .indexOf(step)` é o índice usado para ler `plano.etapas[i]`, e os
+ * planos das semanas passadas foram congelados com três entradas na ordem
+ * [2, 3, 5]. Inserir o 4 no meio empurraria o 5 do índice 2 para o 3, e
+ * toda semana anterior passaria a mostrar o rótulo errado — histórico que
+ * mente é pior que histórico ausente.
+ *
+ * No fim, os índices 0, 1 e 2 continuam sendo 2, 3 e 5. Plano antigo não
+ * tem índice 3, então o passo 4 cai no rótulo de reserva sem quebrar.
+ */
+export const ROTATING_SLOTS = [2, 3, 5, 4];
 
 export interface ClientPhaseInput {
   /** Onboarding aberto significa cliente entrando na casa. */

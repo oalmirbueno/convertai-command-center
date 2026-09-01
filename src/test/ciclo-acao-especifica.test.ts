@@ -105,3 +105,28 @@ describe("a faixa na tela", () => {
     expect(bloco.indexOf("<Link")).toBeGreaterThan(bloco.indexOf("</button>"));
   });
 });
+
+describe("duas etapas fixas, quatro que giram", () => {
+  const tasks = ler("src/lib/cycleTasks.ts");
+  const evid = ler("src/lib/cycleEvidencia.ts");
+
+  it("o 4 entra no FIM do array, e não na posição numérica", () => {
+    // A ordem aqui é índice no plano congelado. Inserir o 4 no meio
+    // empurraria o 5 do índice 2 para o 3, e toda semana anterior passaria
+    // a mostrar o rótulo errado — histórico que mente é pior que ausente.
+    expect(tasks).toContain("export const ROTATING_SLOTS = [2, 3, 5, 4];");
+  });
+
+  it("a prova fixa do passo 4 saiu junto com ele virar girante", () => {
+    // A prova fixa é chaveada por (área, passo) e não sabe se o passo é
+    // fixo. Se ficasse, o 4 exibindo "Escalar o criativo campeão" seria
+    // marcado como feito porque alguém escreveu no diário.
+    expect(evid).not.toContain("if (step === 4) {");
+    expect(evid).toContain("falso positivo silencioso");
+  });
+
+  it("as provas de 1 e 6 continuam, porque eles continuam fixos", () => {
+    expect(evid).toContain("if (step === 1) {");
+    expect(evid).toContain("if (step === 6) {");
+  });
+});
