@@ -15,6 +15,7 @@ import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import { falarComoGente } from "@/lib/falarComoGente";
+import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
@@ -1535,6 +1536,10 @@ export default function AdminExecucao() {
         tarefas={tarefas}
         aoFechar={() => setAgenteAberto(null)}
       />
+
+      {/* O espelho de "precisa de você": o que já saiu das suas mãos e agora
+          espera o agente. Sem isto, autorizar parecia concluir. */}
+      {aba === "decisoes" && <OrdensAutorizadas />}
 
       {/* O card do Kanban, aqui dentro: contexto, entrega e histórico sem
           sair da Execução. */}

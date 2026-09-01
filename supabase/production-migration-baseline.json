@@ -681,6 +681,14 @@
       "remote_name": "aprovacao_fantasma_que_travava_os_agentes",
       "remote_statements_sha256": "618535a73e91c075ce66d24becafaced472e2f41b67941d4b12496860f9e2be7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901050000",
+      "path": "supabase/migrations/20260901050000_ordem_autorizada_o_agente_age_no_mundo.sql",
+      "local_sha256": "ab91c1b0696e68a7d4340e50df0493e557be7ad7a24eb3c75169dce4fdecd107",
+      "remote_name": "ordem_autorizada_o_agente_age_no_mundo",
+      "remote_statements_sha256": "ed8d4e31126bdffde0bbf1ddd3423d92875459beca48eb0e6fd519384d572c8d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
