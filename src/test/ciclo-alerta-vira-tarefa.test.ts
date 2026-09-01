@@ -91,10 +91,23 @@ describe("o painel prova a etapa, e o ciclo para de cobrar", () => {
   });
 
   it("diario recente fecha o painel atualizado; diario velho nao", () => {
-    expect(provaDe(4, { ultimoDiario: "2026-08-24T10:00:00Z" })).toContain("diário escrito");
+    // O passo 4 virou girante em 2026-09-01, entao a prova dele passou a
+    // depender do ROTULO: o diario so fecha a etapa quando ela AINDA e a
+    // do painel atualizado.
+    const painel = { rotulo: "Painel atualizado (arquivos, agenda e diário)" };
+    expect(provaDe(4, { ultimoDiario: "2026-08-24T10:00:00Z" }, painel))
+      .toContain("diário escrito");
     // Duas semanas parado nao prova nada: o painel esta desatualizado.
-    expect(provaDe(4, { ultimoDiario: "2026-08-05T10:00:00Z" })).toBeNull();
-    expect(provaDe(4, { ultimoDiario: null })).toBeNull();
+    expect(provaDe(4, { ultimoDiario: "2026-08-05T10:00:00Z" }, painel)).toBeNull();
+    expect(provaDe(4, { ultimoDiario: null }, painel)).toBeNull();
+  });
+
+  it("com outro rotulo, o passo 4 NAO e fechado pelo diario", () => {
+    // Sem esta checagem, "Escalar o criativo campeao" seria dado como
+    // feito porque alguem escreveu no diario — o falso positivo silencioso
+    // que derruba a confianca em todas as outras provas da tela.
+    expect(provaDe(4, { ultimoDiario: "2026-08-24T10:00:00Z" },
+      { rotulo: "Escalar o criativo campeão para novos públicos" })).toBeNull();
   });
 
   it("post agendado ou ja publicado fecha a etapa de publicacao", () => {

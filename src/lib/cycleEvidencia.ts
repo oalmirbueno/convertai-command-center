@@ -44,12 +44,17 @@ const diasDesde = (iso: string, agoraMs: number) =>
  *
  * A chave é (área, passo) e não o rótulo: o passo é o que fica gravado, e
  * consertar um texto na tela não pode desligar o reconhecimento em silêncio.
+ *
+ * A exceção é o passo 4, que virou girante em 2026-09-01. Ele só prova
+ * quando o rótulo AINDA é o do painel atualizado — ver o comentário lá
+ * embaixo.
  */
 function provaDaEtapaFixa(
   area: CycleArea,
   step: number,
   fatos: FatosDaProva,
   agoraMs: number,
+  rotulo: string,
 ): string | null {
   const diario =
     fatos.ultimoDiario && diasDesde(fatos.ultimoDiario, agoraMs) <= DIAS_DE_DIARIO_VALIDO
@@ -64,19 +69,30 @@ function provaDaEtapaFixa(
     return null;
   }
 
-  /*
-   * O passo 4 NÃO prova mais por fato, e isto anda junto com ele ter
-   * virado etapa girante (2026-09-01).
-   *
-   * A prova fixa é chaveada por (área, passo) e não sabe se o passo é
-   * fixo. Se ficasse aqui, o passo 4 exibindo "Escalar o criativo
-   * campeão" seria marcado como feito porque alguém escreveu no diário —
-   * um falso positivo silencioso, do tipo que derruba a confiança em
-   * todas as outras provas da tela.
-   *
-   * Como etapa girante, o 4 passa a provar pela regra das girantes:
-   * quando a pendência que o gerou some da lista real.
-   */
+  if (step === 4) {
+    /*
+     * O passo 4 virou girante em 2026-09-01, e a prova dele passou a
+     * depender do RÓTULO — não do número.
+     *
+     * A regra do dono continua valendo: "se for atualizado tudo lá dentro
+     * pelo painel, o ciclo reconhece e coloca como concluído". Então o
+     * diário continua fechando esta etapa QUANDO ela é a do painel.
+     *
+     * Mas a prova fixa é chaveada por (área, passo) e não sabe se o passo
+     * é fixo. Sem esta checagem, o passo 4 exibindo "Escalar o criativo
+     * campeão" seria dado como feito porque alguém escreveu no diário —
+     * um falso positivo silencioso, do tipo que derruba a confiança em
+     * todas as outras provas da tela.
+     *
+     * Apagar a prova inteira, que foi minha primeira tentativa, resolvia
+     * o falso positivo criando um problema pior: a etapa deixaria de se
+     * reconhecer sozinha mesmo quando o painel provava que estava feita.
+     */
+    if (!/painel atualizado/i.test(rotulo)) return null;
+    // Painel atualizado: o diário é a prova de que alguém passou por lá.
+    if (diario === null) return null;
+    return diario === 0 ? "diário escrito hoje" : `diário escrito há ${diario} ${diario === 1 ? "dia" : "dias"}`;
+  }
 
   if (step === 6) {
     if (area === "social") {
@@ -142,7 +158,7 @@ export function provaDaEtapa(input: {
   // Sem dados não se afirma nada: silêncio é pendente, nunca "feito".
   if (!fatos) return null;
 
-  const fixa = provaDaEtapaFixa(area, step, fatos, agoraMs);
+  const fixa = provaDaEtapaFixa(area, step, fatos, agoraMs, rotulo);
   if (fixa) return fixa;
 
   const texto = rotulo.trim();

@@ -117,12 +117,15 @@ describe("duas etapas fixas, quatro que giram", () => {
     expect(tasks).toContain("export const ROTATING_SLOTS = [2, 3, 5, 4];");
   });
 
-  it("a prova fixa do passo 4 saiu junto com ele virar girante", () => {
-    // A prova fixa é chaveada por (área, passo) e não sabe se o passo é
-    // fixo. Se ficasse, o 4 exibindo "Escalar o criativo campeão" seria
-    // marcado como feito porque alguém escreveu no diário.
-    expect(evid).not.toContain("if (step === 4) {");
+  it("a prova do passo 4 passou a depender do RÓTULO, não do número", () => {
+    // Minha primeira tentativa foi APAGAR a prova do 4. Resolvia o falso
+    // positivo criando um problema pior: a etapa deixaria de se reconhecer
+    // sozinha mesmo quando o painel provava que estava feita — contra a
+    // regra que o dono ditou ("se for atualizado lá dentro, o ciclo
+    // reconhece"). Um teste antigo pegou isso.
+    expect(evid).toContain("if (!/painel atualizado/i.test(rotulo)) return null;");
     expect(evid).toContain("falso positivo silencioso");
+    expect(evid).toContain("criando um problema pior");
   });
 
   it("as provas de 1 e 6 continuam, porque eles continuam fixos", () => {
