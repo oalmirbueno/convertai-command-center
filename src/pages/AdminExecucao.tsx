@@ -14,6 +14,7 @@ import PerfilDoAgente from "@/components/execucao/PerfilDoAgente";
 import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
+import { falarComoGente } from "@/lib/falarComoGente";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { useProjects, useTeamMembers } from "@/hooks/useSupabaseData";
 import AprovacoesExplicadas from "@/components/execucao/AprovacoesExplicadas";
@@ -906,23 +907,53 @@ export default function AdminExecucao() {
         </div>
 
         {v.last_action && (
-          <p className="mt-1.5 text-[11.5px] text-foreground/85">{v.last_action}</p>
-        )}
-        {v.last_evidence && (
-          /* Evidencia INTEIRA: truncar e esconder exatamente a parte que
-             prova (ou nao prova) a entrega. */
-          <p className="mt-1 break-all text-[11px] text-muted-foreground">
-            evidência: {v.last_evidence.startsWith("http")
-              ? <a className="text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
-              : v.last_evidence}
+          <p className="mt-1.5 text-[11.5px] text-foreground/85">
+            {falarComoGente(v.last_action).humano}
           </p>
         )}
+        {v.last_evidence && (() => {
+          // Traduz UMA vez: o cartão é redesenhado a cada atualização da
+          // fila, e três chamadas por cartão viram trabalho à toa.
+          const ev = falarComoGente(v.last_evidence);
+          return (
+          /* A evidência em português, com o log de máquina guardado atrás de
+             um toque. Traduzir é para dar de LER; apagar o original seria
+             trocar um problema por outro pior, porque é a evidência que
+             sustenta a entrega. */
+          <details
+            className="mt-1"
+            /* Abrir o detalhe NÃO pode abrir a tarefa: o cartão inteiro é
+               clicável, e o clique aqui é outra intenção. */
+            onClick={(e) => e.stopPropagation()}
+          >
+            <summary className="cursor-pointer list-none text-[11px] text-muted-foreground marker:hidden">
+              <span className="break-words">
+                {v.last_evidence.startsWith("http")
+                  ? <a className="break-all text-primary underline" href={v.last_evidence} target="_blank" rel="noopener noreferrer">{v.last_evidence}</a>
+                  : ev.humano}
+              </span>
+              {ev.temDetalheTecnico && (
+                <span className="ml-1 whitespace-nowrap text-[10px] text-primary/70 underline">
+                  detalhe técnico
+                </span>
+              )}
+            </summary>
+            {ev.temDetalheTecnico && (
+              <p className="mt-1 break-all rounded-lg bg-secondary/60 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                {ev.original}
+              </p>
+            )}
+          </details>
+          );
+        })()}
         {v.next_step && (
-          <p className="mt-1 text-[11px] text-muted-foreground">próximo passo: {v.next_step}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            próximo passo: {falarComoGente(v.next_step).humano}
+          </p>
         )}
         {v.block_reason && (
           <p className="mt-1 rounded-lg border border-destructive/25 bg-secondary px-2 py-1 text-[11px] text-destructive">
-            bloqueio: {v.block_reason}
+            bloqueio: {falarComoGente(v.block_reason).humano}
           </p>
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

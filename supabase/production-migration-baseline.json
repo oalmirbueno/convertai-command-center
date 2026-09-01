@@ -673,6 +673,14 @@
       "remote_name": "todos_os_posts_e_nao_so_os_25",
       "remote_statements_sha256": "73fa25622c63eb90645ec3fa0c77abf0d03fc62542d678a4e08c5c44022f4041",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260901040000",
+      "path": "supabase/migrations/20260901040000_aprovacao_fantasma_que_travava_os_agentes.sql",
+      "local_sha256": "388b01ddffbf58b03d1703f9897a71b122ff9219452b6d9682d1229a41fa9077",
+      "remote_name": "aprovacao_fantasma_que_travava_os_agentes",
+      "remote_statements_sha256": "618535a73e91c075ce66d24becafaced472e2f41b67941d4b12496860f9e2be7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
