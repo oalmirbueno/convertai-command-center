@@ -1781,31 +1781,58 @@ export default function AdminCiclo() {
                 <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   O que pede ação hoje
                 </p>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {acoes.map((acao, indice) => (
-                    <button
+                    <div
                       key={`${acao.clientId}:${acao.acao}:${indice}`}
-                      type="button"
-                      onClick={() => {
-                        cardRefs.current[acao.clientId]?.scrollIntoView?.({
-                          behavior: "smooth", block: "center",
-                        });
-                        setHighlighted(acao.clientId);
-                      }}
-                      className="flex w-full items-start gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-secondary/50"
+                      className="rounded-lg px-1 py-0.5 transition-colors hover:bg-secondary/50"
                     >
-                      <span
-                        className={`mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full ${
-                          acao.gravidade === "urgente" ? "bg-destructive" : "bg-warning"
-                        }`}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
-                        {acao.acao}
-                      </span>
-                      <span className="shrink-0 text-[10.5px] text-muted-foreground">
-                        {acao.nome}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          cardRefs.current[acao.clientId]?.scrollIntoView?.({
+                            behavior: "smooth", block: "center",
+                          });
+                          setHighlighted(acao.clientId);
+                        }}
+                        className="flex w-full items-start gap-2 text-left"
+                      >
+                        <span
+                          className={`mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full ${
+                            acao.gravidade === "urgente" ? "bg-destructive" : "bg-warning"
+                          }`}
+                        />
+                        <span className="min-w-0 flex-1 text-[12px] text-foreground">
+                          {acao.acao}
+                        </span>
+                        <span className="shrink-0 text-[10.5px] text-muted-foreground">
+                          {acao.nome}
+                        </span>
+                      </button>
+
+                      {/* OS NOMES e O CAMINHO. A pendência sempre carregou os
+                          dois, e a faixa jogava fora: "aprovação parada" sem
+                          dizer qual post nem para onde ir era o que fazia
+                          isto parecer genérico com a informação a um campo
+                          de distância. */}
+                      {(acao.detalhes?.length || acao.rota) && (
+                        <p className="ml-3.5 mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[10.5px] leading-snug">
+                          {acao.detalhes?.length ? (
+                            <span className="text-muted-foreground">
+                              {acao.detalhes.slice(0, 3).join(" · ")}
+                            </span>
+                          ) : null}
+                          {acao.rota && (
+                            <Link
+                              to={acao.rota}
+                              className="shrink-0 font-medium text-primary underline"
+                            >
+                              resolver aqui
+                            </Link>
+                          )}
+                        </p>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

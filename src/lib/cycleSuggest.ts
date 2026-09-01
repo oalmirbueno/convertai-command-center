@@ -366,6 +366,17 @@ export interface AcaoDoDia {
   nome: string;
   acao: string;
   gravidade: Gravidade;
+  /**
+   * Os itens por NOME, e a tela onde se resolve.
+   *
+   * A faixa nascia jogando os dois fora: dizia "aprovação parada" sem
+   * dizer QUAL post nem para ONDE ir. A pendência já carregava as duas
+   * coisas — perder isso no caminho é o que fazia a faixa parecer
+   * genérica quando a informação específica existia a um campo de
+   * distância.
+   */
+  detalhes?: string[];
+  rota?: string;
 }
 
 /**
@@ -394,6 +405,8 @@ export function acoesDoDia(
         nome: cliente.nome,
         acao: textoDaEtapa(p),
         gravidade: p.gravidade,
+        detalhes: p.detalhes,
+        rota: p.rota,
       });
     }
   }
