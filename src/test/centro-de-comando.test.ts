@@ -154,12 +154,17 @@ describe("a tela participa", () => {
   });
 
   it("a evidencia aparece inteira, sem truncar", () => {
-    // O trecho da evidencia usa break-all; truncate ali escondia
-    // exatamente a parte que prova a entrega.
-    const trecho = pagina.slice(pagina.indexOf("{v.last_evidence && ("));
-    const linha = trecho.slice(0, trecho.indexOf("evidência:"));
-    expect(linha).toContain("break-all");
-    expect(linha).not.toContain("truncate");
+    // A regra e a mesma de sempre: truncar ali esconde exatamente a parte
+    // que prova a entrega. O que mudou foi a marcacao — o texto passou a
+    // ser traduzido para leitura e o ORIGINAL ficou a um toque, dentro de
+    // um <details>. Entao o teste agora olha o bloco inteiro.
+    const inicio = pagina.indexOf("{v.last_evidence && (");
+    const bloco = pagina.slice(inicio, pagina.indexOf("</details>", inicio));
+    expect(bloco).toContain("break-all");
+    expect(bloco).not.toContain("truncate");
+    expect(bloco).not.toContain("line-clamp");
+    // E o original tem que estar la, palavra por palavra.
+    expect(bloco).toContain("{ev.original}");
   });
 
   it("os deep-links de aprovacao, proposta e diario sao lidos", () => {
