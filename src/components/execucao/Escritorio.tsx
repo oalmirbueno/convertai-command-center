@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Bot, ChevronDown, Clock, PauseCircle, ShieldAlert, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { esperandoVoce, precisaDecisao } from "@/lib/precisaDecisao";
 
 /**
  * O escritório: cada agente como uma pessoa, e o que ela está fazendo agora.
@@ -198,7 +199,8 @@ export default function Escritorio({
 
   const esperandoVoce = useMemo(
     () => trabalhos.filter(
-      (t) => t.approval_required || ["blocked", "awaiting_input", "review"].includes(t.status),
+      // Concluido nao espera nada, mesmo que tenha esperado no passado.
+      (t) => esperandoVoce(t),
     ).length,
     [trabalhos],
   );
@@ -338,7 +340,7 @@ export default function Escritorio({
               )}
 
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {meus.some((t) => t.approval_required && t.status !== "done") && (
+                {meus.some((t) => precisaDecisao(t)) && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
                     <ShieldAlert className="h-2.5 w-2.5" /> aprovação
                   </span>

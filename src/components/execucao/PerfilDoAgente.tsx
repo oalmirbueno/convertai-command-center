@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { precisaDecisao } from "@/lib/precisaDecisao";
 import {
   Dialog,
   DialogContent,
@@ -384,7 +385,7 @@ export default function PerfilDoAgente({
                                 próximo passo: {v.next_step}
                               </p>
                             )}
-                            {v.approval_required && v.status !== "done" && (
+                            {precisaDecisao(v) && (
                               <p className="mt-1 text-[10px] font-semibold text-warning">
                                 precisa da sua aprovação
                               </p>

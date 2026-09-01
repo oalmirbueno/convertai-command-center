@@ -15,6 +15,7 @@ import DiarioDaExecucao from "@/components/execucao/DiarioDaExecucao";
 import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import { falarComoGente } from "@/lib/falarComoGente";
+import { precisaDecisao } from "@/lib/precisaDecisao";
 import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
 import OQueFoiFeito from "@/components/execucao/OQueFoiFeito";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
@@ -307,7 +308,7 @@ export default function AdminExecucao() {
       revisao: por("review"),
       aguardando: por("awaiting_input"),
       bloqueadas: por("blocked"),
-      aprovacoes: vinculos.filter((v) => v.approval_required && v.status !== "done").length,
+      aprovacoes: vinculos.filter((v) => precisaDecisao(v)).length,
       kanbanAbertas: disponiveis.length,
       semOperador,
       // Prazo estourado é a única contagem que vale por si: ela decide o dia.
@@ -329,7 +330,7 @@ export default function AdminExecucao() {
       aguardando: meus.filter((v) => v.status === "awaiting_input").length,
       // Evidência é o que separa "feito" de "disse que fez".
       comEvidencia: meus.filter((v) => Boolean(v.last_evidence)).length,
-      aprovacoes: meus.filter((v) => v.approval_required && v.status !== "done").length,
+      aprovacoes: meus.filter((v) => precisaDecisao(v)).length,
       total: meus.length,
     };
   };
@@ -376,7 +377,7 @@ export default function AdminExecucao() {
       review: conta((v) => v.status === "review"),
       awaiting_input: conta((v) => v.status === "awaiting_input"),
       blocked: conta((v) => v.status === "blocked"),
-      aprovacao: conta((v) => v.approval_required && v.status !== "done"),
+      aprovacao: conta((v) => precisaDecisao(v)),
       hierarquia: operadores.length,
       // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
       relatorios: 0,
@@ -454,7 +455,7 @@ export default function AdminExecucao() {
 
   const filtrados = useMemo(() => {
     if (visao === "fila") return vinculosVisiveis.filter((v) => ["queued", "in_progress"].includes(v.status));
-    if (visao === "aprovacao") return vinculosVisiveis.filter((v) => v.approval_required && v.status !== "done");
+    if (visao === "aprovacao") return vinculosVisiveis.filter((v) => precisaDecisao(v));
     if (visao === "done") return vinculosVisiveis.filter((v) => v.status === "done");
     if (visao === "relatorios" || visao === "escritorio") return [];
     return vinculosVisiveis.filter((v) => v.status === visao);
@@ -494,7 +495,7 @@ export default function AdminExecucao() {
         v.last_evidence ? "  evidencia: " + v.last_evidence : null,
         v.next_step ? "  proximo passo: " + v.next_step : null,
         v.block_reason ? "  bloqueio: " + v.block_reason : null,
-        v.approval_required ? "  DECISAO NECESSARIA do responsavel" : null,
+        precisaDecisao(v) ? "  DECISAO NECESSARIA do responsavel" : null,
       ].filter(Boolean).join("\n");
     };
     const bloco = (titulo: string, lista: Vinculo[]) =>
@@ -521,7 +522,7 @@ export default function AdminExecucao() {
       `EXCECOES · ${new Date().toLocaleDateString("pt-BR")}`,
       bloco("Bloqueadas", bloqueadas),
       bloco("Prazo critico (vence hoje ou venceu)", prazoCritico),
-      bloco("Aprovacoes pendentes", vinculos.filter((v) => v.approval_required && v.status !== "done")),
+      bloco("Aprovacoes pendentes", vinculos.filter((v) => precisaDecisao(v))),
       incidentes.length
         ? `Falhas de execucao (${incidentes.length})\n` + incidentes.slice(0, 10).map((r) =>
             `- ${opDe(String(r.operator_id))?.display_name || "?"} · run ${r.run_key} · ${r.status}${r.error ? " · " + r.error : ""}`,
@@ -689,7 +690,7 @@ export default function AdminExecucao() {
       if (c.id === v.status) continue;
       itens.push({ rotulo: `Mover para ${c.titulo}`, acao: () => void moverVinculo(v, c.id) });
     }
-    if (v.approval_required) {
+    if (precisaDecisao(v)) {
       itens.push({ separador: true });
       itens.push({ rotulo: "Marcar aprovação como resolvida", acao: () => void resolverAprovacao(v) });
     }
@@ -960,7 +961,7 @@ export default function AdminExecucao() {
           </p>
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {v.approval_required && (
+          {precisaDecisao(v) && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setVisao("aprovacao"); }}

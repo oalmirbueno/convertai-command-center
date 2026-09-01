@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { precisaDecisao } from "@/lib/precisaDecisao";
 import {
   Ban, Bot, CheckCircle2, Clock, ExternalLink, FileText, Loader2,
   PauseCircle, ShieldAlert, UserPlus, XCircle,
@@ -265,7 +266,7 @@ export default function ContextoDoAgente({ taskId }: { taskId: string }) {
                   <span className="font-semibold">travado: </span>{l.block_reason}
                 </p>
               )}
-              {l.approval_required && (
+              {precisaDecisao(l) && (
                 <p className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-semibold text-warning">
                   <ShieldAlert className="h-3 w-3" /> precisa da sua aprovação
                 </p>
