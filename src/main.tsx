@@ -1,3 +1,5 @@
+// Primeiro de tudo: preenche o que navegador antigo nao tem (ver polyfills.ts).
+import "./polyfills";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import AppErrorBoundary from "./components/AppErrorBoundary.tsx";

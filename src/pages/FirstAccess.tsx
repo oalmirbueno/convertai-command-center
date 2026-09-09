@@ -19,7 +19,27 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
   return { level: 100, label: "Forte", color: "#00FF66" };
 }
 
-type Phase = "loading" | "form" | "invalid" | "used" | "done";
+type Phase = "loading" | "form" | "invalid" | "used" | "done" | "slow";
+
+/**
+ * Nenhuma espera desta tela fica sem saida. Cliente novo via a roda girando
+ * para sempre ao criar a senha: a chamada travava (rede ruim, navegador
+ * antigo, funcao fria) e nada avisava. Agora toda espera tem prazo, e quando
+ * estoura a pessoa ve o que houve e um botao para tentar de novo.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (reason) => { clearTimeout(timer); reject(reason); },
+    );
+  });
+}
+
+const VALIDATE_TIMEOUT_MS = 20_000;
+const SUBMIT_TIMEOUT_MS = 30_000;
+const LOGIN_TIMEOUT_MS = 12_000;
 
 export default function FirstAccess() {
   const [params] = useSearchParams();
@@ -33,6 +53,8 @@ export default function FirstAccess() {
   const [showPw, setShowPw] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   const strength = getPasswordStrength(password);
 
@@ -41,24 +63,36 @@ export default function FirstAccess() {
       setPhase("invalid");
       return;
     }
+    let alive = true;
+    setPhase("loading");
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("client-first-access", {
-          body: { action: "validate", token },
-        });
+        const { data, error } = await withTimeout(
+          supabase.functions.invoke("client-first-access", {
+            body: { action: "validate", token },
+          }),
+          VALIDATE_TIMEOUT_MS,
+        );
+        if (!alive) return;
         if (error) throw error;
         if (data?.valid) {
+          if (typeof data.email === "string") setAccountEmail(data.email);
           setPhase("form");
         } else if (data?.error === "used") {
           setPhase("used");
         } else {
           setPhase("invalid");
         }
-      } catch {
-        setPhase("invalid");
+      } catch (err) {
+        if (!alive) return;
+        // Demorou ou a rede caiu: nao e link invalido, e espera que estourou.
+        const message = err instanceof Error ? err.message : "";
+        const isNetwork = message === "timeout" || /fetch|network|Failed to send/i.test(message);
+        setPhase(isNetwork ? "slow" : "invalid");
       }
     })();
-  }, [token]);
+    return () => { alive = false; };
+  }, [token, attempt]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,27 +113,39 @@ export default function FirstAccess() {
     }
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("client-first-access", {
-        body: { action: "set_password", token, password },
-      });
+      const { data, error } = await withTimeout(
+        supabase.functions.invoke("client-first-access", {
+          body: { action: "set_password", token, password },
+        }),
+        SUBMIT_TIMEOUT_MS,
+      );
       if (error) throw error;
       if (data?.error) {
         setError(data.message || data.error);
         setSubmitting(false);
         return;
       }
-      const accountEmail = typeof data?.email === "string" ? data.email : "";
+      const email = typeof data?.email === "string" && data.email ? data.email : accountEmail;
+      setAccountEmail(email);
       setPhase("done");
-      // Auto-login and redirect
+
+      // A senha JA existe a partir daqui. Entrar sozinho e cortesia: se nao
+      // der em alguns segundos, a pessoa vai para o login com a senha valendo,
+      // em vez de ficar olhando a roda girar.
       try {
-        if (!accountEmail) throw new Error("Email unavailable");
-        await loginWithCredentials(accountEmail, password);
-        setTimeout(() => navigate("/dashboard", { replace: true }), 1200);
+        if (!email) throw new Error("Email unavailable");
+        await withTimeout(loginWithCredentials(email, password), LOGIN_TIMEOUT_MS);
+        navigate("/dashboard", { replace: true });
       } catch {
-        setTimeout(() => navigate("/login", { replace: true }), 1600);
+        navigate("/login", { replace: true, state: { email, passwordJustCreated: true } });
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Não foi possível criar a senha. Tente novamente.");
+      const message = err instanceof Error ? err.message : "";
+      setError(
+        message === "timeout"
+          ? "A conexão demorou demais. Confira a internet e toque em Criar senha de novo."
+          : message || "Não foi possível criar a senha. Tente novamente.",
+      );
       setSubmitting(false);
     }
   };
@@ -136,6 +182,22 @@ export default function FirstAccess() {
             </div>
           )}
 
+          {phase === "slow" && (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-warning" />
+              </div>
+              <h1 className="text-base font-semibold text-foreground">A conexão demorou demais</h1>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Não conseguimos validar o seu link agora. Confira a internet e tente de novo — o link continua valendo.
+              </p>
+              <button onClick={() => setAttempt((n) => n + 1)}
+                className="mt-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
           {phase === "used" && (
             <div className="flex flex-col items-center gap-3 py-6 text-center">
               <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
@@ -161,6 +223,10 @@ export default function FirstAccess() {
               <h1 className="text-base font-semibold text-foreground">Tudo pronto!</h1>
               <p className="text-xs text-muted-foreground">Senha criada com sucesso. Entrando no portal...</p>
               <Loader2 className="w-4 h-4 animate-spin text-primary mt-1" />
+              <button onClick={() => navigate("/login", { replace: true, state: { email: accountEmail, passwordJustCreated: true } })}
+                className="mt-3 text-[12px] font-medium text-primary hover:underline cursor-pointer bg-transparent border-none">
+                Ir para o login agora
+              </button>
             </div>
           )}
 

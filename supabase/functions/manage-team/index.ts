@@ -145,92 +145,44 @@ Deno.serve(async (req) => {
         throw new Error("Demote the administrator before deleting this account");
       }
 
-      // Editorial history is append-only and keeps its actors/owners. Refuse
-      // deletion before mutating any legacy table so role, profile and Auth
-      // never diverge when the account participates in that history.
-      const editorialDependencyChecks = await Promise.all([
-        adminClient
-          .from("editorial_posts")
-          .select("id")
-          .eq("client_id", user_id)
-          .limit(1),
-        adminClient
-          .from("editorial_post_internal")
-          .select("post_id")
-          .or(
-            `responsible_id.eq.${user_id},created_by.eq.${user_id},updated_by.eq.${user_id}`,
-          )
-          .limit(1),
-        adminClient
-          .from("editorial_publication_internal")
-          .select("publication_id")
-          .or(
-            `created_by.eq.${user_id},updated_by.eq.${user_id},scheduled_by.eq.${user_id},published_by.eq.${user_id}`,
-          )
-          .limit(1),
-        adminClient
-          .from("editorial_events")
-          .select("id")
-          .or(`client_id.eq.${user_id},actor_id.eq.${user_id}`)
-          .limit(1),
-      ]);
-      if (editorialDependencyChecks.some(({ error }) => error)) {
-        throw new Error("Failed to verify editorial history");
-      }
-      if (
-        editorialDependencyChecks.some(
-          ({ data }) => Array.isArray(data) && data.length > 0,
-        )
-      ) {
-        return new Response(
-          JSON.stringify({
-            error:
-              "Este usuário possui histórico editorial e não pode ser excluído. Desative seus acessos e preserve o registro de auditoria.",
-            code: "editorial_history_conflict",
-          }),
-          {
-            status: 409,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "application/json",
-            },
-          },
-        );
+      // A lista manual de limpeza tabela a tabela morreu aqui: cada tabela
+      // nova virava um "Failed to clean X" novo. Agora o banco resolve numa
+      // transacao so (admin_purge_user), varrendo o catalogo - tabela nova
+      // entra sozinha. O que e do cliente vai embora; o que ele apenas fez
+      // fica sem autor ou passa para quem apagou, e user_purges guarda o
+      // de-para.
+      //
+      // Os caminhos do Storage sao capturados ANTES da purga, porque depois
+      // dela as linhas de files nao existem mais.
+      const { data: storageObjects, error: storageListError } = await adminClient
+        .rpc("admin_user_storage_objects", { _target: user_id });
+      if (storageListError) {
+        console.error("admin_user_storage_objects failed:", storageListError);
+        throw new Error("Failed to list storage objects");
       }
 
-      // Clean up ALL foreign key references before deleting auth user
-      const cleanup = async (label: string, promise: any) => {
-        const res = await promise;
-        if (res.error) {
-          console.error(`Cleanup ${label} failed:`, res.error);
-          throw new Error(`Failed to clean ${label}`);
+      const { data: purgeSummary, error: purgeError } = await adminClient
+        .rpc("admin_purge_user", { _target: user_id, _actor: caller.id });
+      if (purgeError) {
+        console.error("admin_purge_user failed:", purgeError);
+        throw new Error(purgeError.message || "Failed to purge user");
+      }
+
+      // Objetos privados saem depois, em lotes. Falha aqui nao desfaz a purga
+      // (a conta ja nao existe): fica na resposta e no log, nunca escondida.
+      const storageErrors: string[] = [];
+      let storageRemoved = 0;
+      const objectsByBucket = (storageObjects || {}) as Record<string, string[]>;
+      for (const [bucket, names] of Object.entries(objectsByBucket)) {
+        for (let offset = 0; offset < names.length; offset += 100) {
+          const batch = names.slice(offset, offset + 100);
+          const { error: removeError } = await adminClient.storage.from(bucket).remove(batch);
+          if (removeError) storageErrors.push(`${bucket}: ${removeError.message}`);
+          else storageRemoved += batch.length;
         }
-      };
-
-      await cleanup("tasks", adminClient.from("tasks").update({ assigned_to: null }).eq("assigned_to", user_id));
-      await cleanup("files_uploaded", adminClient.from("files").update({ uploaded_by: caller.id }).eq("uploaded_by", user_id));
-      await cleanup("files_client", adminClient.from("files").update({ client_id: caller.id }).eq("client_id", user_id));
-      await cleanup("updates", adminClient.from("updates").delete().eq("author_id", user_id));
-      await cleanup("notifications", adminClient.from("notifications").delete().eq("user_id", user_id));
-      await cleanup("client_requests", adminClient.from("client_requests").delete().eq("client_id", user_id));
-      await cleanup("reports_created", adminClient.from("reports").update({ created_by: null }).eq("created_by", user_id));
-      await cleanup("reports_client", adminClient.from("reports").update({ client_id: caller.id }).eq("client_id", user_id));
-      await cleanup("recharge_client", adminClient.from("recharge_requests").delete().eq("client_id", user_id));
-      await cleanup("recharge_by", adminClient.from("recharge_requests").update({ requested_by: null }).eq("requested_by", user_id));
-      await cleanup("recharge_approved", adminClient.from("recharge_requests").update({ approved_by: null }).eq("approved_by", user_id));
-      await cleanup("ads_wallet", adminClient.from("ads_wallet").delete().eq("client_id", user_id));
-      await cleanup("billing", adminClient.from("billing").delete().eq("client_id", user_id));
-      await cleanup("briefings", adminClient.from("briefings").delete().eq("client_id", user_id));
-      await cleanup("projects_client", adminClient.from("projects").update({ client_id: caller.id }).eq("client_id", user_id));
-      await cleanup("projects_created", adminClient.from("projects").update({ created_by: null }).eq("created_by", user_id));
-      await cleanup("profiles", adminClient.from("profiles").delete().eq("id", user_id));
-      await cleanup("user_roles", adminClient.from("user_roles").delete().eq("user_id", user_id));
-
-      // Finally delete auth user
-      const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
-      if (deleteError) {
-        console.error("deleteUser error:", deleteError);
-        throw new Error(deleteError.message || "Error deleting user");
+      }
+      if (storageErrors.length > 0) {
+        console.warn("purge storage cleanup incomplete:", { user_id, storageErrors });
       }
 
       // Notify Ops (best-effort) — local-first delete already done.
@@ -267,9 +219,10 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ success: true, purged: purgeSummary, storageRemoved, storageErrors }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     /**

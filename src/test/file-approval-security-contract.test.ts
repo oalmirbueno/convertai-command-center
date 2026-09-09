@@ -148,9 +148,14 @@ describe("file approval security contract", () => {
   });
 
   it("preflights file deletion with the caller's authorization", () => {
+    // A equipe continua presa a can_write_file (so o que ainda e editavel);
+    // o administrador passa por can_delete_file, e o proprio banco (RLS +
+    // files_secure_guard) repete a mesma regra do lado de la.
     expect(deleteFileAssets).toContain(
-      'caller.rpc("can_write_file", { _file_id: fileId })',
+      'const rpcName = isAdmin ? "can_delete_file" : "can_write_file";',
     );
+    expect(deleteFileAssets).toContain("caller.rpc(rpcName, { _file_id: fileId })");
+    expect(deleteFileAssets).toContain("assertCallerCanDeleteFiles(caller, parsed.data.fileIds, isAdmin)");
     expect(deleteFileAssets).toContain("await prepareFileDelete");
     expect(deleteFileAssets).toContain("await executeFileDelete");
     expect(deleteFileAssets.indexOf("await prepareFileDelete")).toBeLessThan(

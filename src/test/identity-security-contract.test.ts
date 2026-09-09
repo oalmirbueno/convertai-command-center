@@ -104,44 +104,27 @@ describe("identity boundary required by the internal agent Kanban", () => {
     expect(manageTeam).toMatch(/targetRoles\?\.some\(\(\{ role \}\) => role === "admin"\)/);
   });
 
-  it("blocks account deletion before mutation when editorial history exists", () => {
-    const preflight = manageTeam.indexOf(
-      "const editorialDependencyChecks = await Promise.all",
-    );
-    const firstCleanup = manageTeam.indexOf(
-      'await cleanup("tasks"',
-      preflight,
-    );
-    const profileCleanup = manageTeam.indexOf(
-      'await cleanup("profiles"',
-      firstCleanup,
-    );
-    const roleCleanup = manageTeam.indexOf(
-      'await cleanup("user_roles"',
-      firstCleanup,
-    );
-    const authDelete = manageTeam.indexOf(
-      "adminClient.auth.admin.deleteUser(user_id)",
-      firstCleanup,
-    );
+  it("apaga a conta numa transacao so, pelo banco, e limpa o storage depois", () => {
+    // A limpeza manual tabela a tabela quebrava a cada tabela nova
+    // ("Failed to clean files_client"). O contrato agora: capturar os
+    // objetos do Storage, purgar pelo banco (uma transacao, catalogo varrido
+    // la dentro), so entao remover os objetos, e por fim avisar o Ops.
+    const deleteStart = manageTeam.indexOf('if (action === "delete")');
+    const notify = manageTeam.indexOf("// Notify Ops (best-effort)", deleteStart);
+    const deleteBlock = manageTeam.slice(deleteStart, notify);
+    const listStorage = deleteBlock.indexOf('rpc("admin_user_storage_objects"');
+    const purge = deleteBlock.indexOf('rpc("admin_purge_user"');
+    const storageRemove = deleteBlock.indexOf(".storage.from(bucket).remove(");
 
-    expect(preflight).toBeGreaterThan(-1);
-    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
-      'code: "editorial_history_conflict"',
-    );
-    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
-      "status: 409",
-    );
-    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
-      '"editorial_events"',
-    );
-    expect(firstCleanup).toBeGreaterThan(preflight);
-    expect(profileCleanup).toBeGreaterThan(firstCleanup);
-    expect(roleCleanup).toBeGreaterThan(profileCleanup);
-    expect(authDelete).toBeGreaterThan(roleCleanup);
-    expect(manageTeam).toContain(
-      "throw new Error(`Failed to clean ${label}`)",
-    );
+    expect(deleteStart).toBeGreaterThan(-1);
+    expect(notify).toBeGreaterThan(deleteStart);
+    expect(listStorage).toBeGreaterThan(-1);
+    expect(purge).toBeGreaterThan(listStorage);
+    expect(storageRemove).toBeGreaterThan(purge);
+    expect(deleteBlock).toContain("_actor: caller.id");
+    expect(deleteBlock).not.toContain("await cleanup(");
+    expect(deleteBlock).not.toContain("adminClient.auth.admin.deleteUser(");
+    expect(deleteBlock).not.toContain("editorial_history_conflict");
   });
 
   it("authenticates the internal Ops notification after deleting a member", () => {

@@ -236,6 +236,9 @@ export default function AdminFiles() {
   const isStaff = profile?.role === "admin"
     || ["design", "traffic", "manager"].includes(profile?.role || "");
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
+  // O administrador apaga qualquer arquivo, travado ou nao: a trava e da
+  // equipe, nao do dono da casa. O banco aplica a mesma regra.
+  const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const {
@@ -1059,7 +1062,7 @@ export default function AdminFiles() {
   const handleDelete = async () => {
     if (!confirmDeleteFile || deletingFile) return;
     const target = (allFiles || []).find((file: any) => file.id === confirmDeleteFile.id);
-    if (!isEditableFile(target)) {
+    if (!isEditableFile(target) && !isAdmin) {
       toast({
         title: "Exclusão indisponível",
         description: "O arquivo só pode ser excluído antes de entrar em revisão.",
@@ -1329,7 +1332,7 @@ export default function AdminFiles() {
                               <Send className="w-4 h-4" />
                             </button>
                           )}
-                          {isEditable && (
+                          {(isEditable || isAdmin) && (
                             <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
                               className="text-muted-foreground hover:text-destructive transition-colors">
                               <Trash2 className="w-4 h-4" />
@@ -1417,7 +1420,7 @@ export default function AdminFiles() {
                         }}>
                         <Download className="w-4 h-4" />
                       </button>
-                      {isEditable && (
+                      {(isEditable || isAdmin) && (
                         <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
                           className="text-muted-foreground hover:text-destructive transition-colors">
                           <Trash2 className="w-4 h-4" />

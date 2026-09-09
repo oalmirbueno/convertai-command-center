@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
@@ -74,28 +74,61 @@ function ApprovalFileThumb({ file, className = "w-full h-full" }: { file: any; c
   );
 }
 
+/**
+ * Deslizar com o dedo troca o card. No celular nao existe "passar o mouse", e
+ * as setas que so apareciam no hover deixavam o cliente vendo a capa do
+ * carrossel achando que era uma imagem so.
+ */
+function useSwipe(onPrev: () => void, onNext: () => void) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  return {
+    onTouchStart: (event: React.TouchEvent) => {
+      const touch = event.touches[0];
+      start.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    },
+    onTouchEnd: (event: React.TouchEvent) => {
+      const from = start.current;
+      const touch = event.changedTouches[0];
+      start.current = null;
+      if (!from || !touch) return;
+      const dx = touch.clientX - from.x;
+      const dy = touch.clientY - from.y;
+      if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy)) return;
+      event.stopPropagation();
+      if (dx > 0) onPrev(); else onNext();
+    },
+  };
+}
+
 function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) {
   const [idx, setIdx] = useState(0);
+  const prev = () => setIdx((i) => (i - 1 + images.length) % images.length);
+  const next = () => setIdx((i) => (i + 1) % images.length);
+  const swipe = useSwipe(prev, next);
   if (images.length === 0) return null;
-  const current = images[idx];
+  const current = images[idx] || images[0];
   const maxH = small ? "h-32" : "min-h-[200px] max-h-[400px]";
 
   return (
-    <div className="relative group">
+    <div className="relative group" {...(images.length > 1 ? swipe : {})}>
       <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
         <ApprovalFileThumb file={current} />
       </div>
       {images.length > 1 && (
         <>
           <button
-            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
+            type="button"
+            aria-label="Card anterior"
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-md opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); prev(); }}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
+            type="button"
+            aria-label="Próximo card"
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/85 border border-border rounded-full p-2 shadow-md opacity-90 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); next(); }}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -126,6 +159,7 @@ export default function ClientApprovals() {
   const [feedbackText, setFeedbackText] = useState("");
   const [previewFile, setPreviewFileRaw] = useState<any>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
+  const previewSwipeStart = useRef<{ x: number; y: number } | null>(null);
   const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
   const editorialPreview = useEditorialApprovalPreview(
     previewFile?.id || null,
@@ -305,7 +339,25 @@ export default function ClientApprovals() {
             const current = items[currentIdx] || previewFile;
             return (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <div className="relative">
+              <div
+                className="relative"
+                {...(items.length > 1 ? {
+                  onTouchStart: (event: React.TouchEvent) => {
+                    const touch = event.touches[0];
+                    previewSwipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+                  },
+                  onTouchEnd: (event: React.TouchEvent) => {
+                    const from = previewSwipeStart.current;
+                    const touch = event.changedTouches[0];
+                    previewSwipeStart.current = null;
+                    if (!from || !touch) return;
+                    const dx = touch.clientX - from.x;
+                    const dy = touch.clientY - from.y;
+                    if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy)) return;
+                    setIdx(dx > 0 ? (currentIdx - 1 + items.length) % items.length : (currentIdx + 1) % items.length);
+                  },
+                } : {})}
+              >
                 <FilePreviewContent
                   fileName={current.file_name}
                   fileUrl={current.file_url}

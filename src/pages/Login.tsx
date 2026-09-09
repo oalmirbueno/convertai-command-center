@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, ArrowRight, Eye, EyeOff, Check, BarChart3, Zap, Target } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { safeInternalPath } from "@/lib/internalNavigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -70,6 +70,20 @@ export default function Login() {
 
   const next = new URLSearchParams(window.location.search).get("next");
   const safeNext = safeInternalPath(next) ?? "/dashboard";
+
+  // Quem acabou de criar a senha no primeiro acesso e nao conseguiu entrar
+  // sozinho chega aqui com o e-mail ja preenchido e o aviso de que a senha
+  // vale. Sem isso a pessoa achava que o cadastro tinha falhado.
+  const location = useLocation();
+  const handoff = (location.state || {}) as { email?: string; passwordJustCreated?: boolean };
+  useEffect(() => {
+    if (handoff.email) setEmail(handoff.email);
+    if (handoff.passwordJustCreated) {
+      toast.success("Senha criada! Agora é só entrar com ela.");
+    }
+    // roda uma vez, na chegada
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!loading && user && profile) {

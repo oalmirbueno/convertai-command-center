@@ -112,13 +112,16 @@ function assertStorageCleanupSucceeded(errors: string[]) {
   }
 }
 
-async function assertCallerCanDeleteFiles(caller: any, ids: string[]) {
+async function assertCallerCanDeleteFiles(caller: any, ids: string[], isAdmin: boolean) {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  // Administrador apaga qualquer arquivo do cliente que enxerga
+  // (can_delete_file); a equipe segue presa ao que ainda e editavel.
+  const rpcName = isAdmin ? "can_delete_file" : "can_write_file";
   for (let offset = 0; offset < uniqueIds.length; offset += 25) {
     const chunk = uniqueIds.slice(offset, offset + 25);
     const checks = await Promise.all(
       chunk.map(async (fileId) => {
-        const { data, error } = await caller.rpc("can_write_file", { _file_id: fileId });
+        const { data, error } = await caller.rpc(rpcName, { _file_id: fileId });
         if (error) throw error;
         return data === true;
       }),
@@ -129,7 +132,7 @@ async function assertCallerCanDeleteFiles(caller: any, ids: string[]) {
   }
 }
 
-async function prepareFileDelete(admin: any, ids: string[]): Promise<FileDeletePlan> {
+async function prepareFileDelete(admin: any, ids: string[], isAdmin: boolean): Promise<FileDeletePlan> {
   const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
   if (!uniqueIds.length) return { rows: [], refs: [] };
 
@@ -161,24 +164,39 @@ async function prepareFileDelete(admin: any, ids: string[]): Promise<FileDeleteP
 
   const rowsById = new Map<string, FileRow>();
   for (const row of [...(targets || []), ...(children || [])] as FileRow[]) rowsById.set(row.id, row);
-  const rows = Array.from(rowsById.values());
   const { data: revisions, error: revisionError } = await admin
     .from("files")
-    .select("id,revision_of_file_id")
-    .in("revision_of_file_id", rows.map((row) => row.id));
+    .select(fields)
+    .in("revision_of_file_id", Array.from(rowsById.keys()));
   if (revisionError) throw revisionError;
   if ((revisions || []).length > 0) {
-    throw new HttpError("Arquivos com histórico de versões não podem ser excluídos", 409);
+    if (!isAdmin) {
+      throw new HttpError("Arquivos com histórico de versões não podem ser excluídos", 409);
+    }
+    // Administrador leva a cadeia inteira: as revisoes e os filhos delas.
+    const revisionIds = (revisions as FileRow[]).map((row) => row.id);
+    const { data: revisionChildren, error: revisionChildError } = await admin
+      .from("files")
+      .select(fields)
+      .in("parent_file_id", revisionIds);
+    if (revisionChildError) throw revisionChildError;
+    for (const row of [...(revisions || []), ...(revisionChildren || [])] as FileRow[]) rowsById.set(row.id, row);
   }
+  const rows = Array.from(rowsById.values());
 
-  const protectedFile = rows.find((row) =>
-    row.locked_at
-    || row.approval_status !== "none"
-    || row.agency_approval_status !== "not_requested"
-    || row.visibility !== "internal"
-  );
-  if (protectedFile) {
-    throw new HttpError("Arquivos enviados para revisão, compartilhados ou aprovados são imutáveis", 409);
+  // Travado, em revisao ou liberado e imutavel para a equipe. O administrador
+  // e o dono da casa: apaga o que quiser, e o banco (files_secure_guard)
+  // aplica exatamente a mesma regra do lado de la.
+  if (!isAdmin) {
+    const protectedFile = rows.find((row) =>
+      row.locked_at
+      || row.approval_status !== "none"
+      || row.agency_approval_status !== "not_requested"
+      || row.visibility !== "internal"
+    );
+    if (protectedFile) {
+      throw new HttpError("Arquivos enviados para revisão, compartilhados ou aprovados são imutáveis", 409);
+    }
   }
 
   const refs = rows
@@ -315,14 +333,15 @@ Deno.serve(async (req) => {
     if (roleError) throw roleError;
     const isStaff = (roles || []).some((row: any) => StaffRoles.has(row.role));
     if (!isStaff) return json({ error: "Sem permissão para excluir arquivos" }, 403);
+    const isAdmin = (roles || []).some((row: any) => row.role === "admin");
 
     const parsed = BodySchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return json({ error: "Dados inválidos", details: parsed.error.flatten().fieldErrors }, 400);
 
     if (parsed.data.target === "files") {
-      await assertCallerCanDeleteFiles(caller, parsed.data.fileIds);
-      const plan = await prepareFileDelete(admin, parsed.data.fileIds);
-      await assertCallerCanDeleteFiles(caller, plan.rows.map((row) => row.id));
+      await assertCallerCanDeleteFiles(caller, parsed.data.fileIds, isAdmin);
+      const plan = await prepareFileDelete(admin, parsed.data.fileIds, isAdmin);
+      await assertCallerCanDeleteFiles(caller, plan.rows.map((row) => row.id), isAdmin);
       const result = await executeFileDelete(caller, admin, plan);
       assertStorageCleanupSucceeded(result.storageErrors);
       return json({ ok: true, ...result });
