@@ -257,19 +257,19 @@ describe("o Kanban denuncia nas duas frentes", () => {
     }
   });
 
-  it("tarefa sem dono só ocupa etapa quando vira monte", () => {
-    // Uma tarefa solta é normal; três é sintoma de trabalho sem dono.
-    const uma = pendenciasDoCliente(situacao({
-      tarefasSemDono: 1, agendados: 3, artesProntas: 1,
-      ultimoDiario: new Date().toISOString(),
-    }), "social");
-    expect(uma.find((x) => x.chave === "tarefa-sem-dono")?.viraEtapa).toBe(false);
-
-    const tres = pendenciasDoCliente(situacao({
-      tarefasSemDono: 3, agendados: 3, artesProntas: 1,
-      ultimoDiario: new Date().toISOString(),
-    }), "social");
-    expect(tres.find((x) => x.chave === "tarefa-sem-dono")?.viraEtapa).toBe(true);
+  it("tarefa sem dono nunca vira etapa: se resolve no Kanban, dando dono ao que existe", () => {
+    // A etapa "definir responsável" virava uma TAREFA nova sem dono, que
+    // aumentava o próprio contador de "sem dono". O alerta aponta para o
+    // Kanban e fica só como aviso, uma ou trinta.
+    for (const n of [1, 3, 30]) {
+      const lista = pendenciasDoCliente(situacao({
+        tarefasSemDono: n, agendados: 3, artesProntas: 1,
+        ultimoDiario: new Date().toISOString(),
+      }), "social");
+      const p = lista.find((x) => x.chave === "tarefa-sem-dono");
+      expect(p?.viraEtapa).toBe(false);
+      expect(p?.rota).toBe("/kanban");
+    }
   });
 });
 
@@ -399,7 +399,7 @@ describe("tarefa se liga ao cliente pelo projeto, nunca direto", () => {
 
     const situacao = readFileSync(resolve(raiz, "src/lib/cycleSituation.ts"), "utf8");
     const trechoTarefas = situacao.slice(situacao.indexOf('.from("projects")'));
-    expect(trechoTarefas).toMatch(/tasks\(status/);
+    expect(trechoTarefas).toMatch(/tasks\(id, status/);
     expect(situacao).not.toMatch(/from\("tasks"\)[\s\S]{0,160}in\("client_id"/);
 
     const dossie = readFileSync(
@@ -494,7 +494,10 @@ describe("fechar a semana GUARDA na historia e a folha atualiza", () => {
 
     expect(pagina).toContain("Etapa concluída: ");
     expect(pagina).toContain('registro: "etapa"');
-    const inicioDesfazer = pagina.indexOf('.from("weekly_cycle_progress").delete()');
+    const inicioDesfazer = pagina.indexOf(
+      '.from("weekly_cycle_progress").delete()',
+      pagina.indexOf("Desfazer conserta a história também") - 400,
+    );
     const desfazer = pagina.slice(
       inicioDesfazer,
       pagina.indexOf("} else {", inicioDesfazer),

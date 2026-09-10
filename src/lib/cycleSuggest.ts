@@ -177,6 +177,20 @@ function pendenciasDoKanban(s: SituacaoDoCliente): Pendencia[] {
       rota: "/kanban",
     });
   }
+  // Marco da timeline vencido: a linha do tempo prometida ao cliente
+  // passou da data. Entra na rotina para não ficar só na Timeline.
+  if (s.marcosVencidos > 0) {
+    lista.push({
+      chave: "marco-vencido",
+      texto: s.marcosVencidos === 1
+        ? "1 marco da timeline passou da data"
+        : `${s.marcosVencidos} marcos da timeline passaram da data`,
+      gravidade: "urgente",
+      viraEtapa: true,
+      detalhes: s.marcosVencidosNomes,
+      rota: "/timeline",
+    });
+  }
   // Tarefa sem dono é a que ninguém faz: não some, não atrasa, só fica.
   if (s.tarefasSemDono > 0) {
     lista.push({
@@ -259,6 +273,21 @@ function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
         : `${situacao.aguardandoAprovacao} ${situacao.aguardandoAprovacao === 1 ? "arte aguardando" : "artes aguardando"} o cliente aprovar`,
       gravidade: demais ? "urgente" : "atencao",
       viraEtapa: demais,
+    });
+  }
+
+  // Conteúdo pronto na gaveta e nenhuma data: pior que agenda vazia, porque
+  // o trabalho existe e não vai para a rua. Vem com os nomes das pautas.
+  if (situacao.prontosSemAgenda > 0) {
+    lista.push({
+      chave: "pronto-sem-agenda",
+      texto: situacao.prontosSemAgenda === 1
+        ? "1 conteúdo pronto sem data na agenda"
+        : `${situacao.prontosSemAgenda} conteúdos prontos sem data na agenda`,
+      gravidade: situacao.agendados === 0 ? "urgente" : "atencao",
+      viraEtapa: true,
+      detalhes: situacao.prontosSemAgendaNomes,
+      rota: "/calendario",
     });
   }
 
@@ -511,8 +540,10 @@ const SLOT_POR_CHAVE: Record<string, number> = {
   "metrica-parada": 3,
   "tarefa-atrasada": 3,
   "tarefa-sem-dono": 3,
+  "marco-vencido": 3,
   "dado-parado": 3,
   // Publicação: colocar e manter na rua.
+  "pronto-sem-agenda": 5,
   "sem-agenda": 5,
   "agenda-curta": 5,
   "perderam-data": 5,
@@ -605,6 +636,8 @@ export function textoDaEtapa(p: Pendencia): string {
     case "recusadas": return "Refazer a arte que o cliente pediu para mudar";
     case "aprovacao-parada": return "Cobrar no grupo a aprovação que está parada";
     case "sem-agenda": return "Agendar os posts da semana";
+    case "pronto-sem-agenda": return "Dar data na agenda ao conteúdo que já está pronto";
+    case "marco-vencido": return "Fechar ou repactuar o marco da timeline que venceu";
     case "agenda-curta": return "Completar a agenda da semana";
     case "sem-arte": return "Criar as artes da semana";
     case "diario-parado":

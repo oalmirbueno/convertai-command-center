@@ -103,6 +103,14 @@ export interface SituacaoDoCliente {
       não. É o que permite fechar sozinha a tarefa cujo problema o painel
       já mostra resolvido. */
   tarefasEncaminhadas: Array<{ id: string; chave: string; updated_at: string | null }>;
+  /** Marcos da timeline com data alvo ja passada e ainda abertos. */
+  marcosVencidos: number;
+  marcosVencidosNomes: string[];
+  /** O proximo marco aberto com data. */
+  proximoMarco: { titulo: string; data: string } | null;
+  /** Pautas com arte pronta e NENHUMA publicacao agendada ou no ar. */
+  prontosSemAgenda: number;
+  prontosSemAgendaNomes: string[];
 }
 
 /** Tarefa parada há mais que isto deixa de calar o alerta que a gerou. */
@@ -146,6 +154,11 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     temDossie: false,
     pendenciasEncaminhadas: [],
     tarefasEncaminhadas: [],
+    marcosVencidos: 0,
+    marcosVencidosNomes: [],
+    proximoMarco: null,
+    prontosSemAgenda: 0,
+    prontosSemAgendaNomes: [],
   };
 }
 
@@ -226,7 +239,7 @@ export async function lerSituacoes(
 
   const [
     arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira,
-    conexoes, metricas, briefings, dossies, adsDiario,
+    conexoes, metricas, briefings, dossies, adsDiario, marcos, pautasProntas,
   ] = await Promise.all([
     supabase
       .from("files")
@@ -307,7 +320,54 @@ export async function lerSituacoes(
       .select("client_id, campaign_name, day, spend, actions, frequency")
       .in("client_id", clientIds)
       .gte("day", new Date(agora - 14 * 86_400_000).toISOString().slice(0, 10)),
+    // Marcos da timeline: o ciclo ignorava a linha do tempo inteira, e o
+    // marco vencido nao aparecia em lugar nenhum da rotina.
+    (supabase as any)
+      .from("projects")
+      .select("id, client_id, milestones(id, title, status, target_date)")
+      .in("client_id", clientIds)
+      .is("deleted_at", null)
+      .is("milestones.deleted_at", null)
+      .neq("milestones.status", "completed"),
+    // Conteudo PRONTO sem data: pauta com arte (production_status=ready) e
+    // nenhuma publicacao agendada/publicada. E o "agenda vazia com material
+    // na gaveta" - o pior dos dois mundos, e o painel nao acusava.
+    (supabase as any)
+      .from("editorial_posts")
+      .select("id, client_id, title, production_status, editorial_publications(status)")
+      .in("client_id", clientIds)
+      .is("archived_at", null)
+      .eq("production_status", "ready"),
   ]);
+
+  for (const projeto of (marcos.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(projeto.client_id));
+    if (!s) continue;
+    const lista = (projeto.milestones ?? []) as Array<{ title?: string; target_date?: string | null }>;
+    for (const m of lista) {
+      const alvo = typeof m.target_date === "string" ? m.target_date : null;
+      if (!alvo) continue;
+      const hojeLocal = (() => { const d = new Date(agora); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
+      if (alvo < hojeLocal) {
+        s.marcosVencidos += 1;
+        const nome = String(m.title ?? "").trim();
+        if (nome && s.marcosVencidosNomes.length < 3) s.marcosVencidosNomes.push(nome);
+      } else if (!s.proximoMarco || alvo < s.proximoMarco.data) {
+        s.proximoMarco = { titulo: String(m.title ?? "").trim(), data: alvo };
+      }
+    }
+  }
+
+  for (const post of (pautasProntas.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(post.client_id));
+    if (!s) continue;
+    const pubs = (post.editorial_publications ?? []) as Array<{ status?: string | null }>;
+    const temData = pubs.some((p) => ["scheduled", "published"].includes(String(p.status ?? "")));
+    if (temData) continue;
+    s.prontosSemAgenda += 1;
+    const nome = String(post.title ?? "").trim();
+    if (nome && s.prontosSemAgendaNomes.length < 3) s.prontosSemAgendaNomes.push(nome);
+  }
 
   for (const linha of (arquivos.data ?? []) as Array<Record<string, unknown>>) {
     const s = mapa.get(String(linha.client_id));

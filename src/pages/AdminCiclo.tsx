@@ -86,6 +86,9 @@ interface CycleRow {
   step: number;
   done_at?: string | null;
   done_by?: string | null;
+  /** true = gravada pela prova automática do painel, não por gente. */
+  auto?: boolean | null;
+  proof?: string | null;
 }
 
 const shortDate = (date: Date) =>
@@ -423,7 +426,7 @@ export default function AdminCiclo() {
         // uma girante na segunda para o plano congelar com as outras três
         // paradas na foto daquela manhã.
         const nenhumaGiranteMarcada = ROTATING_SLOTS.every(
-          (step) => !doneMap.get(`${id}:${area}:${step}`),
+          (step) => !(doneMap.get(`${id}:${area}:${step}`) && !doneMap.get(`${id}:${area}:${step}`)!.auto),
         );
         if (
           nenhumaGiranteMarcada
@@ -555,7 +558,7 @@ export default function AdminCiclo() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("weekly_cycle_progress")
-        .select("id, client_id, area, week_start, step, done_at, done_by")
+        .select("id, client_id, area, week_start, step, done_at, done_by, auto, proof")
         .eq("week_start", weekKey);
       if (error) throw error;
       return (data || []) as CycleRow[];
@@ -749,6 +752,44 @@ export default function AdminCiclo() {
       agoraMs: Date.now(),
     });
   };
+
+  /**
+   * A prova do painel passa a ficar GRAVADA em weekly_cycle_progress
+   * (auto=true, done_by nulo, proof = o fato). Antes a tela provava sozinha
+   * e o coach, o pulso e o brain-log - que leem só a tabela - diziam
+   * "parado em conteúdo criado" para um cliente com a semana fechada na
+   * tela. Se o fato sumir do painel, a linha automática sai; a marcação
+   * humana nunca é tocada por aqui.
+   */
+  const provasGravadasRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!situacoes || !rows || !canWrite) return;
+    void (async () => {
+      let mudou = false;
+      for (const client of activeClients as any[]) {
+        if (ehAvulso(client)) continue;
+        for (let step = 1; step <= totalFor(client); step += 1) {
+          const key = `${client.id}:${area}:${step}`;
+          const existente = doneMap.get(key);
+          const prova = provaDaEtapaDe(client, step);
+          if (prova && !existente && !provasGravadasRef.current.has(key)) {
+            provasGravadasRef.current.add(key);
+            const { error } = await (supabase as any)
+              .from("weekly_cycle_progress")
+              .insert({ client_id: client.id, area, week_start: weekKey, step, done_by: null, auto: true, proof: prova });
+            if (!error) mudou = true;
+          } else if (!prova && existente?.auto) {
+            provasGravadasRef.current.delete(key);
+            const { error } = await (supabase as any)
+              .from("weekly_cycle_progress").delete().eq("id", existente.id).eq("auto", true);
+            if (!error) mudou = true;
+          }
+        }
+      }
+      if (mudou) await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [situacoes, rows, pendenciasReaisPorCliente, activeClients, area, weekKey, canWrite]);
 
   const doneCountFor = (client: any) => {
     if (ehAvulso(client)) {

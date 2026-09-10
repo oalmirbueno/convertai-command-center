@@ -154,6 +154,72 @@ Deno.serve(async (req) => {
       target.get(row.client_id)!.add(row.step);
     }
 
+    // O que o painel SABE de cada cliente, além do checklist: o plano da
+    // semana (rótulos reais, não os fixos), o dossiê atual, as tarefas de
+    // alerta abertas e a agenda. Sem isto o coach dizia "parado em conteúdo
+    // criado" para um cliente cujo plano nem tinha essa etapa.
+    const ids = clients.map((c: any) => c.id);
+    const [planosRes, dossiesRes, projetosRes, agendaRes] = await Promise.all([
+      db.from("project_memory")
+        .select("client_id, metadata")
+        .eq("kind", "ciclo_semana")
+        .in("client_id", ids)
+        .filter("metadata->>week_start", "eq", weekStart)
+        .filter("metadata->>area", "eq", area),
+      db.from("client_dossiers")
+        .select("client_id, summary, content, updated_at")
+        .in("client_id", ids)
+        .eq("is_current", true)
+        .eq("dossier_type", "contexto")
+        .is("project_id", null),
+      db.from("projects")
+        .select("client_id, tasks(title, status, source, due_date, deleted_at)")
+        .in("client_id", ids)
+        .is("deleted_at", null),
+      db.from("editorial_publications")
+        .select("client_id, status, scheduled_at")
+        .in("client_id", ids)
+        .in("status", ["scheduled", "published"]),
+    ]);
+    const planoDe = new Map<string, string[]>();
+    for (const row of planosRes.data || []) {
+      const etapas = (row.metadata as any)?.etapas;
+      if (Array.isArray(etapas) && !planoDe.has(row.client_id)) planoDe.set(row.client_id, etapas.map(String));
+    }
+    const dossieDe = new Map<string, string>();
+    for (const d of dossiesRes.data || []) {
+      const texto = String(d.summary || d.content || "").replace(/\s+/g, " ").trim();
+      if (texto) dossieDe.set(d.client_id, texto.slice(0, 260));
+    }
+    const tarefasDe = new Map<string, { abertas: string[]; atrasadas: number }>();
+    const hojeIso = new Date().toISOString().slice(0, 10);
+    for (const p of projetosRes.data || []) {
+      const acc = tarefasDe.get(p.client_id) || { abertas: [], atrasadas: 0 };
+      for (const t of (p.tasks || []) as any[]) {
+        if (t.deleted_at || !["backlog", "todo", "doing", "review"].includes(String(t.status))) continue;
+        if (String(t.source || "").startsWith("ciclo:") && acc.abertas.length < 4) acc.abertas.push(String(t.title));
+        if (typeof t.due_date === "string" && t.due_date < hojeIso) acc.atrasadas += 1;
+      }
+      tarefasDe.set(p.client_id, acc);
+    }
+    const agendaDe = new Map<string, { proximos7: number; publicados7: number }>();
+    const agoraMs = Date.now();
+    for (const e of agendaRes.data || []) {
+      const acc = agendaDe.get(e.client_id) || { proximos7: 0, publicados7: 0 };
+      const quando = e.scheduled_at ? new Date(e.scheduled_at).getTime() : null;
+      if (e.status === "scheduled" && quando && quando > agoraMs && quando < agoraMs + 7 * 86400000) acc.proximos7 += 1;
+      if (e.status === "published" && quando && quando > agoraMs - 7 * 86400000) acc.publicados7 += 1;
+      agendaDe.set(e.client_id, acc);
+    }
+    // Slots que giram no plano congelado: [2,3,5,4] (o mesmo de cycleTasks).
+    const ROTATING_SLOTS = [2, 3, 5, 4];
+    const rotuloDaEtapa = (clientId: string, step: number): string => {
+      const plano = planoDe.get(clientId);
+      const indice = ROTATING_SLOTS.indexOf(step);
+      if (plano && indice >= 0 && plano[indice]) return plano[indice];
+      return CORE_LABELS[area][step] || STEP_LABELS[area][step - 1] || `etapa ${step} da semana`;
+    };
+
     const labels = STEP_LABELS[area];
     let closed = 0;
     const lines: string[] = [];
@@ -171,11 +237,19 @@ Deno.serve(async (req) => {
       const firstMissing = Array.from({ length: total }, (_, i) => i + 1)
         .find((step) => !done.has(step))!;
       const missingLabel = firstMissing <= labels.length
-        ? (CORE_LABELS[area][firstMissing] || `etapa ${firstMissing} da semana`)
+        ? rotuloDaEtapa(client.id, firstMissing)
         : ONBOARDING_LABELS[firstMissing - labels.length - 1];
       const inherited = prevDone.size > 0 && prevDone.size < labels.length;
+      const extras: string[] = [];
+      const t = tarefasDe.get(client.id);
+      if (t?.abertas.length) extras.push(`tarefas de alerta abertas: ${t.abertas.join("; ")}`);
+      if (t?.atrasadas) extras.push(`${t.atrasadas} tarefa(s) vencida(s) no Kanban`);
+      const ag = agendaDe.get(client.id);
+      if (ag) extras.push(`agenda: ${ag.proximos7} post(s) nos próximos 7 dias, ${ag.publicados7} no ar nos últimos 7`);
+      const dossie = dossieDe.get(client.id);
+      if (dossie) extras.push(`dossiê (onde estamos): ${dossie}`);
       lines.push(
-        `${name}${isNew ? " (cliente novo, em onboarding)" : ""}: ${doneCount}/${total} etapas, parado em "${missingLabel}"${inherited ? `, semana passada também ficou incompleta (${prevDone.size}/${labels.length})` : ""}${doneCount === 0 ? ", SEMANA AINDA ZERADA" : ""}`,
+        `${name}${isNew ? " (cliente novo, em onboarding)" : ""}: ${doneCount}/${total} etapas, parado em "${missingLabel}"${inherited ? `, semana passada também ficou incompleta (${prevDone.size}/${labels.length})` : ""}${doneCount === 0 ? ", SEMANA AINDA ZERADA" : ""}${extras.length ? ` — ${extras.join(" · ")}` : ""}`,
       );
     }
 

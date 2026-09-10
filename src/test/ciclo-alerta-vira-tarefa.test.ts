@@ -50,10 +50,13 @@ describe("alerta que virou tarefa sai do vermelho", () => {
     const situacao = readFileSync(resolve(raiz, "src/lib/cycleSituation.ts"), "utf8");
 
     // Escrita: source = "ciclo:<chave>".
-    expect(folha).toContain("source: `${MARCA_DE_ENCAMINHAMENTO}${p.chave}`");
+    expect(folha).toContain("const origem = `${MARCA_DE_ENCAMINHAMENTO}${p.chave}`");
+    expect(folha).toContain("source: origem,");
+    // Idempotente: procura tarefa aberta com a mesma origem antes de criar.
+    expect(folha).toContain('.eq("source", origem)');
     // Leitura: a mesma marca, na consulta que ja existia (sem coluna nova).
     expect(situacao).toContain('export const MARCA_DE_ENCAMINHAMENTO = "ciclo:"');
-    expect(situacao).toContain("title, source)");
+    expect(situacao).toContain("title, source, updated_at)");
     expect(situacao).toContain("s.pendenciasEncaminhadas.push(chave)");
     // So tarefa ABERTA cala o alerta: o laco ja pula o que nao esta aberto.
     const trecho = situacao.slice(situacao.indexOf("const ABERTAS = new Set"));

@@ -196,8 +196,17 @@ export default function ClientCycleSheet({
       const diaDaSemana = (hoje.getDay() + 6) % 7; // 0 = segunda
       const sexta = addDays(hoje, diaDaSemana <= 4 ? 4 - diaDaSemana : 11 - diaDaSemana);
 
+      // Ligada ao proximo marco aberto do projeto: assim a Timeline e o
+      // progresso do projeto andam quando a tarefa fecha (gatilho do banco).
+      const { data: marco } = await (supabase as any)
+        .from("milestones").select("id").eq("project_id", projeto.id)
+        .is("deleted_at", null).neq("status", "completed")
+        .order("target_date", { ascending: true, nullsFirst: false })
+        .limit(1).maybeSingle();
+
       const { error } = await (supabase as any).from("tasks").insert({
         project_id: projeto.id,
+        milestone_id: marco?.id ?? null,
         title: titulo,
         description: [p.texto, ...(p.detalhes || []).map((d) => `- ${d}`)].join("\n"),
         status: "backlog",
