@@ -1892,6 +1892,7 @@ export type Database = {
           id: string
           notes: string | null
           paid_date: string | null
+          parent_expense_id: string | null
           payment_method: string | null
           recurrence: string
           status: string
@@ -1910,6 +1911,7 @@ export type Database = {
           id?: string
           notes?: string | null
           paid_date?: string | null
+          parent_expense_id?: string | null
           payment_method?: string | null
           recurrence?: string
           status?: string
@@ -1928,13 +1930,22 @@ export type Database = {
           id?: string
           notes?: string | null
           paid_date?: string | null
+          parent_expense_id?: string | null
           payment_method?: string | null
           recurrence?: string
           status?: string
           supplier?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "expenses_parent_expense_id_fkey"
+            columns: ["parent_expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       external_account_connections: {
         Row: {
@@ -3104,6 +3115,41 @@ export type Database = {
           },
         ]
       }
+      financial_tax_rates: {
+        Row: {
+          competence: string
+          created_at: string
+          note: string | null
+          rate: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          competence: string
+          created_at?: string
+          note?: string | null
+          rate: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          competence?: string
+          created_at?: string
+          note?: string | null
+          rate?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_tax_rates_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_configs: {
         Row: {
           auth_header: string
@@ -3469,6 +3515,9 @@ export type Database = {
           decision_note: string | null
           destino: string | null
           evidencia: string | null
+          executed_at: string | null
+          execution_evidence: string | null
+          execution_run_key: string | null
           id: string
           impacto: string | null
           kanban_task_id: string | null
@@ -3494,6 +3543,9 @@ export type Database = {
           decision_note?: string | null
           destino?: string | null
           evidencia?: string | null
+          executed_at?: string | null
+          execution_evidence?: string | null
+          execution_run_key?: string | null
           id?: string
           impacto?: string | null
           kanban_task_id?: string | null
@@ -3519,6 +3571,9 @@ export type Database = {
           decision_note?: string | null
           destino?: string | null
           evidencia?: string | null
+          executed_at?: string | null
+          execution_evidence?: string | null
+          execution_run_key?: string | null
           id?: string
           impacto?: string | null
           kanban_task_id?: string | null
@@ -3607,6 +3662,66 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "operator_audit_log_operator_id_fkey"
+            columns: ["operator_id"]
+            isOneToOne: false
+            referencedRelation: "internal_operators"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operator_deliveries: {
+        Row: {
+          approval_id: string | null
+          client_id: string | null
+          como: string
+          id: string
+          kanban_task_id: string | null
+          o_que: string
+          occurred_at: string
+          onde_acessar: string
+          onde_documentado: string | null
+          operator_id: string
+          run_key: string | null
+          task_link_id: string | null
+        }
+        Insert: {
+          approval_id?: string | null
+          client_id?: string | null
+          como: string
+          id?: string
+          kanban_task_id?: string | null
+          o_que: string
+          occurred_at?: string
+          onde_acessar: string
+          onde_documentado?: string | null
+          operator_id: string
+          run_key?: string | null
+          task_link_id?: string | null
+        }
+        Update: {
+          approval_id?: string | null
+          client_id?: string | null
+          como?: string
+          id?: string
+          kanban_task_id?: string | null
+          o_que?: string
+          occurred_at?: string
+          onde_acessar?: string
+          onde_documentado?: string | null
+          operator_id?: string
+          run_key?: string | null
+          task_link_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operator_deliveries_approval_id_fkey"
+            columns: ["approval_id"]
+            isOneToOne: false
+            referencedRelation: "operator_approvals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operator_deliveries_operator_id_fkey"
             columns: ["operator_id"]
             isOneToOne: false
             referencedRelation: "internal_operators"
@@ -5206,6 +5321,36 @@ export type Database = {
           },
         ]
       }
+      user_purges: {
+        Row: {
+          actor_id: string
+          id: string
+          purged_at: string
+          summary: Json
+          target_email: string | null
+          target_id: string
+          target_name: string | null
+        }
+        Insert: {
+          actor_id: string
+          id?: string
+          purged_at?: string
+          summary?: Json
+          target_email?: string | null
+          target_id: string
+          target_name?: string | null
+        }
+        Update: {
+          actor_id?: string
+          id?: string
+          purged_at?: string
+          summary?: Json
+          target_email?: string | null
+          target_id?: string
+          target_name?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -5783,10 +5928,24 @@ export type Database = {
       }
     }
     Functions: {
+      admin_delete_readiness: {
+        Args: never
+        Returns: {
+          coluna: string
+          obrigatoria: boolean
+          tabela: string
+          tratamento: string
+        }[]
+      }
+      admin_purge_user: {
+        Args: { _actor: string; _target: string }
+        Returns: Json
+      }
       admin_release_file_now: {
         Args: { p_file_id: string; p_mode: string }
         Returns: undefined
       }
+      admin_user_storage_objects: { Args: { _target: string }; Returns: Json }
       ads_contas_conhecidas: { Args: never; Returns: Json }
       ads_creatives_tick: { Args: never; Returns: Json }
       ads_metrics_tick: { Args: never; Returns: Json }
@@ -5833,6 +5992,7 @@ export type Database = {
       }
       can_access_client: { Args: { _client_id: string }; Returns: boolean }
       can_client_read_file: { Args: { _file_id: string }; Returns: boolean }
+      can_delete_file: { Args: { _file_id: string }; Returns: boolean }
       can_manage_client: { Args: { _client_id: string }; Returns: boolean }
       can_read_file: { Args: { _file_id: string }; Returns: boolean }
       can_staff_access_project: {
@@ -5990,6 +6150,7 @@ export type Database = {
         Args: { _client_id: string }
         Returns: boolean
       }
+      editorial_ciclo_publicacao: { Args: never; Returns: Json }
       editorial_client_can_read_post: {
         Args: { _post_id: string }
         Returns: boolean
@@ -6033,6 +6194,10 @@ export type Database = {
         Args: { _task_status: string }
         Returns: string
       }
+      editorial_promover_planejados: {
+        Args: { _janela_de_atraso?: string }
+        Returns: Json
+      }
       editorial_reconcile_task_delivery_types: { Args: never; Returns: number }
       editorial_reconciliar_publicados: { Args: never; Returns: Json }
       editorial_staff_can_access_client: {
@@ -6051,6 +6216,16 @@ export type Database = {
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number
+      }
+      expense_estornar: { Args: { _pagamento_id: string }; Returns: Json }
+      expense_pagar: {
+        Args: {
+          _expense_id: string
+          _pago_em?: string
+          _proximo_vencimento?: string
+          _valor?: number
+        }
+        Returns: Json
       }
       file_guard_state: {
         Args: { p_file_id: string }
@@ -6375,6 +6550,15 @@ export type Database = {
         }
         Returns: Json
       }
+      operator_cancelar_tarefa: {
+        Args: {
+          _approval_id: string
+          _motivo: string
+          _operator_slug: string
+          _task_id: string
+        }
+        Returns: Json
+      }
       operator_expire_stale_runs: { Args: never; Returns: number }
       operator_human_action: {
         Args: {
@@ -6406,6 +6590,34 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      operator_ordem_executada: {
+        Args: {
+          _approval_id: string
+          _evidence: string
+          _operator_slug: string
+          _run_key?: string
+        }
+        Returns: Json
+      }
+      operator_ordens_abertas: {
+        Args: { _operator_slug: string }
+        Returns: {
+          action_kind: string
+          approval_id: string
+          aprovada_em: string
+          custo_previsto: number
+          destino: string
+          kanban_task_id: string
+          nota_de_quem_aprovou: string
+          o_que: string
+          payload: Json
+          por_que: string
+          prazo: string
+          reversivel: boolean
+          task_link_id: string
+          titulo_da_tarefa: string
+        }[]
+      }
       operator_participar: {
         Args: {
           _attachments?: Json
@@ -6435,6 +6647,19 @@ export type Database = {
         Returns: Json
       }
       operator_reconciliar_vinculos_gemeos: { Args: never; Returns: Json }
+      operator_registrar_feito: {
+        Args: {
+          _approval_id?: string
+          _como: string
+          _kanban_task_id?: string
+          _o_que: string
+          _onde_acessar: string
+          _onde_documentado?: string
+          _operator_slug: string
+          _run_key?: string
+        }
+        Returns: Json
+      }
       operator_report_event: {
         Args: {
           _action?: string
@@ -6476,6 +6701,11 @@ export type Database = {
         }
         Returns: Json
       }
+      operator_status_do_card: {
+        Args: { _event: string; _status_atual: string; _tem_evidencia: boolean }
+        Returns: string
+      }
+      operator_status_do_run: { Args: { _event: string }; Returns: string }
       operator_update: {
         Args: {
           _actor: string
@@ -6997,12 +7227,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7026,11 +7256,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7051,11 +7281,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7076,11 +7306,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7093,11 +7323,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
