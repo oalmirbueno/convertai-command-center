@@ -16,8 +16,11 @@ import { readMemory } from "@/lib/clientMemory";
 import {
   formatMetricNumber,
   useSocialMetricsWeekly,
+  agruparPorConta,
   weekDeltaPct,
+  type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
+import { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
 
 /**
  * O narrador do mês: a IA escreve 3 a 5 frases contando o mês do cliente a
@@ -222,8 +225,33 @@ const SIGNAL_TONE: Record<string, string> = {
  * ainda não conectada ou primeira coleta pendente), o bloco não aparece.
  */
 function InstagramRealBlock({ clientId }: { clientId: string }) {
-  const { data: rows } = useSocialMetricsWeekly(clientId, 12);
-  if (!rows || rows.length === 0) return null;
+  // 12 semanas POR CONTA: quem tem duas contas precisa de linhas para as duas.
+  const { data: todas } = useSocialMetricsWeekly(clientId, 40);
+  const { data: identidades } = useIdentidadesPorConta();
+  if (!todas || todas.length === 0) return null;
+  // Uma conta por bloco. Misturar as duas contas do mesmo cliente comparava a
+  // semana de uma com a mesma semana da outra e mostrava variacao inventada.
+  const porConta = agruparPorConta(todas);
+  return (
+    <>
+      {[...porConta.entries()].map(([accountId, rows]) => (
+        <InstagramContaBlock
+          key={accountId}
+          rows={rows.slice(0, 12)}
+          username={identidades?.get(accountId)?.username ?? null}
+        />
+      ))}
+    </>
+  );
+}
+
+function InstagramContaBlock({
+  rows,
+  username,
+}: {
+  rows: SocialMetricsWeek[];
+  username: string | null;
+}) {
   const latest = rows[0];
   const weekLabel = (value: string) => {
     const [, month, day] = value.split("-");
@@ -244,6 +272,7 @@ function InstagramRealBlock({ clientId }: { clientId: string }) {
           <Instagram className="h-3 w-3" /> Instagram em números reais
         </span>
         <p className="mt-2 text-xs text-muted-foreground">
+          {username ? `@${username} · ` : ""}
           Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)},
           direto da sua conta. Atualiza sozinho toda semana.
         </p>

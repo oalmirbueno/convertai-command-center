@@ -18,9 +18,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import SaudeDasContas from "@/components/admin/SaudeDasContas";
-import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
+import LogoDoCliente, { useIdentidadesPorConta } from "@/components/admin/LogoDoCliente";
 import IdentidadeDoCliente from "@/components/admin/IdentidadeDoCliente";
 import {
+  agruparPorConta,
   collectSocialMetricsNow,
   formatMetricNumber,
   useSocialClientIdentity,
@@ -65,20 +66,24 @@ function DeltaBadge({ pct }: { pct: number | null }) {
  */
 function ClientMetricsDetail({
   clientId,
+  accountId,
   clientName,
   rows,
   onBack,
 }: {
   clientId: string;
+  accountId: string;
   clientName: string;
   rows: SocialMetricsWeek[];
   onBack: () => void;
 }) {
   // 200 e nao 25: agora que a coleta pagina, limitar aqui esconderia
   // justamente os posts que passaram a existir.
-  const { data: posts } = useSocialPostMetrics(clientId, 200);
+  // Tudo aqui e DESTA conta: semanas, posts e identidade. O cliente pode ter
+  // outra conta, e ela tem o proprio dossie.
+  const { data: posts } = useSocialPostMetrics(clientId, 200, accountId);
   const [abaDoCliente, setAbaDoCliente] = useState<"desempenho" | "identidade">("desempenho");
-  const { data: identity } = useSocialClientIdentity(clientId);
+  const { data: identity } = useSocialClientIdentity(clientId, accountId);
   const latest = rows[0];
   const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
   const rankedPosts = useMemo(
@@ -423,12 +428,13 @@ export default function AdminMetricas() {
   const { data: rows, isLoading } = useSocialMetricsWeekly();
   const queryClient = useQueryClient();
   // Uma consulta so para a grade inteira: uma por cartao seria N chamadas
-  // para desenhar a mesma tela.
-  const { data: identidades } = useIdentidadesDosClientes();
+  // para desenhar a mesma tela. Por CONTA, porque cada hub e uma conta.
+  const { data: identidades } = useIdentidadesPorConta();
   const [collecting, setCollecting] = useState(false);
   const [search, setSearch] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClientId = searchParams.get("client") || "";
+  const selectedAccountId = searchParams.get("account") || "";
 
   const clientNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -438,34 +444,41 @@ export default function AdminMetricas() {
     return map;
   }, [clients]);
 
-  const byClient = useMemo(() => {
-    const map = new Map<string, SocialMetricsWeek[]>();
-    for (const row of rows || []) {
-      const list = map.get(row.client_id) || [];
-      list.push(row);
-      map.set(row.client_id, list);
-    }
-    return [...map.entries()].sort((a, b) =>
-      (clientNames.get(a[0]) || "").localeCompare(clientNames.get(b[0]) || "", "pt-BR"),
+  // Um hub por CONTA de Instagram, nao por cliente. A AcelerIQ tem @aceleriq
+  // e @sitebolt; a Acerbi tem @acerbispc e @cmeacerbi2025. Agrupar por cliente
+  // misturava as semanas das duas contas: o "ultimo" numero era de uma conta
+  // qualquer e a variacao comparava uma conta com a outra (500 x 53 = "-89%").
+  const byAccount = useMemo(() => {
+    const porConta = agruparPorConta(rows);
+    const nomeDe = (accountId: string, clientId: string) => {
+      const user = identidades?.get(accountId)?.username;
+      return `${clientNames.get(clientId) || ""} ${user ? "@" + user : ""}`;
+    };
+    return [...porConta.entries()].sort((a, b) =>
+      nomeDe(a[0], a[1][0].client_id).localeCompare(nomeDe(b[0], b[1][0].client_id), "pt-BR"),
     );
-  }, [rows, clientNames]);
+  }, [rows, clientNames, identidades]);
 
   const filteredHubs = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("pt-BR");
-    if (!term) return byClient;
-    return byClient.filter(([clientId]) =>
-      (clientNames.get(clientId) || "").toLocaleLowerCase("pt-BR").includes(term),
+    if (!term) return byAccount;
+    return byAccount.filter(([accountId, list]) =>
+      `${clientNames.get(list[0].client_id) || ""} ${identidades?.get(accountId)?.username || ""}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(term),
     );
-  }, [byClient, clientNames, search]);
+  }, [byAccount, clientNames, identidades, search]);
 
-  const openClient = (clientId: string) => {
+  const openAccount = (clientId: string, accountId: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("client", clientId);
+    next.set("account", accountId);
     setSearchParams(next);
   };
   const closeClient = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("client");
+    next.delete("account");
     setSearchParams(next);
   };
 
@@ -497,9 +510,12 @@ export default function AdminMetricas() {
     );
   }
 
-  const selectedRows = selectedClientId
-    ? byClient.find(([clientId]) => clientId === selectedClientId)?.[1] || []
-    : [];
+  // Link antigo so com ?client= continua abrindo: cai na primeira conta do cliente.
+  const selectedHub = selectedClientId
+    ? byAccount.find(([accountId, list]) =>
+        list[0].client_id === selectedClientId && (!selectedAccountId || accountId === selectedAccountId))
+    : undefined;
+  const selectedRows = selectedHub?.[1] || [];
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-5 p-4 sm:p-6">
@@ -520,16 +536,17 @@ export default function AdminMetricas() {
         </Button>
       </div>
 
-      {selectedClientId ? (
+      {selectedClientId && selectedHub ? (
         <ClientMetricsDetail
           clientId={selectedClientId}
+          accountId={selectedHub[0]}
           clientName={clientNames.get(selectedClientId) || "Cliente"}
           rows={selectedRows}
           onBack={closeClient}
         />
       ) : isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando métricas...</p>
-      ) : byClient.length === 0 ? (
+      ) : byAccount.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
           Nenhuma métrica coletada ainda. Clique em "Atualizar agora": a coleta é
           disparada para todas as contas Instagram conectadas e os números chegam
@@ -537,7 +554,7 @@ export default function AdminMetricas() {
         </div>
       ) : (
         <>
-          {byClient.length > 6 && (
+          {byAccount.length > 6 && (
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -549,21 +566,22 @@ export default function AdminMetricas() {
             </div>
           )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredHubs.map(([clientId, list]) => {
+            {filteredHubs.map(([accountId, list]) => {
               const latest = list[0];
+              const clientId = latest.client_id;
               const reachDelta = weekDeltaPct(list, "reach");
               const followersDelta = weekDeltaPct(list, "followers");
               return (
                 <button
-                  key={clientId}
+                  key={accountId}
                   type="button"
-                  onClick={() => openClient(clientId)}
+                  onClick={() => openAccount(clientId, accountId)}
                   className="group rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
                 >
                   <div className="flex items-center gap-2.5">
                     {/* A marca antes do nome: o olho acha antes da palavra. */}
                     <LogoDoCliente
-                      url={identidades?.get(clientId)?.profile_picture_url}
+                      url={identidades?.get(accountId)?.profile_picture_url}
                       nome={clientNames.get(clientId)}
                       tamanho={36}
                     />
@@ -571,9 +589,9 @@ export default function AdminMetricas() {
                       <p className="truncate text-sm font-semibold text-foreground">
                         {clientNames.get(clientId) || "Cliente"}
                       </p>
-                      {identidades?.get(clientId)?.username && (
+                      {identidades?.get(accountId)?.username && (
                         <p className="truncate text-[10px] text-muted-foreground">
-                          @{identidades.get(clientId)!.username}
+                          @{identidades.get(accountId)!.username}
                         </p>
                       )}
                     </div>

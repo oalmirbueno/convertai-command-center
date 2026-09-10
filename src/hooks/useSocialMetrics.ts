@@ -63,10 +63,48 @@ export interface SocialPostMetric {
   captured_at: string;
 }
 
-export function useSocialPostMetrics(clientId?: string, limit = 25) {
+/**
+ * Uma conta por vez, nunca o cliente inteiro.
+ *
+ * Um cliente pode ter DUAS contas de Instagram (a AcelerIQ tem @aceleriq e
+ * @sitebolt; a Acerbi tem @acerbispc e @cmeacerbi2025). As linhas semanais
+ * vem misturadas, ordenadas so por semana: "a mais recente" era a conta que
+ * o banco devolvesse primeiro, e a variacao comparava a semana de UMA conta
+ * com a mesma semana da OUTRA - 500 seguidores contra 53 virava "-89%".
+ * Agrupar por conta e o unico jeito de os numeros serem os da conta.
+ */
+export function agruparPorConta<T extends { external_account_id: string }>(rows: T[] | undefined) {
+  const porConta = new Map<string, T[]>();
+  for (const row of rows || []) {
+    const lista = porConta.get(row.external_account_id) || [];
+    lista.push(row);
+    porConta.set(row.external_account_id, lista);
+  }
+  return porConta;
+}
+
+/**
+ * A conta que representa o cliente quando so cabe uma (rituais, resumo):
+ * a de maior alcance na ultima semana, e no empate a de mais seguidores.
+ * E sinal, nao sorteio.
+ */
+export function contaPrincipal(rows: SocialMetricsWeek[] | undefined): SocialMetricsWeek[] {
+  const porConta = agruparPorConta(rows);
+  let melhor: SocialMetricsWeek[] = [];
+  for (const lista of porConta.values()) {
+    const a = lista[0];
+    const b = melhor[0];
+    if (!b) { melhor = lista; continue; }
+    const alcanceA = a.reach ?? -1, alcanceB = b.reach ?? -1;
+    if (alcanceA > alcanceB || (alcanceA === alcanceB && (a.followers ?? -1) > (b.followers ?? -1))) melhor = lista;
+  }
+  return melhor;
+}
+
+export function useSocialPostMetrics(clientId?: string, limit = 25, accountId?: string) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["social-post-metrics", user?.id, clientId ?? "all", limit],
+    queryKey: ["social-post-metrics", user?.id, clientId ?? "all", limit, accountId ?? "all"],
     queryFn: async () => {
       let query = (supabase as any)
         .from("social_post_metrics")
@@ -74,6 +112,7 @@ export function useSocialPostMetrics(clientId?: string, limit = 25) {
         .order("posted_at", { ascending: false })
         .limit(limit);
       if (clientId) query = query.eq("client_id", clientId);
+      if (accountId) query = query.eq("external_account_id", accountId);
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as SocialPostMetric[];
@@ -95,15 +134,19 @@ export interface SocialClientIdentity {
   captured_at: string;
 }
 
-export function useSocialClientIdentity(clientId?: string) {
+export function useSocialClientIdentity(clientId?: string, accountId?: string) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["social-client-identity", user?.id, clientId ?? "none"],
+    queryKey: ["social-client-identity", user?.id, clientId ?? "none", accountId ?? "any"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from("social_client_identity")
         .select("*")
-        .eq("client_id", clientId)
+        .eq("client_id", clientId);
+      // Com a conta informada, a identidade e DAQUELA conta - e nao a mais
+      // recente do cliente, que pode ser a outra.
+      if (accountId) query = query.eq("external_account_id", accountId);
+      const { data, error } = await query
         .order("captured_at", { ascending: false })
         .limit(1)
         .maybeSingle();

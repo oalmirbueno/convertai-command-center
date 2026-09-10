@@ -8,6 +8,7 @@ import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import {
   formatMetricNumber,
   useSocialMetricsWeekly,
+  contaPrincipal,
   weekDeltaPct,
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
@@ -292,12 +293,17 @@ export default function AdminExperience() {
     return set;
   }, [cycleRows]);
   const igByClient = useMemo(() => {
-    const map = new Map<string, SocialMetricsWeek[]>();
+    const bruto = new Map<string, SocialMetricsWeek[]>();
     for (const row of igAllWeeks || []) {
-      const list = map.get(row.client_id) || [];
+      const list = bruto.get(row.client_id) || [];
       list.push(row);
-      map.set(row.client_id, list);
+      bruto.set(row.client_id, list);
     }
+    // Cliente com duas contas de Instagram: o ritual fala de UMA (a principal),
+    // nunca das duas misturadas - misturar comparava a semana de uma conta
+    // com a mesma semana da outra e inventava variacao.
+    const map = new Map<string, SocialMetricsWeek[]>();
+    for (const [clientId, rows] of bruto) map.set(clientId, contaPrincipal(rows));
     return map;
   }, [igAllWeeks]);
 

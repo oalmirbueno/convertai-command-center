@@ -85,6 +85,37 @@ export function useIdentidadesDosClientes() {
   });
 }
 
+/**
+ * A identidade de CADA conta (e nao a principal do cliente): a tela de
+ * metricas mostra um hub por conta de Instagram, e cada hub precisa do
+ * proprio @ e da propria foto - senao @sitebolt aparece com a logo da
+ * AcelerIQ, que e exatamente o erro que a escolha da principal evita.
+ */
+export function useIdentidadesPorConta() {
+  return useQuery({
+    queryKey: ["identidades-por-conta"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("social_client_identity")
+        .select("client_id, external_account_id, profile_picture_url, username, captured_at")
+        .order("captured_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      const porConta = new Map<string, IdentidadeMinima>();
+      for (const l of (data || []) as any[]) {
+        if (!porConta.has(l.external_account_id)) {
+          porConta.set(l.external_account_id, {
+            client_id: l.client_id,
+            profile_picture_url: l.profile_picture_url,
+            username: l.username,
+          });
+        }
+      }
+      return porConta;
+    },
+    staleTime: 600_000,
+  });
+}
+
 export function iniciaisDe(nome?: string | null): string {
   const limpo = String(nome ?? "").trim();
   if (!limpo) return "?";
