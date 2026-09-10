@@ -1815,3 +1815,253 @@ export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthCont
       : problemas.map((p) => `${p.verificacao}: ${p.quantidade}`).join('; '),
   };
 }
+
+// ─── Situação do ciclo (uma semana, uma frente, um cliente) ───────────────
+// A leitura que o agente fazia em três chamadas (etapas, plano congelado,
+// tarefas do ciclo) e ainda precisava cruzar sozinho. Aqui o servidor cruza
+// e resume em uma ou duas frases — fatos, não julgamento.
+const CICLO_ETAPAS_TOTAL = 6;
+
+function hojeEmSaoPaulo(): string {
+  // en-CA formata como AAAA-MM-DD; o fuso é o da operação, não o do servidor.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+function segundaDaSemana(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) throw new Error('week_start must be YYYY-MM-DD');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function ddmm(iso: string | null | undefined): string {
+  if (!iso) return '?';
+  const s = String(iso);
+  return `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+}
+
+export async function getCycleStatus(
+  opts: { client_id: string; week_start?: string; area?: 'social' | 'trafego' },
+  ctx: AuthContext,
+) {
+  if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+  assertClientAccess(ctx, opts.client_id);
+  const area = opts.area ?? 'social';
+  if (opts.week_start && !isRealCalendarDate(opts.week_start)) {
+    throw new Error('week_start must be a real calendar date (YYYY-MM-DD)');
+  }
+  const weekStart = segundaDaSemana(opts.week_start ?? hojeEmSaoPaulo());
+
+  const etapas = await withTimeout(
+    db().from('weekly_cycle_progress')
+      .select('step, done_at, done_by, auto, proof')
+      .eq('client_id', opts.client_id)
+      .eq('area', area)
+      .eq('week_start', weekStart)
+      .order('step', { ascending: true }),
+  );
+  if (etapas.error) throw new Error(etapas.error.message);
+
+  const plano = await withTimeout(
+    db().from('project_memory')
+      .select('id, title, content, metadata, created_at')
+      .eq('client_id', opts.client_id)
+      .eq('kind', 'ciclo_semana')
+      .eq('metadata->>week_start', weekStart)
+      .eq('metadata->>area', area)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  );
+  if (plano.error) throw new Error(plano.error.message);
+
+  const projetos = await withTimeout(
+    db().from('projects').select('id').eq('client_id', opts.client_id).is('deleted_at', null),
+  );
+  if (projetos.error) throw new Error(projetos.error.message);
+  const projectIds = ((projetos.data ?? []) as Array<{ id: string }>).map((p) => p.id);
+
+  let tarefas: Array<{ id: string; title: string; due_date: string | null; status: string; source: string | null; project_id: string }> = [];
+  if (projectIds.length > 0) {
+    const t = await withTimeout(
+      db().from('tasks')
+        .select('id, title, due_date, status, source, project_id')
+        .in('project_id', projectIds)
+        .like('source', 'ciclo:%')
+        .neq('status', 'done')
+        .is('deleted_at', null)
+        .order('due_date', { ascending: true, nullsFirst: false })
+        .limit(200),
+    );
+    if (t.error) throw new Error(t.error.message);
+    tarefas = (t.data ?? []) as typeof tarefas;
+  }
+
+  const linhas = (etapas.data ?? []) as Array<{ step: number; done_at: string; done_by: string | null; auto: boolean | null; proof: string | null }>;
+  const doCiclo = linhas.filter((l) => l.step <= CICLO_ETAPAS_TOTAL);
+  const automaticas = doCiclo.filter((l) => l.auto === true).length;
+  const hoje = hojeEmSaoPaulo();
+  const atrasadas = tarefas.filter((t) => t.due_date && t.due_date < hoje).length;
+  const metaPlano = (plano.data as { metadata?: Record<string, unknown> } | null)?.metadata ?? null;
+
+  const frases: string[] = [];
+  frases.push(
+    `Semana de ${ddmm(weekStart)} (${area}): ${doCiclo.length} de ${CICLO_ETAPAS_TOTAL} etapas concluídas`
+    + (automaticas > 0 ? ` (${automaticas} por prova automática do painel)` : '')
+    + (doCiclo.length >= CICLO_ETAPAS_TOTAL ? ' — semana fechada.' : '.'),
+  );
+  frases.push(plano.data
+    ? 'Há plano congelado para a semana.'
+    : 'Sem plano congelado para a semana.');
+  frases.push(tarefas.length === 0
+    ? 'Nenhuma tarefa do ciclo aberta.'
+    : `${tarefas.length} tarefa(s) do ciclo aberta(s)${atrasadas > 0 ? `, ${atrasadas} atrasada(s)` : ''}.`);
+
+  return {
+    client_id: opts.client_id,
+    area,
+    week_start: weekStart,
+    steps: doCiclo.map((l) => ({ step: l.step, done_at: l.done_at, done_by: l.done_by, auto: l.auto === true, proof: l.proof ?? null })),
+    onboarding_steps: linhas.filter((l) => l.step > CICLO_ETAPAS_TOTAL).map((l) => ({ step: l.step, done_at: l.done_at, done_by: l.done_by, auto: l.auto === true, proof: l.proof ?? null })),
+    done_count: doCiclo.length,
+    total: CICLO_ETAPAS_TOTAL,
+    closed: doCiclo.length >= CICLO_ETAPAS_TOTAL,
+    plan: plano.data
+      ? {
+        id: (plano.data as { id: string }).id,
+        title: (plano.data as { title: string | null }).title,
+        created_at: (plano.data as { created_at: string }).created_at,
+        etapas: (metaPlano?.etapas as unknown) ?? null,
+        metadata: metaPlano,
+      }
+      : null,
+    open_tasks: tarefas.map((t) => ({ id: t.id, title: t.title, due_date: t.due_date, status: t.status, source: t.source, project_id: t.project_id })),
+    summary: frases.join(' '),
+  };
+}
+
+// ─── Situação da agenda editorial (um cliente) ────────────────────────────
+// O que está marcado para sair, o que saiu, o que está pronto e parado, e o
+// que ainda não tem arte. O diagnóstico é a leitura que o dono faz de cabeça
+// quando abre o calendário — aqui ela vem escrita.
+export async function getAgendaStatus(
+  opts: { client_id: string; days?: number },
+  ctx: AuthContext,
+) {
+  if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+  assertClientAccess(ctx, opts.client_id);
+  const days = Math.min(Math.max(Math.floor(Number(opts.days ?? 14)) || 14, 1), 60);
+
+  const agora = new Date();
+  const horizonte = new Date(agora.getTime() + days * 86_400_000);
+  const seteDiasAtras = new Date(agora.getTime() - 7 * 86_400_000);
+
+  const [agendadas, publicadas, prontas, semArte] = await Promise.all([
+    withTimeout(
+      db().from('editorial_publications')
+        .select('id, post_id, platform, scheduled_at, status')
+        .eq('client_id', opts.client_id)
+        .eq('status', 'scheduled')
+        .gte('scheduled_at', agora.toISOString())
+        .lte('scheduled_at', horizonte.toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+    withTimeout(
+      db().from('editorial_publications')
+        .select('id, post_id, platform, published_at, permalink')
+        .eq('client_id', opts.client_id)
+        .eq('status', 'published')
+        .gte('published_at', seteDiasAtras.toISOString())
+        .order('published_at', { ascending: false })
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+    withTimeout(
+      db().from('editorial_posts')
+        .select('id, title, content_type, updated_at')
+        .eq('client_id', opts.client_id)
+        .eq('production_status', 'ready')
+        .is('archived_at', null)
+        .order('updated_at', { ascending: false })
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+    withTimeout(
+      db().from('editorial_posts')
+        .select('id, title, production_status, content_type')
+        .eq('client_id', opts.client_id)
+        .is('archived_at', null)
+        .is('primary_file_id', null)
+        .order('updated_at', { ascending: false })
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+  ]);
+  for (const r of [agendadas, publicadas, prontas, semArte]) {
+    if (r.error) throw new Error(r.error.message);
+  }
+
+  type Pub = { id: string; post_id: string; platform: string; scheduled_at?: string | null; published_at?: string | null; permalink?: string | null };
+  const listaAgendadas = (agendadas.data ?? []) as Pub[];
+  const listaPublicadas = (publicadas.data ?? []) as Pub[];
+  const listaProntas = (prontas.data ?? []) as Array<{ id: string; title: string; content_type: string; updated_at: string }>;
+  const listaSemArte = (semArte.data ?? []) as Array<{ id: string; title: string; production_status: string; content_type: string }>;
+
+  // Títulos das pautas por trás das publicações.
+  const postIds = [...new Set([...listaAgendadas, ...listaPublicadas].map((p) => p.post_id))];
+  const titulos = new Map<string, string>();
+  if (postIds.length > 0) {
+    const t = await withTimeout(
+      db().from('editorial_posts').select('id, title').in('id', postIds.slice(0, MAX_CLIENT_IDS_PER_POSTGREST_FILTER * 5)),
+    );
+    for (const row of (t.data ?? []) as Array<{ id: string; title: string }>) titulos.set(row.id, row.title);
+  }
+
+  // Pauta pronta "na gaveta": ready, ativa e sem publicação agendada/no ar.
+  let prontasSemData = listaProntas;
+  if (listaProntas.length > 0) {
+    const ocupadas = await withTimeout(
+      db().from('editorial_publications')
+        .select('post_id')
+        .in('post_id', listaProntas.map((p) => p.id))
+        .in('status', ['scheduled', 'published'])
+        .limit(READ_LIMITS.maxPageSize),
+    );
+    if (ocupadas.error) throw new Error(ocupadas.error.message);
+    const comAgenda = new Set(((ocupadas.data ?? []) as Array<{ post_id: string }>).map((r) => r.post_id));
+    prontasSemData = listaProntas.filter((p) => !comAgenda.has(p.id));
+  }
+
+  const ultimaAgendada = listaAgendadas.length > 0
+    ? listaAgendadas[listaAgendadas.length - 1].scheduled_at ?? null
+    : null;
+
+  let diagnosis: string;
+  if (listaAgendadas.length === 0 && prontasSemData.length === 0) {
+    diagnosis = `agenda vazia: nada agendado nos próximos ${days} dias e nenhuma pauta pronta esperando data.`;
+  } else if (listaAgendadas.length === 0) {
+    diagnosis = `conteúdo pronto na gaveta: ${prontasSemData.length} pauta(s) pronta(s) sem data e nada agendado nos próximos ${days} dias.`;
+  } else {
+    diagnosis = `agenda coberta até ${ddmm(ultimaAgendada)} (${listaAgendadas.length} publicação(ões) agendada(s) nos próximos ${days} dias)`
+      + (prontasSemData.length > 0 ? `; ${prontasSemData.length} pauta(s) pronta(s) ainda sem data.` : '.');
+  }
+  if (listaSemArte.length > 0) diagnosis += ` ${listaSemArte.length} pauta(s) ainda sem arte.`;
+  if (listaPublicadas.length > 0) diagnosis += ` ${listaPublicadas.length} publicada(s) nos últimos 7 dias.`;
+
+  return {
+    client_id: opts.client_id,
+    days,
+    scheduled: listaAgendadas.map((p) => ({
+      publication_id: p.id, post_id: p.post_id, title: titulos.get(p.post_id) ?? null,
+      platform: p.platform, scheduled_at: p.scheduled_at ?? null,
+    })),
+    published_last_7_days: listaPublicadas.map((p) => ({
+      publication_id: p.id, post_id: p.post_id, title: titulos.get(p.post_id) ?? null,
+      platform: p.platform, published_at: p.published_at ?? null, permalink: p.permalink ?? null,
+    })),
+    ready_without_date: prontasSemData.map((p) => ({ id: p.id, title: p.title, content_type: p.content_type })),
+    without_art: listaSemArte.map((p) => ({ id: p.id, title: p.title, production_status: p.production_status, content_type: p.content_type })),
+    covered_until: ultimaAgendada ? String(ultimaAgendada).slice(0, 10) : null,
+    diagnosis,
+  };
+}

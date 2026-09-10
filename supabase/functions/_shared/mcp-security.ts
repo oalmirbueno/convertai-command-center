@@ -149,6 +149,8 @@ export const CLIENT_SCOPED_LEGACY_TOOLS = [
   'aceleriq_create_editorial_item',
   'aceleriq_update_task',
   'aceleriq_complete_task',
+  'aceleriq_delete_task',
+  'aceleriq_get_agenda_status',
   'aceleriq_create_report_draft',
   'aceleriq_update_project',
 ] as const;

@@ -30,6 +30,8 @@ import {
   search,
   getCurrentDossier,
   auditIntegrity,
+  getCycleStatus,
+  getAgendaStatus,
 } from './aceleriq-read-services.ts';
 import {
   OPERATOR_EVENTS,
@@ -107,6 +109,12 @@ import {
   updateTaskSchema,
   upsertCurrentDossier,
   upsertCurrentDossierSchema,
+  deleteTask,
+  deleteTaskSchema,
+  linkProjectToClient,
+  linkProjectToClientSchema,
+  registerDossierProgress,
+  registerDossierProgressSchema,
   WriteError,
 } from './mcp-write-services.ts';
 import {
@@ -264,6 +272,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_create_task: 'tasks:write',
   aceleriq_update_task: 'tasks:write',
   aceleriq_complete_task: 'tasks:write',
+  aceleriq_delete_task: 'tasks:write',
+  aceleriq_link_project_to_client: 'projects:write',
+  aceleriq_get_agenda_status: 'editorial:read',
   aceleriq_list_reports: 'reports:read',
   aceleriq_get_social_metrics: 'reports:read',
   aceleriq_list_social_posts: 'reports:read',
@@ -297,7 +308,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.40.0',
+  version: '1.41.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -689,6 +700,26 @@ const listEditorialCalendarTool = makeRead(
     additionalProperties: false,
   },
   (input, ctx) => listEditorialCalendar(input, ctx),
+);
+
+const getAgendaStatusTool = makeRead(
+  'aceleriq_get_agenda_status',
+  'Agenda editorial — situação',
+  'Situação da agenda editorial de um cliente, já diagnosticada: publicações agendadas nos próximos N dias (com plataforma e título da pauta), publicadas nos últimos 7 dias, pautas prontas sem data (production_status=ready, ativas, sem publicação agendada ou no ar) e pautas ainda sem arte (sem primary_file_id). O campo diagnosis diz em uma frase o que o calendário mostra: "agenda vazia", "conteúdo pronto na gaveta" ou "agenda coberta até dd/mm". Para a lista completa item a item, use aceleriq_list_editorial_calendar.',
+  z.object({
+    client_id: UUID,
+    days: limite(60),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      days: { type: 'integer', minimum: 1, maximum: 60, default: 14, description: 'Horizonte em dias para as publicações agendadas.' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  (input, ctx) => getAgendaStatus(input, ctx),
 );
 
 const listReportsTool = makeRead(
@@ -1251,6 +1282,31 @@ const completeTaskTool: ToolDefinition = {
   },
 };
 
+const deleteTaskTool: ToolDefinition = {
+  name: 'aceleriq_delete_task',
+  title: 'Excluir tarefa',
+  description:
+    'Exclui uma tarefa do Kanban com a MESMA regra do painel. Recusa tarefa que nasceu de pedido do cliente (desvincule e reabra o pedido) e tarefa editorial cuja publicação está agendada ou no ar (cancele o agendamento ou arquive a pauta). Ao excluir: vínculos de operador ficam bloqueados com o motivo e o diário do cliente registra "Tarefa descartada". Exclusão definitiva — para sumir da vista sem apagar, prefira mudar o status. Idempotente por idempotency_key.',
+  scopes: WRITE,
+  annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      task_id: { type: 'string', format: 'uuid' },
+      reason: { type: 'string', maxLength: 300, description: 'Por que a tarefa está saindo. Vai para o vínculo de operador e para o diário do cliente.' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['task_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = deleteTaskSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await deleteTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 const createReportDraftTool: ToolDefinition = {
   name: 'aceleriq_create_report_draft',
   title: 'Criar rascunho de relatório',
@@ -1343,6 +1399,31 @@ const updateProjectTool: ToolDefinition = {
     const parsed = updateProjectSchema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
     try { return await updateProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const linkProjectToClientTool: ToolDefinition = {
+  name: 'aceleriq_link_project_to_client',
+  title: 'Vincular projeto a cliente',
+  description:
+    'Muda o dono de um projeto: aponta projects.client_id para outro cliente. É o único campo que aceleriq_update_project não toca. Valida que o projeto existe e que o destino é um cliente ativo (perfil não apagado, papel client). O diário do cliente novo registra "Projeto vinculado" com o cliente de origem. Não move arquivos, relatórios nem publicações que carregam client_id próprio. Idempotente por idempotency_key.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      client_id: { type: 'string', format: 'uuid', description: 'Cliente de destino.' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'client_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = linkProjectToClientSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await linkProjectToClient(parsed.data, ensureWriteCtx(ctx)); }
     catch (e) { throw writeError(e); }
   },
 };
@@ -1648,6 +1729,29 @@ const upsertCurrentDossierTool: ToolDefinition = {
   },
 };
 
+const registerDossierProgressTool: ToolDefinition = {
+  name: 'aceleriq_register_dossier_progress',
+  title: 'Dossiê — registrar avanços',
+  description:
+    'Anexa ao dossiê geral do cliente (tipo contexto, sem projeto) a seção automática "Avanços recentes" com os fatos do painel dos últimos 7 dias, chamando a rotina do banco dossie_registrar_avancos. Só cria versão nova quando há fato novo: chamar de novo sem mudança devolve updated=false. Sem dossiê atual, nada é inventado — grave um antes com aceleriq_upsert_current_dossier. É a mesma rotina que o painel roda toda sexta.',
+  scopes: ['clients:write'] as const,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = registerDossierProgressSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await registerDossierProgress(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 const getCurrentDossierTool: ToolDefinition = {
   name: 'aceleriq_get_current_dossier',
   title: 'Dossiê — estado atual e histórico',
@@ -1719,6 +1823,35 @@ const getWeeklyCycleTool: ToolDefinition = {
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     return await listWeeklyCycle(parsed.data);
+  },
+};
+
+const getCycleStatusTool: ToolDefinition = {
+  name: 'aceleriq_get_cycle_status',
+  title: 'Ciclo da semana — situação',
+  description:
+    'Situação do ciclo de UMA semana, UMA frente (social ou trafego) e UM cliente, já cruzada: as etapas concluídas (com quem marcou, se foi prova automática do painel e qual foi a prova), o plano congelado da semana (memória ciclo_semana com as etapas), as tarefas do ciclo ainda abertas (source ciclo:*) nos projetos do cliente, e um resumo de 1 a 3 frases. Sem week_start, usa a semana atual (segunda-feira, fuso America/Sao_Paulo); qualquer data é normalizada para a segunda da sua semana. Para várias semanas de uma vez, use aceleriq_get_weekly_cycle.',
+  scopes: ['projects:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      week_start: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Segunda-feira da semana (AAAA-MM-DD). Sem isto, a semana atual.' },
+      area: { type: 'string', enum: ['social', 'trafego'], default: 'social' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: z.string().uuid(),
+      week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealToolDate, { message: 'week_start must be a real calendar date' }).optional(),
+      area: z.enum(['social', 'trafego']).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await getCycleStatus(parsed.data, ctx);
   },
 };
 
@@ -2899,6 +3032,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getProjectTool,
   listTasksTool,
   listEditorialCalendarTool,
+  getAgendaStatusTool,
   listReportsTool,
   getReportTool,
   listBriefingsTool,
@@ -2948,14 +3082,17 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   createEditorialItemTool,
   updateTaskTool,
   completeTaskTool,
+  deleteTaskTool,
   createReportDraftTool,
   createProjectTool,
   updateProjectTool,
+  linkProjectToClientTool,
   updateClientTool,
   archiveProjectTool,
   restoreProjectTool,
   reopenTaskTool,
   upsertCurrentDossierTool,
+  registerDossierProgressTool,
   getCurrentDossierTool,
   auditIntegrityTool,
   // Contracts (Bloco B) — read + scope-gated write
@@ -2967,6 +3104,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Persistent per-client/project memory (Studio + external agents)
   getClientDossierTool,
   getWeeklyCycleTool,
+  getCycleStatusTool,
   getProjectMemoryTool,
   upsertProjectMemoryTool,
   // Resultado real (v1.12.0): sem estas, o agente sabia o que a equipe fez e

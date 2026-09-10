@@ -27,9 +27,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   editProject?: any;
+  /** Abrir já com o cliente escolhido (ex.: "Novo projeto" de dentro do cadastro). */
+  defaultClientId?: string;
 }
 
-export default function CreateProjectModal({ open, onClose, editProject }: Props) {
+export default function CreateProjectModal({ open, onClose, editProject, defaultClientId }: Props) {
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { data: teamMembers } = useTeamMembers();
@@ -67,6 +69,12 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
     client_phone: selectedClient?.phone ?? null,
     client_plan: selectedClient?.plan_name ?? null,
   });
+
+  // De dentro do cadastro do cliente, o projeto nasce dele: sem escolher
+  // cliente numa lista de trinta.
+  useEffect(() => {
+    if (open && !editProject && defaultClientId) setClientId(defaultClientId);
+  }, [open, editProject, defaultClientId]);
 
   useEffect(() => {
     if (editProject) {

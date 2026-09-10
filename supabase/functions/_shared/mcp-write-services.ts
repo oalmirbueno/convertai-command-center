@@ -1050,3 +1050,352 @@ export async function updateProject(input: UpdateProjectInput, ctx: WriteCtx) {
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }
+
+// ─── delete_task ──────────────────────────────────────────────
+// A MESMA regra do painel (src/lib/taskDelete.ts), reproduzida no servidor:
+// tarefa que nasceu de pedido do cliente não sai (o pedido ficaria sem
+// resposta), e tarefa editorial com publicação agendada/no ar não sai (a
+// agenda ficaria órfã). O que passa, sai limpo: vínculo de operador
+// bloqueado com motivo e diário do cliente com "tarefa descartada".
+//
+// O padrão de source é cópia literal de SIGNED_SOURCE_PATTERN em
+// src/lib/requestTaskWorkflow.ts — um teste de contrato mantém os dois iguais.
+const CLIENT_REQUEST_SOURCE_PATTERN =
+  /^client_request:([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}):([0-9a-f]{64})$/i;
+
+export function requestIdFromTaskSource(source: string | null | undefined): string | null {
+  const match = CLIENT_REQUEST_SOURCE_PATTERN.exec(source || '');
+  return match?.[1] || null;
+}
+
+export const deleteTaskSchema = z.object({
+  task_id: UUID,
+  reason: z.string().trim().max(300).optional(),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type DeleteTaskInput = z.infer<typeof deleteTaskSchema>;
+
+const MEMORIA_DESCARTE_PREFIXO = 'Tarefa descartada: ';
+
+export async function deleteTask(input: DeleteTaskInput, ctx: WriteCtx) {
+  // Replay ANTES de procurar a tarefa: depois da exclusão ela não existe
+  // mais, e a segunda chamada com a mesma chave precisa responder "já
+  // feito", não "não encontrada". O registro do diário é a prova.
+  const replay = await replayIdempotent(
+    'aceleriq_delete_task', ctx.keyId, input.idempotency_key,
+    async (id) => {
+      const { data } = await db()
+        .from('project_memory')
+        .select('id, title, metadata')
+        .eq('kind', 'ciclo')
+        .eq('metadata->>task_id', id)
+        .eq('metadata->>registro', 'descartada')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!data) return { deleted: id, title: null as string | null };
+      const titulo = String((data as { title?: string | null }).title ?? '');
+      return {
+        deleted: id,
+        title: titulo.startsWith(MEMORIA_DESCARTE_PREFIXO) ? titulo.slice(MEMORIA_DESCARTE_PREFIXO.length) : titulo,
+      };
+    },
+    priorInput => requirePriorResource(priorInput, 'task_id', input.task_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = input.task_id;
+    return {
+      ...(replay.record ?? { deleted: input.task_id, title: null }),
+      replayed: true,
+      correlation_id: ctx.correlationId,
+      idempotency_replay_of: replay.correlation_id,
+    };
+  }
+
+  const { data: existing, error: fetchErr } = await db()
+    .from('tasks')
+    .select('id, project_id, title, source, deleted_at')
+    .eq('id', input.task_id)
+    .maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing || (existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'task_id not found');
+  }
+  const tarefa = existing as { id: string; project_id: string | null; title: string | null; source: string | null };
+
+  // O cliente dono da tarefa (tarefa não tem client_id; passa pelo projeto).
+  // Projeto arquivado ainda responde pelo cliente: a tarefa órfã pode sair.
+  let clientId: string | null = null;
+  if (tarefa.project_id) {
+    const { data: projeto, error: projErr } = await db()
+      .from('projects').select('id, client_id').eq('id', tarefa.project_id).maybeSingle();
+    if (projErr) throw new WriteError('validation', projErr.message);
+    clientId = (projeto as { client_id?: string } | null)?.client_id ?? null;
+  }
+  if (clientId) assertWriteClientScope(ctx, clientId);
+  else if (!ctx.dataScope.unrestricted) {
+    throw new WriteError('forbidden', 'resource is outside this MCP principal data scope');
+  }
+
+  // 1. Tarefa que nasceu de um pedido do cliente: o pedido ficaria sem
+  //    resposta. O caminho certo é desvincular e reabrir o pedido.
+  if (requestIdFromTaskSource(tarefa.source)) {
+    throw new WriteError(
+      'conflict',
+      'Esta tarefa veio de um pedido do cliente. Desvincule e reabra o pedido em vez de excluir.',
+    );
+  }
+
+  // 2. Tarefa editorial cuja publicação já está agendada ou no ar: apagar a
+  //    tarefa deixaria a publicação órfã na agenda. Arquive a pauta.
+  const { data: vinculo, error: vincErr } = await db()
+    .from('editorial_post_internal')
+    .select('post_id')
+    .eq('task_id', tarefa.id)
+    .maybeSingle();
+  if (vincErr) throw new WriteError('validation', vincErr.message);
+  const postId = (vinculo as { post_id?: string } | null)?.post_id ?? null;
+  if (postId) {
+    const { data: pubs, error: pubErr } = await db()
+      .from('editorial_publications')
+      .select('id, status')
+      .eq('post_id', postId)
+      .in('status', ['scheduled', 'published'])
+      .limit(1);
+    if (pubErr) throw new WriteError('validation', pubErr.message);
+    const pub = (pubs ?? [])[0] as { status?: string } | undefined;
+    if (pub) {
+      throw new WriteError(
+        'conflict',
+        pub.status === 'published'
+          ? 'A publicação desta pauta já está no ar. A tarefa fica como histórico; arquive a pauta se não quiser mais vê-la.'
+          : 'A publicação desta pauta está agendada. Cancele o agendamento na agenda antes de excluir a tarefa.',
+      );
+    }
+  }
+
+  const titulo = String(tarefa.title || '').trim() || 'tarefa sem título';
+  const origemCiclo = String(tarefa.source || '').startsWith('ciclo:');
+  const motivo = input.reason?.trim() || '';
+
+  const { error: delErr } = await db().from('tasks').delete().eq('id', tarefa.id);
+  if (delErr) throw new WriteError('validation', delErr.message);
+
+  // Vínculo de operador: bloqueado com motivo, nunca apontando para o nada.
+  // Falha aqui não desfaz a exclusão (já aconteceu); fica registrada na resposta.
+  const avisos: string[] = [];
+  const { error: linkErr } = await db()
+    .from('operator_task_links')
+    .update({ status: 'blocked', block_reason: `Tarefa excluída via MCP${motivo ? `: ${motivo}` : ''}` })
+    .eq('kanban_task_id', tarefa.id);
+  if (linkErr) avisos.push(`operator_task_links: ${linkErr.message}`);
+
+  if (clientId) {
+    const { error: memErr } = await db().from('project_memory').insert({
+      client_id: clientId,
+      project_id: tarefa.project_id,
+      kind: 'ciclo',
+      title: `${MEMORIA_DESCARTE_PREFIXO}${titulo}`.slice(0, 200),
+      content: origemCiclo
+        ? `A tarefa que tinha nascido de um alerta do Ciclo foi descartada${motivo ? ` (${motivo})` : ''}. Se o problema continuar no painel, o alerta volta a aparecer.`
+        : `Tarefa excluída do Kanban${motivo ? ` (${motivo})` : ''}.`,
+      source: 'mcp',
+      tags: ['tarefa', 'descartada'],
+      metadata: {
+        task_id: tarefa.id,
+        source: tarefa.source ?? null,
+        registro: 'descartada',
+        via: 'mcp',
+        reason: motivo || null,
+        client_visible: false,
+        origin: ctx.origin,
+        key_id: ctx.keyId,
+        correlation_id: ctx.correlationId,
+      },
+      created_by: null,
+    });
+    if (memErr) avisos.push(`project_memory: ${memErr.message}`);
+  }
+
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = tarefa.id;
+  return {
+    deleted: tarefa.id,
+    title: titulo,
+    replayed: false,
+    correlation_id: ctx.correlationId,
+    ...(avisos.length > 0 ? { warnings: avisos } : {}),
+  };
+}
+
+// ─── link_project_to_client ───────────────────────────────────
+// O único campo de projeto que aceleriq_update_project se recusa a tocar:
+// o dono. Aqui ele muda de propósito, com as duas pontas validadas (cliente
+// de destino existe e É cliente; projeto existe) e o diário do cliente novo
+// registrando de onde o projeto veio.
+export const linkProjectToClientSchema = z.object({
+  project_id: UUID,
+  client_id: UUID,
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type LinkProjectToClientInput = z.infer<typeof linkProjectToClientSchema>;
+
+export async function linkProjectToClient(input: LinkProjectToClientInput, ctx: WriteCtx) {
+  const { data: existing, error: fetchErr } = await db()
+    .from('projects').select('id, client_id, name, deleted_at').eq('id', input.project_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing || (existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'project_id not found');
+  }
+  const projeto = existing as { id: string; client_id: string | null; name: string | null };
+  if (projeto.client_id) assertWriteClientScope(ctx, projeto.client_id);
+  assertWriteClientScope(ctx, input.client_id);
+
+  // Precisa ser um cliente de verdade: sem esta checagem o projeto iria
+  // parar no perfil de um membro da equipe.
+  const { data: perfil, error: perfilErr } = await db()
+    .from('profiles').select('id, deleted_at').eq('id', input.client_id).maybeSingle();
+  if (perfilErr) throw new WriteError('validation', perfilErr.message);
+  if (!perfil || (perfil as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'client_id not found or unavailable');
+  }
+  const { data: papeis, error: papelErr } = await db()
+    .from('user_roles').select('role').eq('user_id', input.client_id);
+  if (papelErr) throw new WriteError('validation', papelErr.message);
+  if (!(papeis ?? []).some((r: { role: string }) => r.role === 'client')) {
+    throw new WriteError('validation', 'client_id must be a client');
+  }
+
+  const replay = await replayIdempotent(
+    'aceleriq_link_project_to_client', ctx.keyId, input.idempotency_key,
+    async (id) => {
+      const { data: p } = await db().from('projects').select('id, client_id').eq('id', id).maybeSingle();
+      const { data: memoria } = await db()
+        .from('project_memory')
+        .select('metadata')
+        .eq('kind', 'nota')
+        .eq('metadata->>project_id', id)
+        .eq('metadata->>registro', 'vinculado')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const meta = (memoria as { metadata?: Record<string, unknown> } | null)?.metadata ?? null;
+      return p
+        ? {
+          project_id: (p as { id: string }).id,
+          client_id: (p as { client_id: string | null }).client_id,
+          previous_client_id: (meta?.from_client_id as string | null | undefined) ?? null,
+        }
+        : null;
+    },
+    priorInput => requirePriorResource(priorInput, 'project_id', input.project_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder) ctx.resultRefHolder.value = input.project_id;
+    return {
+      ...(replay.record ?? { project_id: input.project_id, client_id: input.client_id, previous_client_id: null }),
+      replayed: true,
+      correlation_id: ctx.correlationId,
+      idempotency_replay_of: replay.correlation_id,
+    };
+  }
+
+  if (projeto.client_id === input.client_id) {
+    throw new WriteError('conflict', 'project is already linked to this client');
+  }
+
+  const { data, error } = await db()
+    .from('projects')
+    .update({ client_id: input.client_id })
+    .eq('id', input.project_id)
+    .select('id, client_id, name')
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+
+  const nome = String(projeto.name || '').trim() || 'projeto sem nome';
+  const avisos: string[] = [];
+  const { error: memErr } = await db().from('project_memory').insert({
+    client_id: input.client_id,
+    project_id: input.project_id,
+    kind: 'nota',
+    title: `Projeto vinculado: ${nome}`.slice(0, 200),
+    content: projeto.client_id
+      ? `O projeto "${nome}" passou a pertencer a este cliente (antes estava em outro cliente).`
+      : `O projeto "${nome}" passou a pertencer a este cliente.`,
+    source: 'mcp',
+    tags: ['projeto', 'vinculo'],
+    metadata: {
+      project_id: input.project_id,
+      from_client_id: projeto.client_id,
+      registro: 'vinculado',
+      via: 'mcp',
+      client_visible: false,
+      origin: ctx.origin,
+      key_id: ctx.keyId,
+      correlation_id: ctx.correlationId,
+    },
+    created_by: null,
+  });
+  if (memErr) avisos.push(`project_memory: ${memErr.message}`);
+
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return {
+    project_id: data.id,
+    client_id: data.client_id,
+    previous_client_id: projeto.client_id,
+    replayed: false,
+    correlation_id: ctx.correlationId,
+    ...(avisos.length > 0 ? { warnings: avisos } : {}),
+  };
+}
+
+// ─── register_dossier_progress ────────────────────────────────
+// Chama a rotina do banco que anexa ao dossiê geral (contexto, sem projeto)
+// a seção "Avanços recentes" dos últimos 7 dias. O banco só cria versão
+// quando há fato novo, então repetir a chamada é seguro por natureza.
+export const registerDossierProgressSchema = z.object({
+  client_id: UUID,
+}).strict();
+export type RegisterDossierProgressInput = z.infer<typeof registerDossierProgressSchema>;
+
+export async function registerDossierProgress(input: RegisterDossierProgressInput, ctx: WriteCtx) {
+  assertWriteClientScope(ctx, input.client_id);
+  await exigirClienteExistente(db(), input.client_id);
+
+  const { data, error } = await db().rpc('dossie_registrar_avancos', { _client_id: input.client_id });
+  if (error) {
+    const msg = String(error.message ?? '');
+    if (msg.includes('version_conflict')) throw new WriteError('conflict', msg);
+    if (msg.includes('not_found')) throw new WriteError('not_found', msg);
+    if (msg.includes('not_allowed')) throw new WriteError('forbidden', msg);
+    throw new WriteError('validation', msg);
+  }
+  const updated = data === true;
+
+  const { data: dossie, error: dossieErr } = await db()
+    .from('client_dossiers')
+    .select('id, version, updated_at')
+    .eq('client_id', input.client_id)
+    .eq('dossier_type', 'contexto')
+    .is('project_id', null)
+    .eq('is_current', true)
+    .maybeSingle();
+  if (dossieErr) throw new WriteError('validation', dossieErr.message);
+  const atual = dossie as { id: string; version: number; updated_at: string } | null;
+
+  let message: string;
+  if (!atual) {
+    message = 'Sem dossiê atual de contexto (geral) para este cliente: nada foi registrado. O painel não inventa dossiê — grave um com aceleriq_upsert_current_dossier (expected_version=0) e chame de novo.';
+  } else if (updated) {
+    message = `Nova versão ${atual.version} do dossiê criada com os avanços dos últimos 7 dias.`;
+  } else {
+    message = `Nada novo desde o último registro: o dossiê continua na versão ${atual.version}.`;
+  }
+
+  if (ctx.resultRefHolder && atual) ctx.resultRefHolder.value = atual.id;
+  return {
+    updated,
+    dossier: atual ? { version: atual.version, updated_at: atual.updated_at } : null,
+    message,
+    correlation_id: ctx.correlationId,
+  };
+}

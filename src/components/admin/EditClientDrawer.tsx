@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
+import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
@@ -173,6 +174,61 @@ export default function EditClientDrawer({
   });
 
   const clientProjectIds = (clientProjects || []).map((p: any) => p.id);
+
+  // Projetos DESTE cadastro: criar um novo já ligado ao cliente, ou puxar
+  // para cá um projeto que ficou solto/em outro cadastro. Sem isto, projeto
+  // criado no lugar errado só se consertava editando um por um em Projetos.
+  const [novoProjetoAberto, setNovoProjetoAberto] = useState(false);
+  const [vincularAberto, setVincularAberto] = useState(false);
+  const [projetoParaVincular, setProjetoParaVincular] = useState("");
+  const [vinculando, setVinculando] = useState(false);
+  const { data: projetosDeOutros = [] } = useQuery({
+    queryKey: ["projetos-de-outros", client?.id],
+    enabled: !!client?.id && vincularAberto,
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("projects")
+        .select("id, name, status, client_id, client:profiles!projects_client_id_fkey(company_name, full_name)")
+        .neq("client_id", client.id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      return (data || []) as any[];
+    },
+  });
+  const vincularProjeto = async () => {
+    if (!projetoParaVincular) return;
+    setVinculando(true);
+    try {
+      const alvo = projetosDeOutros.find((p: any) => p.id === projetoParaVincular);
+      const { error } = await (supabase as any)
+        .from("projects").update({ client_id: client.id }).eq("id", projetoParaVincular);
+      if (error) throw error;
+      // Fica na história dos dois lados: de onde saiu e para onde foi.
+      await (supabase as any).from("project_memory").insert({
+        client_id: client.id,
+        kind: "nota",
+        title: `Projeto vinculado: ${alvo?.name ?? ""}`,
+        content: `O projeto "${alvo?.name ?? ""}" passou a pertencer a este cliente${alvo?.client ? ` (antes estava em ${alvo.client.company_name || alvo.client.full_name})` : ""}.`,
+        source: "cadastro",
+        tags: ["projeto", "vinculo"],
+        metadata: { project_id: projetoParaVincular, from_client_id: alvo?.client_id ?? null, client_visible: false },
+      }).then(() => undefined, () => undefined);
+      toast.success(`"${alvo?.name ?? "Projeto"}" agora é deste cliente.`);
+      setProjetoParaVincular("");
+      setVincularAberto(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["client-exec-projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["projects"] }),
+        queryClient.invalidateQueries({ queryKey: ["clients"] }),
+        queryClient.invalidateQueries({ queryKey: ["projetos-de-outros"] }),
+      ]);
+    } catch (e: any) {
+      toast.error(e?.message || "Não foi possível vincular o projeto.");
+    } finally {
+      setVinculando(false);
+    }
+  };
 
   const { data: clientTasks } = useQuery({
     queryKey: ["client-exec-tasks", client?.id, clientProjectIds.join(",")],
@@ -580,6 +636,73 @@ export default function EditClientDrawer({
                   Aprovações
                 </button>
               </div>
+            </div>
+
+            {/* Projetos do cliente: criar aqui ou puxar um que ficou solto */}
+            <div className="rounded-xl border border-border bg-secondary/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Projetos</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    {(clientProjects || []).length === 0
+                      ? "Este cliente ainda não tem projeto. Crie um ou vincule um que já existe."
+                      : `${(clientProjects || []).length} projeto(s) neste cadastro.`}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNovoProjetoAberto(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-primary bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground hover:opacity-90"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Novo projeto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVincularAberto((v) => !v)}
+                    className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-2 text-[12px] font-medium text-foreground hover:border-primary/40"
+                  >
+                    <Briefcase className="h-3.5 w-3.5 text-primary" /> Vincular projeto existente
+                  </button>
+                </div>
+              </div>
+              {(clientProjects || []).length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {(clientProjects || []).map((p: any) => (
+                    <li key={p.id} className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="truncate text-foreground">{p.name}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">{p.status} · {p.progress ?? 0}%</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {vincularAberto && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background p-3">
+                  <select
+                    value={projetoParaVincular}
+                    onChange={(e) => setProjetoParaVincular(e.target.value)}
+                    className="min-w-0 flex-1 rounded-md border border-border bg-secondary px-2 py-2 text-[12px] text-foreground"
+                  >
+                    <option value="">Escolha o projeto que vai para este cliente…</option>
+                    {projetosDeOutros.map((p: any) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · hoje em {p.client?.company_name || p.client?.full_name || "sem cliente"} ({p.status})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!projetoParaVincular || vinculando}
+                    onClick={() => void vincularProjeto()}
+                    className="rounded-md bg-primary px-3 py-2 text-[12px] font-medium text-primary-foreground disabled:opacity-50"
+                  >
+                    {vinculando ? "Vinculando…" : "Vincular a este cliente"}
+                  </button>
+                  <p className="basis-full text-[10.5px] text-muted-foreground">
+                    O projeto sai do cadastro atual e passa para cá com tarefas, marcos e arquivos. Fica registrado no diário dos dois.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Contas e canais cadastrados manualmente, sem credenciais */}
@@ -1099,6 +1222,15 @@ export default function EditClientDrawer({
         onClose={() => setBriefingOpen(false)}
         briefing={clientBriefing}
         clientName={client.company_name || client.full_name}
+      />
+      <CreateProjectModal
+        open={novoProjetoAberto}
+        defaultClientId={client.id}
+        onClose={() => {
+          setNovoProjetoAberto(false);
+          queryClient.invalidateQueries({ queryKey: ["client-exec-projects"] });
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+        }}
       />
     </>
   );
