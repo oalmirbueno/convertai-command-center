@@ -51,8 +51,18 @@ Deno.serve(async (req) => {
 
   // This worker bypasses RLS and drains a shared queue. Gateway JWT
   // verification alone is insufficient because it also accepts end-user JWTs.
+  //
+  // Duas credenciais valem: a chave de servico do runtime OU o CRON_SECRET no
+  // cabecalho x-cron-secret (o mesmo contrato de check-renewals). A segunda
+  // existe porque, em projetos com chaves de assinatura novas, a chave de
+  // servico que o runtime enxerga NAO e a chave legada que o banco guarda no
+  // cofre - e o pg_cron so consegue mandar o que esta no cofre.
   const bearerMatch = req.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i);
-  if (!SERVICE_ROLE || bearerMatch?.[1] !== SERVICE_ROLE) {
+  const cronSecret = Deno.env.get('CRON_SECRET')?.trim();
+  const providedCron = req.headers.get('x-cron-secret')?.trim();
+  const bearerOk = Boolean(SERVICE_ROLE) && bearerMatch?.[1] === SERVICE_ROLE;
+  const cronOk = Boolean(cronSecret) && providedCron === cronSecret;
+  if (!bearerOk && !cronOk) {
     return json({ error: 'unauthorized' }, 401);
   }
 
