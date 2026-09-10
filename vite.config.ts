@@ -15,21 +15,22 @@ const PUBLIC_ENV_KEYS = [
 // Fallback público e versionado: o ambiente de build de produção não recebe o
 // arquivo .env local (ignorado pelo Git). Estes valores são públicos por design
 // (URL do projeto e chave publishable); segredos continuam fora do repositório.
-function loadPublicEnvDefaults(): Record<string, string> {
+function loadPublicEnvDefaults(): { values: Record<string, string>; pinned: boolean } {
   try {
     const raw = readFileSync(
       path.resolve(__dirname, "config/public-env.production.json"),
       "utf8",
     ) as string;
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    return Object.fromEntries(
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const values = Object.fromEntries(
       PUBLIC_ENV_KEYS.filter((key) => typeof parsed[key] === "string").map((key) => [
         key,
-        parsed[key],
+        parsed[key] as string,
       ]),
     );
+    return { values, pinned: parsed.pinned === true };
   } catch {
-    return {};
+    return { values: {}, pinned: false };
   }
 }
 
@@ -69,13 +70,33 @@ export default defineConfig(({ command, mode }) => {
   const buildId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   define["__APP_BUILD_ID__"] = JSON.stringify(command === "build" ? buildId : "dev");
 
+  const { values: defaults, pinned } = loadPublicEnvDefaults();
+
+  // O preview do Lovable roda o servidor de dev (sem build), onde o `define`
+  // abaixo nao entra. Pinado, o processo passa a carregar os valores do arquivo
+  // antes de o Vite montar import.meta.env - o Vite da precedencia ao ambiente
+  // do processo sobre qualquer .env, entao isto cobre dev e build igualmente.
+  if (pinned) {
+    for (const key of PUBLIC_ENV_KEYS) {
+      if (defaults[key]) process.env[key] = defaults[key];
+    }
+  }
+
   if (command === "build") {
     const fileEnv = loadEnv(mode, process.cwd(), "");
-    const defaults = loadPublicEnvDefaults();
-    const env: Record<string, string | undefined> = { ...defaults, ...fileEnv };
+
+    // Pinado: o arquivo versionado vence o ambiente. O Lovable Cloud injeta as
+    // variaveis do projeto Supabase ANTIGO em todo build (e esconde a tela de
+    // "Supabase externo" enquanto esta ligado); sem o pino, o painel nunca
+    // chegaria ao projeto proprio. Sem pino, vale a regra antiga: o ambiente
+    // vence e o arquivo e so o fallback.
+    const env: Record<string, string | undefined> = pinned
+      ? { ...fileEnv, ...defaults }
+      : { ...defaults, ...fileEnv };
 
     for (const key of PUBLIC_ENV_KEYS) {
-      if (!fileEnv[key]?.trim() && env[key]) {
+      const forcar = pinned ? Boolean(defaults[key]) : !fileEnv[key]?.trim();
+      if (forcar && env[key]) {
         define[`import.meta.env.${key}`] = JSON.stringify(env[key]);
       }
     }

@@ -1,7 +1,9 @@
 {
   "//": "Valores PUBLICOS do build de producao. Nada aqui e segredo: a URL do projeto e a chave publishable sao expostas no bundle por design e os dados sao protegidos por RLS. Nunca inclua service_role, segredos OAuth ou tokens de provedores.",
-  "VITE_SUPABASE_URL": "https://gicbrgagstyvbaaumprj.supabase.co",
-  "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdpY2JyZ2Fnc3R5dmJhYXVtcHJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzMwMjUsImV4cCI6MjA4NzQ0OTAyNX0.M3VN0bIeV4dqvym-Tp7sMiLjDxEOBROjfUXu0Je4pDU",
-  "VITE_SUPABASE_PROJECT_ID": "gicbrgagstyvbaaumprj",
+  "//pinned": "Com pinned=true estes valores VENCEM o ambiente do build. Motivo: o Lovable Cloud injeta as variaveis do projeto Supabase antigo (gicbrgag...) em todo build e nao oferece a tela de 'Supabase externo' enquanto o Cloud esta ligado. O pino e a chave de virada para o projeto proprio (jjjtkowvxemvituvywvf). Volte para false so se o frontend sair do Lovable ou o Cloud for desligado.",
+  "pinned": true,
+  "VITE_SUPABASE_URL": "https://jjjtkowvxemvituvywvf.supabase.co",
+  "VITE_SUPABASE_PUBLISHABLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqanRrb3d2eGVtdml0dXZ5d3ZmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNjUzNDgsImV4cCI6MjEwMzk0MTM0OH0.uKoCe0UKtHlFRx2iE5O4LeZ4WhBFesPoF9Meuya68Ck",
+  "VITE_SUPABASE_PROJECT_ID": "jjjtkowvxemvituvywvf",
   "VITE_APP_PUBLIC_URL": "https://aceleriq.online"
 }
