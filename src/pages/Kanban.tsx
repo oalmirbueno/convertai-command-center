@@ -4,7 +4,8 @@ import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
-import { notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
+import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
+import { excluirTarefa } from "@/lib/taskDelete";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -138,26 +139,20 @@ export default function Kanban() {
   const [detailTask, setDetailTask] = useState<any>(null);
   const [deleteTask, setDeleteTask] = useState<any>(null);
 
+  // Um caminho só para excluir (guardas + limpeza + aviso ao Ops): o mesmo
+  // da Timeline, do modal de edição e do detalhe da tarefa.
   const handleDeleteTask = async () => {
     if (!deleteTask) return;
-    if (requestIdFromTaskSource(deleteTask.source)) {
-      toast.error(
-        "Tarefas vinculadas a pedidos não podem ser excluídas sem desvincular e reabrir o pedido.",
-      );
+    const r = await excluirTarefa(deleteTask);
+    if (!r.ok) {
+      toast.error(r.mensagem);
       setDeleteTask(null);
       return;
-    }
-    const { error } = await supabase.from("tasks").delete().eq("id", deleteTask.id);
-    if (error) {
-      toast.error("Erro ao excluir tarefa");
-      return;
-    }
-    if (!requestIdFromTaskSource(deleteTask.source)) {
-      notifyOpsTaskDeleted(deleteTask.id, deleteTask.ops_node_id);
     }
     toast.success("Tarefa excluída");
     setDeleteTask(null);
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
   };
 
   // Filters

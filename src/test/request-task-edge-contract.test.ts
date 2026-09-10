@@ -11,6 +11,9 @@ const requests = read("src/pages/AdminRequests.tsx");
 const workflow = read("src/lib/requestTaskWorkflow.ts");
 const kanban = read("src/pages/Kanban.tsx");
 const drawer = read("src/components/admin/TaskDetailDrawer.tsx");
+const taskDelete = read("src/lib/taskDelete.ts");
+const timeline = read("src/pages/TimelinePage.tsx");
+const createTaskModal = read("src/components/admin/CreateTaskModal.tsx");
 
 describe("request task edge authorization contract", () => {
   it("requires a verified user and limits both actions by role and client", () => {
@@ -151,9 +154,11 @@ describe("request task frontend consistency contract", () => {
   it("does not reactivate legacy Ops for request-linked tasks", () => {
     expect(requests).toContain("notifyLegacyOps = true");
     expect(requests).toContain("result.task.project_id,\n          false");
-    expect(kanban).toContain(
-      "if (!requestIdFromTaskSource(deleteTask.source))",
-    );
+    // A exclusão saiu do Kanban para um caminho único (taskDelete): é lá que
+    // a tarefa de pedido é barrada e o Ops legado só é avisado quando cabe.
+    expect(kanban).toContain("await excluirTarefa(deleteTask)");
+    expect(taskDelete).toContain("if (requestIdFromTaskSource(t.source))");
+    expect(taskDelete).toContain("notifyOpsTaskDeleted(t.id, t.ops_node_id ?? null)");
     expect(kanban).toContain("if (!linkedRequestId)");
     expect(drawer).toContain(
       "if (!requestIdFromTaskSource(task.source))",
@@ -165,9 +170,9 @@ describe("request task frontend consistency contract", () => {
       '{ allowCreate: selected.status !== "in_progress" }',
     );
     expect(workflow).toContain("allowCreate: options.allowCreate !== false");
-    expect(kanban).toContain(
-      "if (requestIdFromTaskSource(deleteTask.source))",
-    );
+    expect(taskDelete).toContain("if (requestIdFromTaskSource(t.source))");
+    expect(timeline).toContain("await excluirTarefa(t)");
+    expect(createTaskModal).toContain("await excluirTarefa(editTask as any)");
     expect(kanban).toContain(
       "!requestIdFromTaskSource(task.source)",
     );

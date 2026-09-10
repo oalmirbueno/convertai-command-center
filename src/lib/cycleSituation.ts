@@ -99,7 +99,14 @@ export interface SituacaoDoCliente {
       Enquanto a tarefa existir, o alerta sai da lista: ele deixou de
       ser aviso e virou trabalho com dono e lugar. */
   pendenciasEncaminhadas: string[];
+  /** TODAS as tarefas abertas nascidas de alerta (id + chave), mexidas ou
+      não. É o que permite fechar sozinha a tarefa cujo problema o painel
+      já mostra resolvido. */
+  tarefasEncaminhadas: Array<{ id: string; chave: string; updated_at: string | null }>;
 }
+
+/** Tarefa parada há mais que isto deixa de calar o alerta que a gerou. */
+export const DIAS_QUE_UMA_TAREFA_CALA_O_ALERTA = 14;
 
 export function situacaoVazia(clientId: string): SituacaoDoCliente {
   return {
@@ -138,6 +145,7 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     briefingRespondido: false,
     temDossie: false,
     pendenciasEncaminhadas: [],
+    tarefasEncaminhadas: [],
   };
 }
 
@@ -231,19 +239,27 @@ export async function lerSituacoes(
       .select("client_id, status, scheduled_at, published_at")
       .in("client_id", clientIds)
       .neq("status", "cancelled"),
+    // O diário e o que GENTE escreve (decisão, nota, marco, ritual). O próprio
+    // Ciclo também grava em project_memory (plano congelado, etapa marcada,
+    // "alerta virou tarefa"); contar isso como diário fazia "painel
+    // atualizado" provar-se sozinho na segunda de manhã.
     (supabase as any)
       .from("project_memory")
       .select("client_id, created_at")
       .in("client_id", clientIds)
+      .not("kind", "in", "(ciclo,ciclo_semana,checklist,avulso,entrega)")
       .order("created_at", { ascending: false }),
     // Tarefa NAO tem client_id: o vinculo com o cliente passa pelo
     // projeto. Buscar direto por client_id retorna erro que o catch
     // engole, e a contagem ficaria sempre zero sem ninguem perceber.
+    // Tarefa apagada de leve (deleted_at) nao conta: contava, e o alerta
+    // falava de tarefa que ninguem mais via.
     (supabase as any)
       .from("projects")
-      .select("id, client_id, tasks(status, due_date, assigned_to, title, source)")
+      .select("id, client_id, tasks(id, status, due_date, assigned_to, title, source, updated_at)")
       .in("client_id", clientIds)
-      .is("deleted_at", null),
+      .is("deleted_at", null)
+      .is("tasks.deleted_at", null),
     // Pauta no calendario sem arte: primary_file_id nulo. E o buraco entre
     // "planejei o conteudo" e "existe conteudo" — o calendario parece
     // cheio e nao ha o que publicar.
@@ -337,24 +353,34 @@ export async function lerSituacoes(
   }
 
   const ABERTAS = new Set(["backlog", "todo", "doing", "review"]);
-  const hoje = new Date(agora).toISOString().slice(0, 10);
+  // Data LOCAL: toISOString e UTC, e a tarefa com prazo hoje aparecia
+  // "atrasada" a partir das 21h.
+  const d0 = new Date(agora);
+  const hoje = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}-${String(d0.getDate()).padStart(2, "0")}`;
+  const limiteSilencio = new Date(agora).getTime() - DIAS_QUE_UMA_TAREFA_CALA_O_ALERTA * 86400000;
   for (const projeto of (tarefas.data ?? []) as Array<Record<string, unknown>>) {
     const s = mapa.get(String(projeto.client_id));
     if (!s) continue;
     const lista = (projeto.tasks ?? []) as Array<{
-      status?: string | null; due_date?: string | null; assigned_to?: string | null;
-      source?: string | null;
+      id?: string; status?: string | null; due_date?: string | null; assigned_to?: string | null;
+      source?: string | null; updated_at?: string | null;
     }>;
     for (const t of lista) {
       if (!ABERTAS.has(String(t.status ?? ""))) continue;
       s.tarefasAbertas += 1;
       // A tarefa nascida de um alerta carrega a chave dele na origem. É o
-      // que faz o alerta calar enquanto a tarefa estiver de pé.
+      // que faz o alerta calar enquanto a tarefa estiver de pé - mas só
+      // enquanto alguém mexe nela: tarefa esquecida por semanas deixa de
+      // calar o vermelho, senão o problema fica escondido para sempre.
       const origem = String(t.source ?? "");
       if (origem.startsWith(MARCA_DE_ENCAMINHAMENTO)) {
         const chave = origem.slice(MARCA_DE_ENCAMINHAMENTO.length);
-        if (chave && !s.pendenciasEncaminhadas.includes(chave)) {
-          s.pendenciasEncaminhadas.push(chave);
+        if (chave) {
+          s.tarefasEncaminhadas.push({ id: String(t.id ?? ""), chave, updated_at: t.updated_at ?? null });
+          const mexida = t.updated_at ? new Date(t.updated_at).getTime() : 0;
+          if (mexida >= limiteSilencio && !s.pendenciasEncaminhadas.includes(chave)) {
+            s.pendenciasEncaminhadas.push(chave);
+          }
         }
       }
       if (typeof t.due_date === "string" && t.due_date < hoje) {

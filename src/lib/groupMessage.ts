@@ -88,6 +88,12 @@ export interface GroupMessageContext {
   proximoPasso?: string | null;
 
   /** Campanhas: leitura da semana em linguagem simples, se houver tráfego. */
+  /** Tarefas concluídas com nome nos últimos 7 dias (o trabalho real). */
+  tarefasConcluidas7d?: string[];
+  /** As mesmas, só as fechadas desde segunda. */
+  tarefasDesdeSegunda?: string[];
+  /** Quando o dossiê "onde estamos" foi escrito por último (ISO). */
+  dossieIdade?: string | null;
   anuncios?: {
     campanhasNoAr: number;
     investidoSemana: number;
@@ -125,6 +131,17 @@ function abertura(ctx: GroupMessageContext): string {
   // situar antes de ouvir o que vem. Vem do dossiê, que é a fonte de verdade.
   if (ctx.contextoRecente) {
     linhas.push("", `*Onde estamos*`, ctx.contextoRecente);
+  }
+
+  // 1b. O QUE FICOU PRONTO NA SEMANA PASSADA. Trabalho com nome: o cliente
+  // reconhece a tarefa que pediu, não "seguimos produzindo".
+  const feitoSemanaPassada = [...ctx.entregasSemana, ...(ctx.tarefasConcluidas7d || [])];
+  if (feitoSemanaPassada.length > 0) {
+    linhas.push(
+      "",
+      `*O que ficou pronto na última semana*`,
+      `${maiuscula(listInWords(feitoSemanaPassada, 4))}.`,
+    );
   }
 
   // 2. O QUE JÁ ESTÁ NA MÃO. O concreto que ele reconhece, com o motivo de
@@ -210,6 +227,9 @@ function meio(ctx: GroupMessageContext): string {
         ? `${ctx.entregasDesdeSegunda[0]} ficou pronto e já está no painel`
         : `${listInWords(ctx.entregasDesdeSegunda)} ficaram prontos e já estão no painel`,
     );
+  }
+  if ((ctx.tarefasDesdeSegunda || []).length > 0) {
+    movimento.push(`concluímos ${listInWords(ctx.tarefasDesdeSegunda!, 4)}`);
   }
   if (ctx.cicloFeito.length > 0) {
     movimento.push(`da rotina da semana: ${listInWords(ctx.cicloFeito, 3)}`);
@@ -305,6 +325,9 @@ function fechamento(ctx: GroupMessageContext): string {
         ? `${ctx.entregasSemana[0]} ficou pronto`
         : `${listInWords(ctx.entregasSemana, 3)} ficaram prontos`,
     );
+  }
+  if ((ctx.tarefasDesdeSegunda || []).length > 0) {
+    feito.push(`concluímos ${listInWords(ctx.tarefasDesdeSegunda!, 4)}`);
   }
   if (ctx.cicloFeito.length > 0) {
     feito.push(listInWords(ctx.cicloFeito, 3));

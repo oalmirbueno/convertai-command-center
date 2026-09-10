@@ -175,8 +175,47 @@ Deno.serve(async (req) => {
       );
     }
 
+    // O que o painel SABE do negócio: dossiê atual, briefing e as últimas
+    // decisões. Sem isto a IA "deduzia o nicho pelo nome" e devolvia ideia
+    // que servia para qualquer empresa.
+    const [dossieRes, briefingRes, memoriaRes] = await Promise.all([
+      db.from("client_dossiers")
+        .select("version, summary, content, updated_at, project_id")
+        .eq("client_id", clientId)
+        .eq("is_current", true)
+        .order("updated_at", { ascending: false })
+        .limit(2),
+      db.from("briefings")
+        .select("answers, created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false })
+        .limit(1),
+      db.from("project_memory")
+        .select("kind, title, content, created_at")
+        .eq("client_id", clientId)
+        .in("kind", ["decisao", "marco", "nota", "summary", "ritual", "second_brain", "external"])
+        .order("created_at", { ascending: false })
+        .limit(6),
+    ]);
+    const dossieLines = (dossieRes.data || []).map((d: any) => {
+      const texto = String(d.content || d.summary || "").replace(/\s+/g, " ").trim().slice(0, 1400);
+      return texto
+        ? `DOSSIÊ ${d.project_id ? "do projeto" : "geral"} (v${d.version ?? "?"}, ${String(d.updated_at || "").slice(0, 10)}): ${texto}`
+        : "";
+    }).filter(Boolean);
+    const briefing = briefingRes.data?.[0]?.answers;
+    const briefingLine = briefing
+      ? `BRIEFING (respostas do cliente): ${JSON.stringify(briefing).slice(0, 900)}`
+      : "";
+    const memoriaLines = (memoriaRes.data || []).map(
+      (m: any) => `Registro (${m.kind}, ${String(m.created_at || "").slice(0, 10)}): ${String(m.title || "")} — ${String(m.content || "").replace(/\s+/g, " ").slice(0, 220)}`,
+    );
+
     const context = [
       `Cliente: ${clientName}`,
+      ...dossieLines,
+      briefingLine,
+      ...memoriaLines,
       ...igLines,
       `Tempo de casa: ${months} mes(es)`,
       `Frentes contratadas: ${
@@ -195,7 +234,12 @@ Deno.serve(async (req) => {
       }`,
     ].join("\n");
 
-    const userPrompt = `CONTEXTO REAL DO CLIENTE (dados do painel, hoje):\n${context}\n\nPasso 1: deduza o nicho do negócio pelo nome e pelos materiais. Passo 2: busque na web tendências e formatos que estão funcionando AGORA para esse nicho no Brasil (Instagram, TikTok, experiência do cliente). Passo 3: gere as 3 ideias seguindo as regras. Lembre: específicas para ${clientName}, com a descrição completa da ideia.`;
+    const temDossie = dossieLines.length > 0 || Boolean(briefingLine);
+    const userPrompt = `CONTEXTO REAL DO CLIENTE (dados do painel, hoje):\n${context}\n\nPasso 1: ${
+      temDossie
+        ? "o nicho, o diferencial e a situação atual estão no DOSSIÊ/BRIEFING acima — parta deles, não deduza nada que o dossiê já diz, e NÃO proponha o que o dossiê ou os registros mostram que já foi feito ou já está em andamento."
+        : "não há dossiê registrado: deduza o nicho pelo nome e pelos materiais e diga explicitamente que a ideia é uma hipótese a validar com o dossiê."
+    } Passo 2: busque na web tendências e formatos que estão funcionando AGORA para esse nicho no Brasil (Instagram, TikTok, experiência do cliente). Passo 3: gere as 3 ideias seguindo as regras, cada uma citando o fato do dossiê/registro que a justifica. Lembre: específicas para ${clientName}, com a descrição completa da ideia.`;
 
     const providers = resolveAiProviderChain({
       primaryModels: PRIMARY_MODEL_CHAIN,

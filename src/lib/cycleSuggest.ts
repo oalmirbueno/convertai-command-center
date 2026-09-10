@@ -185,7 +185,11 @@ function pendenciasDoKanban(s: SituacaoDoCliente): Pendencia[] {
         ? "1 tarefa aberta sem responsável"
         : `${s.tarefasSemDono} tarefas abertas sem responsável`,
       gravidade: "atencao",
-      viraEtapa: s.tarefasSemDono >= 3,
+      // Nunca vira tarefa: a tarefa criada para "tarefa sem dono" nascia sem
+      // dono e alimentava o próprio alerta. Aqui se resolve no Kanban, dando
+      // dono ao que já existe.
+      viraEtapa: false,
+      rota: "/kanban",
     });
   }
   return lista;

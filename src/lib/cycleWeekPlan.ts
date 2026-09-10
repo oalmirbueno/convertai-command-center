@@ -87,15 +87,32 @@ export async function substituirPlano(input: {
   return !error;
 }
 
-/** Os rótulos da semana ANTERIOR, para o acervo não repetir. */
+/** Quantas semanas passadas o acervo olha antes de repetir um rótulo. */
+export const SEMANAS_DE_MEMORIA_DO_ACERVO = 3;
+
+/**
+ * Os rótulos das semanas ANTERIORES, para o acervo não repetir. Três, e não
+ * só a última: com uma semana de memória o mesmo rótulo voltava na terceira
+ * semana, e o dono lia "de novo isso?" toda quinzena.
+ */
 export async function lerPlanoAnterior(
   clientIds: string[],
   area: string,
   weekStartAnterior: string,
 ): Promise<Map<string, string[]>> {
   const mapa = new Map<string, string[]>();
-  const planos = await lerPlanosDaSemana(clientIds, area, weekStartAnterior);
-  for (const [id, plano] of planos) mapa.set(id, plano.etapas);
+  const semanas: string[] = [];
+  for (let i = 0; i < SEMANAS_DE_MEMORIA_DO_ACERVO; i += 1) {
+    const d = new Date(`${weekStartAnterior}T00:00:00`);
+    d.setDate(d.getDate() - 7 * i);
+    semanas.push(d.toISOString().slice(0, 10));
+  }
+  const lidos = await Promise.all(semanas.map((s) => lerPlanosDaSemana(clientIds, area, s)));
+  for (const planos of lidos) {
+    for (const [id, plano] of planos) {
+      mapa.set(id, [...(mapa.get(id) || []), ...plano.etapas]);
+    }
+  }
   return mapa;
 }
 

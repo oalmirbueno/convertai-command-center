@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
+import { excluirTarefa } from "@/lib/taskDelete";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
 // @ts-ignore
@@ -93,6 +94,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
   // Edit state
   const [editing, setEditing] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority);
@@ -685,6 +687,14 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                 <Pencil className="w-4 h-4" />
               </button>
             )}
+            {/* Excluir daqui: é o detalhe que a Execução e o Kanban abrem, e
+                era a única tela sem saída para a tarefa que perdeu o sentido. */}
+            {!readOnly && !editing && canManageLinkedAssignment && (
+              <button onClick={() => setConfirmarExclusao(true)} title="Excluir tarefa"
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
               <X className="w-4 h-4" />
@@ -1208,6 +1218,27 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         description="Tem certeza que deseja remover este anexo?"
         onConfirm={handleDeleteAttachment}
         onCancel={() => setConfirmDelete(null)}
+      />
+      <ConfirmModal
+        open={confirmarExclusao}
+        title="Excluir tarefa"
+        description={`"${task.title}" sai do Kanban de vez. Comentários, checklist e anexos vão junto; o diário do cliente guarda que ela foi descartada.`}
+        confirmLabel="Excluir tarefa"
+        onConfirm={async () => {
+          const r = await excluirTarefa(task);
+          if (!r.ok) {
+            toast.error(r.mensagem);
+            setConfirmarExclusao(false);
+            return;
+          }
+          toast.success("Tarefa excluída");
+          setConfirmarExclusao(false);
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+          queryClient.invalidateQueries({ queryKey: ["execucao"] });
+          onClose();
+        }}
+        onCancel={() => setConfirmarExclusao(false)}
       />
     </div>
   );

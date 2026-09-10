@@ -22,6 +22,7 @@ import {
 } from "@/lib/cycleTasks";
 import { textoDaEtapa } from "@/lib/cycleSuggest";
 import { MARCA_DE_ENCAMINHAMENTO } from "@/lib/cycleSituation";
+import { excluirTarefa } from "@/lib/taskDelete";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
@@ -128,7 +129,7 @@ export default function ClientCycleSheet({
   const [bulkRunning, setBulkRunning] = useState(false);
   // Qual semana está sendo editada aqui dentro. A tela continua na semana
   // atual; só esta folha volta uma semana para acertar o que ficou faltando.
-  const [editandoAnterior, setEditandoAnterior] = useState(false);
+  const [editandoAnterior, setEditandoAnterior] = useState(false);
   /** Qual etapa esta com o contexto aberto — "a etapa nao e so uma frase". */
   const [etapaAberta, setEtapaAberta] = useState<number | null>(null);
   const [criandoTarefa, setCriandoTarefa] = useState<string | null>(null);
@@ -166,6 +167,35 @@ export default function ClientCycleSheet({
         return;
       }
       const titulo = textoDaEtapa(p as Parameters<typeof textoDaEtapa>[0]);
+      const origem = `${MARCA_DE_ENCAMINHAMENTO}${p.chave}`;
+
+      // Idempotente: dois toques (ou dois navegadores) criavam duas tarefas
+      // iguais. Se ja existe uma aberta com a mesma origem para este cliente,
+      // e ela que vale.
+      const { data: projetosDoCliente } = await (supabase as any)
+        .from("projects").select("id").eq("client_id", client.id).is("deleted_at", null);
+      const idsProjetos = ((projetosDoCliente || []) as Array<{ id: string }>).map((x) => x.id);
+      if (idsProjetos.length > 0) {
+        const { data: existente } = await (supabase as any)
+          .from("tasks").select("id, title")
+          .in("project_id", idsProjetos)
+          .eq("source", origem)
+          .in("status", ["backlog", "todo", "doing", "review"])
+          .is("deleted_at", null)
+          .limit(1).maybeSingle();
+        if (existente) {
+          toast.info(`Ja existe a tarefa "${existente.title}" para este alerta.`);
+          await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao", "ciclo-tarefas"] });
+          return;
+        }
+      }
+
+      // Nasce com dono e prazo (sexta desta semana): antes nascia sem os
+      // dois e alimentava os proprios alertas de "sem dono" e "atrasada".
+      const hoje = new Date();
+      const diaDaSemana = (hoje.getDay() + 6) % 7; // 0 = segunda
+      const sexta = addDays(hoje, diaDaSemana <= 4 ? 4 - diaDaSemana : 11 - diaDaSemana);
+
       const { error } = await (supabase as any).from("tasks").insert({
         project_id: projeto.id,
         title: titulo,
@@ -173,15 +203,18 @@ export default function ClientCycleSheet({
         status: "backlog",
         kanban_status: "backlog",
         priority: p.gravidade === "urgente" ? "high" : "medium",
+        assigned_to: currentUserId ?? null,
+        due_date: localIso(sexta),
         // A origem carrega a chave do alerta: e o fio que faz o vermelho
         // calar enquanto a tarefa existir, e voltar se ela fechar sem o
         // problema ter sido resolvido no painel.
-        source: `${MARCA_DE_ENCAMINHAMENTO}${p.chave}`,
+        source: origem,
       });
       if (error) {
         toast.error("Nao foi possivel criar a tarefa.");
         return;
       }
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-tarefas"] });
       // O encaminhamento entra na historia: "virou tarefa" e um passo do
       // crescimento, nao um clique que some.
       await recordMemory({
@@ -200,6 +233,56 @@ export default function ClientCycleSheet({
       toast.success("Tarefa criada. O alerta saiu da lista.");
     } finally {
       setCriandoTarefa(null);
+    }
+  };
+  /** As tarefas abertas que nasceram de alertas deste cliente. */
+  const { data: tarefasDoCiclo = [] } = useQuery({
+    queryKey: ["ciclo-tarefas", client?.id],
+    enabled: Boolean(client?.id),
+    queryFn: async () => {
+      const { data: projetos } = await (supabase as any)
+        .from("projects").select("id").eq("client_id", client!.id).is("deleted_at", null);
+      const ids = ((projetos || []) as Array<{ id: string }>).map((x) => x.id);
+      if (ids.length === 0) return [] as Array<{ id: string; title: string; due_date: string | null; source: string | null; project_id: string; ops_node_id: string | null }>;
+      const { data } = await (supabase as any)
+        .from("tasks")
+        .select("id, title, due_date, source, project_id, ops_node_id, status")
+        .in("project_id", ids)
+        .like("source", `${MARCA_DE_ENCAMINHAMENTO}%`)
+        .in("status", ["backlog", "todo", "doing", "review"])
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+      return (data || []) as Array<{ id: string; title: string; due_date: string | null; source: string | null; project_id: string; ops_node_id: string | null }>;
+    },
+    staleTime: 15_000,
+  });
+  const [mexendoTarefa, setMexendoTarefa] = useState<string | null>(null);
+  const concluirTarefaDoCiclo = async (t: { id: string; title: string }) => {
+    setMexendoTarefa(t.id);
+    try {
+      const { error } = await (supabase as any)
+        .from("tasks").update({ status: "done", kanban_status: "done" }).eq("id", t.id);
+      if (error) { toast.error("Nao foi possivel concluir."); return; }
+      toast.success("Tarefa concluída.");
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-tarefas"] });
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    } finally {
+      setMexendoTarefa(null);
+    }
+  };
+  const descartarTarefaDoCiclo = async (t: { id: string; title: string; source: string | null; project_id: string; ops_node_id: string | null }) => {
+    setMexendoTarefa(t.id);
+    try {
+      const r = await excluirTarefa(t, { motivo: "descartada na folha do Ciclo" });
+      if (!r.ok) { toast.error(r.mensagem); return; }
+      toast.success("Tarefa excluída. Se o problema continuar, o alerta volta.");
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-tarefas"] });
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      void recarregarHistoria();
+    } finally {
+      setMexendoTarefa(null);
     }
   };
   const [novaNota, setNovaNota] = useState("");
@@ -711,6 +794,51 @@ export default function ClientCycleSheet({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* As tarefas que os alertas geraram, aqui mesmo: concluir ou
+                  descartar sem ir ao Kanban. Era o buraco que fazia tarefa
+                  sem sentido acumular - nascia aqui e nao tinha saida aqui. */}
+              {tarefasDoCiclo.length > 0 && (
+                <div className="mb-3 rounded-xl border border-border bg-secondary/20 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tarefas nascidas de alertas ({tarefasDoCiclo.length})
+                  </p>
+                  <div className="mt-1.5 space-y-1">
+                    {tarefasDoCiclo.map((t) => (
+                      <div key={t.id} className="flex items-center gap-2 text-[11.5px]">
+                        <span className="min-w-0 flex-1 truncate text-foreground" title={t.title}>
+                          {t.title}
+                          {t.due_date && (
+                            <span className="ml-1 text-[10px] text-muted-foreground">· até {t.due_date.slice(8, 10)}/{t.due_date.slice(5, 7)}</span>
+                          )}
+                        </span>
+                        {canWrite && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={mexendoTarefa === t.id}
+                              onClick={() => void concluirTarefaDoCiclo(t)}
+                              className="shrink-0 rounded border border-success/40 bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold text-success disabled:opacity-50"
+                              title="Marcar como concluída"
+                            >
+                              Concluir
+                            </button>
+                            <button
+                              type="button"
+                              disabled={mexendoTarefa === t.id}
+                              onClick={() => void descartarTarefaDoCiclo(t)}
+                              className="shrink-0 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-semibold text-destructive disabled:opacity-50"
+                              title="Excluir: a tarefa não faz mais sentido"
+                            >
+                              Excluir
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

@@ -3,7 +3,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
-import { notifyOpsTaskCreated, notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
+import { notifyOpsTaskCreated, notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -170,9 +170,14 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const handleDelete = async () => {
     if (!editTask) return;
     try {
-      const opsNodeId = (editTask as any)?.ops_node_id ?? null;
-      await supabase.from("tasks").delete().eq("id", editTask.id);
-      notifyOpsTaskDeleted(editTask.id, opsNodeId);
+      // Mesmas guardas e mesma limpeza das outras telas.
+      const { excluirTarefa } = await import("@/lib/taskDelete");
+      const r = await excluirTarefa(editTask as any);
+      if (!r.ok) {
+        toast.error(r.mensagem);
+        setConfirmDelete(false);
+        return;
+      }
       toast.success("Tarefa excluída");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setConfirmDelete(false);

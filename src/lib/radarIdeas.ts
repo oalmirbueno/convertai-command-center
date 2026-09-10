@@ -237,7 +237,16 @@ const PLAYS: RadarPlay[] = [
     ],
     signal: "Mensagens no direct e no WhatsApp citando o conteúdo, e a objeção aparecendo menos na conversa de venda.",
     internal: { offer: "Pacote de conteúdo de objeção (carrossel + vídeo)", range: [600, 1200], effort: "baixo" },
-    when: () => 66,
+    // Só quando há conteúdo rodando de verdade (alcance para aproveitar) ou
+    // aprovação parada (a dúvida travando do lado de lá). "Sempre 66" fazia
+    // esta ideia aparecer para todo cliente, e ideia que vale para todos não
+    // é ideia de ninguém.
+    when: (ctx) =>
+      ctx.publishedLast30 >= 2
+        ? 66 + Math.min(ctx.publishedLast30, 8)
+        : (ctx.pendingApprovals ?? 0) > 0
+          ? 58
+          : null,
   },
   {
     id: "prova-numero-real",
@@ -297,7 +306,12 @@ const PLAYS: RadarPlay[] = [
     ],
     signal: "Avaliações novas, clientes que voltam e indicações espontâneas chegando.",
     internal: { offer: "Régua de pós-venda (mensagens + peças)", range: [800, 1800], effort: "medio" },
-    when: (ctx) => 60 + (ctx.pulseScore && ctx.pulseScore >= 4 ? 10 : 0),
+    // Pós-venda só faz sentido para quem já tem clientes chegando pelo
+    // trabalho: pelo menos 2 meses de casa ou um Pulso alto que prove valor.
+    when: (ctx) =>
+      ctx.monthsTogether >= 2 || (ctx.pulseScore != null && ctx.pulseScore >= 4)
+        ? 60 + (ctx.pulseScore && ctx.pulseScore >= 4 ? 10 : 0)
+        : null,
   },
   {
     id: "atendimento-sem-fila",

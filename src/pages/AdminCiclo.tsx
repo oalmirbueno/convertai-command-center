@@ -301,6 +301,58 @@ export default function AdminCiclo() {
   }, [pendenciasReaisPorCliente, situacoes]);
 
   /**
+   * A tarefa nascida de um alerta FECHA SOZINHA quando o painel prova que o
+   * problema sumiu (posts agendados, aprovação liberada, campanha no ar...).
+   * Sem isto "Agendar os posts da semana" ficava no backlog depois de os
+   * posts estarem agendados, e o dono fechava à mão o que o painel já sabia.
+   * A descrição ganha a prova e a data; o diário registra.
+   */
+  const fechadasRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!situacoes || !canWrite) return;
+    void (async () => {
+      let algum = false;
+      for (const [id, pendReais] of pendenciasReaisPorCliente) {
+        const s = situacoes.get(id);
+        if (!s) continue;
+        const chavesVivas = new Set(pendReais.map((p) => p.chave));
+        for (const t of s.tarefasEncaminhadas) {
+          if (!t.id || chavesVivas.has(t.chave) || fechadasRef.current.has(t.id)) continue;
+          fechadasRef.current.add(t.id);
+          const { data: atual } = await (supabase as any)
+            .from("tasks").select("id, title, description, status").eq("id", t.id).maybeSingle();
+          if (!atual || atual.status === "done") continue;
+          const hoje = new Date().toLocaleDateString("pt-BR");
+          const { error } = await (supabase as any)
+            .from("tasks")
+            .update({
+              status: "done",
+              kanban_status: "done",
+              description: `${String(atual.description || "").trim()}\n\n✔ Fechada pelo painel em ${hoje}: o problema que gerou esta tarefa ("${t.chave}") não aparece mais na situação do cliente.`.trim(),
+            })
+            .eq("id", t.id);
+          if (error) continue;
+          algum = true;
+          await recordMemory({
+            clientId: id,
+            kind: "ciclo",
+            title: `Tarefa fechada pelo painel: ${String(atual.title || "")}`,
+            content: `O painel deixou de mostrar o problema "${t.chave}"; a tarefa criada a partir dele foi concluída automaticamente.`,
+            source: "ciclo",
+            tags: [area, "fechada-pelo-painel"],
+            metadata: { chave: t.chave, task_id: t.id, registro: "fechada-pelo-painel" },
+          }).catch(() => undefined);
+        }
+      }
+      if (algum) {
+        await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendenciasReaisPorCliente, situacoes, canWrite, area]);
+
+  /**
    * A jornada de entrada, só para quem ainda está entrando. Sai da
    * situação real e dos serviços contratados — nunca de caixinha marcada.
    */
@@ -366,8 +418,12 @@ export default function AdminCiclo() {
         // pendência nova entra, resolvida sai — "atualiza conforme". A
         // primeira marcação trava, porque ela guarda só o número e trocar
         // o rótulo depois faria o histórico mentir.
+        // Só marcação HUMANA trava o plano. A prova automática ("o painel
+        // mostra isso resolvido") também contava, e bastava o painel provar
+        // uma girante na segunda para o plano congelar com as outras três
+        // paradas na foto daquela manhã.
         const nenhumaGiranteMarcada = ROTATING_SLOTS.every(
-          (step) => !etapaFeita(client, step),
+          (step) => !doneMap.get(`${id}:${area}:${step}`),
         );
         if (
           nenhumaGiranteMarcada

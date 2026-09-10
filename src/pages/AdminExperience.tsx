@@ -237,7 +237,7 @@ export default function AdminExperience() {
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         supabase.from("milestones")
-          .select("id, project_id, title, status, target_date")
+          .select("id, project_id, title, status, target_date, updated_at")
           .is("deleted_at", null)
           .order("target_date", { ascending: true })
           .range(de, ate),
@@ -260,23 +260,38 @@ export default function AdminExperience() {
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return d.toISOString().slice(0, 10);
   }, []);
-  const { data: cycleRows } = useQuery({
+  // Três semanas, não só a corrente: na segunda de manhã a semana atual está
+  // vazia por definição, e tudo que dependia dela ("tráfego em operação",
+  // rotina feita) dizia "sem registro" para um cliente que rodou a semana
+  // inteira anterior.
+  const cycleSince = useMemo(() => {
+    const d = new Date(`${cycleWeekKey}T00:00:00`);
+    d.setDate(d.getDate() - 14);
+    return d.toISOString().slice(0, 10);
+  }, [cycleWeekKey]);
+  const { data: cycleRowsAll } = useQuery({
     queryKey: ["weekly-cycle-ritual", cycleWeekKey],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("weekly_cycle_progress")
-        .select("client_id, area, step")
-        .eq("week_start", cycleWeekKey);
+        .select("client_id, area, step, week_start")
+        .gte("week_start", cycleSince);
       if (error) return [];
-      return (data || []) as Array<{ client_id: string; area: string; step: number }>;
+      return (data || []) as Array<{ client_id: string; area: string; step: number; week_start: string }>;
     },
     staleTime: 30_000,
     ...AO_VIVO,
   });
+  // A semana corrente continua sendo a referência da rotina "desta semana".
+  const cycleRows = useMemo(
+    () => (cycleRowsAll || []).filter((row) => row.week_start === cycleWeekKey),
+    [cycleRowsAll, cycleWeekKey],
+  );
   const cycleDoneByClient = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of cycleRows || []) {
-      if (row.step <= 6 && row.area === "social") {
+      // Social e tráfego contam: a Prova de sexta fala do ciclo inteiro.
+      if (row.step <= 6 && (row.area === "social" || row.area === "trafego")) {
         map.set(row.client_id, (map.get(row.client_id) || 0) + 1);
       }
     }
@@ -287,11 +302,49 @@ export default function AdminExperience() {
   // campanhas está em operação de verdade, independente de carteira.
   const trafegoEmOperacao = useMemo(() => {
     const set = new Set<string>();
-    for (const row of cycleRows || []) {
+    for (const row of cycleRowsAll || []) {
       if (row.area === "trafego") set.add(row.client_id);
     }
     return set;
-  }, [cycleRows]);
+  }, [cycleRowsAll]);
+
+  // O dossiê ATUAL de cada cliente (geral e por projeto). É a fonte de verdade
+  // do "onde estamos": o MCP grava aqui, e a mensagem do grupo lia outra
+  // tabela (project_memory) - por isso o dossiê mudava e a mensagem não.
+  const { data: expDossies = [] } = useQuery({
+    queryKey: ["exp-dossies"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("client_dossiers")
+        .select("id, client_id, project_id, dossier_type, version, summary, content, effective_at, updated_at")
+        .eq("is_current", true)
+        .order("updated_at", { ascending: false });
+      if (error) return [];
+      return (data || []) as any[];
+    },
+    ...AO_VIVO,
+  });
+
+  // Tarefas concluídas nos últimos 7 dias: o trabalho real da semana, com nome.
+  // Sem isto a mensagem só sabia de arquivo liberado e etapa de checklist.
+  const { data: expTasksDone = [] } = useQuery({
+    queryKey: ["exp-tasks-done", cycleWeekKey],
+    queryFn: async () => {
+      const desde = new Date();
+      desde.setDate(desde.getDate() - 7);
+      const { data, error } = await (supabase as any)
+        .from("tasks")
+        .select("id, title, project_id, updated_at, workstream")
+        .eq("status", "done")
+        .is("deleted_at", null)
+        .gte("updated_at", desde.toISOString())
+        .order("updated_at", { ascending: false })
+        .limit(400);
+      if (error) return [];
+      return (data || []) as any[];
+    },
+    ...AO_VIVO,
+  });
   const igByClient = useMemo(() => {
     const bruto = new Map<string, SocialMetricsWeek[]>();
     for (const row of igAllWeeks || []) {
@@ -356,7 +409,9 @@ export default function AdminExperience() {
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         supabase.from("editorial_publications")
-          .select("id, client_id, status, platform, scheduled_at, published_at")
+          // O título vem junto: "a publicação do dia 12/09" não diz nada ao
+          // cliente; "o reel da vitrine, dia 12/09" diz.
+          .select("id, client_id, status, platform, scheduled_at, published_at, post:editorial_posts(title)")
           .in("status", ["scheduled", "published"])
           .order("scheduled_at", { ascending: true })
           .range(de, ate),
@@ -447,13 +502,32 @@ export default function AdminExperience() {
 
       const lastRelease = lastReleaseByClient.get(client.id) || null;
       const releaseDays = daysSince(lastRelease);
+      // "Sem avanço" se mede a partir do que o cliente VIU por último: a última
+      // entrega liberada ou, se ainda não houve nenhuma, o dia em que ele
+      // entrou. Antes, "nenhuma entrega" virava "45+ dias sem avanço" e um
+      // cliente que chegou esta semana aparecia em vermelho com alerta de risco.
+      const daysInHouse = daysSince(client.created_at);
+      const onboarding = lastRelease === null && daysInHouse !== null && daysInHouse <= 21;
+      const daysWithoutProgress = releaseDays ?? daysInHouse;
       factors.push({
-        label: "Avanço percebido (entregas)",
+        label: onboarding ? "Avanço percebido (onboarding)" : "Avanço percebido (entregas)",
         weight: 25,
-        earned: releaseDays === null ? 0 : releaseDays <= 14 ? 25 : releaseDays <= 45 ? 13 : 0,
-        note: releaseDays === null ? "Nenhuma entrega liberada" : `Última entrega há ${releaseDays}d`,
+        earned: onboarding
+          ? null // sem dado ainda: não pune nem premia, e o peso sai da conta
+          : daysWithoutProgress === null
+            ? 0
+            : daysWithoutProgress <= 14 ? 25 : daysWithoutProgress <= 45 ? 13 : 0,
+        note: onboarding
+          ? `Cliente novo: ${daysInHouse}d de casa, primeira entrega ainda não liberada`
+          : lastRelease === null
+            ? `Nenhuma entrega liberada em ${daysWithoutProgress ?? "?"}d de casa`
+            : `Última entrega há ${releaseDays}d`,
       });
-      if (releaseDays === null || releaseDays > 45) {
+      if (onboarding) {
+        if ((daysInHouse ?? 0) >= 10) {
+          alerts.push({ kind: "onboarding", label: `${daysInHouse}d de casa sem primeira entrega: liberar algo esta semana` });
+        }
+      } else if (daysWithoutProgress === null || daysWithoutProgress > 45) {
         alerts.push({ kind: "risco", label: "45+ dias sem avanço percebido" });
       }
 
@@ -468,11 +542,16 @@ export default function AdminExperience() {
 
       const lastReport = lastPublishedReportByClient.get(client.id) || null;
       const reportDays = daysSince(lastReport);
+      // Cliente com menos de 35 dias de casa ainda não teve o primeiro
+      // relatório por definição: sem dado, não sem comunicação.
+      const cedoParaRelatorio = reportDays === null && daysInHouse !== null && daysInHouse < 35;
       factors.push({
         label: "Comunicação publicada",
         weight: 10,
-        earned: reportDays === null ? 0 : reportDays <= 35 ? 10 : 4,
-        note: reportDays === null ? "Nenhum relatório publicado" : `Último há ${reportDays}d`,
+        earned: cedoParaRelatorio ? null : reportDays === null ? 0 : reportDays <= 35 ? 10 : 4,
+        note: cedoParaRelatorio
+          ? `Primeiro relatório previsto até o dia 35 (hoje: ${daysInHouse}d)`
+          : reportDays === null ? "Nenhum relatório publicado" : `Último há ${reportDays}d`,
       });
 
       // Percepção de valor: agora com fonte real, o Pulso respondido pelo cliente.
@@ -1115,9 +1194,11 @@ export default function AdminExperience() {
     const etapas = (allMilestones || []).filter((m: any) =>
       clientProjects.some((p: any) => p.id === m.project_id),
     );
+    // A coluna e target_date (due_date nunca existiu em milestones): o filtro
+    // antigo descartava TODA etapa, e a IA nunca soube o que vinha a seguir.
     const proximas = etapas
-      .filter((m: any) => m.status !== "completed" && m.due_date)
-      .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))
+      .filter((m: any) => m.status !== "completed" && m.target_date)
+      .sort((a: any, b: any) => String(a.target_date).localeCompare(String(b.target_date)))
       .slice(0, 3);
     const concluidas = etapas.filter(
       (m: any) => m.status === "completed" && m.updated_at && new Date(m.updated_at) >= weekAgo,
@@ -1252,7 +1333,7 @@ export default function AdminExperience() {
       agendadas.length ? `Publicações já agendadas: ${agendadas.length}` : "",
       concluidas.length ? `Etapas concluídas nos últimos 7 dias: ${concluidas.map((m: any) => m.title).join("; ")}` : "",
       proximas.length
-        ? `Próximas etapas com data: ${proximas.map((m: any) => `${m.title} (${new Date(m.due_date).toLocaleDateString("pt-BR")})`).join("; ")}`
+        ? `Próximas etapas com data: ${proximas.map((m: any) => `${m.title} (${new Date(`${m.target_date}T12:00:00`).toLocaleDateString("pt-BR")})`).join("; ")}`
         : "",
       // Semana de bastidor: quando não houve publicação, o trabalho existiu
       // do mesmo jeito. É isto que a mensagem conta, em vez de dizer que nada
@@ -1263,6 +1344,23 @@ export default function AdminExperience() {
       igUltima
         ? `Instagram na última semana medida: ${igUltima.followers ?? "?"} seguidores${pct("followers")}, alcance ${igUltima.reach ?? "?"}${pct("reach")}, ${igUltima.total_interactions ?? "?"} interações${pct("total_interactions")}`
         : `Instagram: sem medição registrada`,
+      // O dossiê atual é a fonte de verdade do "onde estamos": entra inteiro
+      // (resumido) para a IA escrever a partir dele, não do nome do cliente.
+      (() => {
+        const d = (expDossies || []).find((x: any) => x.client_id === client.id);
+        if (!d) return "";
+        const texto = String(d.content || d.summary || "").trim();
+        if (!texto) return "";
+        const idade = daysSince(d.updated_at);
+        return `DOSSIÊ ATUAL (v${d.version ?? "?"}, escrito há ${idade ?? "?"} dia(s)) — use como base do "onde estamos" e do "para onde vamos":\n${texto.slice(0, 1800)}`;
+      })(),
+      (() => {
+        const ids = new Set(clientProjects.map((p: any) => p.id));
+        const feitas = (expTasksDone || []).filter((t: any) => ids.has(t.project_id)).slice(0, 8);
+        return feitas.length
+          ? `Tarefas concluídas nos últimos 7 dias: ${feitas.map((t: any) => t.title).join("; ")}`
+          : "";
+      })(),
       cicloFeito > 0
         ? `Bastidor da semana: ${cicloFeito} de 6 etapas do nosso ciclo interno concluídas para este cliente`
         : "",
@@ -1313,7 +1411,13 @@ export default function AdminExperience() {
           // do painel e o que o segundo cérebro sabe daquele cliente fora
           // dele. Sem a terceira, a mensagem escreve com meio contexto.
           const [historia, cerebro] = await Promise.all([
-            readMemory(c.id, { limit: 8 }).then(memoryAsContext),
+            // Só o que conta história (decisão, marco, nota, resumo): os 8
+            // últimos registros de qualquer tipo eram ciclo e entrega, e a IA
+            // não recebia nenhuma decisão.
+            readMemory(c.id, {
+              limit: 12,
+              kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any,
+            }).then(memoryAsContext),
             supabase.functions
               .invoke("brain-client-context", { body: { client_name: clientName } })
               .then((r) => String(r.data?.context || ""))
@@ -1434,8 +1538,15 @@ export default function AdminExperience() {
 
   const deleteDraft = async (report: any) => {
     try {
-      const { error } = await supabase.from("reports").delete().eq("id", report.id).eq("status", "draft");
+      // A fila mostra tudo que não foi publicado; o descarte precisa cobrir o
+      // mesmo conjunto, e dizer a verdade quando nada foi apagado.
+      const { data: apagados, error } = await supabase
+        .from("reports").delete().eq("id", report.id).neq("status", "published").select("id");
       if (error) throw error;
+      if (!apagados || apagados.length === 0) {
+        toast.error("Nada foi removido: este item já não estava na fila.");
+        return;
+      }
       toast.success("Rascunho removido");
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
     } catch (err: any) {
@@ -1525,9 +1636,12 @@ export default function AdminExperience() {
           p.status === "scheduled" && p.scheduled_at &&
           new Date(p.scheduled_at) > new Date() && new Date(p.scheduled_at) < proximaSegunda,
       )
-      .map((p: any) => new Date(p.scheduled_at))
-      .sort((a: Date, b: Date) => a.getTime() - b.getTime())
-      .map((d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }));
+      .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+      .map((p: any) => {
+        const dia = new Date(p.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+        const titulo = readableFileName(String(p.post?.title || ""));
+        return titulo ? `${dia} (${titulo})` : dia;
+      });
     const publicadasSemana = publicacoes.filter(
       (p: any) => p.status === "published" && p.published_at && new Date(p.published_at) >= segunda,
     ).length;
@@ -1553,15 +1667,31 @@ export default function AdminExperience() {
       .map((m: any) => String(m.title || "").toLowerCase())
       .filter(Boolean);
 
-    // O contexto vivo: a última decisão, nota ou dossiê recente. É o que
-    // substitui o genérico "seguimos trabalhando em X".
-    const contextoEntrada = memoriaDoCliente.find(
-      (m: any) => CONTEXTO_KINDS.has(m.kind) && (daysSince(m.created_at) ?? 99) <= 14,
-    );
+    // O contexto vivo vem do DOSSIÊ ATUAL (client_dossiers, is_current): é
+    // onde o MCP e a equipe escrevem "onde estamos". A memória (project_memory)
+    // fica como reserva. Sem janela de 14 dias: dossiê velho continua sendo o
+    // retrato até alguém escrever outro - o que muda e a idade dele, não a
+    // existência.
+    const dossiesDoCliente = (expDossies || []).filter((d: any) => d.client_id === client.id);
+    const dossieAtual = dossiesDoCliente[0] || null; // ordenado por updated_at desc
+    const contextoEntrada = dossieAtual
+      ? { kind: "summary", title: `Dossiê v${dossieAtual.version ?? ""}`, content: String(dossieAtual.content || dossieAtual.summary || ""), created_at: dossieAtual.updated_at }
+      : memoriaDoCliente.find((m: any) => CONTEXTO_KINDS.has(m.kind)) || null;
     const contextoRecente = contextoEntrada ? trechoDoContexto(contextoEntrada) || null : null;
     const oQueEsperar = contextoEntrada
       ? oQueEsperarDoDossie(String(contextoEntrada.content || "")) || null
       : null;
+
+    // Tarefas concluídas com nome: o trabalho de verdade da semana.
+    const projetosDoCliente = new Set(
+      (projects || []).filter((p: any) => p.client_id === client.id).map((p: any) => p.id),
+    );
+    const tarefasFeitas = (expTasksDone || []).filter((t: any) => projetosDoCliente.has(t.project_id));
+    const tarefasConcluidas7d = tarefasFeitas.map((t: any) => readableFileName(String(t.title || ""))).filter(Boolean);
+    const tarefasDesdeSegunda = tarefasFeitas
+      .filter((t: any) => t.updated_at && new Date(t.updated_at) >= segunda)
+      .map((t: any) => readableFileName(String(t.title || "")))
+      .filter(Boolean);
 
     // O próximo passo combinado no último relatório publicado ainda fresco.
     const relatorioComPasso = (reports || []).find(
@@ -1628,6 +1758,9 @@ export default function AdminExperience() {
       oQueEsperar,
       proximoPasso,
       anuncios,
+      tarefasConcluidas7d,
+      tarefasDesdeSegunda,
+      dossieIdade: dossieAtual?.updated_at ?? null,
     };
     return buildGroupMessageText(ctx, moment);
   };
@@ -1702,7 +1835,7 @@ export default function AdminExperience() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.08] via-transparent to-success/[0.05]" />
             <div className="relative z-10">
               <p className="text-sm font-semibold text-foreground">
-                {greeting}, Almir! Hoje é {weekday}: dia de <span className="text-primary">{todayRitual.label}</span>.
+                {greeting}, {(profile?.full_name || "").split(" ")[0] || "time"}! Hoje é {weekday}: dia de <span className="text-primary">{todayRitual.label}</span>.
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{todayRitual.why}. Gere, revise cliente por cliente e publique.</p>
               <div className="mt-3 grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
@@ -2159,7 +2292,11 @@ export default function AdminExperience() {
                     <button
                       onClick={() =>
                         copyText(
-                          `Oi, ${client.full_name?.split(" ")[0] || "tudo bem"}! Aqui é da Aceleriq. 😊\n\nSeu projeto com a gente foi entregue e queremos saber: como estão os resultados por aí?\n\nSe fizer sentido, temos duas formas de continuar te ajudando:\n1) Acompanhamento mensal para manter tudo evoluindo\n2) Um diagnóstico express (R$ 497) para mapear o próximo passo de maior impacto\n\nTopa conversar esta semana?`,
+                          `Oi, ${client.full_name?.split(" ")[0] || "tudo bem"}! Aqui é da Aceleriq. 😊\n\n${
+                            doneCount > 0
+                              ? `Faz ${age ?? "algum tempo"} dia(s) que entregamos ${doneCount === 1 ? "o seu projeto" : `os seus ${doneCount} projetos`} e queremos saber: como estão os resultados por aí?`
+                              : "Queremos saber como estão as coisas por aí."
+                          }\n\nSe fizer sentido, a gente conversa sobre o próximo passo — pode ser um acompanhamento contínuo ou um trabalho pontual, o que fizer mais sentido para o momento de vocês.\n\nTopa conversar esta semana?`,
                           "Mensagem de reativação copiada!"
                         )
                       }

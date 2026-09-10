@@ -380,10 +380,17 @@ export default function TimelinePage() {
   const handleDeleteTask = async () => {
     if (!deleteTask) return;
     const t = deleteTask;
-    await supabase.from("tasks").delete().eq("id", t.id);
-    const { notifyOpsTaskDeleted } = await import("@/lib/opsTaskSync");
-    notifyOpsTaskDeleted(t.id, t.ops_node_id ?? null);
+    // As mesmas guardas do Kanban: aqui a tarefa de pedido do cliente
+    // passava batida e sumia sem ninguém responder o pedido.
+    const { excluirTarefa } = await import("@/lib/taskDelete");
+    const r = await excluirTarefa(t);
+    if (!r.ok) {
+      toast.error(r.mensagem);
+      setDeleteTask(null);
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
     toast.success("Tarefa excluída!");
     setDeleteTask(null);
   };
