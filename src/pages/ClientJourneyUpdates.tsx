@@ -17,6 +17,7 @@ import {
   formatMetricNumber,
   useSocialMetricsWeekly,
   agruparPorConta,
+  semanaEmAndamento,
   weekDeltaPct,
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
@@ -273,7 +274,8 @@ function InstagramContaBlock({
         </span>
         <p className="mt-2 text-xs text-muted-foreground">
           {username ? `@${username} · ` : ""}
-          Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)},
+          Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)}
+          {semanaEmAndamento(latest) ? " (em andamento, números parciais)" : ""},
           direto da sua conta. Atualiza sozinho toda semana.
         </p>
       </div>

@@ -24,6 +24,7 @@ import {
   agruparPorConta,
   collectSocialMetricsNow,
   formatMetricNumber,
+  semanaEmAndamento,
   useSocialClientIdentity,
   useSocialMetricsWeekly,
   useSocialPostMetrics,
@@ -36,7 +37,9 @@ const fmtWeek = (row: SocialMetricsWeek) => {
     const [, month, day] = value.split("-");
     return `${day}/${month}`;
   };
-  return `${d(row.week_start)} a ${d(row.week_end)}`;
+  // A semana corrente aparece com os numeros parciais e diz isso na cara:
+  // sem o aviso, 3 dias de alcance pareciam uma semana fraca.
+  return `${d(row.week_start)} a ${d(row.week_end)}${semanaEmAndamento(row) ? " (em andamento)" : ""}`;
 };
 
 const MEDIA_TYPE_LABELS: Record<string, string> = {

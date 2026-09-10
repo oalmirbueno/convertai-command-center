@@ -172,7 +172,19 @@ export function formatMetricNumber(value: number | null | undefined) {
   return new Intl.NumberFormat("pt-BR").format(value);
 }
 
+/** A semana ainda esta correndo? (week_end e hoje ou depois) */
+export function semanaEmAndamento(row: Pick<SocialMetricsWeek, "week_end">) {
+  const hoje = new Date();
+  const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+  return row.week_end >= hojeISO;
+}
+
 // Variacao percentual entre a semana mais recente e a anterior, por campo.
+//
+// So entre semanas FECHADAS. O robo tambem grava a semana em andamento
+// (coleta diaria); comparar 3 dias com 7 dava "alcance -89%" em toda conta
+// na quarta-feira - numero real, leitura falsa. Com a semana aberta no topo,
+// a variacao mostrada e a da ultima semana fechada contra a anterior.
 export function weekDeltaPct(
   rows: SocialMetricsWeek[],
   field: keyof Pick<
@@ -180,7 +192,7 @@ export function weekDeltaPct(
     "followers" | "reach" | "total_interactions" | "profile_views" | "accounts_engaged"
   >,
 ) {
-  const withValue = rows.filter((row) => row[field] != null);
+  const withValue = rows.filter((row) => row[field] != null && !semanaEmAndamento(row));
   if (withValue.length < 2) return null;
   const [latest, previous] = withValue;
   const prev = Number(previous[field]);
