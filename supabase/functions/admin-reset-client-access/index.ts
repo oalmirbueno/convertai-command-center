@@ -66,6 +66,9 @@ Deno.serve(async (req) => {
       ? body.new_full_name.trim()
       : "";
     const sendContractId = body.send_contract_id;
+    // Quando false, apenas gera e devolve o link de primeiro acesso para o
+    // admin copiar e enviar na mão, sem disparar o e-mail de convite.
+    const sendEmail = body.send_email !== false;
     if (
       !validUuid(profileId) ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) ||
@@ -121,59 +124,65 @@ Deno.serve(async (req) => {
 
     const firstAccessUrl =
       `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
-    const { data: welcomeData, error: welcomeError } = await admin.functions
-      .invoke(
-        "send-transactional-email",
-        {
-          body: {
-            templateName: "client-welcome",
-            recipientEmail: newEmail,
-            idempotencyKey: `client-welcome-resend-${profileId}-${Date.now()}`,
-            templateData: {
-              name: profile?.full_name || "",
-              company: profile?.company_name || "",
-              email: newEmail,
-              firstAccessUrl,
-            },
-          },
-        },
-      );
-    const welcomeResult = rpcRecord(welcomeData);
-    if (welcomeError || welcomeResult?.error) {
-      throw new Error("welcome_email_failed");
-    }
 
-    // Verifica a ENTREGA real no log do despachante para o painel não mentir:
-    // "enfileirado" não é "entregue". Espera o dispatcher processar e lê o
-    // status final (sent / failed / dlq) com a mensagem de erro, se houver.
+    // delivery: "skipped" quando o admin só quer o link para enviar na mão.
     let delivery: { status: string; error: string | null } = {
-      status: "pending",
+      status: sendEmail ? "pending" : "skipped",
       error: null,
     };
-    const welcomeMessageId = typeof welcomeResult?.message_id === "string"
-      ? welcomeResult.message_id
-      : null;
-    if (welcomeMessageId) {
-      for (let attempt = 0; attempt < 4; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        const { data: logRows } = await admin
-          .from("email_send_log")
-          .select("status, error_message, created_at")
-          .eq("message_id", welcomeMessageId)
-          .order("created_at", { ascending: false })
-          .limit(5);
-        const rows = Array.isArray(logRows) ? logRows : [];
-        const final = rows.find((row) =>
-          ["sent", "failed", "dlq", "bounced", "suppressed"].includes(
-            String(row.status),
-          )
+
+    if (sendEmail) {
+      const { data: welcomeData, error: welcomeError } = await admin.functions
+        .invoke(
+          "send-transactional-email",
+          {
+            body: {
+              templateName: "client-welcome",
+              recipientEmail: newEmail,
+              idempotencyKey:
+                `client-welcome-resend-${profileId}-${Date.now()}`,
+              templateData: {
+                name: profile?.full_name || "",
+                company: profile?.company_name || "",
+                email: newEmail,
+                firstAccessUrl,
+              },
+            },
+          },
         );
-        if (final) {
-          delivery = {
-            status: String(final.status),
-            error: final.error_message ? String(final.error_message) : null,
-          };
-          break;
+      const welcomeResult = rpcRecord(welcomeData);
+      if (welcomeError || welcomeResult?.error) {
+        throw new Error("welcome_email_failed");
+      }
+
+      // Verifica a ENTREGA real no log do despachante para o painel não mentir:
+      // "enfileirado" não é "entregue". Espera o dispatcher processar e lê o
+      // status final (sent / failed / dlq) com a mensagem de erro, se houver.
+      const welcomeMessageId = typeof welcomeResult?.message_id === "string"
+        ? welcomeResult.message_id
+        : null;
+      if (welcomeMessageId) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const { data: logRows } = await admin
+            .from("email_send_log")
+            .select("status, error_message, created_at")
+            .eq("message_id", welcomeMessageId)
+            .order("created_at", { ascending: false })
+            .limit(5);
+          const rows = Array.isArray(logRows) ? logRows : [];
+          const final = rows.find((row) =>
+            ["sent", "failed", "dlq", "bounced", "suppressed"].includes(
+              String(row.status),
+            )
+          );
+          if (final) {
+            delivery = {
+              status: String(final.status),
+              error: final.error_message ? String(final.error_message) : null,
+            };
+            break;
+          }
         }
       }
     }

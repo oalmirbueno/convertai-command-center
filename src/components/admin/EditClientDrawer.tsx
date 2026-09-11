@@ -91,6 +91,8 @@ export default function EditClientDrawer({
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [resendingInvite, setResendingInvite] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [firstAccessLink, setFirstAccessLink] = useState("");
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -321,6 +323,7 @@ export default function EditClientDrawer({
       setBrand((client as any).brand || "");
       setClientPassword("");
       setAvatarUrl(client.avatar_url || "");
+      setFirstAccessLink("");
     }
   }, [client]);
 
@@ -982,6 +985,72 @@ export default function EditClientDrawer({
                     {resendingInvite ? "Reenviando convite…" : "Reenviar convite de primeiro acesso"}
                   </button>
                 </div>
+                {!client?.first_access_used_at && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Link de Primeiro Acesso</label>
+                    <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
+                      Gera o link para você enviar na mão (WhatsApp) sem disparar e-mail. Cada novo link invalida o anterior, então envie sempre o último gerado.
+                    </p>
+                    <button
+                      type="button"
+                      disabled={generatingLink}
+                      onClick={async () => {
+                        if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
+                        setGeneratingLink(true);
+                        try {
+                          const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+                            body: {
+                              profile_id: client.id,
+                              new_email: String(client.email).trim().toLowerCase(),
+                              new_full_name: (fullName || client.full_name || "").trim(),
+                              send_email: false,
+                            },
+                          });
+                          const result = (Array.isArray(data) ? data[0] : data) as any;
+                          if (error || result?.error || !result?.firstAccessUrl) throw new Error(result?.error || error?.message);
+                          setFirstAccessLink(String(result.firstAccessUrl));
+                          try {
+                            await navigator.clipboard.writeText(String(result.firstAccessUrl));
+                            toast.success("Link gerado e copiado. Cole no WhatsApp do cliente.");
+                          } catch {
+                            toast.success("Link gerado. Copie no campo abaixo.");
+                          }
+                        } catch {
+                          toast.error("Não foi possível gerar o link agora. Tente novamente em instantes.");
+                        } finally {
+                          setGeneratingLink(false);
+                        }
+                      }}
+                      className="w-full py-2.5 rounded-[10px] text-[13px] font-medium bg-secondary text-foreground border border-border hover:border-primary/50 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {generatingLink ? "Gerando link…" : firstAccessLink ? "Gerar novo link" : "Gerar link de primeiro acesso"}
+                    </button>
+                    {firstAccessLink && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          readOnly
+                          value={firstAccessLink}
+                          onFocus={(e) => e.currentTarget.select()}
+                          className="flex-1 min-w-0 bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-[12px] font-mono text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(firstAccessLink);
+                              toast.success("Link copiado.");
+                            } catch {
+                              toast.error("Copie manualmente selecionando o texto.");
+                            }
+                          }}
+                          className="shrink-0 py-2.5 px-3.5 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Segurança do Acesso</label>
                   <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
