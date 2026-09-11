@@ -761,6 +761,14 @@
       "remote_name": "guarda_de_arquivos_le_pelo_definidor",
       "remote_statements_sha256": "1e32787c7685d2d96e888845d792eb94837a48674dc583d5aa9140745ee44375",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260911235000",
+      "path": "supabase/migrations/20260911235000_execucao_destravada.sql",
+      "local_sha256": "54a58a9a5dced1b0964403ab10bcd0656bd847ec585bcec81582099bb5220d1d",
+      "remote_name": "execucao_destravada",
+      "remote_statements_sha256": "e797052004faa1175b5867e07c08f5bfde06fd40864e2459a0cf1c94ea519ef8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
