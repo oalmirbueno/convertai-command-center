@@ -20,6 +20,7 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import {
@@ -312,19 +313,61 @@ export default function AdminExperience() {
   // O dossiê ATUAL de cada cliente (geral e por projeto). É a fonte de verdade
   // do "onde estamos": o MCP grava aqui, e a mensagem do grupo lia outra
   // tabela (project_memory) - por isso o dossiê mudava e a mensagem não.
-  const { data: expDossies = [] } = useQuery({
+  // Regra do dono: a leitura e SEMPRE do dossie GERAL final (nunca o de um
+  // projeto por ser mais recente), comparado com a versao anterior para a
+  // progressao. lerDossiesDaCarteira faz isso em duas consultas.
+  const { data: expDossieMap } = useQuery({
     queryKey: ["exp-dossies"],
     queryFn: async () => {
+      try { return await lerDossiesDaCarteira(); } catch { return new Map<string, DossieGeralDoCliente>(); }
+    },
+    ...AO_VIVO,
+  });
+  const dossieDe = (clientId: string): DossieGeralDoCliente | null => expDossieMap?.get(clientId) ?? null;
+
+  // O plano desta semana pela esteira (foco, feito, proximos), um por cliente.
+  const { data: expPlanos = [] } = useQuery({
+    queryKey: ["exp-planos", cycleWeekKey],
+    queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from("client_dossiers")
-        .select("id, client_id, project_id, dossier_type, version, summary, content, effective_at, updated_at")
-        .eq("is_current", true)
-        .order("updated_at", { ascending: false });
+        .from("project_memory")
+        .select("client_id, metadata, created_at")
+        .eq("kind", "esteira_plano")
+        .contains("metadata", { week_start: cycleWeekKey })
+        .order("created_at", { ascending: false });
       if (error) return [];
       return (data || []) as any[];
     },
     ...AO_VIVO,
   });
+  const planoDe = (clientId: string): { foco: string; feito: string[]; proximos: Array<{ titulo: string; passo: string; motivo?: string }> } | null => {
+    const p = (expPlanos as any[]).find((x) => x.client_id === clientId);
+    if (!p?.metadata) return null;
+    const m = p.metadata as Record<string, unknown>;
+    return { foco: String(m.foco ?? ""), feito: Array.isArray(m.feito) ? (m.feito as string[]) : [], proximos: Array.isArray(m.proximos) ? (m.proximos as Array<{ titulo: string; passo: string; motivo?: string }>) : [] };
+  };
+
+  // Vendas registradas nos ultimos 7 dias: o numero que paga o anuncio.
+  const { data: expVendas = [] } = useQuery({
+    queryKey: ["exp-vendas"],
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+      const { data, error } = await (supabase as any)
+        .from("ads_sales")
+        .select("client_id, sold_at, campaign_name, channel, quantity, value")
+        .gte("sold_at", desde);
+      if (error) return [];
+      return (data || []) as any[];
+    },
+    ...AO_VIVO,
+  });
+  const vendasDe = (clientId: string): { total: number; receita: number; porCampanha: string[] } => {
+    const linhas = (expVendas as any[]).filter((v) => v.client_id === clientId);
+    const total = linhas.reduce((t, v) => t + Math.max(1, Number(v.quantity) || 1), 0);
+    const receita = linhas.reduce((t, v) => t + (Number(v.value) || 0), 0);
+    const porCampanha = Array.from(new Set(linhas.map((v) => String(v.campaign_name || "")).filter(Boolean)));
+    return { total, receita, porCampanha };
+  };
 
   // Tarefas concluídas nos últimos 7 dias: o trabalho real da semana, com nome.
   // Sem isto a mensagem só sabia de arquivo liberado e etapa de checklist.
@@ -1360,12 +1403,30 @@ export default function AdminExperience() {
       // O dossiê atual é a fonte de verdade do "onde estamos": entra inteiro
       // (resumido) para a IA escrever a partir dele, não do nome do cliente.
       (() => {
-        const d = (expDossies || []).find((x: any) => x.client_id === client.id);
-        if (!d) return "";
-        const texto = String(d.content || d.summary || "").trim();
+        const d = dossieDe(client.id);
+        if (!d?.geral) return "";
+        const texto = String(d.geral.content || d.geral.summary || "").trim();
         if (!texto) return "";
-        const idade = daysSince(d.updated_at);
-        return `DOSSIÊ ATUAL (v${d.version ?? "?"}, escrito há ${idade ?? "?"} dia(s)) — use como base do "onde estamos" e do "para onde vamos":\n${texto.slice(0, 1800)}`;
+        const idade = daysSince(d.geral.updated_at);
+        const mudancas = d.mudancas.length
+          ? `\nO QUE MUDOU DESDE A VERSÃO ANTERIOR (v${d.anterior?.version ?? "?"} -> v${d.geral.version ?? "?"}); é a progressão, retome-a como avanço:\n${d.mudancas.map((m) => `- ${m}`).join("\n")}`
+          : "";
+        const outros = d.outros.length ? `\nDossiês de projeto (complemento, não substituem o geral): ${d.outros.map((o) => `v${o.version ?? "?"} ${String(o.summary || o.content || "").slice(0, 160)}`).join(" | ")}` : "";
+        return `DOSSIÊ GERAL ATUAL (${d.substituto ? "sem geral: usando o mais recente" : `v${d.geral.version ?? "?"}`}, escrito há ${idade ?? "?"} dia(s)) — fonte da verdade do "onde estamos" e do "para onde vamos":\n${texto.slice(0, 1800)}${mudancas}${outros}`;
+      })(),
+      (() => {
+        const p = planoDe(client.id);
+        if (!p) return "";
+        return [
+          p.foco ? `PLANO DA SEMANA PELA ESTEIRA — foco: ${p.foco}` : "",
+          p.feito.length ? `Esteira provou como feito nesta semana: ${p.feito.join("; ")}` : "",
+          p.proximos.length ? `Próximos passos combinados (traduza para a língua do cliente, nunca como pendência): ${p.proximos.map((x) => `${x.titulo}: ${x.passo}`).join("; ")}` : "",
+        ].filter(Boolean).join("\n");
+      })(),
+      (() => {
+        const v = vendasDe(client.id);
+        if (v.total === 0) return "";
+        return `VENDAS registradas nos últimos 7 dias: ${v.total}${v.receita > 0 ? ` (R$ ${v.receita.toFixed(0)})` : ""}${v.porCampanha.length ? ` — campanhas: ${v.porCampanha.join(", ")}` : ""}. Conte como resultado concreto.`;
       })(),
       (() => {
         const ids = new Set(clientProjects.map((p: any) => p.id));
@@ -1693,11 +1754,13 @@ export default function AdminExperience() {
     // fica como reserva. Sem janela de 14 dias: dossiê velho continua sendo o
     // retrato até alguém escrever outro - o que muda e a idade dele, não a
     // existência.
-    const dossiesDoCliente = (expDossies || []).filter((d: any) => d.client_id === client.id);
-    const dossieAtual = dossiesDoCliente[0] || null; // ordenado por updated_at desc
+    const dossieGeral = dossieDe(client.id);
+    const dossieAtual = dossieGeral?.geral ?? null; // SEMPRE o geral; projeto so complementa
     const contextoEntrada = dossieAtual
       ? { kind: "summary", title: `Dossiê v${dossieAtual.version ?? ""}`, content: String(dossieAtual.content || dossieAtual.summary || ""), created_at: dossieAtual.updated_at }
       : memoriaDoCliente.find((m: any) => CONTEXTO_KINDS.has(m.kind)) || null;
+    const planoDaSemana = planoDe(client.id);
+    const vendasDaSemana = vendasDe(client.id);
     const contextoRecente = contextoEntrada ? trechoDoContexto(contextoEntrada) || null : null;
     const oQueEsperar = contextoEntrada
       ? oQueEsperarDoDossie(String(contextoEntrada.content || "")) || null
@@ -1782,6 +1845,10 @@ export default function AdminExperience() {
       tarefasConcluidas7d,
       tarefasDesdeSegunda,
       dossieIdade: dossieAtual?.updated_at ?? null,
+      dossieMudancas: dossieGeral?.mudancas ?? [],
+      focoDaSemana: planoDaSemana?.foco || null,
+      feitoDaEsteira: (planoDaSemana?.feito ?? []).map((f) => readableFileName(String(f))).filter(Boolean),
+      vendas: vendasDaSemana.total > 0 ? { total: vendasDaSemana.total, receita: vendasDaSemana.receita } : null,
     };
     return buildGroupMessageText(ctx, moment);
   };
@@ -2165,6 +2232,22 @@ export default function AdminExperience() {
                           alguém acabou de liberar material, marcar etapa ou
                           registrar decisão, o botão traz o texto já com isso —
                           sem precisar recarregar a página inteira. */}
+                      {(() => {
+                        const d = dossieDe(client.id);
+                        const p = planoDe(client.id);
+                        return (
+                          <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+                            <p className="text-[11px] text-primary">{rotuloDoDossie(d, nowTick)}{p?.foco ? ` · plano da semana lido` : " · sem plano da semana ainda"}</p>
+                            {d?.substituto && <p className="mt-0.5 text-[11px] text-warning">Este cliente não tem dossiê geral; a leitura está usando o de projeto. Escreva o geral para a mensagem ficar certa.</p>}
+                            {d && d.mudancas.length > 0 && (
+                              <ul className="mt-1 space-y-0.5">
+                                {d.mudancas.slice(0, 4).map((m, i) => <li key={i} className="text-[11.5px] leading-snug text-foreground/90">• {m}</li>)}
+                              </ul>
+                            )}
+                            {p?.foco && <p className="mt-1 text-[11.5px] text-foreground/90"><span className="text-muted-foreground">Foco: </span>{p.foco}</p>}
+                          </div>
+                        );
+                      })()}
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Mensagem do grupo · escolha o momento</span>
                         <button

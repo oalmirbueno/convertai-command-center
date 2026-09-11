@@ -94,6 +94,18 @@ export interface GroupMessageContext {
   tarefasDesdeSegunda?: string[];
   /** Quando o dossiê "onde estamos" foi escrito por último (ISO). */
   dossieIdade?: string | null;
+  /**
+   * O que mudou do dossiê anterior para o atual, em linhas curtas. É a
+   * progressão: o cliente ouve o que andou desde a última leitura, não o
+   * mesmo retrato de sempre.
+   */
+  dossieMudancas?: string[];
+  /** O foco desta semana, lido do plano da esteira (uma frase). */
+  focoDaSemana?: string | null;
+  /** O que a esteira provou como feito nesta semana, com nome. */
+  feitoDaEsteira?: string[];
+  /** Vendas registradas nos últimos 7 dias (o número que paga o anúncio). */
+  vendas?: { total: number; receita: number } | null;
   anuncios?: {
     campanhasNoAr: number;
     investidoSemana: number;
@@ -132,10 +144,18 @@ function abertura(ctx: GroupMessageContext): string {
   if (ctx.contextoRecente) {
     linhas.push("", `*Onde estamos*`, ctx.contextoRecente);
   }
+  // 1a. O QUE ANDOU DESDE A ÚLTIMA LEITURA. A progressão entre uma versão do
+  // dossiê e a outra: é o que faz a mensagem desta semana ser desta semana.
+  if ((ctx.dossieMudancas || []).length > 0) {
+    linhas.push("", `*O que andou desde a última leitura*`, ...ctx.dossieMudancas!.slice(0, 3).map((m) => `• ${m}`));
+  }
+  if (ctx.focoDaSemana) {
+    linhas.push("", `*Foco desta semana*`, ctx.focoDaSemana);
+  }
 
   // 1b. O QUE FICOU PRONTO NA SEMANA PASSADA. Trabalho com nome: o cliente
   // reconhece a tarefa que pediu, não "seguimos produzindo".
-  const feitoSemanaPassada = [...ctx.entregasSemana, ...(ctx.tarefasConcluidas7d || [])];
+  const feitoSemanaPassada = [...ctx.entregasSemana, ...(ctx.tarefasConcluidas7d || []), ...(ctx.feitoDaEsteira || [])];
   if (feitoSemanaPassada.length > 0) {
     linhas.push(
       "",
@@ -231,6 +251,9 @@ function meio(ctx: GroupMessageContext): string {
   if ((ctx.tarefasDesdeSegunda || []).length > 0) {
     movimento.push(`concluímos ${listInWords(ctx.tarefasDesdeSegunda!, 4)}`);
   }
+  if ((ctx.feitoDaEsteira || []).length > 0) {
+    movimento.push(`${listInWords(ctx.feitoDaEsteira!, 3)}`);
+  }
   if (ctx.cicloFeito.length > 0) {
     movimento.push(`da rotina da semana: ${listInWords(ctx.cicloFeito, 3)}`);
   }
@@ -268,6 +291,12 @@ function meio(ctx: GroupMessageContext): string {
   // semana também situa, não só lista tarefa.
   if (ctx.contextoRecente) {
     linhas.push("", `*Onde estamos*`, ctx.contextoRecente);
+  }
+  if ((ctx.dossieMudancas || []).length > 0) {
+    linhas.push("", `*O que andou desde a última leitura*`, ...ctx.dossieMudancas!.slice(0, 2).map((m) => `• ${m}`));
+  }
+  if (ctx.vendas && ctx.vendas.total > 0) {
+    linhas.push("", `*Vendas até agora*`, `${ctx.vendas.total === 1 ? "1 venda" : `${ctx.vendas.total} vendas`} registrada${ctx.vendas.total === 1 ? "" : "s"} nos últimos 7 dias${ctx.vendas.receita > 0 ? `, ${dinheiro(ctx.vendas.receita)} em receita` : ""}.`);
   }
 
   // 3. O QUE AINDA VEM ATÉ SEXTA. O caminho do resto da semana.
@@ -329,6 +358,9 @@ function fechamento(ctx: GroupMessageContext): string {
   if ((ctx.tarefasDesdeSegunda || []).length > 0) {
     feito.push(`concluímos ${listInWords(ctx.tarefasDesdeSegunda!, 4)}`);
   }
+  if ((ctx.feitoDaEsteira || []).length > 0) {
+    feito.push(listInWords(ctx.feitoDaEsteira!, 3));
+  }
   if (ctx.cicloFeito.length > 0) {
     feito.push(listInWords(ctx.cicloFeito, 3));
   }
@@ -361,6 +393,11 @@ function fechamento(ctx: GroupMessageContext): string {
         : `os anúncios rodaram com ${dinheiro(investidoSemana)} investidos`,
     );
   }
+  if (ctx.vendas && ctx.vendas.total > 0) {
+    resultado.push(
+      `${ctx.vendas.total === 1 ? "uma venda foi registrada" : `${ctx.vendas.total} vendas foram registradas`}${ctx.vendas.receita > 0 ? ` (${dinheiro(ctx.vendas.receita)})` : ""}`,
+    );
+  }
   if (resultado.length > 0) {
     linhas.push("", `*O que isso rendeu*`, `${maiuscula(resultado.join(", "))}.`);
   }
@@ -369,6 +406,9 @@ function fechamento(ctx: GroupMessageContext): string {
   // passou pelo trabalho, e agora está aqui.
   if (ctx.contextoRecente) {
     linhas.push("", `*Onde isso nos deixa*`, ctx.contextoRecente);
+  }
+  if ((ctx.dossieMudancas || []).length > 0) {
+    linhas.push("", `*O que mudou nesta semana*`, ...ctx.dossieMudancas!.slice(0, 3).map((m) => `• ${m}`));
   }
 
   // 4. O QUE JÁ ESTÁ PREPARADO. Sexta sem próximo passo deixa o cliente com a

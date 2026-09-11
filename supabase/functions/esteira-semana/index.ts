@@ -97,7 +97,8 @@ Deno.serve(async (req) => {
     const desde14dia = new Date(semanaIni.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
     const [perfil, dossie, historia, projetos, posts, rituais, metricas, adsDiario, vendas] = await Promise.all([
       db.from("profiles").select("full_name, company_name, services_config, created_at").eq("id", clientId).maybeSingle(),
-      db.from("client_dossiers").select("summary, content, updated_at").eq("client_id", clientId).eq("is_current", true).order("updated_at", { ascending: false }).limit(1),
+      // Todos os atuais: o GERAL (contexto, sem projeto) manda; projeto complementa.
+      db.from("client_dossiers").select("id, project_id, dossier_type, version, summary, content, updated_at, prior_version_id").eq("client_id", clientId).eq("is_current", true).order("updated_at", { ascending: false }),
       db.from("project_memory").select("kind, title, content, created_at").eq("client_id", clientId).neq("kind", "esteira_plano").gte("created_at", desde14).order("created_at", { ascending: false }).limit(40),
       db.from("projects").select("id, name, tasks(title, status, due_date, updated_at), milestones(title, status, target_date)").eq("client_id", clientId).is("deleted_at", null),
       db.from("editorial_posts").select("title, production_status, primary_file_id, editorial_publications(status, scheduled_at, published_at)").eq("client_id", clientId).is("archived_at", null).order("created_at", { ascending: false }).limit(40),
@@ -202,8 +203,28 @@ Deno.serve(async (req) => {
 
     const nome = perfil.data?.company_name || perfil.data?.full_name || "Cliente";
     const servicos = Object.entries((perfil.data?.services_config ?? {}) as Record<string, unknown>).filter(([, v]) => v === true).map(([k]) => k).join(", ") || "nao informado";
-    const d = dossie.data?.[0];
+    const atuais = (dossie.data ?? []) as Array<Record<string, any>>;
+    const d = atuais.find((x) => (x.dossier_type ?? "contexto") === "contexto" && x.project_id == null) ?? atuais[0];
     const dossieTexto = String(d?.content || d?.summary || "").slice(0, 7000) || "(sem dossie escrito)";
+    const complementos = atuais.filter((x) => x && d && x.id !== d.id).map((x) => `- projeto v${x.version ?? "?"}: ${String(x.summary || x.content || "").slice(0, 300)}`).join("\n");
+    // A versao anterior do geral: o que entrou de novo e a progressao.
+    let mudancas: string[] = [];
+    if (d?.prior_version_id) {
+      const { data: prev } = await db.from("client_dossiers").select("content, summary, version").eq("id", d.prior_version_id).maybeSingle();
+      const antes = new Set(String(prev?.content || prev?.summary || "").split(/\r?\n+/).map((l: string) => l.replace(/^[\s#*\-•>]+/, "").replace(/\s+/g, " ").trim().toLowerCase()).filter((l: string) => l.length >= 12));
+      let auto = false;
+      for (const linha of String(d.content || "").split(/\r?\n/)) {
+        const t = linha.trim();
+        if (/^##\s*avan[cç]os recentes/i.test(t)) { auto = true; continue; }
+        if (/^##?\s+/.test(t)) { auto = false; continue; }
+        if (auto) continue;
+        const limpa = t.replace(/^[\s#*\-•>]+/, "").replace(/\s+/g, " ").trim();
+        if (limpa.length < 12 || antes.has(limpa.toLowerCase())) continue;
+        mudancas.push(limpa.slice(0, 220));
+        if (mudancas.length >= 8) break;
+      }
+      if (mudancas.length) mudancas = [`(v${prev?.version ?? "?"} -> v${d.version ?? "?"})`, ...mudancas];
+    }
 
     const hist = ((historia.data ?? []) as Array<Record<string, any>>).map((h) => `- ${String(h.created_at).slice(0, 10)} [${h.kind}] ${h.title ?? ""}: ${String(h.content ?? "").slice(0, 220)}`).join("\n") || "(nada nos ultimos 14 dias)";
 
@@ -238,7 +259,9 @@ Deno.serve(async (req) => {
     const fatos = [
       `CLIENTE: ${nome} (servicos: ${servicos}; na casa desde ${String(perfil.data?.created_at ?? "").slice(0, 10)})`,
       `SEMANA: ${weekStart}`,
-      `DOSSIE ATUAL (fonte da verdade sobre onde o cliente esta):\n${dossieTexto}`,
+      `DOSSIE GERAL ATUAL (fonte da verdade sobre onde o cliente esta):\n${dossieTexto}`,
+      `O QUE MUDOU NO DOSSIE DESDE A VERSAO ANTERIOR (progressao; o proximo degrau parte daqui):\n${mudancas.join("\n") || "(sem versao anterior ou nada novo)"}`,
+      `DOSSIES DE PROJETO (complemento):\n${complementos || "(nenhum)"}`,
       `HISTORIA (ultimos 14 dias):\n${hist}`,
       `POSTS (o painel ja mostra os elos que faltam; nao repita):\n${postsLinhas.slice(0, 30).join("\n") || "(nenhum)"}`,
       `TAREFAS DO KANBAN (o painel ja mostra atrasadas e desta semana; nao repita):\n${tarefas.slice(0, 40).join("\n") || "(nenhuma)"}`,

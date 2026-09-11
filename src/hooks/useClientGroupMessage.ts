@@ -11,6 +11,7 @@ import { goalForCampaign, resultFromActions, statusLabel } from "@/lib/adsLangua
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { lerDossieDoCliente } from "@/lib/dossieGeral";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import {
   porqueDaSemana as porqueDaSemana_,
@@ -54,7 +55,7 @@ export function useClientGroupMessage(client: any | null) {
       const seteDiasAtras = new Date(Date.now() - 7 * 86400000).toISOString();
 
       // Uma ida só ao banco para tudo que a mensagem precisa daquele cliente.
-      const [entregas, aprovacoes, publicacoes, projetos, ciclo, memoria, relatorios, adsDias, adsCampanhas, pautas] =
+      const [entregas, aprovacoes, publicacoes, projetos, ciclo, memoria, relatorios, adsDias, adsCampanhas, pautas, dossie, vendas] =
         await Promise.all([
           supabase.from("files")
             .select("file_name, created_at")
@@ -97,6 +98,11 @@ export function useClientGroupMessage(client: any | null) {
             .eq("client_id", clientId!).is("archived_at", null)
             .in("production_status", ["ready", "production"])
             .order("updated_at", { ascending: false }).limit(8),
+          // O dossie GERAL (nunca o de projeto por ser mais novo) e a versao anterior.
+          lerDossieDoCliente(clientId!).catch(() => null),
+          (supabase as any).from("ads_sales")
+            .select("quantity, value")
+            .eq("client_id", clientId!).gte("sold_at", new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)),
         ]);
 
       const nome = client.company_name || client.full_name || "time";
@@ -147,9 +153,16 @@ export function useClientGroupMessage(client: any | null) {
        * Agora as duas telas chamam a MESMA função. Regra repetida em dois
        * lugares é regra que diverge no primeiro conserto.
        */
-      const contexto = registros.find(
-        (m) => CONTEXTO_KINDS.has(m.kind) && diasDesde(m.created_at) <= 14,
-      );
+      // O dossie geral atual vale sempre (a idade e informacao, nao filtro);
+      // a memoria so entra como reserva de quem ainda nao tem dossie.
+      const geral = dossie?.geral ?? null;
+      const contexto = geral
+        ? { kind: "summary", title: `Dossiê v${geral.version ?? ""}`, content: String(geral.content || geral.summary || ""), created_at: geral.updated_at }
+        : registros.find((m) => CONTEXTO_KINDS.has(m.kind) && diasDesde(m.created_at) <= 14);
+      const planoDaSemana = registros.find((m) => m.kind === "esteira_plano" && m.metadata?.week_start === semanaKey) ?? null;
+      const linhasVendas = ((vendas as any)?.data ?? []) as Array<{ quantity?: number; value?: number | null }>;
+      const totalVendas = linhasVendas.reduce((t, v) => t + Math.max(1, Number(v.quantity) || 1), 0);
+      const receitaVendas = linhasVendas.reduce((t, v) => t + (Number(v.value) || 0), 0);
       const contextoRecente = contexto ? trechoDoContexto(contexto) || null : null;
       // A outra metade do dossiê: o que ele promete para a frente. É lido do
       // MESMO registro que deu a situação, então os dois nunca desencontram.
@@ -216,6 +229,11 @@ export function useClientGroupMessage(client: any | null) {
         oQueEsperar,
         proximoPasso,
         anuncios,
+        dossieIdade: geral?.updated_at ?? null,
+        dossieMudancas: dossie?.mudancas ?? [],
+        focoDaSemana: planoDaSemana ? String(planoDaSemana.metadata?.foco || "") || null : null,
+        feitoDaEsteira: Array.isArray(planoDaSemana?.metadata?.feito) ? (planoDaSemana!.metadata.feito as string[]).map((f) => readableFileName(String(f))).filter(Boolean) : [],
+        vendas: totalVendas > 0 ? { total: totalVendas, receita: receitaVendas } : null,
       };
       return contexto_;
     },
