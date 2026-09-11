@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { ClienteDaEsteira } from "@/hooks/useEsteira";
-import type { EsteiraItem, Fonte, Insight } from "@/lib/esteira/esteiraTipos";
+import type { EsteiraItem, Fonte, Insight, Leitura, Numero } from "@/lib/esteira/esteiraTipos";
 import { ONBOARDING, itensDaFrente } from "@/lib/esteira/esteiraMontar";
 import { itemDoPlano, lerPlanoDaSemana, marcarJaTem, marcarRitual, ocultarCliente, type PlanoDaSemana } from "@/lib/esteira/esteiraAcoes";
 import { createChecklist, splitRequestIntoItems } from "@/lib/clientChecklist";
@@ -26,6 +26,57 @@ function IconeTendencia({ t }: { t: Insight["tendencia"] }) {
   if (t === "sobe") return <TrendingUp className="h-3.5 w-3.5 text-primary" />;
   if (t === "cai") return <TrendingDown className="h-3.5 w-3.5 text-destructive" />;
   return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+function fmtNumero(n: Numero): string {
+  if (n.atual === null) return "–";
+  if (n.formato === "brl") return `R$ ${Math.round(n.atual).toLocaleString("pt-BR")}`;
+  if (n.formato === "dec") return n.atual.toFixed(1);
+  return Math.round(n.atual).toLocaleString("pt-BR");
+}
+
+function Numeros({ leitura }: { leitura: Leitura }) {
+  const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-primary" : t === "cai" ? "text-destructive" : "text-muted-foreground");
+  return (
+    <section className="mt-3 rounded-2xl border border-border bg-card p-3">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{leitura.frente === "social" ? "Números do Instagram" : "Números dos anúncios"}</p>
+        <p className="text-[10px] text-muted-foreground/80">{leitura.periodo}</p>
+      </div>
+      <div className={`mt-2 grid gap-2 ${leitura.numeros.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+        {leitura.numeros.map((n) => (
+          <div key={n.rotulo} className="rounded-xl bg-secondary/60 px-2.5 py-2">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{n.rotulo}</p>
+            <p className="text-[20px] font-bold leading-tight tabular-nums text-foreground">{fmtNumero(n)}</p>
+            <p className={`flex items-center gap-1 text-[11px] tabular-nums ${cor(n.tendencia)}`}>
+              <IconeTendencia t={n.tendencia} />
+              {n.variacao !== null ? `${n.variacao > 0 ? "+" : ""}${n.variacao}%` : n.anterior !== null ? "igual" : "sem base"}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {[
+          { t: "Subiu", lista: leitura.subiu, cls: "text-primary" },
+          { t: "Parado", lista: leitura.parado, cls: "text-muted-foreground" },
+          { t: "Caiu", lista: leitura.caiu, cls: "text-destructive" },
+        ].map((g) => (
+          <div key={g.t} className="rounded-xl border border-border/70 px-2.5 py-2">
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${g.cls}`}>{g.t}</p>
+            {g.lista.length === 0 ? <p className="text-[11px] text-muted-foreground/70">nada</p> : g.lista.map((x, i) => <p key={i} className="text-[11.5px] leading-snug text-foreground/90">{x}</p>)}
+          </div>
+        ))}
+      </div>
+      {leitura.fazer.length > 0 && (
+        <div className="mt-2.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">O que fazer por causa disso</p>
+          <ul className="mt-1 space-y-1">
+            {leitura.fazer.map((x, i) => <li key={i} className="text-[12.5px] leading-snug text-foreground">• {x}</li>)}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Secao({ titulo, aberta, onToggle, children }: { titulo: string; aberta: boolean; onToggle: () => void; children: React.ReactNode }) {
@@ -82,7 +133,9 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
   if (!cliente) return null;
   const e = cliente.esteira;
   const itens = itensDaFrente(e, frente);
-  const insights = e.insights.filter((i) => i.frente === frente);
+  const leitura = e.leituras.find((l) => l.frente === frente) ?? null;
+  // Insights soltos so quando nao ha leitura completa (ex.: segunda conta).
+  const insights = leitura ? [] : e.insights.filter((i) => i.frente === frente);
   const grupos = GRUPOS.map((g) => ({ ...g, itens: itens.filter((it) => g.fontes.includes(it.fonte)) })).filter((g) => g.itens.length > 0);
   const oculto = cliente.fatos.oculto.areas.includes(frente);
 
@@ -134,8 +187,9 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
   return (
     <Sheet open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
-      <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-2xl">
-        <SheetHeader className="text-left">
+      <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-2xl [&>button]:right-4 [&>button]:top-6 [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100">
+        <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
+        <SheetHeader className="pr-12 text-left">
           <SheetTitle className="text-base">{cliente.nome}</SheetTitle>
           <SheetDescription>
             {e.onboardingCompleto ? "Em operação" : "Entrada em andamento"} · {e.resumo.urgentes} urgente{e.resumo.urgentes === 1 ? "" : "s"}, {e.resumo.atencao} de atenção · {e.feitos.length + planoFeitos.length} feito{e.feitos.length + planoFeitos.length === 1 ? "" : "s"} na semana
@@ -178,6 +232,8 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
           )}
           {!lendoPlano && !plano && <p className="mt-1.5 text-[12px] text-muted-foreground">Não consegui ler o dossiê agora. Tente Reler.</p>}
         </section>
+
+        {leitura && <Numeros leitura={leitura} />}
 
         {insights.length > 0 && (
           <section className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">

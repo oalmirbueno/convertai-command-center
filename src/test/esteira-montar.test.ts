@@ -210,6 +210,32 @@ describe("esteira: marcacao humana e frentes", () => {
     expect(e.itens.some((i) => i.key.startsWith("post:p"))).toBe(false);
   });
 
+  it("leitura de numeros: seguidores reais, subiu/parado/caiu e o que fazer; anuncios so no trafego", () => {
+    const f = fatos({
+      servicos: { social: true, trafego: true },
+      conexoes: [{ provider: "instagram", status: "connected" }, { provider: "meta_ads", status: "connected" }],
+      metricas: [
+        { accountId: "acc", weekStart: "2026-09-07", reach: 174, followers: 500, interactions: 6 },
+        { accountId: "acc", weekStart: "2026-08-31", reach: 247, followers: 500, interactions: 27 },
+      ],
+      campanhas: [{ id: "c", nome: "Campanha X", ativa: true, diario: [
+        { day: "2026-09-10", spend: 100, leads: 1, frequency: 1.2 },
+        { day: "2026-09-02", spend: 100, leads: 4, frequency: 1.1 },
+      ] }],
+    });
+    const e = montarEsteira(f, HOJE, "2026-09-07");
+    const social = e.leituras.find((l) => l.frente === "social");
+    const trafego = e.leituras.find((l) => l.frente === "trafego");
+    expect(social?.numeros.find((n) => n.rotulo === "Seguidores")?.atual).toBe(500);
+    expect(social?.parado.some((x) => x.startsWith("Seguidores"))).toBe(true);
+    expect(social?.caiu.some((x) => x.startsWith("Alcance"))).toBe(true);
+    expect(social?.fazer.length).toBeGreaterThan(0);
+    expect(social?.numeros.some((n) => /Leads|Gasto/.test(n.rotulo))).toBe(false);
+    expect(trafego?.numeros.find((n) => n.rotulo === "Leads (7d)")?.atual).toBe(1);
+    expect(trafego?.caiu.some((x) => x.startsWith("Leads"))).toBe(true);
+    expect(trafego?.fazer.some((x) => /pausar|criativo/i.test(x))).toBe(true);
+  });
+
   it("rituais comecam em branco e refletem o que foi marcado", () => {
     const e = montarEsteira(fatos({ rituais: [{ key: "segunda", source: "central", doneAt: "2026-09-07T10:00:00Z" }] }), HOJE);
     expect(e.rituais.map((r) => [r.key, r.feito])).toEqual([["segunda", true], ["quarta", false], ["sexta", false]]);

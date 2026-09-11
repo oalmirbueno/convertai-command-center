@@ -18,6 +18,8 @@ import type {
   Frente,
   Gravidade,
   Insight,
+  Leitura,
+  Numero,
   PostFato,
   RitualDaSemana,
   RitualKey,
@@ -392,6 +394,94 @@ export function insightsDoCliente(f: FatosDoCliente, hoje: Date): Insight[] {
   return out;
 }
 
+/* ── Leitura de numeros por frente: seguidores de verdade, o que subiu,
+      o que parou, o que caiu, e o que fazer por causa disso ── */
+
+function numero(rotulo: string, atual: number | null, anterior: number | null, formato: Numero["formato"] = "int"): Numero {
+  const v = atual !== null && anterior !== null ? pct(atual, anterior) : null;
+  return { rotulo, atual, anterior, variacao: v, tendencia: atual !== null && anterior !== null && anterior === 0 && atual > 0 ? "sobe" : tendencia(v), formato };
+}
+
+function fmtNum(n: number | null, formato: Numero["formato"]): string {
+  if (n === null) return "–";
+  if (formato === "brl") return `R$ ${n.toFixed(0)}`;
+  if (formato === "dec") return n.toFixed(1);
+  return String(Math.round(n));
+}
+
+function classificar(nums: Numero[], out: Leitura): void {
+  for (const n of nums) {
+    const linha = `${n.rotulo}: ${fmtNum(n.atual, n.formato)}${n.anterior !== null ? ` (antes ${fmtNum(n.anterior, n.formato)}${n.variacao !== null ? `, ${n.variacao > 0 ? "+" : ""}${n.variacao}%` : ""})` : ""}`;
+    if (n.tendencia === "sobe") out.subiu.push(linha);
+    else if (n.tendencia === "cai") out.caiu.push(linha);
+    else if (n.tendencia === "igual") out.parado.push(linha);
+  }
+}
+
+export function leiturasDoCliente(f: FatosDoCliente, hoje: Date, itens: EsteiraItem[]): Leitura[] {
+  const out: Leitura[] = [];
+
+  if (f.servicos.social && f.metricas.length) {
+    // Uma conta so (a principal): a de mais seguidores. Contas extras
+    // continuam no insight de alcance do card, sem poluir a leitura.
+    const porConta = new Map<string, typeof f.metricas>();
+    for (const m of f.metricas) porConta.set(m.accountId, [...(porConta.get(m.accountId) ?? []), m]);
+    const principal = [...porConta.values()].sort((a, b) => (Math.max(...b.map((x) => x.followers ?? 0)) - Math.max(...a.map((x) => x.followers ?? 0))))[0];
+    const ord = [...principal].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+    const [s0, s1] = ord;
+    if (s0) {
+      const nums = [
+        numero("Seguidores", s0.followers, s1?.followers ?? null),
+        numero("Alcance", s0.reach, s1?.reach ?? null),
+        numero("Interações", s0.interactions, s1?.interactions ?? null),
+      ];
+      const l: Leitura = { frente: "social", numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: s1 ? `semana de ${fmtDia(s0.weekStart)} contra ${fmtDia(s1.weekStart)}` : `semana de ${fmtDia(s0.weekStart)}` };
+      classificar(nums, l);
+      // O que fazer nasce do numero + do que a esteira ja sabe.
+      const agendados = f.posts.flatMap((p) => p.publicacoes.filter((x) => x.status === "scheduled" && x.scheduledAt && new Date(x.scheduledAt).getTime() >= hoje.getTime())).length;
+      const alc = nums[1]; const seg = nums[0]; const inter = nums[2];
+      if (alc.tendencia === "cai") l.fazer.push(agendados < 2 ? "Alcance caiu e a agenda está curta: dar data para pelo menos 2 posts e priorizar Reels." : "Alcance caiu com posts agendados: trocar o formato dos próximos 2 (Reels ou carrossel com gancho no primeiro slide).");
+      if (seg.tendencia === "igual" || seg.tendencia === "cai") l.fazer.push("Seguidores parados: 1 conteúdo de conversão por semana (colab, sorteio simples ou CTA de seguir no fim do Reel).");
+      if (inter.tendencia === "cai") l.fazer.push("Interações caíram: responder todos os comentários em até 24h e puxar pergunta na legenda.");
+      if (itens.some((i) => i.key === "agenda:vazia")) l.fazer.push("Agenda vazia: colocar posts antes de qualquer outra coisa.");
+      const recusados = itens.filter((i) => i.key.endsWith(":refazer"));
+      if (recusados.length) l.fazer.push(`Refazer ${recusados.length === 1 ? "a arte recusada" : `${recusados.length} artes recusadas`} e reenviar (${recusados.map((i) => i.titulo).slice(0, 2).join(", ")}).`);
+      if (l.fazer.length === 0 && (alc.tendencia === "sobe" || inter.tendencia === "sobe")) l.fazer.push("Subiu: repetir o formato do post que mais alcançou nesta semana.");
+      out.push(l);
+    }
+  }
+
+  if (f.servicos.trafego && f.campanhas.length) {
+    const a = somaJanela(f, hoje, 7, 0);
+    const b = somaJanela(f, hoje, 14, 7);
+    if (a.spend > 0 || b.spend > 0) {
+      const cplA = a.leads > 0 ? a.spend / a.leads : null;
+      const cplB = b.leads > 0 ? b.spend / b.leads : null;
+      const ativas = f.campanhas.filter((c) => c.ativa).length;
+      const nums = [
+        numero("Leads (7d)", a.leads, b.leads),
+        numero("Gasto (7d)", a.spend, b.spend, "brl"),
+        numero("Custo por lead", cplA, cplB, "brl"),
+        { rotulo: "Campanhas ativas", atual: ativas, anterior: null, variacao: null, tendencia: "sem-base" as const, formato: "int" as const },
+      ];
+      const l: Leitura = { frente: "trafego", numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: "últimos 7 dias contra os 7 anteriores" };
+      classificar(nums, l);
+      const leads = nums[0]; const gasto = nums[1]; const cpl = nums[2];
+      if (leads.tendencia === "cai" && gasto.tendencia !== "cai") l.fazer.push("Gastou igual ou mais e trouxe menos lead: pausar a campanha mais fraca e subir um criativo novo.");
+      if (cpl.tendencia === "sobe") l.fazer.push("Custo por lead subiu: revisar público e trocar o criativo com frequência mais alta.");
+      const saturadas = itens.filter((i) => i.key.endsWith(":saturada"));
+      if (saturadas.length) l.fazer.push(`Trocar criativo em ${saturadas.map((i) => i.titulo).slice(0, 2).join(", ")} (saturado).`);
+      const semLead = itens.filter((i) => i.key.endsWith(":sem-lead"));
+      if (semLead.length) l.fazer.push(`Conferir ${semLead.map((i) => i.titulo).slice(0, 2).join(", ")}: gastou sem lead.`);
+      if (itens.some((i) => i.key === "ads:verba-zerada")) l.fazer.push("Verba zerada com campanha no ar: recarregar hoje.");
+      if (ativas === 0) l.fazer.push("Nenhuma campanha no ar: ativar ou cadastrar.");
+      if (l.fazer.length === 0 && leads.tendencia === "sobe") l.fazer.push("Leads subiram: escalar 20% a verba da campanha que mais converteu.");
+      out.push(l);
+    }
+  }
+  return out;
+}
+
 /* ── Rituais da semana ── */
 
 export const RITUAIS: Array<{ key: RitualKey; rotulo: string }> = [
@@ -452,7 +542,7 @@ export function montarEsteira(f: FatosDoCliente, hoje: Date = new Date(), weekSt
     else resumo.normais++;
   }
 
-  return { clientId: f.clientId, itens, feitos, insights: insightsDoCliente(f, hoje), rituais: rituaisDoCliente(f), onboardingCompleto: onb.completo, resumo };
+  return { clientId: f.clientId, itens, feitos, insights: insightsDoCliente(f, hoje), leituras: leiturasDoCliente(f, hoje, itens), rituais: rituaisDoCliente(f), onboardingCompleto: onb.completo, resumo };
 }
 
 /** Filtra a esteira pela frente da aba: social ve social + geral; trafego ve

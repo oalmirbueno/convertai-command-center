@@ -60,6 +60,31 @@ export interface Insight {
   texto: string;
 }
 
+/** Um numero com a comparacao pronta. */
+export interface Numero {
+  rotulo: string;
+  atual: number | null;
+  anterior: number | null;
+  /** Variacao percentual contra o anterior; null sem base. */
+  variacao: number | null;
+  tendencia: "sobe" | "cai" | "igual" | "sem-base";
+  /** Como mostrar: inteiro, moeda ou decimal. */
+  formato?: "int" | "brl" | "dec";
+}
+
+/** A leitura de uma frente: numeros reais, o que subiu, o que parou, o que
+    caiu e o que fazer por causa disso. Social e Trafego nunca se misturam. */
+export interface Leitura {
+  frente: "social" | "trafego";
+  numeros: Numero[];
+  subiu: string[];
+  parado: string[];
+  caiu: string[];
+  fazer: string[];
+  /** Ex.: "semana de 07/09 contra 31/08". */
+  periodo: string;
+}
+
 export type RitualKey = "segunda" | "quarta" | "sexta";
 
 export interface RitualDaSemana {
@@ -76,6 +101,8 @@ export interface EsteiraDoCliente {
   /** Itens marcados como feitos nesta semana (ficam visiveis, riscados). */
   feitos: EsteiraItem[];
   insights: Insight[];
+  /** Leitura de numeros por frente (so existe onde ha dado). */
+  leituras: Leitura[];
   rituais: RitualDaSemana[];
   onboardingCompleto: boolean;
   resumo: { urgentes: number; atencao: number; normais: number; total: number };
