@@ -753,6 +753,14 @@
       "remote_name": "vendas_de_anuncio",
       "remote_statements_sha256": "e20f53995c019f857f0d38f276ac4307048d7563dfa9dd62568bc68a203e626c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260911230000",
+      "path": "supabase/migrations/20260911230000_guarda_de_arquivos_le_pelo_definidor.sql",
+      "local_sha256": "11c62f87c70c0c0fcf2700fb59a7e880722745674effb92ac551d2cad24ec700",
+      "remote_name": "guarda_de_arquivos_le_pelo_definidor",
+      "remote_statements_sha256": "1e32787c7685d2d96e888845d792eb94837a48674dc583d5aa9140745ee44375",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
