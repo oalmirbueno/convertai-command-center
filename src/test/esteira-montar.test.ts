@@ -12,6 +12,8 @@ function fatos(over: Partial<FatosDoCliente>): FatosDoCliente {
     posts: [],
     tarefas: [],
     campanhas: [],
+    contasAds: [],
+    vendas: [],
     saldoVerba: null,
     checklists: [],
     marcos: [],

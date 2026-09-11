@@ -58,7 +58,7 @@ export const ONBOARDING: PassoOnboarding[] = [
   { key: "instagram", rotulo: "Instagram", passo: "Criar o Instagram e conectar no painel", auto: (f) => conectado(f, "instagram", "meta", "facebook"), depende: "identidade", soSe: "social", rota: "/clientes" },
   { key: "portfolio", rotulo: "Portfólio / site", passo: "Montar o portfólio ou site", auto: null, depende: "identidade" },
   { key: "grupo", rotulo: "Grupo no WhatsApp", passo: "Criar o grupo com o cliente", auto: null },
-  { key: "anuncios", rotulo: "Conta de anúncios", passo: "Criar e conectar a conta de anúncios", auto: (f) => conectado(f, "meta_ads", "ads", "google_ads") || f.contasAds.some((c) => c.ativa), depende: "instagram", soSe: "trafego", rota: "/clientes" },
+  { key: "anuncios", rotulo: "Conta de anúncios", passo: "Criar e conectar a conta de anúncios", auto: (f) => conectado(f, "meta_ads", "ads", "google_ads") || (f.contasAds ?? []).some((c) => c.ativa), depende: "instagram", soSe: "trafego", rota: "/clientes" },
 ];
 
 /** Cliente estabelecido: ja publica ou esta ha mais de 90 dias na casa.
