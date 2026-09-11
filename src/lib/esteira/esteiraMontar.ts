@@ -20,6 +20,8 @@ import type {
   Insight,
   Leitura,
   Numero,
+  PlataformaAds,
+  PlataformaResumo,
   PostFato,
   RitualDaSemana,
   RitualKey,
@@ -56,7 +58,7 @@ export const ONBOARDING: PassoOnboarding[] = [
   { key: "instagram", rotulo: "Instagram", passo: "Criar o Instagram e conectar no painel", auto: (f) => conectado(f, "instagram", "meta", "facebook"), depende: "identidade", soSe: "social", rota: "/clientes" },
   { key: "portfolio", rotulo: "Portfólio / site", passo: "Montar o portfólio ou site", auto: null, depende: "identidade" },
   { key: "grupo", rotulo: "Grupo no WhatsApp", passo: "Criar o grupo com o cliente", auto: null },
-  { key: "anuncios", rotulo: "Conta de anúncios", passo: "Criar e conectar a conta de anúncios", auto: (f) => conectado(f, "meta_ads", "ads", "google_ads"), depende: "instagram", soSe: "trafego", rota: "/clientes" },
+  { key: "anuncios", rotulo: "Conta de anúncios", passo: "Criar e conectar a conta de anúncios", auto: (f) => conectado(f, "meta_ads", "ads", "google_ads") || f.contasAds.some((c) => c.ativa), depende: "instagram", soSe: "trafego", rota: "/clientes" },
 ];
 
 /** Cliente estabelecido: ja publica ou esta ha mais de 90 dias na casa.
@@ -186,21 +188,101 @@ export function itensDaAgenda(f: FatosDoCliente, hoje: Date, onboardingCompleto:
 
 /* ── Anuncios: campanha por campanha, e a semana contra a anterior ── */
 
-function somaJanela(f: FatosDoCliente, hoje: Date, deDias: number, ateDias: number): { spend: number; leads: number } {
+function somaJanela(f: FatosDoCliente, hoje: Date, deDias: number, ateDias: number, plataforma?: PlataformaAds): { spend: number; leads: number; compras: number; valorCompras: number } {
   const ini = hoje.getTime() - deDias * DIA;
   const fim = hoje.getTime() - ateDias * DIA;
-  let spend = 0;
-  let leads = 0;
+  const out = { spend: 0, leads: 0, compras: 0, valorCompras: 0 };
   for (const c of f.campanhas) {
+    if (plataforma && c.plataforma !== plataforma) continue;
     for (const d of c.diario) {
       const t = new Date(d.day).getTime();
       if (t >= ini && t < fim) {
-        spend += d.spend;
-        leads += d.leads;
+        out.spend += d.spend;
+        out.leads += d.leads;
+        out.compras += d.compras;
+        out.valorCompras += d.valorCompras;
       }
     }
   }
-  return { spend, leads };
+  return out;
+}
+
+/* ── Vendas: registradas a mao + rastreadas pela plataforma, numa janela ── */
+
+export interface ResumoDeVendas {
+  /** Vendas registradas a mao (quantidade). */
+  registradas: number;
+  /** Compras rastreadas pela plataforma (pixel). */
+  rastreadas: number;
+  /** Total: registradas + rastreadas. */
+  total: number;
+  /** Receita conhecida (soma dos valores informados + valor rastreado). */
+  receita: number;
+  /** Quantas vendas registradas vieram sem valor. */
+  semValor: number;
+  porCampanha: Array<{ nome: string; vendas: number; receita: number }>;
+  porCanal: Array<{ canal: string; vendas: number }>;
+}
+
+export function resumoDeVendas(f: FatosDoCliente, hoje: Date, deDias: number, ateDias: number, plataforma?: PlataformaAds): ResumoDeVendas {
+  const ini = hoje.getTime() - deDias * DIA;
+  const fim = hoje.getTime() - ateDias * DIA;
+  const out: ResumoDeVendas = { registradas: 0, rastreadas: 0, total: 0, receita: 0, semValor: 0, porCampanha: [], porCanal: [] };
+  const porCampanha = new Map<string, { nome: string; vendas: number; receita: number }>();
+  const porCanal = new Map<string, number>();
+  for (const v of f.vendas) {
+    if (plataforma && v.plataforma !== plataforma) continue;
+    const t = new Date(`${v.data}T12:00:00Z`).getTime();
+    if (t < ini || t >= fim) continue;
+    out.registradas += v.quantidade;
+    if (v.valor === null) out.semValor += 1; else out.receita += v.valor;
+    const nome = v.campanhaNome ?? "Sem campanha";
+    const c = porCampanha.get(nome) ?? { nome, vendas: 0, receita: 0 };
+    c.vendas += v.quantidade;
+    c.receita += v.valor ?? 0;
+    porCampanha.set(nome, c);
+    porCanal.set(v.canal, (porCanal.get(v.canal) ?? 0) + v.quantidade);
+  }
+  for (const c of f.campanhas) {
+    if (plataforma && c.plataforma !== plataforma) continue;
+    let vendas = 0; let receita = 0;
+    for (const d of c.diario) {
+      const t = new Date(d.day).getTime();
+      if (t >= ini && t < fim) { vendas += d.compras; receita += d.valorCompras; }
+    }
+    if (vendas > 0) {
+      out.rastreadas += vendas;
+      out.receita += receita;
+      const x = porCampanha.get(c.nome) ?? { nome: c.nome, vendas: 0, receita: 0 };
+      x.vendas += vendas; x.receita += receita;
+      porCampanha.set(c.nome, x);
+    }
+  }
+  out.total = out.registradas + out.rastreadas;
+  out.porCampanha = [...porCampanha.values()].sort((a, b) => b.vendas - a.vendas || b.receita - a.receita);
+  out.porCanal = [...porCanal.entries()].map(([canal, vendas]) => ({ canal, vendas })).sort((a, b) => b.vendas - a.vendas);
+  return out;
+}
+
+/* ── Plataformas de anuncio: o que esta ligado, o que falta configurar ── */
+
+const PLATAFORMAS_CONHECIDAS: Array<{ key: PlataformaAds; rotulo: string }> = [
+  { key: "meta_ads", rotulo: "Meta Ads" },
+  { key: "google_ads", rotulo: "Google Ads" },
+  { key: "tiktok_ads", rotulo: "TikTok Ads" },
+];
+
+export function plataformasDoCliente(f: FatosDoCliente, hoje: Date = new Date()): PlataformaResumo[] {
+  return PLATAFORMAS_CONHECIDAS.map((p) => {
+    const contas = f.contasAds.filter((c) => c.plataforma === p.key);
+    const campanhas = f.campanhas.filter((c) => c.plataforma === p.key);
+    const ativas = campanhas.filter((c) => c.ativa).length;
+    const vendas7d = resumoDeVendas(f, hoje, 7, 0, p.key).total;
+    const estado: PlataformaResumo["estado"] = contas.length === 0
+      ? "nao-configurada"
+      : contas.some((c) => c.ativa) ? (campanhas.length > 0 ? "ativa" : "ligada") : "pausada";
+    return { key: p.key, rotulo: p.rotulo, estado, contas: contas.length, campanhas: campanhas.length, ativas, vendas7d };
+  });
 }
 
 export function itensDeAnuncios(f: FatosDoCliente, hoje: Date, onboardingCompleto: boolean): EsteiraItem[] {
@@ -228,16 +310,16 @@ export function itensDeAnuncios(f: FatosDoCliente, hoje: Date, onboardingComplet
     const ultimoDia = c.diario.map((d) => d.day).sort().at(-1) ?? null;
     const parado = diasDesde(ultimoDia, hoje);
     if (parado === null || parado >= 3) {
-      itens.push({ ...base, key: `camp:${c.id}:parado`, titulo: c.nome, passo: "Dados parados, conferir a campanha", gravidade: "atencao", fatos: [parado === null ? "Sem dado nenhum" : `Último dado há ${parado} dias`] });
+      itens.push({ ...base, key: `camp:${c.id}:parado`, titulo: c.nome, passo: "Dados parados, conferir a campanha", gravidade: "atencao", fatos: [parado === null ? "Sem dado nenhum" : `Último dado há ${parado} dias`], plataforma: c.plataforma });
       continue;
     }
     const freq = Math.max(...c.diario.filter((d) => new Date(d.day).getTime() >= hoje.getTime() - 7 * DIA).map((d) => d.frequency ?? 0), 0);
     if (freq >= 3.5) {
-      itens.push({ ...base, key: `camp:${c.id}:saturada`, titulo: c.nome, passo: "Criativo saturado, trocar o criativo", gravidade: "atencao", fatos: [`Frequência ${freq.toFixed(1)}`] });
+      itens.push({ ...base, key: `camp:${c.id}:saturada`, titulo: c.nome, passo: "Criativo saturado, trocar o criativo", gravidade: "atencao", fatos: [`Frequência ${freq.toFixed(1)}`], plataforma: c.plataforma });
     }
     const g = c.diario.filter((d) => new Date(d.day).getTime() >= hoje.getTime() - 7 * DIA).reduce((a, d) => ({ spend: a.spend + d.spend, leads: a.leads + d.leads }), { spend: 0, leads: 0 });
     if (g.spend > 0 && g.leads === 0) {
-      itens.push({ ...base, key: `camp:${c.id}:sem-lead`, titulo: c.nome, passo: "Gastou sem trazer lead, conferir", gravidade: "atencao", fatos: [`R$ ${g.spend.toFixed(0)} em 7 dias, 0 leads`] });
+      itens.push({ ...base, key: `camp:${c.id}:sem-lead`, titulo: c.nome, passo: "Gastou sem trazer lead, conferir", gravidade: "atencao", fatos: [`R$ ${g.spend.toFixed(0)} em 7 dias, 0 leads`], plataforma: c.plataforma });
     }
   }
 
@@ -452,26 +534,51 @@ export function leiturasDoCliente(f: FatosDoCliente, hoje: Date, itens: EsteiraI
   }
 
   if (f.servicos.trafego && f.campanhas.length) {
-    const a = somaJanela(f, hoje, 7, 0);
-    const b = somaJanela(f, hoje, 14, 7);
-    if (a.spend > 0 || b.spend > 0) {
+    // Uma leitura por plataforma com campanha: Meta nao se mistura com Google.
+    const plataformas = [...new Set(f.campanhas.map((c) => c.plataforma))];
+    for (const p of plataformas) {
+      const a = somaJanela(f, hoje, 7, 0, p);
+      const b = somaJanela(f, hoje, 14, 7, p);
+      if (a.spend === 0 && b.spend === 0) continue;
+      const va = resumoDeVendas(f, hoje, 7, 0, p);
+      const vb = resumoDeVendas(f, hoje, 14, 7, p);
       const cplA = a.leads > 0 ? a.spend / a.leads : null;
       const cplB = b.leads > 0 ? b.spend / b.leads : null;
-      const ativas = f.campanhas.filter((c) => c.ativa).length;
-      const nums = [
+      const cpvA = va.total > 0 ? a.spend / va.total : null;
+      const cpvB = vb.total > 0 ? b.spend / vb.total : null;
+      const ativas = f.campanhas.filter((c) => c.plataforma === p && c.ativa).length;
+      const nums: Numero[] = [
         numero("Leads (7d)", a.leads, b.leads),
+        numero("Vendas (7d)", va.total, vb.total),
         numero("Gasto (7d)", a.spend, b.spend, "brl"),
         numero("Custo por lead", cplA, cplB, "brl"),
+        numero("Custo por venda", cpvA, cpvB, "brl"),
         { rotulo: "Campanhas ativas", atual: ativas, anterior: null, variacao: null, tendencia: "sem-base" as const, formato: "int" as const },
       ];
-      const l: Leitura = { frente: "trafego", numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: "últimos 7 dias contra os 7 anteriores" };
+      if (va.receita > 0 || vb.receita > 0) nums.splice(2, 0, numero("Receita (7d)", va.receita, vb.receita, "brl"));
+      const l: Leitura = { frente: "trafego", plataforma: p, numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: "últimos 7 dias contra os 7 anteriores" };
       classificar(nums, l);
-      const leads = nums[0]; const gasto = nums[1]; const cpl = nums[2];
+      const leads = nums[0]; const vendas = nums[1];
+      const gasto = nums.find((n) => n.rotulo === "Gasto (7d)") as Numero;
+      const cpl = nums.find((n) => n.rotulo === "Custo por lead") as Numero;
+      const cpv = nums.find((n) => n.rotulo === "Custo por venda") as Numero;
+      const meus = itens.filter((i) => i.fonte === "anuncio" && (!i.plataforma || i.plataforma === p));
+      // Vendas primeiro: e o numero que paga o anuncio.
+      if (a.leads > 0 && va.total === 0) l.fazer.push(`${a.leads} lead${a.leads === 1 ? "" : "s"} e nenhuma venda em 7 dias: conferir o atendimento (tempo de resposta e proposta) e registrar aqui cada venda que fechar.`);
+      if (vendas.tendencia === "sobe" && va.porCampanha[0]) l.fazer.push(`Vendas subiram: escalar 20% a verba de ${va.porCampanha[0].nome} (${va.porCampanha[0].vendas} venda${va.porCampanha[0].vendas === 1 ? "" : "s"} em 7 dias).`);
+      if (vendas.tendencia === "cai" && leads.tendencia !== "cai") l.fazer.push("Leads chegam mas vendas caíram: o problema está depois do clique; revisar oferta e atendimento antes de mexer na campanha.");
+      if (vendas.tendencia === "cai" && leads.tendencia === "cai") l.fazer.push("Leads e vendas caíram juntos: trocar o criativo e conferir o público da campanha principal.");
+      if (cpv.tendencia === "sobe" && va.total > 0) l.fazer.push("Custo por venda subiu: pausar a campanha que gastou sem vender e concentrar verba na que vendeu.");
+      if (va.total > 0 && va.porCampanha.length > 1 && ativas > 1) {
+        const [c1, c2] = va.porCampanha;
+        if (c1.vendas >= 2 * Math.max(1, c2.vendas)) l.fazer.push(`${c1.nome} vende mais que o resto (${c1.vendas} contra ${c2.vendas}): concentrar verba nela.`);
+      }
+      if (va.semValor > 0) l.fazer.push(`${va.semValor} venda${va.semValor === 1 ? "" : "s"} sem valor: colocar o valor quando souber, para o custo por venda fechar.`);
       if (leads.tendencia === "cai" && gasto.tendencia !== "cai") l.fazer.push("Gastou igual ou mais e trouxe menos lead: pausar a campanha mais fraca e subir um criativo novo.");
       if (cpl.tendencia === "sobe") l.fazer.push("Custo por lead subiu: revisar público e trocar o criativo com frequência mais alta.");
-      const saturadas = itens.filter((i) => i.key.endsWith(":saturada"));
+      const saturadas = meus.filter((i) => i.key.endsWith(":saturada"));
       if (saturadas.length) l.fazer.push(`Trocar criativo em ${saturadas.map((i) => i.titulo).slice(0, 2).join(", ")} (saturado).`);
-      const semLead = itens.filter((i) => i.key.endsWith(":sem-lead"));
+      const semLead = meus.filter((i) => i.key.endsWith(":sem-lead"));
       if (semLead.length) l.fazer.push(`Conferir ${semLead.map((i) => i.titulo).slice(0, 2).join(", ")}: gastou sem lead.`);
       if (itens.some((i) => i.key === "ads:verba-zerada")) l.fazer.push("Verba zerada com campanha no ar: recarregar hoje.");
       if (ativas === 0) l.fazer.push("Nenhuma campanha no ar: ativar ou cadastrar.");

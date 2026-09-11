@@ -41,6 +41,7 @@ Regras duras:
 - Se o cliente esta em entrada (sem nome, sem logo, sem Instagram), os proximos sao os passos de entrada que o dossie indica, nao operacao de conteudo.
 - "feito" so com evidencia; se nada, lista vazia.
 - LEIA OS NUMEROS: quando houver metricas (alcance, seguidores, interacoes, leads, gasto), o "foco" e pelo menos um dos "proximos" precisam partir deles e apontar direcao concreta (ex.: alcance caiu 30% em duas semanas com 5 posts agendados: revisar formato dos proximos 2 posts; gasto subiu e lead caiu: pausar a campanha X e testar criativo novo). Nunca so descreva o numero; diga o que fazer por causa dele.
+- VENDAS mandam na otimizacao de anuncio: quando houver linha de VENDAS, o proximo passo de trafego parte dela (campanha que vendeu recebe verba; campanha que gastou sem vender e pausada ou troca criativo; leads sem venda e problema de atendimento/oferta, nao de campanha). Cite a campanha e o numero. Venda registrada sem valor ainda conta como venda.
 - Progressao: compare o dossie (onde estava) com a historia (o que andou) e diga o proximo degrau, nao o mesmo passo de sempre.
 - Maximo 6 proximos, maximo 6 feitos. Frases curtas.`;
 
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
 
     const desde28 = new Date(semanaIni.getTime() - 28 * 86_400_000).toISOString().slice(0, 10);
     const desde14dia = new Date(semanaIni.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
-    const [perfil, dossie, historia, projetos, posts, rituais, metricas, adsDiario] = await Promise.all([
+    const [perfil, dossie, historia, projetos, posts, rituais, metricas, adsDiario, vendas] = await Promise.all([
       db.from("profiles").select("full_name, company_name, services_config, created_at").eq("id", clientId).maybeSingle(),
       db.from("client_dossiers").select("summary, content, updated_at").eq("client_id", clientId).eq("is_current", true).order("updated_at", { ascending: false }).limit(1),
       db.from("project_memory").select("kind, title, content, created_at").eq("client_id", clientId).neq("kind", "esteira_plano").gte("created_at", desde14).order("created_at", { ascending: false }).limit(40),
@@ -102,7 +103,8 @@ Deno.serve(async (req) => {
       db.from("editorial_posts").select("title, production_status, primary_file_id, editorial_publications(status, scheduled_at, published_at)").eq("client_id", clientId).is("archived_at", null).order("created_at", { ascending: false }).limit(40),
       db.from("cycle_rituals").select("ritual_key, source").eq("client_id", clientId).eq("week_start", weekStart),
       db.from("social_metrics_weekly").select("external_account_id, week_start, reach, followers, total_interactions").eq("client_id", clientId).gte("week_start", desde28).order("week_start", { ascending: false }),
-      db.from("ads_campaign_daily").select("campaign_name, day, spend, actions").eq("client_id", clientId).gte("day", desde14dia),
+      db.from("ads_campaign_daily").select("campaign_name, day, spend, actions, action_values").eq("client_id", clientId).gte("day", desde14dia),
+      db.from("ads_sales").select("sold_at, platform, campaign_name, channel, quantity, value, source").eq("client_id", clientId).gte("sold_at", desde14dia).order("sold_at", { ascending: false }),
     ]);
 
     // Numeros: alcance/seguidores/interacoes por semana (por conta) e
@@ -145,6 +147,57 @@ Deno.serve(async (req) => {
     if (agora7.spend > 0 || antes7.spend > 0) {
       metricasLinhas.push(`- Anuncios ultimos 7 dias: R$ ${agora7.spend.toFixed(0)} e ${agora7.leads} leads | 7 dias anteriores: R$ ${antes7.spend.toFixed(0)} e ${antes7.leads} leads`);
       for (const [nome, v] of porCampanha) metricasLinhas.push(`  - ${nome}: R$ ${v.spend.toFixed(0)}, ${v.leads} leads (7d)`);
+    }
+
+    // VENDAS: registradas a mao no painel (WhatsApp, Instagram, balcao) +
+    // compras rastreadas pela plataforma (pixel). E o numero que paga o
+    // anuncio; o plano precisa partir dele.
+    const TIPOS_COMPRA = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase"];
+    const compraDe = (lista: unknown): number => {
+      if (!Array.isArray(lista)) return 0;
+      const porTipo = new Map<string, number>();
+      for (const a of lista as Array<{ action_type?: string; value?: unknown }>) porTipo.set(String(a?.action_type ?? "").toLowerCase(), (porTipo.get(String(a?.action_type ?? "").toLowerCase()) ?? 0) + (Number(a?.value) || 0));
+      for (const t of TIPOS_COMPRA) { const v = porTipo.get(t); if (v && v > 0) return v; }
+      return 0;
+    };
+    const vendasAgora = { qtd: 0, valor: 0, semValor: 0 };
+    const vendasAntes = { qtd: 0, valor: 0 };
+    const vendasPorCampanha = new Map<string, { qtd: number; valor: number }>();
+    const vendasPorCanal = new Map<string, number>();
+    for (const d of (adsDiario.data ?? []) as Array<Record<string, any>>) {
+      const compras = compraDe(d.actions);
+      if (!compras) continue;
+      const t = new Date(String(d.day)).getTime();
+      const alvo = t >= corte ? vendasAgora : vendasAntes;
+      alvo.qtd += compras;
+      alvo.valor += compraDe(d.action_values);
+      if (t >= corte) {
+        const c = vendasPorCampanha.get(String(d.campaign_name)) ?? { qtd: 0, valor: 0 };
+        c.qtd += compras; c.valor += compraDe(d.action_values);
+        vendasPorCampanha.set(String(d.campaign_name), c);
+      }
+    }
+    for (const v of (vendas.data ?? []) as Array<Record<string, any>>) {
+      const t = new Date(`${String(v.sold_at)}T12:00:00Z`).getTime();
+      const qtd = Math.max(1, Number(v.quantity) || 1);
+      const valor = v.value == null ? null : Number(v.value) || 0;
+      const alvo = t >= corte ? vendasAgora : vendasAntes;
+      alvo.qtd += qtd;
+      if (valor !== null) alvo.valor += valor; else if (t >= corte) vendasAgora.semValor += 1;
+      if (t >= corte) {
+        const nome = String(v.campaign_name ?? "sem campanha");
+        const c = vendasPorCampanha.get(nome) ?? { qtd: 0, valor: 0 };
+        c.qtd += qtd; c.valor += valor ?? 0;
+        vendasPorCampanha.set(nome, c);
+        vendasPorCanal.set(String(v.channel ?? "outro"), (vendasPorCanal.get(String(v.channel ?? "outro")) ?? 0) + qtd);
+      }
+    }
+    if (agora7.spend > 0 || antes7.spend > 0 || vendasAgora.qtd > 0 || vendasAntes.qtd > 0) {
+      const brl = (n: number) => `R$ ${n.toFixed(0)}`;
+      metricasLinhas.push(`- VENDAS ultimos 7 dias: ${vendasAgora.qtd}${vendasAgora.valor > 0 ? ` (${brl(vendasAgora.valor)})` : ""}${vendasAgora.semValor > 0 ? `, ${vendasAgora.semValor} sem valor informado` : ""} | 7 dias anteriores: ${vendasAntes.qtd}${vendasAntes.valor > 0 ? ` (${brl(vendasAntes.valor)})` : ""}${agora7.spend > 0 && vendasAgora.qtd > 0 ? ` | custo por venda (7d): ${brl(agora7.spend / vendasAgora.qtd)}` : ""}`);
+      for (const [nome, v] of vendasPorCampanha) metricasLinhas.push(`  - vendeu: ${nome}: ${v.qtd} venda(s)${v.valor > 0 ? ` (${brl(v.valor)})` : ""} (7d)`);
+      if (vendasPorCanal.size) metricasLinhas.push(`  - por onde: ${[...vendasPorCanal.entries()].map(([c, n]) => `${c} ${n}`).join(", ")}`);
+      if (agora7.leads > 0 && vendasAgora.qtd === 0) metricasLinhas.push(`  - ATENCAO: ${agora7.leads} leads em 7 dias e NENHUMA venda registrada: ou o atendimento nao converte, ou as vendas nao estao sendo registradas no painel`);
     }
 
     const nome = perfil.data?.company_name || perfil.data?.full_name || "Cliente";

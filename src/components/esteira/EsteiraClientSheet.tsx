@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
@@ -7,12 +7,14 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import type { ClienteDaEsteira } from "@/hooks/useEsteira";
-import type { EsteiraItem, Fonte, Insight, Leitura, Numero } from "@/lib/esteira/esteiraTipos";
-import { ONBOARDING, itensDaFrente } from "@/lib/esteira/esteiraMontar";
+import type { EsteiraItem, Fonte, Insight, Leitura, Numero, PlataformaAds } from "@/lib/esteira/esteiraTipos";
+import { ONBOARDING, itensDaFrente, plataformasDoCliente } from "@/lib/esteira/esteiraMontar";
 import { itemDoPlano, lerPlanoDaSemana, marcarJaTem, marcarRitual, ocultarCliente, type PlanoDaSemana } from "@/lib/esteira/esteiraAcoes";
 import { createChecklist, splitRequestIntoItems } from "@/lib/clientChecklist";
 import { MEMORY_LABELS, readMemory, type MemoryEntry } from "@/lib/clientMemory";
 import EsteiraItemRow from "./EsteiraItemRow";
+import TrafegoPlataformas, { PlataformaNaoConfigurada } from "./TrafegoPlataformas";
+import TrafegoVendas from "./TrafegoVendas";
 
 const GRUPOS: Array<{ fontes: Fonte[]; titulo: string }> = [
   { fontes: ["onboarding"], titulo: "Entrada do cliente" },
@@ -35,15 +37,19 @@ function fmtNumero(n: Numero): string {
   return Math.round(n.atual).toLocaleString("pt-BR");
 }
 
+const ROTULO_PLATAFORMA: Record<PlataformaAds, string> = { meta_ads: "Meta Ads", google_ads: "Google Ads", tiktok_ads: "TikTok Ads" };
+
 function Numeros({ leitura }: { leitura: Leitura }) {
   const cor = (t: Numero["tendencia"]) => (t === "sobe" ? "text-primary" : t === "cai" ? "text-destructive" : "text-muted-foreground");
+  const titulo = leitura.frente === "social" ? "Números do Instagram" : `Números · ${leitura.plataforma ? ROTULO_PLATAFORMA[leitura.plataforma] : "anúncios"}`;
+  const colunas = leitura.numeros.length >= 5 ? "grid-cols-2 sm:grid-cols-3" : leitura.numeros.length === 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3";
   return (
     <section className="mt-3 rounded-2xl border border-border bg-card p-3">
       <div className="flex items-baseline justify-between">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{leitura.frente === "social" ? "Números do Instagram" : "Números dos anúncios"}</p>
+        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{titulo}</p>
         <p className="text-[10px] text-muted-foreground/80">{leitura.periodo}</p>
       </div>
-      <div className={`mt-2 grid gap-2 ${leitura.numeros.length >= 4 ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`mt-2 grid gap-2 ${colunas}`}>
         {leitura.numeros.map((n) => (
           <div key={n.rotulo} className="rounded-xl bg-secondary/60 px-2.5 py-2">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{n.rotulo}</p>
@@ -111,8 +117,13 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
   const [montando, setMontando] = useState(false);
   const [plano, setPlano] = useState<PlanoDaSemana | null>(null);
   const [lendoPlano, setLendoPlano] = useState(false);
+  const [plataformaEscolhida, setPlataformaEscolhida] = useState<PlataformaAds | null>(null);
+  const hoje = useMemo(() => new Date(), []);
 
   const clienteId = cliente?.id ?? null;
+
+  // Trocou de cliente: a plataforma volta para a que tem campanha no ar.
+  useEffect(() => { setPlataformaEscolhida(null); }, [clienteId]);
 
   // O plano da semana pelo dossie: cache da semana, com "Reler" para forcar.
   useEffect(() => {
@@ -132,10 +143,17 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
   if (!cliente) return null;
   const e = cliente.esteira;
-  const itens = itensDaFrente(e, frente);
-  const leitura = e.leituras.find((l) => l.frente === frente) ?? null;
+  // Trafego: uma plataforma por vez (Meta, Google, TikTok), nunca misturadas.
+  const plataformas = frente === "trafego" ? plataformasDoCliente(cliente.fatos, hoje) : [];
+  const plataforma: PlataformaAds = plataformaEscolhida
+    ?? plataformas.find((p) => p.estado === "ativa")?.key
+    ?? plataformas.find((p) => p.estado === "ligada")?.key
+    ?? "meta_ads";
+  const plataformaAtual = plataformas.find((p) => p.key === plataforma) ?? null;
+  const itens = itensDaFrente(e, frente).filter((it) => frente !== "trafego" || it.fonte !== "anuncio" || !it.plataforma || it.plataforma === plataforma);
+  const leitura = e.leituras.find((l) => l.frente === frente && (frente === "social" || l.plataforma === plataforma)) ?? null;
   // Insights soltos so quando nao ha leitura completa (ex.: segunda conta).
-  const insights = leitura ? [] : e.insights.filter((i) => i.frente === frente);
+  const insights = leitura || frente === "trafego" ? [] : e.insights.filter((i) => i.frente === frente);
   const grupos = GRUPOS.map((g) => ({ ...g, itens: itens.filter((it) => g.fontes.includes(it.fonte)) })).filter((g) => g.itens.length > 0);
   const oculto = cliente.fatos.oculto.areas.includes(frente);
 
@@ -233,7 +251,16 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
           {!lendoPlano && !plano && <p className="mt-1.5 text-[12px] text-muted-foreground">Não consegui ler o dossiê agora. Tente Reler.</p>}
         </section>
 
-        {leitura && <Numeros leitura={leitura} />}
+        {frente === "trafego" && plataformaAtual && (
+          <>
+            <TrafegoPlataformas plataformas={plataformas} selecionada={plataforma} onSelecionar={setPlataformaEscolhida} />
+            {leitura ? <Numeros leitura={leitura} /> : <PlataformaNaoConfigurada plataforma={plataformaAtual} />}
+            {plataformaAtual.estado !== "nao-configurada" && (
+              <TrafegoVendas fatos={cliente.fatos} plataforma={plataforma} hoje={hoje} canWrite={canWrite} onMudou={onMudou} />
+            )}
+          </>
+        )}
+        {frente === "social" && leitura && <Numeros leitura={leitura} />}
 
         {insights.length > 0 && (
           <section className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">

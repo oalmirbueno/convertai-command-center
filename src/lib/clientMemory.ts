@@ -25,6 +25,7 @@ export type MemoryKind =
   | "aprovacao"   // decisão do cliente sobre um material
   | "decisao"     // mudança de rumo combinada
   | "nota"        // anotação da equipe (Studio)
+  | "venda"       // venda registrada na esteira de tráfego
   | "marco";      // conquista ou virada de etapa
 
 export interface MemoryInput {
@@ -170,6 +171,7 @@ export const MEMORY_LABELS: Record<string, string> = {
   marco: "Marco",
   avulso: "Avulso da semana",
   checklist: "Lista rápida",
+  venda: "Venda registrada",
   second_brain: "Dossiê atualizado",
   external: "Registro do agente",
   note: "Anotação",

@@ -45,6 +45,8 @@ export interface EsteiraItem {
   estado?: { status: EstadoHumano; note?: string | null; doneAt?: string | null; auto?: boolean };
   /** Posicao fixa dentro da fonte (onboarding usa a ordem do catalogo). */
   ordem?: number;
+  /** Anuncio: de qual plataforma e o item. */
+  plataforma?: PlataformaAds;
 }
 
 export interface Insight {
@@ -83,6 +85,8 @@ export interface Leitura {
   fazer: string[];
   /** Ex.: "semana de 07/09 contra 31/08". */
   periodo: string;
+  /** Trafego: a plataforma desta leitura. Cada plataforma tem a sua. */
+  plataforma?: PlataformaAds;
 }
 
 export type RitualKey = "segunda" | "quarta" | "sexta";
@@ -145,13 +149,58 @@ export interface CampanhaDiaFato {
   spend: number;
   leads: number;
   frequency: number | null;
+  /** Compras rastreadas pela propria plataforma (pixel), e o valor delas. */
+  compras: number;
+  valorCompras: number;
 }
+
+/** Plataformas de anuncio que o painel conhece. `external_accounts.platform`. */
+export type PlataformaAds = "meta_ads" | "google_ads" | "tiktok_ads";
 
 export interface CampanhaFato {
   id: string;
   nome: string;
   ativa: boolean;
+  plataforma: PlataformaAds;
   diario: CampanhaDiaFato[];
+}
+
+/** Uma conta de anuncio cadastrada, por plataforma. */
+export interface ContaAdsFato {
+  id: string;
+  plataforma: PlataformaAds;
+  nome: string;
+  /** `active` no cadastro da conta. */
+  ativa: boolean;
+}
+
+/** Como cada plataforma de anuncio esta para este cliente. */
+export interface PlataformaResumo {
+  key: PlataformaAds;
+  rotulo: string;
+  /** ativa = conta ligada com campanha; ligada = conta sem campanha;
+      pausada = conta cadastrada mas inativa; nao-configurada = nada. */
+  estado: "ativa" | "ligada" | "pausada" | "nao-configurada";
+  contas: number;
+  campanhas: number;
+  ativas: number;
+  vendas7d: number;
+}
+
+export type CanalVenda = "whatsapp" | "instagram" | "site" | "telefone" | "loja" | "outro";
+
+/** Uma venda registrada (a mao ou rastreada). */
+export interface VendaFato {
+  id: string;
+  data: string;
+  plataforma: PlataformaAds | "organico" | "outro";
+  campanhaId: string | null;
+  campanhaNome: string | null;
+  canal: CanalVenda;
+  quantidade: number;
+  valor: number | null;
+  origem: "manual" | "agente" | "meta" | "google" | "tiktok";
+  nota: string | null;
 }
 
 export interface ChecklistFato {
@@ -187,6 +236,9 @@ export interface FatosDoCliente {
   posts: PostFato[];
   tarefas: TarefaFato[];
   campanhas: CampanhaFato[];
+  contasAds: ContaAdsFato[];
+  /** Vendas dos ultimos 35 dias, mais recente primeiro. */
+  vendas: VendaFato[];
   saldoVerba: number | null;
   checklists: ChecklistFato[];
   marcos: MarcoFato[];

@@ -132,20 +132,52 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
   let qb = db()
     .from('ads_campaign_daily')
     .select(
-      'client_id, campaign_id, campaign_name, objective, day, spend, impressions, reach, clicks, link_clicks, ctr, cpc, cpm, frequency, actions, cost_per_action',
+      'client_id, campaign_id, campaign_name, objective, day, spend, impressions, reach, clicks, link_clicks, ctr, cpc, cpm, frequency, actions, cost_per_action, action_values',
     )
     .gte('day', desde.toISOString().slice(0, 10))
     .order('day', { ascending: false })
     .limit(READ_LIMITS.maxPageSize);
 
+  // Vendas registradas a mao no painel: o pixel nao ve WhatsApp nem balcao.
+  let qv = db()
+    .from('ads_sales')
+    .select('client_id, sold_at, platform, campaign_id, campaign_name, channel, quantity, value, source, note')
+    .gte('sold_at', desde.toISOString().slice(0, 10))
+    .order('sold_at', { ascending: false })
+    .limit(READ_LIMITS.maxPageSize);
+
   if (opts.client_id) {
     if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
     qb = qb.eq('client_id', opts.client_id);
+    qv = qv.eq('client_id', opts.client_id);
   }
 
-  const { data, error } = await qb;
+  const [{ data, error }, { data: vendasData, error: vendasError }] = await Promise.all([qb, qv]);
   if (error) throw new Error(error.message);
+  if (vendasError) throw new Error(vendasError.message);
   const linhas = (data || []) as Array<Record<string, unknown>>;
+  const vendas = (vendasData || []) as Array<Record<string, unknown>>;
+
+  // A Meta devolve a mesma compra sob varios nomes; contamos UM, nesta ordem.
+  const TIPOS_COMPRA = ['omni_purchase', 'purchase', 'offsite_conversion.fb_pixel_purchase', 'onsite_conversion.purchase'];
+  const compraDe = (lista: unknown): number => {
+    if (!Array.isArray(lista)) return 0;
+    const porTipo = new Map<string, number>();
+    for (const a of lista as Array<Record<string, unknown>>) {
+      const tipo = String(a?.action_type ?? '').toLowerCase();
+      if (tipo) porTipo.set(tipo, (porTipo.get(tipo) ?? 0) + numero(a?.value));
+    }
+    for (const t of TIPOS_COMPRA) { const v = porTipo.get(t); if (v && v > 0) return v; }
+    return 0;
+  };
+  const vendasPorCampanha = new Map<string, { registered: number; revenue: number }>();
+  for (const v of vendas) {
+    const chave = String(v.campaign_id ?? '');
+    const atual = vendasPorCampanha.get(chave) ?? { registered: 0, revenue: 0 };
+    atual.registered += Math.max(1, numero(v.quantity));
+    atual.revenue += numero(v.value);
+    vendasPorCampanha.set(chave, atual);
+  }
 
   const porCampanha = new Map<string, Array<Record<string, unknown>>>();
   for (const linha of linhas) {
@@ -161,6 +193,8 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
       let exibicoes = 0;
       let cliquesNoLink = 0;
       let alcance = 0;
+      let comprasRastreadas = 0;
+      let valorRastreado = 0;
       const resultados = new Map<string, number>();
 
       for (const linha of lista) {
@@ -168,6 +202,8 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
         exibicoes += numero(linha.impressions);
         cliquesNoLink += numero(linha.link_clicks);
         alcance = Math.max(alcance, numero(linha.reach));
+        comprasRastreadas += compraDe(linha.actions);
+        valorRastreado += compraDe(linha.action_values);
         const acoes = Array.isArray(linha.actions)
           ? (linha.actions as Array<Record<string, unknown>>)
           : [];
@@ -190,17 +226,50 @@ export async function listAdsPerformance(opts: { client_id?: string; days?: numb
         // Cru de propósito: qual destes tipos É o resultado depende do
         // objetivo, e essa decisão é do leitor, não desta camada.
         results_by_type: Object.fromEntries(resultados),
+        // Vendas: registradas a mão no painel + rastreadas pela plataforma
+        // (pixel). É o número que paga o anúncio; otimize por ele.
+        sales: (() => {
+          const manuais = vendasPorCampanha.get(campaignId) ?? { registered: 0, revenue: 0 };
+          const total = manuais.registered + comprasRastreadas;
+          return {
+            registered: manuais.registered,
+            tracked: comprasRastreadas,
+            total,
+            revenue: Number((manuais.revenue + valorRastreado).toFixed(2)),
+            cost_per_sale: total > 0 ? Number((investido / total).toFixed(2)) : null,
+          };
+        })(),
       };
     })
     .sort((a, b) => b.spend - a.spend);
+
+  const vendasRegistradas = vendas.reduce((t, v) => t + Math.max(1, numero(v.quantity)), 0);
+  const vendasRastreadas = resumo.reduce((t, c) => t + c.sales.tracked, 0);
+  const receita = vendas.reduce((t, v) => t + numero(v.value), 0)
+    + resumo.reduce((t, c) => t + (c.sales.revenue - (vendasPorCampanha.get(c.campaign_id)?.revenue ?? 0)), 0);
+  const porCanal = new Map<string, number>();
+  for (const v of vendas) porCanal.set(String(v.channel ?? 'outro'), (porCanal.get(String(v.channel ?? 'outro')) ?? 0) + Math.max(1, numero(v.quantity)));
+  const gastoTotal = Number(resumo.reduce((soma, campanha) => soma + campanha.spend, 0).toFixed(2));
+  const vendasTotal = vendasRegistradas + vendasRastreadas;
 
   return {
     period_days: dias,
     since: desde.toISOString().slice(0, 10),
     daily: linhas,
     by_campaign: resumo,
+    // Vendas do período: cada registro manual (dia, canal, campanha, valor
+    // quando se sabe) e o total já somado com as rastreadas pelo pixel.
+    sales: {
+      registered: vendasRegistradas,
+      tracked: vendasRastreadas,
+      total: vendasTotal,
+      revenue: Number(receita.toFixed(2)),
+      cost_per_sale: vendasTotal > 0 ? Number((gastoTotal / vendasTotal).toFixed(2)) : null,
+      by_channel: Object.fromEntries(porCanal),
+      items: vendas,
+    },
     totals: {
-      spend: Number(resumo.reduce((soma, campanha) => soma + campanha.spend, 0).toFixed(2)),
+      spend: gastoTotal,
       campaigns: resumo.length,
     },
   };

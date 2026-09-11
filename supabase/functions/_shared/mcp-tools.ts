@@ -308,7 +308,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.41.0',
+  version: '1.42.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1969,7 +1969,7 @@ const getAdsCampaignsTool: ToolDefinition = {
 const getAdsPerformanceTool: ToolDefinition = {
   name: 'aceleriq_get_ads_performance',
   title: 'Meta Ads — desempenho por dia e por campanha',
-  description: 'O desempenho REAL das campanhas: investimento, alcance, exibições, cliques no link e os resultados por tipo (conversas iniciadas, cadastros, compras). Devolve o dia a dia (para ver tendência) E o total já agregado por campanha (para responder quanto rendeu). ATENÇÃO ao ler: alcance NÃO se soma entre dias — a mesma pessoa alcançada em dois dias não são duas pessoas; o campo reach do agregado já é o maior dia, que é o piso honesto. Em results_by_type, qual tipo É o resultado depende do objetivo da campanha.',
+  description: 'O desempenho REAL das campanhas: investimento, alcance, exibições, cliques no link, os resultados por tipo (conversas iniciadas, cadastros, compras) e as VENDAS. Devolve o dia a dia (para ver tendência) E o total já agregado por campanha (para responder quanto rendeu). Vendas: `sales` em cada campanha e no total soma as registradas a mão no painel (WhatsApp, Instagram, balcão: dia, canal, campanha, valor quando se sabe) com as rastreadas pelo pixel, e traz custo por venda. Otimize por venda antes de otimizar por lead: campanha que vendeu recebe verba, campanha que gastou sem vender pausa ou troca criativo, lead sem venda é atendimento/oferta. ATENÇÃO ao ler: alcance NÃO se soma entre dias — a mesma pessoa alcançada em dois dias não são duas pessoas; o campo reach do agregado já é o maior dia, que é o piso honesto. Em results_by_type, qual tipo É o resultado depende do objetivo da campanha.',
   scopes: ['reports:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {

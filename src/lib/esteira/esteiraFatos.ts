@@ -8,12 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   CampanhaFato,
   ChecklistFato,
+  ContaAdsFato,
   EstadoHumano,
   FatosDoCliente,
   MarcoFato,
+  PlataformaAds,
   PostFato,
   RitualKey,
   TarefaFato,
+  VendaFato,
 } from "./esteiraTipos";
 
 interface ClienteBasico {
@@ -31,6 +34,8 @@ function vazio(c: ClienteBasico): FatosDoCliente {
     posts: [],
     tarefas: [],
     campanhas: [],
+    contasAds: [],
+    vendas: [],
     saldoVerba: null,
     checklists: [],
     marcos: [],
@@ -46,6 +51,26 @@ function vazio(c: ClienteBasico): FatosDoCliente {
 }
 
 const num = (v: unknown): number => (typeof v === "number" ? v : Number(v) || 0);
+
+const PLATAFORMAS_ADS: PlataformaAds[] = ["meta_ads", "google_ads", "tiktok_ads"];
+
+// A Meta devolve a mesma compra sob varios nomes (omni_purchase, purchase,
+// pixel). Contamos UM deles, nesta ordem, para nao triplicar.
+const TIPOS_COMPRA = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase"];
+
+function valorDaCompra(lista: unknown): number {
+  if (!Array.isArray(lista)) return 0;
+  const porTipo = new Map<string, number>();
+  for (const a of lista as Array<{ action_type?: string; value?: unknown }>) {
+    const tipo = String(a?.action_type ?? "").toLowerCase();
+    if (tipo) porTipo.set(tipo, (porTipo.get(tipo) ?? 0) + num(a.value));
+  }
+  for (const t of TIPOS_COMPRA) {
+    const v = porTipo.get(t);
+    if (v !== undefined && v > 0) return v;
+  }
+  return 0;
+}
 
 // Mesma regra do Ciclo antigo: lead + conversa iniciada.
 function contarLeads(actions: unknown): number {
@@ -71,13 +96,13 @@ export async function lerFatosDaEsteira(
   const desde5sem = new Date(Date.now() - 35 * 86_400_000).toISOString().slice(0, 10);
   const db = supabase as any;
 
-  const [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs] = await Promise.all([
+  const [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs, contasAds, vendas] = await Promise.all([
     db.from("editorial_posts").select("id, client_id, title, production_status, primary_file_id, default_caption, created_at, editorial_publications(status, scheduled_at, published_at)").in("client_id", ids).is("archived_at", null),
     db.from("projects").select("id, client_id, tasks(id, status, due_date, assigned_to, title, source, updated_at)").in("client_id", ids).is("deleted_at", null).is("tasks.deleted_at", null),
     db.from("projects").select("id, client_id, milestones(id, title, status, target_date)").in("client_id", ids).is("deleted_at", null).is("milestones.deleted_at", null),
-    db.from("ads_campaigns").select("id, campaign_id, client_id, name, effective_status, status").in("client_id", ids),
+    db.from("ads_campaigns").select("id, campaign_id, client_id, external_account_id, name, effective_status, status").in("client_id", ids),
     db.from("ads_wallet").select("client_id, balance").in("client_id", ids),
-    db.from("ads_campaign_daily").select("client_id, campaign_id, campaign_name, day, spend, actions, frequency").in("client_id", ids).gte("day", desde14),
+    db.from("ads_campaign_daily").select("client_id, campaign_id, campaign_name, day, spend, actions, action_values, frequency").in("client_id", ids).gte("day", desde14),
     db.from("external_account_connections").select("client_id, provider, connection_status").in("client_id", ids),
     db.from("social_metrics_weekly").select("client_id, external_account_id, week_start, reach, followers, total_interactions").in("client_id", ids).gte("week_start", desde5sem),
     db.from("briefings").select("client_id").in("client_id", ids).eq("submitted", true),
@@ -86,6 +111,8 @@ export async function lerFatosDaEsteira(
     db.from("cycle_item_state").select("client_id, item_key, status, note, done_at").in("client_id", ids).eq("week_start", weekStart),
     db.from("cycle_rituals").select("client_id, ritual_key, source, done_at").in("client_id", ids).eq("week_start", weekStart),
     db.from("cycle_client_prefs").select("client_id, onboarding_has, hidden_areas, hidden_until").in("client_id", ids),
+    db.from("external_accounts").select("id, client_id, platform, display_name, status").in("client_id", ids).in("platform", PLATAFORMAS_ADS),
+    db.from("ads_sales").select("id, client_id, sold_at, platform, campaign_id, campaign_name, channel, quantity, value, source, note").in("client_id", ids).gte("sold_at", desde5sem).order("sold_at", { ascending: false }),
   ]);
 
   // Aprovacao da arte vive em files; buscamos so os arquivos que sao arte de post.
@@ -133,12 +160,23 @@ export async function lerFatosDaEsteira(
     }
   }
 
+  // Contas de anuncio por plataforma; a campanha herda a plataforma da conta.
+  const plataformaDaConta = new Map<string, PlataformaAds>();
+  for (const a of (contasAds.data ?? []) as Array<Record<string, any>>) {
+    const s = mapa.get(String(a.client_id));
+    if (!s) continue;
+    const plataforma = String(a.platform) as PlataformaAds;
+    const conta: ContaAdsFato = { id: String(a.id), plataforma, nome: String(a.display_name ?? ""), ativa: String(a.status ?? "").toLowerCase() === "active" };
+    s.contasAds.push(conta);
+    plataformaDaConta.set(conta.id, plataforma);
+  }
+
   const campPorChave = new Map<string, CampanhaFato>();
   for (const c of (campanhas.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(c.client_id));
     if (!s) continue;
     const idExterno = String(c.campaign_id ?? c.id);
-    const camp: CampanhaFato = { id: idExterno, nome: String(c.name ?? "Campanha"), ativa: String(c.effective_status ?? c.status ?? "").toUpperCase() === "ACTIVE", diario: [] };
+    const camp: CampanhaFato = { id: idExterno, nome: String(c.name ?? "Campanha"), ativa: String(c.effective_status ?? c.status ?? "").toUpperCase() === "ACTIVE", plataforma: plataformaDaConta.get(String(c.external_account_id)) ?? "meta_ads", diario: [] };
     s.campanhas.push(camp);
     campPorChave.set(`${c.client_id}:${idExterno}`, camp);
     campPorChave.set(`${c.client_id}:nome:${camp.nome}`, camp);
@@ -146,7 +184,13 @@ export async function lerFatosDaEsteira(
   for (const d of (adsDiario.data ?? []) as Array<Record<string, any>>) {
     const camp = campPorChave.get(`${d.client_id}:${d.campaign_id}`) ?? campPorChave.get(`${d.client_id}:nome:${d.campaign_name}`);
     if (!camp) continue;
-    camp.diario.push({ day: String(d.day), spend: num(d.spend), leads: contarLeads(d.actions), frequency: d.frequency == null ? null : num(d.frequency) });
+    camp.diario.push({ day: String(d.day), spend: num(d.spend), leads: contarLeads(d.actions), frequency: d.frequency == null ? null : num(d.frequency), compras: valorDaCompra(d.actions), valorCompras: valorDaCompra(d.action_values) });
+  }
+  for (const v of (vendas.data ?? []) as Array<Record<string, any>>) {
+    const s = mapa.get(String(v.client_id));
+    if (!s) continue;
+    const venda: VendaFato = { id: String(v.id), data: String(v.sold_at), plataforma: v.platform as VendaFato["plataforma"], campanhaId: v.campaign_id ?? null, campanhaNome: v.campaign_name ?? null, canal: v.channel as VendaFato["canal"], quantidade: Math.max(1, num(v.quantity)), valor: v.value == null ? null : num(v.value), origem: (v.source ?? "manual") as VendaFato["origem"], nota: v.note ?? null };
+    s.vendas.push(venda);
   }
   for (const w of (carteira.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(w.client_id));

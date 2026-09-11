@@ -51,8 +51,8 @@ describe("as cinco tools da 1.41.0 existem", () => {
   });
 
   it("a versão subiu para 1.41.0 nos dois arquivos", () => {
-    expect(tools).toContain("version: '1.41.0'");
-    expect(metadata).toContain("const MCP_VERSION = '1.41.0';");
+    expect(tools).toContain("version: '1.42.0'");
+    expect(metadata).toContain("const MCP_VERSION = '1.42.0';");
   });
 
   it("todo inputSchema novo fecha com additionalProperties:false", () => {
