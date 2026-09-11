@@ -20,7 +20,9 @@ import {
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
 
-const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
+// O modelo forte escreve; o mini fica de reserva. O custo por mensagem com o
+// gpt-4.1 fica na casa de centavos (ver a estimativa na Central).
+const PRIMARY_MODEL_CHAIN = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
 
 // O que cada ritual precisa entregar. É a diferença entre um recado semanal
 // e um relatório: cada um tem um trabalho distinto na relação com o cliente.
@@ -65,18 +67,26 @@ REGRAS ABSOLUTAS:
 7. Quando houver material esperando o aval dele, esse é o ponto mais importante da mensagem, e ele é apresentado como algo PRONTO que só precisa do sinal verde.
 8. Português claro do Brasil. SEM TRAVESSÃO (use vírgula ou ponto). Sem jargão ("sinergia", "otimização", "estratégia robusta", "engajamento"). Sem elogio vazio ("grande semana!", "estamos animados").
 9. Trate por "você" e chame a agência de "a gente".
-10. Tamanho: 3 a 5 parágrafos curtos, entre 8 e 14 frases no total. Sem listas, sem títulos, sem markdown, sem emoji.
+10. FORMATO DE WHATSAPP, pronto para colar no grupo: blocos curtos separados por linha em branco, cada bloco com um título curto em negrito de WhatsApp (asteriscos: *Onde estamos*) e de 1 a 4 linhas embaixo; use "•" para listar quando houver mais de um item. Sem markdown de cabeçalho (#), sem emoji, sem tabela. Entre 10 e 18 linhas de texto no total. A pessoa lê no celular em 40 segundos e entende tudo.
 11. O título tem no máximo 60 caracteres e nomeia o movimento da semana daquele cliente. Nunca genérico.
+12. NÚMEROS E VENDAS: quando os fatos trouxerem números (seguidores, alcance, leads, gasto, vendas, receita), eles entram em um bloco próprio, com o número exato e a comparação que os fatos deram, seguido de UMA frase do que faremos por causa disso. Venda registrada é o resultado mais importante da mensagem: nunca fica de fora.
+13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
+14. FRENTES SEPARADAS: conteúdo (Instagram, posts, artes) e tráfego pago (campanhas, leads, verba) são frentes diferentes; cada uma tem seu próprio bloco ou frase, e nunca repita a mesma ação nas duas.
 
-ESTRUTURA (sem escrever os rótulos):
-Parágrafo 1: o que a gente construiu ou avançou, de concreto.
-Parágrafo 2: por que isso foi feito e a que objetivo do negócio serve.
-Parágrafo 3: o que está em andamento nas outras frentes contratadas.
-Parágrafo 4: o próximo passo, e o que se destrava com a participação dele, se houver.
+ESTRUTURA (com os títulos em negrito de WhatsApp, nesta ordem, pulando o bloco que não tiver fato):
+Linha de abertura: cumprimento com o nome e uma frase que diga o momento (segunda abre a semana, quarta mostra o meio, sexta fecha).
+*Onde estamos*: o retrato do negócio hoje, vindo do dossiê, em 1 a 3 linhas.
+*O que avançou*: o que a gente construiu ou entregou, com nome e com o porquê (que objetivo serve).
+*O que os números dizem*: só se houver número; número exato + o que faremos por causa dele.
+*O que vem agora*: o próximo passo em cada frente contratada, ligado ao foco da semana.
+*Precisamos de você*: só se houver algo que depende dele, escrito pelo ganho, com prazo.
+Linha final: uma frase de fechamento e "Tudo detalhado no painel: aceleriq.online".
 
 ANTES DE RESPONDER, releia o texto e remova qualquer frase que fale do que não existe, não foi feito ou não aconteceu. Se sobrar pouca coisa, aprofunde o que foi construído em vez de preencher com ausências.
 
-Responda SOMENTE com JSON válido: {"title":"...","body":"..."}`;
+ALERTAS INTERNOS (nunca vão para o cliente): liste em "alertas" o que você precisou e NÃO encontrou nos fatos, ou afirmou com pouca firmeza (ex.: "sem registro do estado das campanhas", "dossiê com mais de 20 dias", "nenhum número de Instagram", "objetivo do cliente não consta"). Máximo 4, frases curtas, para a equipe completar o painel. Se não houver, lista vazia.
+
+Responda SOMENTE com JSON válido: {"title":"...","body":"...","alertas":["..."]}`;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -85,7 +95,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function extractJson(raw: string): { title?: string; body?: string } {
+function extractJson(raw: string): { title?: string; body?: string; alertas?: unknown } {
   const trimmed = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
@@ -112,7 +122,9 @@ Deno.serve(async (req) => {
     if (!isStaff) return jsonResponse({ error: "Somente equipe." }, 403);
 
     const body = await req.json().catch(() => ({}));
-    const ritual = String(body?.ritual || "");
+    // A Central manda o ritual; a gaveta de Perfis manda o momento do grupo.
+    const MOMENTO: Record<string, string> = { abertura: "rota_semana", meio: "meio_semana", fechamento: "prova_movimento" };
+    const ritual = MOMENTO[String(body?.moment || "")] || String(body?.ritual || "");
     const facts = String(body?.facts || "").slice(0, 12000);
     const clientName = String(body?.client_name || "Cliente").slice(0, 120);
     if (!RITUAL_BRIEF[ritual] || !facts) {
@@ -135,7 +147,7 @@ Deno.serve(async (req) => {
             `FATOS REAIS DESTA SEMANA (do painel):\n${facts}`,
         },
       ],
-      temperature: 0.6,
+      temperature: 0.5,
     });
 
     if (!response.ok) {
@@ -148,8 +160,10 @@ Deno.serve(async (req) => {
     const title = String(parsed?.title || "").trim();
     const text = String(parsed?.body || "").trim();
     if (!text) return jsonResponse({ title: null, body: null, source: "fallback" });
+    const alertas = Array.isArray(parsed?.alertas) ? (parsed.alertas as unknown[]).map((a) => String(a).slice(0, 160)).filter(Boolean).slice(0, 4) : [];
+    const usage = completion?.usage ?? null;
 
-    return jsonResponse({ title: title || null, body: text, source: "ai" });
+    return jsonResponse({ title: title || null, body: text, alertas, source: "ai", model: provider.model, usage });
   } catch (error) {
     // Falha aqui nunca pode travar o ritual: o painel usa o texto de reserva.
     console.warn(`[ritual] falha: ${error instanceof Error ? error.message : String(error)}`);

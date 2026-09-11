@@ -155,6 +155,9 @@ export default function AdminExperience() {
   const [aiLoading, setAiLoading] = useState(false);
   /** Prévia aberta da mensagem do grupo (ver antes de copiar). */
   const [groupMsgPreview, setGroupMsgPreview] = useState<string | null>(null);
+  /** Mensagem do momento escrita pela IA, por cliente+momento (nesta sessão). */
+  const [aiMoment, setAiMoment] = useState<Record<string, { title: string | null; body: string; alertas: string[]; model: string | null }>>({});
+  const [aiMomentLoading, setAiMomentLoading] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
@@ -1468,6 +1471,37 @@ export default function AdminExperience() {
       .join("\n");
   };
 
+  /**
+   * Os fatos completos de um cliente (painel + historia + segundo cerebro),
+   * os mesmos que o gerador de rituais usa. Uma funcao so, para a mensagem
+   * do momento e o rascunho do ritual nunca lerem contextos diferentes.
+   */
+  const fatosCompletos = async (c: any): Promise<string> => {
+    const clientName = c.company_name || c.full_name;
+    const [historia, cerebro] = await Promise.all([
+      readMemory(c.id, { limit: 12, kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any }).then(memoryAsContext).catch(() => ""),
+      supabase.functions.invoke("brain-client-context", { body: { client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
+    ]);
+    return [
+      collectFacts(c),
+      historia ? `HISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}` : "",
+      cerebro ? `CONTEXTO DO SEGUNDO CÉREBRO (anotações fora do painel; trate como verdade sobre o cliente, mas nunca cite a fonte para ele):\n${cerebro}` : "",
+    ].filter(Boolean).join("\n\n");
+  };
+
+  const escreverMomentoComIA = async (client: any, moment: "abertura" | "meio" | "fechamento") => {
+    const chave = `${client.id}:${moment}`;
+    if (aiMomentLoading) return;
+    setAiMomentLoading(chave);
+    try {
+      const fatos = await fatosCompletos(client);
+      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: client.company_name || client.full_name, facts: fatos } });
+      if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto do painel continua disponível."); return; }
+      setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: Array.isArray(data.alertas) ? data.alertas : [], model: data.model ?? null } }));
+      setGroupMsgPreview(moment);
+    } finally { setAiMomentLoading(null); }
+  };
+
   const hasRecentDraft = (clientId: string, ritual: string) =>
     (reports || []).some((r: any) => {
       if (r.client_id !== clientId) return false;
@@ -1491,9 +1525,12 @@ export default function AdminExperience() {
       (projects || []).some((p: any) => p.client_id === c.id && !p.deleted_at)
     );
     const skippedNoProject = targets.length - withProject.length;
-    const alvos = withProject.filter((c: any) => !hasRecentDraft(c.id, genRitual));
+    // Gerar e SEMPRE reler o painel agora: rascunho recente nao barra mais
+    // (era o "nao atualiza"). O rascunho antigo do mesmo ritual sai da fila
+    // quando o novo e criado.
+    const alvos = withProject;
     if (alvos.length === 0 && skippedNoProject === 0) {
-      toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
+      toast.info("Nenhum cliente elegível.");
       return;
     }
 
@@ -1539,7 +1576,7 @@ export default function AdminExperience() {
           if (data?.body) {
             draft.summary = data.body;
             if (data.title) draft.title = String(data.title).slice(0, 80);
-            draft.metrics = { ...(draft.metrics || {}), written_by: "ai" };
+            draft.metrics = { ...(draft.metrics || {}), written_by: "ai", model: data.model || null, alertas: Array.isArray(data.alertas) ? data.alertas : [], substitui_recente: hasRecentDraft(c.id, genRitual) };
           }
         } catch {
           /* sem IA agora: segue com o texto de reserva */
@@ -1551,10 +1588,7 @@ export default function AdminExperience() {
     if (skippedNoProject > 0) {
       toast.info(`${skippedNoProject} cliente(s) sem projeto cadastrado ficaram fora. Crie um projeto para eles entrarem nos rituais.`);
     }
-    if (previews.length === 0) {
-      if (skippedNoProject === 0) toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
-      return;
-    }
+    if (previews.length === 0) return;
     setGenPreviews(previews);
   };
 
@@ -2313,6 +2347,9 @@ export default function AdminExperience() {
                         { moment: "fechamento" as const, label: "Fechamento (sexta)" },
                       ].map((m) => {
                         const isPreviewOpen = groupMsgPreview === m.moment;
+                        const chaveIA = `${client.id}:${m.moment}`;
+                        const escrita = aiMoment[chaveIA] ?? null;
+                        const textoParaCopiar = escrita ? escrita.body : buildGroupMessage(client, m.moment);
                         return (
                         <div key={m.moment} className="rounded-lg border border-border bg-secondary/30 overflow-hidden">
                           <div className="w-full flex items-center justify-between px-3.5 py-2.5">
@@ -2327,10 +2364,19 @@ export default function AdminExperience() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => copyText(buildGroupMessage(client, m.moment), `Mensagem de ${m.label.toLowerCase()} copiada!`)}
+                                onClick={() => void escreverMomentoComIA(client, m.moment)}
+                                disabled={aiMomentLoading !== null}
+                                className="text-[10px] text-primary flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Escreve esta mensagem com a IA a partir do dossiê, da esteira, dos números e das vendas de agora"
+                              >
+                                <Sparkles className={`w-3 h-3 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} /> {aiMomentLoading === chaveIA ? "Escrevendo…" : escrita ? "Reescrever com IA" : "Escrever com IA"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyText(textoParaCopiar, `Mensagem de ${m.label.toLowerCase()} copiada!`)}
                                 className="text-[10px] text-primary flex items-center gap-1 cursor-pointer"
                               >
-                                <Send className="w-3 h-3" /> Copiar
+                                <Send className="w-3 h-3" /> Copiar{escrita ? " (IA)" : ""}
                               </button>
                             </span>
                           </div>
@@ -2338,9 +2384,24 @@ export default function AdminExperience() {
                               hora com os dados reais e a lógica da semana. */}
                           {isPreviewOpen && (
                             <div className="border-t border-border bg-background/60 px-3.5 py-3">
-                              <p className="whitespace-pre-line text-[11.5px] leading-relaxed text-muted-foreground">
-                                {buildGroupMessage(client, m.moment)}
+                              {escrita && (
+                                <p className="mb-1.5 text-[10px] text-primary">Escrita pela IA{escrita.model ? ` (${escrita.model})` : ""} com o dossiê, a esteira, os números e as vendas de agora. O texto do painel fica abaixo como reserva.</p>
+                              )}
+                              {escrita && escrita.alertas.length > 0 && (
+                                <div className="mb-2 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
+                                  <p className="text-[9px] font-semibold uppercase tracking-wider text-warning">O que a IA não encontrou (só para a equipe)</p>
+                                  <ul className="mt-0.5 space-y-0.5">{escrita.alertas.map((a, i) => <li key={i} className="text-[10.5px] leading-snug text-foreground/85">• {a}</li>)}</ul>
+                                </div>
+                              )}
+                              <p className="whitespace-pre-line text-[11.5px] leading-relaxed text-foreground">
+                                {escrita ? escrita.body : buildGroupMessage(client, m.moment)}
                               </p>
+                              {escrita && (
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-[10px] text-muted-foreground">Ver o texto do painel (reserva)</summary>
+                                  <p className="mt-1 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{buildGroupMessage(client, m.moment)}</p>
+                                </details>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => copyText(buildGroupMessage(client, m.moment), "Mensagem copiada! É só colar no WhatsApp.")}
@@ -2663,8 +2724,14 @@ export default function AdminExperience() {
                       <div className="px-5 pb-4 space-y-3 bg-secondary/20">
                         {meta && (
                           <p className="text-[10px] text-muted-foreground pt-2">
-                            Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente.
+                            Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente{(r.metrics as any)?.model ? ` pela IA (${(r.metrics as any).model})` : ""}.
                           </p>
+                        )}
+                        {Array.isArray((r.metrics as any)?.alertas) && (r.metrics as any).alertas.length > 0 && (
+                          <div className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
+                            <p className="text-[9px] font-semibold uppercase tracking-wider text-warning">O que a IA não encontrou (complete o painel ou o dossiê)</p>
+                            <ul className="mt-0.5 space-y-0.5">{(r.metrics as any).alertas.map((a: string, i: number) => <li key={i} className="text-[10.5px] leading-snug text-foreground/85">• {a}</li>)}</ul>
+                          </div>
                         )}
                         <div>
                           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Mensagem ao cliente (resultado explicado)</label>
@@ -2938,8 +3005,14 @@ export default function AdminExperience() {
               </p>
               {genPreviews.map((preview, index) => (
                 <div key={preview.clientId} className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
-                  <p className="text-[12px] font-medium text-foreground">{preview.clientName}</p>
-                  <p className="text-[11px] font-medium text-primary">{preview.draft.title}</p>
+                  <p className="text-[12px] font-medium text-foreground">{preview.clientName}{preview.draft.metrics?.substitui_recente ? <span className="ml-1.5 text-[10px] text-muted-foreground">substitui o rascunho recente</span> : null}</p>
+                  <p className="text-[11px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[9px] text-muted-foreground">IA · {preview.draft.metrics?.model || "modelo"}</span> : <span className="ml-1.5 text-[9px] text-warning">texto de reserva (IA não respondeu)</span>}</p>
+                  {Array.isArray(preview.draft.metrics?.alertas) && preview.draft.metrics.alertas.length > 0 && (
+                    <div className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
+                      <p className="text-[9px] font-semibold uppercase tracking-wider text-warning">O que a IA não encontrou (só para a equipe)</p>
+                      <ul className="mt-0.5 space-y-0.5">{preview.draft.metrics.alertas.map((a: string, i: number) => <li key={i} className="text-[10.5px] leading-snug text-foreground/85">• {a}</li>)}</ul>
+                    </div>
+                  )}
                   <div>
                     <label className="text-[9px] uppercase tracking-wider text-muted-foreground">Mensagem</label>
                     <textarea

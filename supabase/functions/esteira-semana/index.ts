@@ -15,7 +15,7 @@ import {
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
 
-const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
+const PRIMARY_MODEL_CHAIN = ["gpt-4.1", "gpt-4o-mini"];
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -33,8 +33,11 @@ function extractJson(text: string): Record<string, unknown> | null {
 const SYSTEM_PROMPT = `Voce e o cerebro operacional de uma agencia de marketing (Aceleriq). Recebe o DOSSIE atual de um cliente (onde ele esta, o que foi combinado), a HISTORIA recente (o que aconteceu nos ultimos 14 dias), e os FATOS do painel (posts, tarefas, marcos, rituais). Responda SOMENTE um JSON valido, em portugues do Brasil, sem travessao (use virgula ou ponto), com este formato:
 {"foco":"uma frase com o foco desta semana para ESTE cliente",
  "feito":["o que foi realmente feito nesta semana, so com base em evidencia da historia ou dos fatos"],
- "proximos":[{"titulo":"nome curto do item","passo":"a acao concreta","motivo":"por que, citando o dossie ou o fato"}]}
+ "proximos":[{"titulo":"nome curto do item","passo":"a acao concreta","motivo":"por que, citando o dossie ou o fato","frente":"social|trafego|geral"}],
+ "lacunas":["o que o dossie ou o painel NAO dizem e a esteira precisaria saber para dirigir melhor esta semana"]}
 Regras duras:
+- FRENTES SEPARADAS: "social" e conteudo (posts, artes, Instagram, alcance, seguidores); "trafego" e anuncio pago (campanhas, leads, gasto, vendas, verba); "geral" e o que nao pertence a nenhuma (entrada, decisao, reuniao). Cada proximo tem UMA frente. Nunca escreva o mesmo passo para as duas frentes, e um passo de trafego nasce de numero de anuncio ou venda, nunca de post. Se o cliente NAO contratou trafego, nao crie passo de trafego; o mesmo vale para social.
+- LACUNAS: liste (ate 4, frases curtas) o que faltou para decidir com firmeza: dossie sem objetivo, sem numero de anuncio, campanha sem registro, venda sem valor. E para a equipe completar, nao para o cliente.
 - Cada item de "proximos" precisa nascer do dossie ou de um fato. Se nao ha base, nao invente. Pode devolver lista vazia.
 - Nunca repita um item que ja esta em PENDENCIAS DO PAINEL (essas ja aparecem sozinhas).
 - Nunca use frases genericas como "criar conteudo da semana", "postar nas redes", "acompanhar metricas". Diga QUAL conteudo, QUAL post, QUAL campanha, QUAL decisao.
@@ -85,7 +88,7 @@ Deno.serve(async (req) => {
       const c = cache?.[0];
       if (c?.metadata && typeof c.metadata === "object") {
         const m = c.metadata as Record<string, unknown>;
-        return jsonResponse({ foco: m.foco ?? "", feito: m.feito ?? [], proximos: m.proximos ?? [], source: m.source ?? "cache", cached: true, generated_at: c.created_at });
+        return jsonResponse({ foco: m.foco ?? "", feito: m.feito ?? [], proximos: m.proximos ?? [], lacunas: m.lacunas ?? [], source: m.source ?? "cache", cached: true, generated_at: c.created_at });
       }
     }
 
@@ -270,7 +273,7 @@ Deno.serve(async (req) => {
       `RITUAIS JA FEITOS NESTA SEMANA: ${rit}`,
     ].join("\n\n");
 
-    let plano: { foco: string; feito: string[]; proximos: Array<{ titulo: string; passo: string; motivo: string }> } | null = null;
+    let plano: { foco: string; feito: string[]; proximos: Array<{ titulo: string; passo: string; motivo: string; frente: string }>; lacunas: string[] } | null = null;
     let source = "fallback";
     try {
       const providers = resolveAiProviderChain({ primaryModels: PRIMARY_MODEL_CHAIN, lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN });
@@ -286,10 +289,19 @@ Deno.serve(async (req) => {
         const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
         if (parsed) {
           const lim = (v: unknown, n: number) => (Array.isArray(v) ? v.slice(0, n) : []);
+          const frenteDe = (v: unknown): string => (v === "social" || v === "trafego" ? v : "geral");
+          const temTrafego = /trafego/.test(servicos);
+          const temSocial = /social/.test(servicos);
           plano = {
             foco: String(parsed.foco ?? "").slice(0, 240),
             feito: lim(parsed.feito, 6).map((x) => String(x).slice(0, 200)),
-            proximos: lim(parsed.proximos, 6).map((x: any) => ({ titulo: String(x?.titulo ?? "").slice(0, 80), passo: String(x?.passo ?? "").slice(0, 200), motivo: String(x?.motivo ?? "").slice(0, 200) })).filter((x: any) => x.titulo && x.passo),
+            proximos: lim(parsed.proximos, 8)
+              .map((x: any) => ({ titulo: String(x?.titulo ?? "").slice(0, 80), passo: String(x?.passo ?? "").slice(0, 200), motivo: String(x?.motivo ?? "").slice(0, 200), frente: frenteDe(x?.frente) }))
+              .filter((x: any) => x.titulo && x.passo)
+              // Frente nao contratada nao recebe passo, mesmo que o modelo invente.
+              .filter((x: any) => !(x.frente === "trafego" && !temTrafego) && !(x.frente === "social" && !temSocial))
+              .slice(0, 6),
+            lacunas: lim(parsed.lacunas, 4).map((x) => String(x).slice(0, 160)),
           };
           source = "ai";
         }
@@ -304,6 +316,7 @@ Deno.serve(async (req) => {
         foco: "",
         feito: [...postsLinhas.filter((l) => l.startsWith("- PUBLICADO")).map((l) => l.replace("- PUBLICADO nesta semana: ", "Publicado: ")), ...tarefas.filter((l) => l.startsWith("- FEITA")).map((l) => l.replace("- FEITA nesta semana: ", "Concluida: "))].slice(0, 6),
         proximos: [],
+        lacunas: ["A IA nao respondeu: plano so com o que o painel prova sozinho."],
       };
     }
 
@@ -314,7 +327,7 @@ Deno.serve(async (req) => {
       title: `Plano da semana ${weekStart}`,
       content: [plano.foco, ...plano.proximos.map((p) => `- ${p.titulo}: ${p.passo}`)].filter(Boolean).join("\n").slice(0, 4000),
       source: "esteira",
-      metadata: { week_start: weekStart, foco: plano.foco, feito: plano.feito, proximos: plano.proximos, source },
+      metadata: { week_start: weekStart, foco: plano.foco, feito: plano.feito, proximos: plano.proximos, lacunas: plano.lacunas, source },
       created_by: userData.user.id,
     });
 

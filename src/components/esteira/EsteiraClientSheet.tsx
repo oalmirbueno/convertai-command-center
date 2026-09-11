@@ -163,7 +163,8 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
     const est = cliente.fatos.estados[it.key];
     return est ? { ...it, estado: { status: est.status, note: est.note, doneAt: est.doneAt } } : it;
   });
-  const planoAbertos = itensDoPlano.filter((it) => !it.estado);
+  // Cada aba ve os passos da sua frente (e os gerais); trafego nunca herda social.
+  const planoAbertos = itensDoPlano.filter((it) => !it.estado && (it.frente === "geral" || it.frente === frente));
   const planoFeitos = itensDoPlano.filter((it) => it.estado?.status === "done");
 
   const alternarRitual = async (key: "segunda" | "quarta" | "sexta", feito: boolean) => {
@@ -240,6 +241,14 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
                   <div className="space-y-1.5">
                     {planoAbertos.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={canWrite} onMudou={onMudou} />)}
                   </div>
+                </div>
+              )}
+              {plano.lacunas.length > 0 && (
+                <div className="mt-2 rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">
+                  <p className="text-[10.5px] font-semibold uppercase tracking-wider text-warning">O que a esteira não encontrou</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {plano.lacunas.map((l, i) => <li key={i} className="text-[11.5px] leading-snug text-foreground/85">• {l}</li>)}
+                  </ul>
                 </div>
               )}
               {plano.proximos.length === 0 && plano.feito.length === 0 && !plano.foco && (

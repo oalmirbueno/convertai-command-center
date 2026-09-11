@@ -130,7 +130,9 @@ export async function atualizarAvancosDoDossie(clientId: string): Promise<void> 
 export interface PlanoDaSemana {
   foco: string;
   feito: string[];
-  proximos: Array<{ titulo: string; passo: string; motivo: string }>;
+  proximos: Array<{ titulo: string; passo: string; motivo: string; frente?: "social" | "trafego" | "geral" }>;
+  /** O que o dossie ou o painel nao dizem e a esteira precisaria (para a equipe). */
+  lacunas: string[];
   source: string;
   cached: boolean;
   generated_at?: string;
@@ -141,13 +143,15 @@ export async function lerPlanoDaSemana(clientId: string, weekStart: string, refr
   const { data, error } = await supabase.functions.invoke("esteira-semana", { body: { client_id: clientId, week_start: weekStart, refresh } });
   if (error || !data || (data as any).error) return null;
   const d = data as any;
-  return { foco: String(d.foco ?? ""), feito: Array.isArray(d.feito) ? d.feito : [], proximos: Array.isArray(d.proximos) ? d.proximos : [], source: String(d.source ?? ""), cached: Boolean(d.cached), generated_at: d.generated_at };
+  return { foco: String(d.foco ?? ""), feito: Array.isArray(d.feito) ? d.feito : [], proximos: Array.isArray(d.proximos) ? d.proximos : [], lacunas: Array.isArray(d.lacunas) ? d.lacunas.map((x: unknown) => String(x)) : [], source: String(d.source ?? ""), cached: Boolean(d.cached), generated_at: d.generated_at };
 }
 
 /** Item da esteira nascido do plano do dossie (chave estavel pelo titulo). */
-export function itemDoPlano(clientId: string, p: { titulo: string; passo: string; motivo: string }): EsteiraItem {
+export function itemDoPlano(clientId: string, p: { titulo: string; passo: string; motivo: string; frente?: "social" | "trafego" | "geral" }): EsteiraItem {
   const slug = p.titulo.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48);
-  return { key: `dossie:${slug}`, clientId, frente: "geral", fonte: "checklist", titulo: p.titulo, passo: p.passo, gravidade: "normal", fatos: p.motivo ? [p.motivo] : [] };
+  // A frente vem do plano: passo de trafego nao aparece na aba Social, e vice-versa.
+  const frente = p.frente === "social" || p.frente === "trafego" ? p.frente : "geral";
+  return { key: `dossie:${slug}`, clientId, frente, fonte: "checklist", titulo: p.titulo, passo: p.passo, gravidade: "normal", fatos: p.motivo ? [p.motivo] : [] };
 }
 
 /** Oculta ou volta a mostrar o cliente numa frente. `ateQuando` null = sempre. */
