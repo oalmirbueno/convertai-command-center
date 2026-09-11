@@ -41,7 +41,7 @@ import {
   type FileKindId,
   type FolderId,
 } from "@/lib/fileTaxonomy";
-import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl, fileExtension, mensagemDaFuncao } from "@/lib/fileUrls";
 import {
   releaseFileToClient,
   requestFileAgencyReview,
@@ -124,23 +124,34 @@ function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: s
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    transform: kind === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    transform: kind === "image" ? { width: 640, quality: 72, resize: "contain" } : null,
     expiresIn: 3600,
   });
+  // A capa mostra a peca INTEIRA: nada de zoom nem corte. Imagem e video
+  // entram encaixados num fundo neutro; o resto ganha o icone do tipo e a
+  // extensao, para o olho achar PDF, planilha ou documento de longe.
+  const ext = (fileExtension(file.file_name, file.file_url, file.extension) || "").toUpperCase().slice(0, 5);
+  const compacto = /w-(?:8|9|10|12|14|16|20)/.test(className);
 
   return (
-    <div className={`${className} rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative`}>
+    <div className={`${className} rounded-lg bg-secondary/70 border border-border overflow-hidden flex items-center justify-center shrink-0 relative`}>
       {url && kind === "image" ? (
-        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className={`h-full w-full object-contain ${compacto ? "" : "p-2"}`} />
       ) : url && kind === "video" ? (
         <>
-          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-            <Film className="w-5 h-5 text-primary-foreground drop-shadow" />
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="h-full w-full bg-black object-contain" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="rounded-full bg-black/45 p-2"><Film className="w-5 h-5 text-white drop-shadow" /></span>
           </div>
         </>
       ) : (
-        <Icon className="w-7 h-7 text-muted-foreground" />
+        <div className="flex flex-col items-center justify-center gap-1.5">
+          <Icon className={`${compacto ? "w-6 h-6" : "w-9 h-9"} text-muted-foreground`} />
+          {!compacto && ext && <span className="rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-muted-foreground">{ext}</span>}
+        </div>
+      )}
+      {!compacto && ext && (kind === "image" || kind === "video") && (
+        <span className="absolute bottom-1.5 right-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-white">{ext}</span>
       )}
     </div>
   );
@@ -1076,7 +1087,7 @@ export default function AdminFiles() {
       const { data, error } = await supabase.functions.invoke("delete-file-assets", {
         body: { target: "files", fileIds: [confirmDeleteFile.id] },
       });
-      if (error) throw error;
+      if (error) throw new Error(await mensagemDaFuncao(error, "Não foi possível excluir agora."));
       if ((data as any)?.error) throw new Error((data as any).error);
       void invalidateFileViews();
       if (previewFile?.id === confirmDeleteFile.id) setPreviewFile(null);

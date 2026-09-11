@@ -63,10 +63,10 @@ function ApprovalThumb({ file }: { file: any }) {
   });
 
   if (kind === "image" && url) {
-    return <img src={url} alt={file.file_name} className="w-full h-full object-cover" loading="lazy" />;
+    return <img src={url} alt={file.file_name} className="w-full h-full object-contain" loading="lazy" />;
   }
   if (kind === "video" && url) {
-    return <video src={`${url}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" />;
+    return <video src={`${url}#t=0.1`} className="w-full h-full bg-black object-contain" muted playsInline preload="metadata" />;
   }
   const Icon = kind === "video" ? Film : kind === "image" ? FileImage : FileText;
   return <Icon className="w-12 h-12 text-muted-foreground/30" />;

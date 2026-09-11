@@ -37,7 +37,7 @@ import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
-import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -1304,20 +1304,20 @@ export default function Workspace() {
           const { data, error } = await supabase.functions.invoke("delete-file-assets", {
             body: { target: "files", fileIds: parentIds },
           });
-          if (error) throw error;
+          if (error) throw new Error(await mensagemDaFuncao(error, "Não foi possível excluir agora."));
           if ((data as any)?.error) throw new Error((data as any).error);
         }
       } else if (n.__virtual && n.kind === "file" && n.__file_id) {
         const { data, error } = await supabase.functions.invoke("delete-file-assets", {
           body: { target: "files", fileIds: [n.__file_id] },
         });
-        if (error) throw error;
+        if (error) throw new Error(await mensagemDaFuncao(error, "Não foi possível excluir agora."));
         if ((data as any)?.error) throw new Error((data as any).error);
       } else {
         const { data, error } = await supabase.functions.invoke("delete-file-assets", {
           body: { target: "workspace_node", nodeId: n.id },
         });
-        if (error) throw error;
+        if (error) throw new Error(await mensagemDaFuncao(error, "Não foi possível excluir agora."));
         if ((data as any)?.error) throw new Error((data as any).error);
       }
       setSelected(null); setConfirmDelete(null);

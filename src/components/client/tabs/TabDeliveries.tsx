@@ -121,11 +121,11 @@ function DeliveryThumb({ file }: { file: any }) {
     expiresIn: 3600,
   });
 
-  if (url && kind === "image") return <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />;
+  if (url && kind === "image") return <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-contain" />;
   if (url && kind === "video") {
     return (
       <>
-        <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+        <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full bg-black object-contain" />
         <div className="absolute inset-0 flex items-center justify-center bg-background/30">
           <Film className="w-4 h-4 text-foreground" />
         </div>

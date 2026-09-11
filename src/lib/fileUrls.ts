@@ -196,3 +196,26 @@ export function isCarouselAssetGroup(parent?: CarouselLikeFile | null, children:
   ].filter(Boolean).join(" ").toLowerCase();
   return /carrossel|carousel|slides?|sequ[eê]ncia|feed/.test(context) || children.length >= 1;
 }
+
+/**
+ * A mensagem real de uma Edge Function que respondeu erro. O cliente do
+ * Supabase devolve so "Edge Function returned a non-2xx status code"; o
+ * motivo (permissao, arquivo em uso, guarda do banco) vem no corpo.
+ */
+export async function mensagemDaFuncao(error: unknown, padrao = "Tente novamente."): Promise<string> {
+  const e = error as { message?: string; context?: { json?: () => Promise<unknown>; text?: () => Promise<string> } } | null;
+  try {
+    const ctx = e?.context;
+    if (ctx?.json) {
+      const body = (await ctx.json()) as { error?: unknown; message?: unknown } | null;
+      const m = body?.error ?? body?.message;
+      if (typeof m === "string" && m.trim()) return m;
+    } else if (ctx?.text) {
+      const t = await ctx.text();
+      if (t && t.trim() && t.length < 300) return t;
+    }
+  } catch { /* corpo ilegivel: cai na mensagem generica */ }
+  const msg = e?.message;
+  if (typeof msg === "string" && msg && !/non-2xx/i.test(msg)) return msg;
+  return padrao;
+}

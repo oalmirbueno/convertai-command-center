@@ -118,7 +118,7 @@ export async function lerFatosDaEsteira(
   // Aprovacao da arte vive em files; buscamos so os arquivos que sao arte de post.
   const fileIds = Array.from(new Set(((posts.data ?? []) as Array<{ primary_file_id?: string | null }>).map((p) => p.primary_file_id).filter((x): x is string => Boolean(x))));
   const arquivos = fileIds.length
-    ? await db.from("files").select("id, approval_status, agency_approval_status, approval_requested_at").in("id", fileIds)
+    ? await db.from("staff_files_secure").select("id, approval_status, agency_approval_status, approval_requested_at").in("id", fileIds)
     : { data: [] };
   const arquivoPorId = new Map<string, { approval_status?: string | null; agency_approval_status?: string | null; approval_requested_at?: string | null }>();
   for (const f of (arquivos.data ?? []) as Array<{ id: string }>) arquivoPorId.set(f.id, f as any);
