@@ -45,7 +45,18 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const bearerMatch = req.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i)
   const callerToken = bearerMatch?.[1]
-  if (!callerToken) {
+
+  // Internal cron/server path. On projects with rotated signing keys the vault
+  // service-role JWT is a valid gateway JWT but is not string-equal to the
+  // runtime SUPABASE_SERVICE_ROLE_KEY and resolves to no user, so the checks
+  // below would reject it. A shared x-cron-secret authorizes those internal
+  // callers without weakening the staff path for browser callers.
+  const cronSecret = Deno.env.get('CRON_SECRET')?.trim()
+  const internalCron = Boolean(
+    cronSecret && req.headers.get('x-cron-secret')?.trim() === cronSecret,
+  )
+
+  if (!callerToken && !internalCron) {
     return new Response(
       JSON.stringify({ error: 'Unauthorized' }),
       {
@@ -55,7 +66,7 @@ Deno.serve(async (req) => {
     )
   }
 
-  if (callerToken !== supabaseServiceKey) {
+  if (!internalCron && callerToken !== supabaseServiceKey) {
     const { data: callerData, error: callerError } = await supabase.auth.getUser(callerToken)
     if (callerError || !callerData.user) {
       return new Response(
