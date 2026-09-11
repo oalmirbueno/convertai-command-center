@@ -70,9 +70,12 @@ export async function marcarItem(input: {
     await marcarJaTem(item.clientId, item.key.replace(/^onb:/, ""), true);
   }
   // Item de checklist feito marca o proprio checklist tambem.
-  if (status === "done" && item.fonte === "checklist") {
+  if (status === "done" && item.fonte === "checklist" && item.key.startsWith("check:")) {
     await concluirItemDeChecklist(item.key);
   }
+  // Todo feito e progressao: o dossie reescreve os avancos na hora, para a
+  // Central e a proxima leitura da IA partirem do ponto novo.
+  if (status === "done") await atualizarAvancosDoDossie(item.clientId);
   return true;
 }
 
@@ -121,7 +124,7 @@ export async function marcarJaTem(clientId: string, passo: string, tem: boolean)
 /** Pede ao banco para reescrever a secao automatica de avancos do dossie.
     Best-effort: se a funcao nao existir ou falhar, nada quebra. */
 export async function atualizarAvancosDoDossie(clientId: string): Promise<void> {
-  try { await (supabase as any).rpc("dossie_registrar_avancos", { p_client_id: clientId }); } catch { /* silencioso */ }
+  try { await (supabase as any).rpc("dossie_registrar_avancos", { _client_id: clientId }); } catch { /* silencioso */ }
 }
 
 export interface PlanoDaSemana {

@@ -52,9 +52,19 @@ export function useEsteira(weekStart: string, hoje: Date) {
     }).filter((x): x is ClienteDaEsteira => x !== null);
   }, [ativos, fatosQuery.data, hoje, weekStart]);
 
-  const recarregar = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ["esteira-fatos"] });
-  }, [queryClient]);
+  // Recarrega clientes E fatos; devolve quando os fatos novos chegaram, para
+  // o botao poder avisar "atualizado" com verdade.
+  const recarregar = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["clients"] });
+    await queryClient.invalidateQueries({ queryKey: ["esteira-fatos"] });
+    await fatosQuery.refetch();
+  }, [queryClient, fatosQuery]);
 
-  return { clientes: lista, carregando: carregandoClientes || fatosQuery.isLoading, erro: fatosQuery.error, recarregar };
+  return {
+    clientes: lista,
+    carregando: carregandoClientes || fatosQuery.isLoading,
+    atualizando: fatosQuery.isFetching,
+    erro: fatosQuery.error,
+    recarregar,
+  };
 }

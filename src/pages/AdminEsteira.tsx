@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Eye, Megaphone, Package, RefreshCw, Share2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Compass, Eye, Megaphone, Package, RefreshCw, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNow } from "@/hooks/useNow";
 import { usePwaProfile } from "@/hooks/usePwaProfile";
@@ -35,9 +36,19 @@ export default function AdminEsteira() {
   const segunda = useMemo(() => addDays(mondayOf(agora), semanaOffset * 7), [agora, semanaOffset]);
   const weekStart = localIso(segunda);
 
-  const { clientes, carregando, recarregar } = useEsteira(weekStart, agora);
+  const { clientes, carregando, atualizando, recarregar } = useEsteira(weekStart, agora);
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [quemEntraAberto, setQuemEntraAberto] = useState(false);
+  const [comecarAberto, setComecarAberto] = useState(false);
+
+  const atualizar = async () => {
+    try {
+      await recarregar();
+      toast.success("Atualizado com o estado de agora.");
+    } catch {
+      toast.error("Não consegui atualizar agora.");
+    }
+  };
 
   // Altura real do topo fixo, medida: o espaco reservado nunca fica menor
   // nem maior que ele (a faixa de resumo muda de altura em telas estreitas).
@@ -104,11 +115,12 @@ export default function AdminEsteira() {
           </div>
           <div className="flex items-center gap-1">
             <button type="button" onClick={() => setQuemEntraAberto(true)} className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary"><span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />Quem entra</span></button>
-            <button type="button" aria-label="Recarregar" onClick={recarregar} className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary"><RefreshCw className={`h-4 w-4 ${carregando ? "animate-spin" : ""}`} /></button>
+            <button type="button" aria-label="Atualizar" disabled={atualizando} onClick={() => void atualizar()} className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${atualizando ? "animate-spin" : ""}`} /></button>
             <Link to="/dashboard" className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary">Painel</Link>
           </div>
         </div>
         <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">
+          <button type="button" onClick={() => setComecarAberto(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground"><Compass className="h-3 w-3" />Por onde começar</button>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{visiveis.length} cliente{visiveis.length === 1 ? "" : "s"}</span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.urgentes ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"}`}>{resumo.urgentes} urgente{resumo.urgentes === 1 ? "" : "s"}</span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.atencao ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>{resumo.atencao} atenção</span>
@@ -156,7 +168,7 @@ export default function AdminEsteira() {
                   </div>
                 </div>
                 <div className="mt-2.5 space-y-1.5">
-                  {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={recarregar} compacto />)}
+                  {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={() => void recarregar()} compacto />)}
                   {resto > 0 && <p className="px-1 text-[11px] text-muted-foreground">+ {resto} item{resto === 1 ? "" : "s"}</p>}
                 </div>
                 <div className="mt-2.5 flex items-center gap-1.5">
@@ -190,7 +202,54 @@ export default function AdminEsteira() {
         </div>
       </nav>
 
-      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={recarregar} />
+      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={() => void recarregar()} />
+
+      {/* Por onde comecar: a carteira ordenada pela urgencia real, com o
+          motivo de cada posicao. Toca no cliente e abre a gaveta dele. */}
+      <Sheet open={comecarAberto} onOpenChange={setComecarAberto}>
+        <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-lg">
+          <SheetHeader className="text-left"><SheetTitle className="text-base">Por onde começar em {frente === "social" ? "Social" : "Tráfego"}</SheetTitle></SheetHeader>
+          {(() => {
+            const fila = visiveis
+              .map((c) => {
+                const its = itensDaFrente(c.esteira, frente);
+                const urg = its.filter((i) => i.gravidade === "urgente");
+                const att = its.filter((i) => i.gravidade === "atencao");
+                const primeiros = [...urg, ...att, ...its.filter((i) => i.gravidade === "normal")].slice(0, 2);
+                const rituaisFaltando = c.esteira.rituais.filter((r) => !r.feito).length;
+                const peso = urg.length * 100 + att.length * 10 + (c.esteira.onboardingCompleto ? 0 : 5) + rituaisFaltando;
+                return { c, its, urg, att, primeiros, peso, rituaisFaltando };
+              })
+              .filter((x) => x.its.length > 0 || x.rituaisFaltando > 0)
+              .sort((a, b) => b.peso - a.peso || a.c.nome.localeCompare(b.c.nome));
+            if (fila.length === 0) return <p className="mt-4 rounded-xl border border-border bg-secondary/40 px-3 py-4 text-center text-[13px] text-muted-foreground">Tudo em dia nesta frente. Nada para começar.</p>;
+            const top = fila[0];
+            return (
+              <div className="mt-3 space-y-2">
+                <p className="rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-[13px]">
+                  Comece por <span className="font-semibold">{top.c.nome}</span>: {top.urg.length ? `${top.urg.length} urgente${top.urg.length === 1 ? "" : "s"}` : top.att.length ? `${top.att.length} de atenção` : "o que pede a semana"}{top.primeiros[0] ? `. Primeiro: ${top.primeiros[0].titulo}, ${top.primeiros[0].passo.toLowerCase()}.` : "."}
+                </p>
+                {fila.map((x, i) => (
+                  <button key={x.c.id} type="button" onClick={() => { setComecarAberto(false); setDetalheId(x.c.id); }} className="flex w-full items-start gap-2.5 rounded-xl border border-border px-3 py-2.5 text-left hover:border-primary/40">
+                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-bold text-muted-foreground">{i + 1}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-[13px] font-semibold">{x.c.nome}</span>
+                        {x.urg.length > 0 && <span className="rounded-full bg-destructive/15 px-1.5 text-[10px] font-semibold text-destructive">{x.urg.length}</span>}
+                        {x.att.length > 0 && <span className="rounded-full bg-warning/15 px-1.5 text-[10px] font-semibold text-warning">{x.att.length}</span>}
+                        {x.rituaisFaltando > 0 && <span className="text-[10px] text-muted-foreground">rituais {3 - x.rituaisFaltando}/3</span>}
+                      </span>
+                      {x.primeiros.map((it) => (
+                        <span key={it.key} className="block truncate text-[12px] text-muted-foreground">{it.titulo}: {it.passo}</span>
+                      ))}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
 
       <Sheet open={quemEntraAberto} onOpenChange={setQuemEntraAberto}>
         <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto rounded-t-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-lg">
@@ -204,7 +263,7 @@ export default function AdminEsteira() {
                 <div key={c.id} className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
                   <div className="min-w-0"><p className="truncate text-[13px] font-medium">{c.nome}</p><p className="text-[11px] text-muted-foreground">{estado}</p></div>
                   {temServico && canWrite && (
-                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: c.id, area: frente, ocultar: !oculto, ateQuando: null }); if (ok) recarregar(); }} className="rounded-lg border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50">{oculto ? "Incluir" : "Ocultar"}</button>
+                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: c.id, area: frente, ocultar: !oculto, ateQuando: null }); if (ok) void recarregar(); }} className="rounded-lg border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50">{oculto ? "Incluir" : "Ocultar"}</button>
                   )}
                 </div>
               );

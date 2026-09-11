@@ -40,6 +40,8 @@ Regras duras:
 - Nunca use frases genericas como "criar conteudo da semana", "postar nas redes", "acompanhar metricas". Diga QUAL conteudo, QUAL post, QUAL campanha, QUAL decisao.
 - Se o cliente esta em entrada (sem nome, sem logo, sem Instagram), os proximos sao os passos de entrada que o dossie indica, nao operacao de conteudo.
 - "feito" so com evidencia; se nada, lista vazia.
+- LEIA OS NUMEROS: quando houver metricas (alcance, seguidores, interacoes, leads, gasto), o "foco" e pelo menos um dos "proximos" precisam partir deles e apontar direcao concreta (ex.: alcance caiu 30% em duas semanas com 5 posts agendados: revisar formato dos proximos 2 posts; gasto subiu e lead caiu: pausar a campanha X e testar criativo novo). Nunca so descreva o numero; diga o que fazer por causa dele.
+- Progressao: compare o dossie (onde estava) com a historia (o que andou) e diga o proximo degrau, nao o mesmo passo de sempre.
 - Maximo 6 proximos, maximo 6 feitos. Frases curtas.`;
 
 function mondayIso(d: Date): string {
@@ -90,14 +92,60 @@ Deno.serve(async (req) => {
     const semanaFim = new Date(semanaIni.getTime() + 7 * 86_400_000);
     const desde14 = new Date(semanaIni.getTime() - 14 * 86_400_000).toISOString();
 
-    const [perfil, dossie, historia, projetos, posts, rituais] = await Promise.all([
+    const desde28 = new Date(semanaIni.getTime() - 28 * 86_400_000).toISOString().slice(0, 10);
+    const desde14dia = new Date(semanaIni.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const [perfil, dossie, historia, projetos, posts, rituais, metricas, adsDiario] = await Promise.all([
       db.from("profiles").select("full_name, company_name, services_config, created_at").eq("id", clientId).maybeSingle(),
       db.from("client_dossiers").select("summary, content, updated_at").eq("client_id", clientId).eq("is_current", true).order("updated_at", { ascending: false }).limit(1),
       db.from("project_memory").select("kind, title, content, created_at").eq("client_id", clientId).neq("kind", "esteira_plano").gte("created_at", desde14).order("created_at", { ascending: false }).limit(40),
       db.from("projects").select("id, name, tasks(title, status, due_date, updated_at), milestones(title, status, target_date)").eq("client_id", clientId).is("deleted_at", null),
       db.from("editorial_posts").select("title, production_status, primary_file_id, editorial_publications(status, scheduled_at, published_at)").eq("client_id", clientId).is("archived_at", null).order("created_at", { ascending: false }).limit(40),
       db.from("cycle_rituals").select("ritual_key, source").eq("client_id", clientId).eq("week_start", weekStart),
+      db.from("social_metrics_weekly").select("external_account_id, week_start, reach, followers, total_interactions").eq("client_id", clientId).gte("week_start", desde28).order("week_start", { ascending: false }),
+      db.from("ads_campaign_daily").select("campaign_name, day, spend, actions").eq("client_id", clientId).gte("day", desde14dia),
     ]);
+
+    // Numeros: alcance/seguidores/interacoes por semana (por conta) e
+    // gasto/leads 7d contra os 7 anteriores, por campanha.
+    const contarLeads = (actions: unknown): number => {
+      if (!Array.isArray(actions)) return 0;
+      let t = 0;
+      for (const a of actions as Array<{ action_type?: string; value?: unknown }>) {
+        const tipo = String(a?.action_type ?? "").toLowerCase();
+        if (tipo.includes("lead") || tipo.includes("messaging_conversation_started")) t += Number(a.value) || 0;
+      }
+      return t;
+    };
+    const metricasLinhas: string[] = [];
+    const porConta = new Map<string, Array<Record<string, any>>>();
+    for (const m of (metricas.data ?? []) as Array<Record<string, any>>) {
+      const k = String(m.external_account_id ?? "conta");
+      porConta.set(k, [...(porConta.get(k) ?? []), m]);
+    }
+    for (const [conta, lista] of porConta) {
+      const seq = lista.slice(0, 4).map((m) => `${String(m.week_start).slice(5)}: alcance ${m.reach ?? "?"}, seguidores ${m.followers ?? "?"}, interacoes ${m.total_interactions ?? "?"}`);
+      metricasLinhas.push(`- Instagram (${conta.slice(-4)}), da mais recente para a anterior: ${seq.join(" | ")}`);
+    }
+    const agora7 = { spend: 0, leads: 0 };
+    const antes7 = { spend: 0, leads: 0 };
+    const porCampanha = new Map<string, { spend: number; leads: number }>();
+    const corte = new Date(Date.now() - 7 * 86_400_000).getTime();
+    for (const d of (adsDiario.data ?? []) as Array<Record<string, any>>) {
+      const t = new Date(String(d.day)).getTime();
+      const alvo = t >= corte ? agora7 : antes7;
+      alvo.spend += Number(d.spend) || 0;
+      alvo.leads += contarLeads(d.actions);
+      if (t >= corte) {
+        const c = porCampanha.get(String(d.campaign_name)) ?? { spend: 0, leads: 0 };
+        c.spend += Number(d.spend) || 0;
+        c.leads += contarLeads(d.actions);
+        porCampanha.set(String(d.campaign_name), c);
+      }
+    }
+    if (agora7.spend > 0 || antes7.spend > 0) {
+      metricasLinhas.push(`- Anuncios ultimos 7 dias: R$ ${agora7.spend.toFixed(0)} e ${agora7.leads} leads | 7 dias anteriores: R$ ${antes7.spend.toFixed(0)} e ${antes7.leads} leads`);
+      for (const [nome, v] of porCampanha) metricasLinhas.push(`  - ${nome}: R$ ${v.spend.toFixed(0)}, ${v.leads} leads (7d)`);
+    }
 
     const nome = perfil.data?.company_name || perfil.data?.full_name || "Cliente";
     const servicos = Object.entries((perfil.data?.services_config ?? {}) as Record<string, unknown>).filter(([, v]) => v === true).map(([k]) => k).join(", ") || "nao informado";
@@ -142,6 +190,7 @@ Deno.serve(async (req) => {
       `POSTS (o painel ja mostra os elos que faltam; nao repita):\n${postsLinhas.slice(0, 30).join("\n") || "(nenhum)"}`,
       `TAREFAS DO KANBAN (o painel ja mostra atrasadas e desta semana; nao repita):\n${tarefas.slice(0, 40).join("\n") || "(nenhuma)"}`,
       `MARCOS ABERTOS:\n${marcos.join("\n") || "(nenhum)"}`,
+      `NUMEROS (leia e direcione por eles):\n${metricasLinhas.join("\n") || "(sem metricas coletadas ainda)"}`,
       `RITUAIS JA FEITOS NESTA SEMANA: ${rit}`,
     ].join("\n\n");
 
