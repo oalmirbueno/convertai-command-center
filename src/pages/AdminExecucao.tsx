@@ -150,6 +150,8 @@ export default function AdminExecucao() {
   const [busca, setBusca] = useState("");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroPrazo, setFiltroPrazo] = useState<"todas" | "vencidas" | "semana">("todas");
+  /** Vinculo cuja tarefa foi excluida: encerrado. Fica fora do quadro por padrao. */
+  const [mostrarEncerradas, setMostrarEncerradas] = useState(false);
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
   const abasRef = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -198,6 +200,9 @@ export default function AdminExecucao() {
       // A leitura expira runs penduradas antes de mostrar: execução sem
       // heartbeat vira timeout VISÍVEL, nunca "em andamento" eterno.
       await (supabase as any).rpc("operator_expire_stale_runs");
+      // Proposta e vinculo de tarefa excluida ou concluida perderam o objeto:
+      // fecham aqui, com motivo, antes de a tela pedir decisao sobre eles.
+      await (supabase as any).rpc("operator_fechar_orfaos").catch(() => null);
       const { data, error } = await (supabase as any)
         .from("operator_task_links").select("*").order("updated_at", { ascending: false }).limit(300);
       if (error) return [];
@@ -229,7 +234,7 @@ export default function AdminExecucao() {
     )] as string[],
     [vinculos],
   );
-  const { data: tarefas = new Map() } = useQuery({
+  const { data: tarefas = new Map(), isSuccess: tarefasProntas } = useQuery({
     queryKey: ["operador-tarefas", taskIds.join(",")],
     queryFn: async () => {
       if (taskIds.length === 0) return new Map();
@@ -297,27 +302,39 @@ export default function AdminExecucao() {
   const hoje = new Date().toISOString().slice(0, 10);
 
   /** Os números do quadro, uma vez só: cabeçalho, cartões e vazios usam. */
+  // Encerrado = a tarefa do vinculo nao existe mais (excluida). Continua na
+  // trilha, mas nao e trabalho: sai do quadro, das contagens e das abas.
+  const encerrado = (v: Vinculo) => Boolean(v.kanban_task_id) && tarefasProntas && taskIds.length > 0 && !tarefas.has(String(v.kanban_task_id));
+  const vinculosAtivos = useMemo(() => vinculos.filter((v) => !encerrado(v)), [vinculos, tarefas, tarefasProntas, taskIds]);
+  const totalEncerradas = vinculos.length - vinculosAtivos.length;
+  const diasParado = (v: Vinculo) => Math.floor((Date.now() - new Date(v.updated_at).getTime()) / 86_400_000);
+  const ultimoRunDosAgentes = useMemo(() => {
+    const datas = operadores.map((o) => o.last_run_at).filter(Boolean).map((d) => new Date(String(d)).getTime());
+    return datas.length ? new Date(Math.max(...datas)) : null;
+  }, [operadores]);
+  const diasSemAgente = ultimoRunDosAgentes ? Math.floor((Date.now() - ultimoRunDosAgentes.getTime()) / 86_400_000) : null;
+
   const numeros = useMemo(() => {
-    const por = (st: string) => vinculos.filter((v) => v.status === st).length;
+    const por = (st: string) => vinculosAtivos.filter((v) => v.status === st).length;
     const comOperador = new Set(vinculos.map((v) => v.kanban_task_id).filter(Boolean));
     const semOperador = disponiveis.filter((t) => !comOperador.has(String(t.id)));
     return {
       fila: por("queued") + por("in_progress"),
       andamento: por("in_progress"),
-      feitas: vinculos.filter((v) => v.status === "done" && v.last_evidence).length,
+      feitas: vinculosAtivos.filter((v) => v.status === "done" && v.last_evidence).length,
       revisao: por("review"),
       aguardando: por("awaiting_input"),
       bloqueadas: por("blocked"),
-      aprovacoes: vinculos.filter((v) => precisaDecisao(v)).length,
+      aprovacoes: vinculosAtivos.filter((v) => precisaDecisao(v)).length,
       kanbanAbertas: disponiveis.length,
       semOperador,
       // Prazo estourado é a única contagem que vale por si: ela decide o dia.
-      vencidas: vinculos.filter((v) => {
+      vencidas: vinculosAtivos.filter((v) => {
         const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
         return t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
       }).length,
     };
-  }, [vinculos, disponiveis, tarefas, hoje]);
+  }, [vinculosAtivos, disponiveis, tarefas, hoje]);
 
   const numerosDoOperador = (operatorId: string) => {
     const meus = vinculos.filter((v) => v.operator_id === operatorId);
@@ -368,9 +385,10 @@ export default function AdminExecucao() {
    * vez de arrastar para descobrir que estava vazia.
    */
   const contagemDaVisao = useMemo(() => {
-    const conta = (fn: (v: Vinculo) => boolean) => vinculos.filter(fn).length;
+    const base = mostrarEncerradas ? vinculos : vinculosAtivos;
+    const conta = (fn: (v: Vinculo) => boolean) => base.filter(fn).length;
     return {
-      quadro: vinculos.length,
+      quadro: base.length,
       fila: conta((v) => ["queued", "in_progress"].includes(v.status)),
       in_progress: conta((v) => v.status === "in_progress"),
       done: conta((v) => v.status === "done"),
@@ -382,7 +400,7 @@ export default function AdminExecucao() {
       // Relatorios nao e uma lista de vinculos: numero ali seria invencao.
       relatorios: 0,
     } as Record<string, number>;
-  }, [vinculos, operadores]);
+  }, [vinculos, vinculosAtivos, mostrarEncerradas, operadores]);
 
   /**
    * Quando a visao muda sozinha (notificacao apontando para um vinculo), a
@@ -396,8 +414,9 @@ export default function AdminExecucao() {
   // O filtro roda ANTES das visoes: quadro, fila e listas enxergam o
   // mesmo recorte, senao o numero da aba discorda do conteudo dela.
   const vinculosVisiveis = useMemo(() => {
-    if (!busca.trim() && !filtroCliente && filtroPrazo === "todas") return vinculos;
-    return vinculos.filter((v) => {
+    const base = mostrarEncerradas ? vinculos : vinculosAtivos;
+    if (!busca.trim() && !filtroCliente && filtroPrazo === "todas") return base;
+    return base.filter((v) => {
       const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
       const cliente = t?.project?.client;
       return passaNoFiltro({
@@ -413,7 +432,7 @@ export default function AdminExecucao() {
         statusFinal: v.status === "done",
       });
     });
-  }, [vinculos, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
+  }, [vinculos, vinculosAtivos, mostrarEncerradas, tarefas, busca, filtroCliente, filtroPrazo, hoje]);
 
   const clientesDoQuadro = useMemo(() => {
     const nomes = new Set<string>();
@@ -955,7 +974,17 @@ export default function AdminExecucao() {
             próximo passo: {falarComoGente(v.next_step).humano}
           </p>
         )}
-        {v.block_reason && (
+        {encerrado(v) && (
+          <p className="mt-1 rounded-lg border border-border bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
+            encerrado: a tarefa foi excluída, este vínculo ficou só como histórico.
+          </p>
+        )}
+        {!encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3 && (
+          <p className="mt-1 text-[11px] text-warning">
+            parado há {diasParado(v)} dias{v.status === "awaiting_input" ? ": o agente espera uma resposta sua" : v.status === "review" ? ": esperando sua revisão" : v.status === "queued" ? ": na fila, nenhum agente pegou" : ""}
+          </p>
+        )}
+        {v.block_reason && !encerrado(v) && (
           <p className="mt-1 rounded-lg border border-destructive/25 bg-secondary px-2 py-1 text-[11px] text-destructive">
             bloqueio: {falarComoGente(v.block_reason).humano}
           </p>
@@ -992,6 +1021,20 @@ export default function AdminExecucao() {
           Operadores internos executam e relatam; o responsável humano continua sendo quem responde.
           Atualizado {dataCurta(new Date(dataUpdatedAt || Date.now()).toISOString())}.
         </p>
+        {diasSemAgente !== null && diasSemAgente >= 2 && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11.5px] text-warning">
+            <PauseCircle className="h-3.5 w-3.5" /> Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"}). A fila só anda com o Hermes ligado; o painel não dispara agente.
+          </p>
+        )}
+        {totalEncerradas > 0 && (
+          <button
+            type="button"
+            onClick={() => setMostrarEncerradas((v) => !v)}
+            className="mt-1.5 block text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"} (tarefa excluída)
+          </button>
+        )}
         </div>
         <button
           type="button"
