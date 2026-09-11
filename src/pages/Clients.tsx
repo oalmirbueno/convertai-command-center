@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useClientFinancialSummaries, useFinancePlans, useFinanceSettings } from "@/hooks/useFinanceV2";
 import { useAuth } from "@/contexts/AuthContext";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import {
   UserPlus,
   Link2,
@@ -506,6 +507,9 @@ export default function Clients() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading, isError, refetch } = useClients();
+  // A cara de cada cliente: cadastro, senao Instagram (como em /metricas), senao a logo dos arquivos.
+  const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
+  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
 
   const toggleOneOffDone = async (client: any, done: boolean) => {
     const nextConfig = { ...(client.services_config || {}), one_off_done: done };
@@ -1283,12 +1287,7 @@ export default function Clients() {
                   aria-describedby={isAdmin ? `client-finance-${c.id}` : undefined}
                   className="flex w-full items-center gap-3 rounded-xl border-0 bg-transparent px-4 py-3.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 md:gap-4 md:px-5 md:py-4"
                 >
-                  <Avatar className="w-10 h-10 shrink-0">
-                    {c.avatar_url && <AvatarImage src={c.avatar_url} alt={c.full_name} />}
-                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-                      {c.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <FotoDoCliente nome={c.company_name || c.full_name || ""} foto={fotoDe({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })} tamanho="lg" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="truncate text-[15px] font-semibold leading-tight text-foreground">{c.company_name || c.full_name}</p>
@@ -1557,6 +1556,7 @@ export default function Clients() {
         open={!!editClient}
         onClose={closeClientDrawer}
         client={editClient}
+        fotoFallback={editClient ? fotoDe({ id: String(editClient.id), nome: editClient.company_name || editClient.full_name, avatar_url: editClient.avatar_url }) : null}
         initialSection={searchParams.get("section") === "accounts" ? "accounts" : null}
         initialProjectId={searchParams.get("project")}
       />

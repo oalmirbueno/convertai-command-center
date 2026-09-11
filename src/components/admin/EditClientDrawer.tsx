@@ -16,6 +16,8 @@ import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import type { FotoDoCliente as Foto } from "@/lib/fotoDoCliente";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useFinancePlans } from "@/hooks/useFinanceV2";
 
@@ -53,6 +55,8 @@ interface Props {
   client: any;
   initialSection?: "accounts" | null;
   initialProjectId?: string | null;
+  /** Foto de reserva (Instagram ou logo dos arquivos) quando o cadastro nao tem. */
+  fotoFallback?: Foto | null;
 }
 
 export default function EditClientDrawer({
@@ -61,6 +65,7 @@ export default function EditClientDrawer({
   client,
   initialSection = null,
   initialProjectId = null,
+  fotoFallback = null,
 }: Props) {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
@@ -541,15 +546,13 @@ export default function EditClientDrawer({
             {/* Avatar upload */}
             <div className="flex items-center gap-4 pb-2">
               <div className="relative group">
-                <div className="w-16 h-16 rounded-full overflow-hidden bg-secondary border border-border flex items-center justify-center">
-                  {avatarUrl ? (
+                {avatarUrl ? (
+                  <div className="w-16 h-16 rounded-full overflow-hidden bg-secondary border border-border flex items-center justify-center">
                     <img src={avatarUrl} alt={client.full_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-lg font-semibold text-primary">
-                      {client.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                    </span>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <FotoDoCliente nome={client.company_name || client.full_name || ""} foto={fotoFallback} tamanho="xl" />
+                )}
                 <button
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={uploadingAvatar}
@@ -561,7 +564,7 @@ export default function EditClientDrawer({
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground">{client.company_name || client.full_name}</p>
-                <p className="text-[11px] text-muted-foreground">Clique na foto para alterar a logo</p>
+                <p className="text-[11px] text-muted-foreground">{avatarUrl ? "Clique na foto para alterar a logo" : fotoFallback?.tipo === "instagram" ? "Foto do Instagram. Clique para subir a logo." : fotoFallback?.tipo === "logo" ? "Logo dos arquivos. Clique para trocar." : "Clique para subir a logo"}</p>
               </div>
             </div>
             {/* Executive Summary */}

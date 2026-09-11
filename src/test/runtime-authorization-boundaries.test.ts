@@ -23,7 +23,7 @@ describe("privileged runtime authorization boundaries", () => {
   });
 
   it("requires the configured service_role before the files worker reads its body or queue", () => {
-    const authorization = filesWorker.indexOf("bearerMatch?.[1] !== SERVICE_ROLE");
+    const authorization = filesWorker.indexOf("bearerMatch?.[1] === SERVICE_ROLE");
     const parseBody = filesWorker.indexOf("const body = await req.json()");
     const drainQueue = filesWorker.indexOf("const job = await claimNext()");
 

@@ -12,6 +12,8 @@ import { addDays, localIso, mondayOf, weekLabel } from "@/lib/cycleWeek";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import EsteiraClientSheet from "@/components/esteira/EsteiraClientSheet";
 import EsteiraItemRow from "@/components/esteira/EsteiraItemRow";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 
 type Aba = "social" | "trafego" | "avulso";
 const ABA_KEY = "aceleriq-esteira-aba";
@@ -37,6 +39,8 @@ export default function AdminEsteira() {
   const weekStart = localIso(segunda);
 
   const { clientes, carregando, atualizando, recarregar } = useEsteira(weekStart, agora);
+  const clientesParaFoto = useMemo(() => clientes.map((c) => ({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })), [clientes]);
+  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [quemEntraAberto, setQuemEntraAberto] = useState(false);
   const [comecarAberto, setComecarAberto] = useState(false);
@@ -153,9 +157,12 @@ export default function AdminEsteira() {
                 className="rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-primary/40"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold leading-tight">{c.nome}</p>
-                    <p className="text-[11px] text-muted-foreground">{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</p>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <FotoDoCliente nome={c.nome} foto={fotoDe({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })} tamanho="md" />
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold leading-tight">{c.nome}</p>
+                      <p className="text-[11px] text-muted-foreground">{c.esteira.onboardingCompleto ? "Em operação" : "Entrada em andamento"}</p>
+                    </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {itens.filter((i) => i.gravidade === "urgente").length > 0 && (
