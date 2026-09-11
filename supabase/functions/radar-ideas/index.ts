@@ -180,11 +180,11 @@ Deno.serve(async (req) => {
     // que servia para qualquer empresa.
     const [dossieRes, briefingRes, memoriaRes] = await Promise.all([
       db.from("client_dossiers")
-        .select("version, summary, content, updated_at, project_id")
+        .select("id, version, summary, content, updated_at, project_id, dossier_type, prior_version_id")
         .eq("client_id", clientId)
         .eq("is_current", true)
         .order("updated_at", { ascending: false })
-        .limit(2),
+        .limit(4),
       db.from("briefings")
         .select("answers, created_at")
         .eq("client_id", clientId)
@@ -197,12 +197,41 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(6),
     ]);
-    const dossieLines = (dossieRes.data || []).map((d: any) => {
-      const texto = String(d.content || d.summary || "").replace(/\s+/g, " ").trim().slice(0, 1400);
+    // O GERAL manda (nunca o de projeto por ser mais novo); projeto complementa.
+    const dossiesAtuais = ((dossieRes.data || []) as any[]).sort((a, b) => Number(Boolean(a.project_id)) - Number(Boolean(b.project_id)));
+    const dossieLines = dossiesAtuais.map((d: any) => {
+      const texto = String(d.content || d.summary || "").replace(/\s+/g, " ").trim().slice(0, d.project_id ? 500 : 1400);
       return texto
-        ? `DOSSIÊ ${d.project_id ? "do projeto" : "geral"} (v${d.version ?? "?"}, ${String(d.updated_at || "").slice(0, 10)}): ${texto}`
+        ? `DOSSIÊ ${d.project_id ? "do projeto (complemento)" : "GERAL (fonte da verdade)"} (v${d.version ?? "?"}, ${String(d.updated_at || "").slice(0, 10)}): ${texto}`
         : "";
     }).filter(Boolean);
+    // O que mudou desde a versão anterior do geral: ideia boa nasce do que
+    // acabou de mover, não do retrato de sempre.
+    const geral = dossiesAtuais.find((d: any) => !d.project_id);
+    let mudancaLine = "";
+    if (geral?.prior_version_id) {
+      const { data: prev } = await db.from("client_dossiers").select("content, summary, version").eq("id", geral.prior_version_id).maybeSingle();
+      const limpar = (l: string) => l.replace(/^[\s#*\-•>]+/, "").replace(/\s+/g, " ").trim();
+      const antes = new Set(String(prev?.content || prev?.summary || "").split(/\r?\n+/).map(limpar).filter((l) => l.length >= 12).map((l) => l.toLowerCase()));
+      const novas: string[] = [];
+      let auto = false;
+      for (const linha of String(geral.content || "").split(/\r?\n/)) {
+        const t = linha.trim();
+        if (/^##\s*avan[cç]os recentes/i.test(t)) { auto = true; continue; }
+        if (/^##?\s+/.test(t)) { auto = false; continue; }
+        if (auto) continue;
+        const limpa = limpar(t);
+        if (limpa.length < 12 || antes.has(limpa.toLowerCase())) continue;
+        novas.push(limpa.slice(0, 200));
+        if (novas.length >= 6) break;
+      }
+      if (novas.length) mudancaLine = `O QUE MUDOU NO DOSSIÊ GERAL desde a v${prev?.version ?? "?"} (parta daqui: é o que acabou de acontecer): ${novas.join(" | ")}`;
+    }
+    // O foco desta semana pela esteira, quando ja foi lido.
+    const segunda = (() => { const x = new Date(); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x.toISOString().slice(0, 10); })();
+    const { data: planoRes } = await db.from("project_memory").select("metadata").eq("client_id", clientId).eq("kind", "esteira_plano").contains("metadata", { week_start: segunda }).order("created_at", { ascending: false }).limit(1);
+    const foco = String((planoRes?.[0] as any)?.metadata?.foco || "").trim();
+    const focoLine = foco ? `FOCO DESTA SEMANA (plano da esteira): ${foco}` : "";
     const briefing = briefingRes.data?.[0]?.answers;
     const briefingLine = briefing
       ? `BRIEFING (respostas do cliente): ${JSON.stringify(briefing).slice(0, 900)}`
@@ -214,6 +243,8 @@ Deno.serve(async (req) => {
     const context = [
       `Cliente: ${clientName}`,
       ...dossieLines,
+      mudancaLine,
+      focoLine,
       briefingLine,
       ...memoriaLines,
       ...igLines,

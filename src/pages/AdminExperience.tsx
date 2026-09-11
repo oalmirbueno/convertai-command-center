@@ -21,6 +21,8 @@ import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMess
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
+import FotoDoCliente from "@/components/clients/FotoDoCliente";
+import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import {
@@ -43,10 +45,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import {
-  HeartPulse, AlertTriangle, Sparkles, FileText, Send, CheckCircle2, RefreshCw,
-  Clock, ArrowUpRight, ShieldAlert, Radar, Star, UserCircle, Trash2, Loader2,
-} from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, Clock, FileText, HeartPulse, Loader2, Radar, RefreshCw, Send, ShieldAlert, Sparkles, Star, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -160,6 +159,8 @@ export default function AdminExperience() {
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
   const [activeTab, setActiveTab] = useState("carteira");
+  /** Historico: um cliente so, ou a carteira inteira. */
+  const [historicoClientId, setHistoricoClientId] = useState<string>("__all__");
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
 
@@ -325,6 +326,25 @@ export default function AdminExperience() {
   });
   const dossieDe = (clientId: string): DossieGeralDoCliente | null => expDossieMap?.get(clientId) ?? null;
 
+  // Todas as versoes recentes do dossie geral: a linha do tempo mostra cada
+  // reescrita como um evento, com o motivo.
+  const { data: expDossieVersoes = [] } = useQuery({
+    queryKey: ["exp-dossie-versoes"],
+    queryFn: async () => {
+      const desde = new Date(Date.now() - 60 * 86_400_000).toISOString();
+      const { linhas } = await buscarTodas<any>((de, ate) =>
+        (supabase as any)
+          .from("client_dossiers")
+          .select("id, client_id, project_id, dossier_type, version, change_reason, source, created_at")
+          .gte("created_at", desde)
+          .order("created_at", { ascending: false })
+          .range(de, ate),
+      );
+      return linhas;
+    },
+    ...AO_VIVO,
+  });
+
   // O plano desta semana pela esteira (foco, feito, proximos), um por cliente.
   const { data: expPlanos = [] } = useQuery({
     queryKey: ["exp-planos", cycleWeekKey],
@@ -347,11 +367,12 @@ export default function AdminExperience() {
     return { foco: String(m.foco ?? ""), feito: Array.isArray(m.feito) ? (m.feito as string[]) : [], proximos: Array.isArray(m.proximos) ? (m.proximos as Array<{ titulo: string; passo: string; motivo?: string }>) : [] };
   };
 
-  // Vendas registradas nos ultimos 7 dias: o numero que paga o anuncio.
+  // Vendas registradas nos ultimos 30 dias: o numero que paga o anuncio
+  // (a mensagem le 7; o historico e o perfil leem 30).
   const { data: expVendas = [] } = useQuery({
     queryKey: ["exp-vendas"],
     queryFn: async () => {
-      const desde = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+      const desde = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
       const { data, error } = await (supabase as any)
         .from("ads_sales")
         .select("client_id, sold_at, campaign_name, channel, quantity, value")
@@ -361,8 +382,9 @@ export default function AdminExperience() {
     },
     ...AO_VIVO,
   });
-  const vendasDe = (clientId: string): { total: number; receita: number; porCampanha: string[] } => {
-    const linhas = (expVendas as any[]).filter((v) => v.client_id === clientId);
+  const vendasDe = (clientId: string, dias = 7): { total: number; receita: number; porCampanha: string[] } => {
+    const corte = new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
+    const linhas = (expVendas as any[]).filter((v) => v.client_id === clientId && String(v.sold_at) >= corte);
     const total = linhas.reduce((t, v) => t + Math.max(1, Number(v.quantity) || 1), 0);
     const receita = linhas.reduce((t, v) => t + (Number(v.value) || 0), 0);
     const porCampanha = Array.from(new Set(linhas.map((v) => String(v.campaign_name || "")).filter(Boolean)));
@@ -494,6 +516,9 @@ export default function AdminExperience() {
   });
 
   // Carteira recorrente completa: ativos E em onboarding entram nos rituais.
+  const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
+  const { fotoDe } = useFotosDosClientes(clientesParaFoto);
+
   const portfolioClients = useMemo(
     () =>
       (clients || []).filter(
@@ -2141,6 +2166,28 @@ export default function AdminExperience() {
                 <p className="text-[11px] text-muted-foreground">
                   Escolha o cliente e veja tudo dele em um lugar: o que enviar em cada momento da semana, a mensagem do grupo pronta e o contexto que explica a nota.
                 </p>
+                {(() => {
+                  const d = dossieDe(client.id);
+                  const v30 = vendasDe(client.id, 30);
+                  const servicos = Object.entries(SERVICE_NAMES).filter(([k]) => (client.services_config || {})[k] === true).map(([, n]) => n);
+                  const dias = daysSince(client.created_at);
+                  return (
+                    <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4">
+                      <FotoDoCliente nome={client.company_name || client.full_name || ""} foto={fotoDe({ id: String(client.id), nome: client.company_name || client.full_name, avatar_url: client.avatar_url })} tamanho="xl" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[17px] font-semibold leading-tight text-foreground">{client.company_name || client.full_name}</p>
+                        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                          {[servicos.length ? servicos.join(" + ") : "sem frente marcada", client.plan_name || null, dias !== null ? `${dias} dias na casa` : null].filter(Boolean).join(" · ")}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] text-primary"><BookOpen className="mr-1 inline h-3 w-3 align-[-2px]" />{rotuloDoDossie(d, nowTick)}</span>
+                          <span className={`rounded-full px-2.5 py-1 text-[11px] ${v30.total > 0 ? "bg-success/10 text-success" : "bg-secondary text-muted-foreground"}`}><BadgeDollarSign className="mr-1 inline h-3 w-3 align-[-2px]" />{v30.total > 0 ? `${v30.total} venda${v30.total === 1 ? "" : "s"} em 30 dias${v30.receita > 0 ? ` · R$ ${Math.round(v30.receita).toLocaleString("pt-BR")}` : ""}` : "sem venda registrada em 30 dias"}</span>
+                          {clientProjs.length > 0 && <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">{clientProjs.length} frente{clientProjs.length === 1 ? "" : "s"} ativa{clientProjs.length === 1 ? "" : "s"}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={client.id}
@@ -2683,8 +2730,28 @@ export default function AdminExperience() {
               const client = portfolioClients.find((c: any) => c.id === clientId);
               return client ? (client.company_name || client.full_name) : "Cliente";
             };
-            type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file"; text: string; clientId: string };
+            type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file" | "dossie" | "plano" | "venda"; text: string; clientId: string };
             const timeline: TimelineEvent[] = [
+              // O dossie reescrito e o evento mais importante da semana: e
+              // onde a leitura do cliente muda. Cada versao entra com o motivo.
+              ...(expDossieVersoes as any[]).map((v) => ({
+                at: v.created_at,
+                icon: "dossie" as const,
+                text: `Dossiê ${v.project_id ? "do projeto" : "geral"} v${v.version ?? "?"}${v.change_reason ? `: ${String(v.change_reason).slice(0, 110)}` : v.source ? ` (${v.source})` : ""}`,
+                clientId: v.client_id,
+              })),
+              ...((expMemory as any[]) || []).filter((m) => m.kind === "esteira_plano" && m.metadata?.foco).map((m) => ({
+                at: m.created_at,
+                icon: "plano" as const,
+                text: `Plano da semana ${String(m.metadata?.week_start || "").slice(5)}: ${String(m.metadata?.foco).slice(0, 120)}`,
+                clientId: m.client_id,
+              })),
+              ...(expVendas as any[]).map((v) => ({
+                at: `${v.sold_at}T12:00:00`,
+                icon: "venda" as const,
+                text: `Venda registrada${Number(v.quantity) > 1 ? ` (${v.quantity})` : ""}${v.value != null ? ` · R$ ${Math.round(Number(v.value)).toLocaleString("pt-BR")}` : ""}${v.campaign_name ? ` · ${v.campaign_name}` : ""}${v.channel ? ` · ${v.channel}` : ""}`,
+                clientId: v.client_id,
+              })),
               ...publishedReports.map((r: any) => ({
                 at: r.created_at,
                 icon: "report" as const,
@@ -2721,16 +2788,28 @@ export default function AdminExperience() {
               })),
             ]
               .filter((event) => event.at)
+              .filter((event) => historicoClientId === "__all__" || event.clientId === historicoClientId)
               .sort((a, b) => (a.at < b.at ? 1 : -1))
-              .slice(0, 120);
-            const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2 } as const;
+              .slice(0, 160);
+            const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2, dossie: BookOpen, plano: Sparkles, venda: BadgeDollarSign } as const;
+            const corDoEvento = { report: "text-success", publication: "text-muted-foreground", approval: "text-warning", file: "text-muted-foreground", dossie: "text-primary", plano: "text-primary", venda: "text-success" } as const;
             return (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+            <div className="px-5 py-3 border-b border-border flex flex-wrap items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-success" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Linha do tempo completa: atualizações, publicações, aprovações e materiais ({timeline.length})
+                Linha do tempo: dossiê, plano da semana, vendas, mensagens, publicações, aprovações e materiais ({timeline.length})
               </span>
+              <select
+                value={historicoClientId}
+                onChange={(e) => setHistoricoClientId(e.target.value)}
+                className="ml-auto rounded-lg border border-border bg-secondary px-2.5 py-1.5 text-[12px] text-foreground"
+              >
+                <option value="__all__">Toda a carteira</option>
+                {portfolioClients.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
+                ))}
+              </select>
             </div>
             <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
               {timeline.length === 0 && (
@@ -2740,7 +2819,7 @@ export default function AdminExperience() {
                 const EventIcon = iconMap[event.icon];
                 return (
                   <div key={`${event.at}-${index}`} className="flex items-center gap-3 px-5 py-2.5">
-                    <EventIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <EventIcon className={`h-3.5 w-3.5 shrink-0 ${corDoEvento[event.icon]}`} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[12px] text-foreground">{event.text}</p>
                       <p className="text-[10px] text-muted-foreground">

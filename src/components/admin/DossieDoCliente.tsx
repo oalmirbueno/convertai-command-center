@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ChevronDown, ChevronUp, History } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { mudancasEntreVersoes } from "@/lib/dossieGeral";
 import {
   CONTEXTO_KINDS, dossieMaisRecente, idadeEmPalavras,
 } from "@/lib/contextoDoCliente";
@@ -35,6 +36,8 @@ interface DossieAtual {
 }
 
 interface VersaoDoHistorico {
+  /** Linhas que entraram nesta versao em relacao a anterior. */
+  entrou?: string[];
   id: string;
   version: number;
   summary: string | null;
@@ -86,14 +89,17 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("client_dossiers")
-        .select("id, version, summary, change_reason, source, created_at, is_current")
+        .select("id, version, summary, change_reason, source, created_at, is_current, content")
         .eq("client_id", clientId)
         .eq("dossier_type", "contexto")
         .is("project_id", null)
         .order("version", { ascending: false })
         .limit(20);
       if (error) return [];
-      return (data || []) as VersaoDoHistorico[];
+      // "O que entrou" em cada versao: a diferenca para a imediatamente
+      // anterior da lista. E a progressao, versao a versao.
+      const lista = (data || []) as Array<VersaoDoHistorico & { content?: string | null }>;
+      return lista.map((v, i) => ({ ...v, entrou: mudancasEntreVersoes(lista[i + 1]?.content ?? null, v.content ?? null, 4) })) as VersaoDoHistorico[];
     },
     enabled: Boolean(clientId) && historicoAberto,
   });
@@ -230,16 +236,23 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
           {historicoAberto && (
             <div className="mt-2 space-y-1 border-t border-border pt-2">
               {(historico || []).map((v) => (
-                <div key={v.id} className="flex items-baseline gap-2 text-[10.5px]">
-                  <span className={`shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
-                    v{v.version}
-                  </span>
-                  <span className="min-w-0 truncate text-muted-foreground">
-                    {v.change_reason || v.summary || v.source || "sem descrição"}
-                  </span>
-                  <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/70">
-                    {new Date(v.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                  </span>
+                <div key={v.id} className="text-[10.5px]">
+                  <div className="flex items-baseline gap-2">
+                    <span className={`shrink-0 font-semibold tabular-nums ${v.is_current ? "text-primary" : "text-muted-foreground"}`}>
+                      v{v.version}
+                    </span>
+                    <span className="min-w-0 truncate text-muted-foreground">
+                      {v.change_reason || v.summary || v.source || "sem descrição"}
+                    </span>
+                    <span className="ml-auto shrink-0 tabular-nums text-muted-foreground/70">
+                      {new Date(v.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    </span>
+                  </div>
+                  {(v.entrou || []).length > 0 && (
+                    <ul className="ml-6 mt-0.5 space-y-0.5">
+                      {v.entrou!.map((linha, i) => <li key={i} className="text-[10.5px] leading-snug text-foreground/85">+ {linha}</li>)}
+                    </ul>
+                  )}
                 </div>
               ))}
               {(historico || []).length === 0 && (

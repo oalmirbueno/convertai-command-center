@@ -93,10 +93,10 @@ describe("a Central não tem mais teto escondido", () => {
     expect(central).not.toContain(".limit(150)");
   });
 
-  it("as oito consultas passaram a paginar", () => {
-    // Sete da Central original + as tarefas concluidas da semana.
+  it("as nove consultas passaram a paginar", () => {
+    // Sete da Central original + tarefas concluidas da semana + versoes do dossie.
     const paginadas = central.match(/buscarTodas<any>/g) || [];
-    expect(paginadas.length).toBe(8);
+    expect(paginadas.length).toBe(9);
   });
 
   it("o corte, se houver, aparece na tela", () => {
