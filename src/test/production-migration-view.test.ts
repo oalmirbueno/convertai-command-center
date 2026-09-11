@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildProductionMigrationView,
   formatProductionLedgerSqlValues,
@@ -31,7 +31,11 @@ const repoRoot = resolve(process.cwd());
  * montagem e, rodando junto com a suite toda, estouravam os 5s padrao do
  * vitest. O prazo maior nao afrouxa nada: as assercoes continuam iguais.
  */
-const TEMPO_PACOTE_COMPLETO = 20_000;
+const TEMPO_PACOTE_COMPLETO = 90_000;
+// Os testes que copiam as ~200 migrations estouravam o prazo padrao quando a
+// suite inteira roda com a maquina cheia. Folga, nao afrouxo: as assercoes
+// continuam iguais.
+vi.setConfig({ testTimeout: TEMPO_PACOTE_COMPLETO });
 
 const scriptPath = resolve(repoRoot, "scripts/prepare-production-migration-view.mjs");
 const manifestPath = resolve(repoRoot, "supabase/production-migration-baseline.json");

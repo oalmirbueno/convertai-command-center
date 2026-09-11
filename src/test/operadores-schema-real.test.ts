@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 /**
  * Coluna que não existe só aparece na hora de executar.
@@ -23,6 +23,21 @@ const dir = resolve(raiz, "supabase/migrations");
 
 const arquivos = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
 
+// Sao ~200 migrations lidas e varridas por regex para cada tabela. Na suite
+// inteira, com a maquina cheia, isso passava de 20s e virava "falha" sem
+// defeito nenhum. Cada arquivo e lido UMA vez e a varredura de funcoes e
+// reaproveitada; o prazo maior e so folga para a carga.
+vi.setConfig({ testTimeout: 90_000 });
+const cacheTexto = new Map<string, string>();
+function textoDe(arquivo: string): string {
+  let t = cacheTexto.get(arquivo);
+  if (t === undefined) {
+    t = semComentario(readFileSync(resolve(dir, arquivo), "utf8"));
+    cacheTexto.set(arquivo, t);
+  }
+  return t;
+}
+
 /** O texto da migration sem comentários de linha. */
 function semComentario(texto: string) {
   return texto
@@ -35,7 +50,7 @@ function semComentario(texto: string) {
 function colunasDeclaradas(tabela: string): Set<string> {
   const colunas = new Set<string>();
   for (const arquivo of arquivos) {
-    const sql = semComentario(readFileSync(resolve(dir, arquivo), "utf8"));
+    const sql = textoDe(arquivo);
 
     const criar = new RegExp(
       `create table (?:if not exists )?public\\.${tabela}\\s*\\(([\\s\\S]*?)\\n\\)`,
@@ -74,16 +89,19 @@ function colunasDeclaradas(tabela: string): Set<string> {
  * reescrevesse historico ja aplicado, o que e pior que o problema: a
  * versao velha nao roda mais, foi substituida por CREATE OR REPLACE.
  */
+let vigentes: Map<string, { arquivo: string; corpo: string }> | null = null;
 function definicoesVigentes(): Map<string, { arquivo: string; corpo: string }> {
+  if (vigentes) return vigentes;
   const porFuncao = new Map<string, { arquivo: string; corpo: string }>();
   for (const arquivo of arquivos) {
-    const sql = semComentario(readFileSync(resolve(dir, arquivo), "utf8"));
+    const sql = textoDe(arquivo);
     const partes = sql.split(/create or replace function /i);
     for (let k = 1; k < partes.length; k += 1) {
       const nome = /^(public\.\w+)/.exec(partes[k])?.[1];
       if (nome) porFuncao.set(nome, { arquivo, corpo: partes[k] });
     }
   }
+  vigentes = porFuncao;
   return porFuncao;
 }
 
@@ -119,7 +137,7 @@ function colunasEscritas(tabela: string): Array<{ arquivo: string; onde: string;
   }
   // Blocos DO fora de funcao tambem escrevem, e valem sempre.
   for (const arquivo of arquivos) {
-    const sql = semComentario(readFileSync(resolve(dir, arquivo), "utf8"));
+    const sql = textoDe(arquivo);
     for (const bloco of sql.split(/create or replace function /i).slice(0, 1)) {
       trechos.push({ arquivo, onde: "(fora de funcao)", sql: bloco });
     }
