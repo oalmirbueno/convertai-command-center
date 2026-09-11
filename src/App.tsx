@@ -35,6 +35,7 @@ const AdminExecucao = lazy(() => import("@/pages/AdminExecucao"));
 const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = lazy(() => import("@/pages/AdminAds"));
 const AdminCiclo = lazy(() => import("@/pages/AdminCiclo"));
+const AdminEsteira = lazy(() => import("@/pages/AdminEsteira"));
 const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = lazy(() => import("@/pages/AdminReports"));
 const ClientReports = lazy(() => import("@/pages/ClientReports"));
@@ -182,7 +183,10 @@ function AppRoutes() {
           cheia e usa toda a largura no celular. Duas URLs servem a mesma
           tela: /ciclo pelo painel e /ciclo.html quando aberto pelo ícone do
           aplicativo instalado. */}
-      <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
+      {/* /ciclo e a Esteira (le o estado real). O Ciclo anterior fica em
+          /ciclo-antigo para comparacao e retorno rapido. */}
+      <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AdminEsteira /></StaffRoute></ProtectedRoute>} />
+      <Route path="/ciclo-antigo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
       {/* Endereço antigo do app instalado: leva para o atual. */}
       <Route path="/ciclo.html" element={<Navigate to="/ciclo" replace />} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
