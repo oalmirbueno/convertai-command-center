@@ -89,6 +89,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.cycle-coach]
     verify_jwt = true
+  [functions.esteira-semana]
+    verify_jwt = true
   [functions.cycle-client-pulse]
     verify_jwt = true
   [functions.cycle-brain-log]

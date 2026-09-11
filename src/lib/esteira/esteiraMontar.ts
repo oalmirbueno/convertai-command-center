@@ -108,15 +108,24 @@ export function itensDeOnboarding(f: FatosDoCliente, hoje: Date): { itens: Estei
 
 /* ── Posts: cada post no seu elo ── */
 
+// Data sem hora (yyyy-mm-dd) e formatada pelas partes: passar por new Date()
+// joga para UTC e, no fuso do Brasil, 12/09 vira 11/09 as 21h.
+const SO_DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 const fmtDia = (iso: string | null | undefined): string => {
   if (!iso) return "";
+  const m = SO_DATA.exec(iso);
+  if (m) return `${m[3]}/${m[2]}`;
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
 
 function diasDesde(iso: string | null, hoje: Date): number | null {
   if (!iso) return null;
-  return Math.floor((hoje.getTime() - new Date(iso).getTime()) / DIA);
+  // Data sem hora conta a partir do meio-dia UTC, para o arredondamento
+  // nao trocar o dia na virada do fuso.
+  const t = SO_DATA.test(iso) ? new Date(`${iso}T12:00:00Z`).getTime() : new Date(iso).getTime();
+  return Math.floor((hoje.getTime() - t) / DIA);
 }
 
 export function itemDoPost(f: FatosDoCliente, p: PostFato, hoje: Date): EsteiraItem | null {
@@ -238,25 +247,53 @@ export function itensDeAnuncios(f: FatosDoCliente, hoje: Date, onboardingComplet
 
 /* ── Tarefas, checklists e marcos: o trabalho real do dia a dia ── */
 
-const TAREFAS_VISIVEIS = 6;
+const TAREFAS_VISIVEIS = 10;
+const CONCLUIDA = new Set(["done", "completed", "concluida", "concluída"]);
 
-export function itensDeTarefas(f: FatosDoCliente, hoje: Date): EsteiraItem[] {
+export function tarefaConcluida(status: string | null): boolean {
+  return CONCLUIDA.has((status ?? "").toLowerCase());
+}
+
+/** Segunda-feira (ISO) da semana que contem a data. */
+export function segundaDe(d: Date): string {
+  const x = new Date(d);
+  const dow = (x.getDay() + 6) % 7;
+  x.setDate(x.getDate() - dow);
+  return x.toISOString().slice(0, 10);
+}
+
+function somaDias(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * A semana de tarefas: atrasadas (urgente), as que vencem nesta semana
+ * (normal), as da proxima semana (para ja enxergar), e as sem dono. O que
+ * nao tem prazo e tem dono fica no Kanban; aqui e o que pede a semana.
+ */
+export function itensDeTarefas(f: FatosDoCliente, hoje: Date, weekStart: string): EsteiraItem[] {
   const hojeStr = hoje.toISOString().slice(0, 10);
-  const abertas = f.tarefas.filter((t) => !["done", "completed", "concluida", "cancelled"].includes((t.status ?? "").toLowerCase()));
+  const fimSemana = somaDias(weekStart, 6);
+  const fimProxima = somaDias(weekStart, 13);
+  const abertas = f.tarefas.filter((t) => !tarefaConcluida(t.status) && (t.status ?? "").toLowerCase() !== "cancelled");
   const itens: EsteiraItem[] = [];
   for (const t of abertas) {
-    const base = { clientId: f.clientId, frente: "geral" as Frente, fonte: "tarefa" as const, titulo: t.titulo, rota: "/kanban", vencimento: t.dueDate ?? undefined };
+    const base = { clientId: f.clientId, frente: "geral" as Frente, fonte: "tarefa" as const, titulo: t.titulo, rota: "/kanban", vencimento: t.dueDate ?? undefined, key: `task:${t.id}` };
     if (t.dueDate && t.dueDate < hojeStr) {
       const atraso = diasDesde(t.dueDate, hoje) ?? 0;
-      itens.push({ ...base, key: `task:${t.id}`, passo: "Tarefa atrasada", gravidade: "urgente", fatos: [`Venceu há ${atraso} dia${atraso === 1 ? "" : "s"}`] });
-    } else if (t.dueDate && new Date(t.dueDate).getTime() <= hoje.getTime() + 7 * DIA) {
-      itens.push({ ...base, key: `task:${t.id}`, passo: `Entregar até ${fmtDia(t.dueDate)}`, gravidade: "normal", fatos: [] });
+      itens.push({ ...base, passo: "Tarefa atrasada", gravidade: "urgente", fatos: [`Venceu há ${atraso} dia${atraso === 1 ? "" : "s"}`] });
+    } else if (t.dueDate && t.dueDate <= fimSemana) {
+      itens.push({ ...base, passo: `Entregar até ${fmtDia(t.dueDate)}`, gravidade: "normal", fatos: ["Nesta semana"] });
+    } else if (t.dueDate && t.dueDate <= fimProxima) {
+      itens.push({ ...base, passo: `Próxima semana, ${fmtDia(t.dueDate)}`, gravidade: "normal", fatos: ["Já dá para adiantar"] });
     } else if (!t.assignedTo) {
-      itens.push({ ...base, key: `task:${t.id}`, passo: "Sem responsável, definir dono", gravidade: "atencao", fatos: [] });
+      itens.push({ ...base, passo: "Sem responsável, definir dono", gravidade: "atencao", fatos: [] });
     }
   }
   const ordem: Record<Gravidade, number> = { urgente: 0, atencao: 1, normal: 2 };
-  itens.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || (a.vencimento ?? "").localeCompare(b.vencimento ?? ""));
+  itens.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade] || (a.vencimento ?? "9999").localeCompare(b.vencimento ?? "9999"));
   if (itens.length > TAREFAS_VISIVEIS) {
     const resto = itens.length - TAREFAS_VISIVEIS;
     const visiveis = itens.slice(0, TAREFAS_VISIVEIS);
@@ -264,6 +301,28 @@ export function itensDeTarefas(f: FatosDoCliente, hoje: Date): EsteiraItem[] {
     return visiveis;
   }
   return itens;
+}
+
+/**
+ * O que o painel prova sozinho nesta semana: post que foi ao ar e tarefa
+ * concluida. Entram em "feitos" com auto=true, sem ninguem marcar, e nao se
+ * desfazem com o dedo.
+ */
+export function feitosAutomaticos(f: FatosDoCliente, weekStart: string): EsteiraItem[] {
+  const ini = new Date(`${weekStart}T00:00:00Z`).getTime();
+  const fim = ini + 7 * DIA;
+  const dentro = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= ini && t < fim; };
+  const out: EsteiraItem[] = [];
+  for (const p of f.posts) {
+    const pub = p.publicacoes.find((x) => x.status === "published" && dentro(x.publishedAt));
+    if (pub) out.push({ key: `post:${p.id}:publicado`, clientId: f.clientId, frente: "social", fonte: "post", titulo: p.titulo, passo: "Publicado", gravidade: "normal", fatos: [`No ar em ${fmtDia(pub.publishedAt)}`], estado: { status: "done", doneAt: pub.publishedAt, auto: true } });
+  }
+  for (const t of f.tarefas) {
+    if (tarefaConcluida(t.status) && dentro(t.updatedAt)) {
+      out.push({ key: `task:${t.id}`, clientId: f.clientId, frente: "geral", fonte: "tarefa", titulo: t.titulo, passo: "Concluída", gravidade: "normal", fatos: [`Em ${fmtDia(t.updatedAt)}`], estado: { status: "done", doneAt: t.updatedAt, auto: true } });
+    }
+  }
+  return out;
 }
 
 export function itensDeChecklists(f: FatosDoCliente): EsteiraItem[] {
@@ -353,7 +412,7 @@ export function rituaisDoCliente(f: FatosDoCliente): RitualDaSemana[] {
 const ORDEM_GRAVIDADE: Record<Gravidade, number> = { urgente: 0, atencao: 1, normal: 2 };
 const ORDEM_FONTE: Record<EsteiraItem["fonte"], number> = { onboarding: 0, post: 1, agenda: 2, anuncio: 3, marco: 4, tarefa: 5, checklist: 6 };
 
-export function montarEsteira(f: FatosDoCliente, hoje: Date = new Date()): EsteiraDoCliente {
+export function montarEsteira(f: FatosDoCliente, hoje: Date = new Date(), weekStart: string = segundaDe(hoje)): EsteiraDoCliente {
   const onb = itensDeOnboarding(f, hoje);
   const brutos: EsteiraItem[] = [
     ...onb.itens,
@@ -361,13 +420,15 @@ export function montarEsteira(f: FatosDoCliente, hoje: Date = new Date()): Estei
     ...itensDaAgenda(f, hoje, onb.completo),
     ...itensDeAnuncios(f, hoje, onb.completo),
     ...itensDeMarcos(f, hoje),
-    ...itensDeTarefas(f, hoje),
+    ...itensDeTarefas(f, hoje, weekStart),
     ...itensDeChecklists(f),
   ];
 
   const itens: EsteiraItem[] = [];
-  const feitos: EsteiraItem[] = [];
+  const feitos: EsteiraItem[] = feitosAutomaticos(f, weekStart);
+  const jaFeito = new Set(feitos.map((x) => x.key));
   for (const it of brutos) {
+    if (jaFeito.has(it.key)) continue;
     const e = f.estados[it.key];
     if (!e) { itens.push(it); continue; }
     const comEstado = { ...it, estado: { status: e.status, note: e.note, doneAt: e.doneAt } };

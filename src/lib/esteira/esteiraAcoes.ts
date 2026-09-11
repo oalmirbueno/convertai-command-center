@@ -8,7 +8,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { recordMemory } from "@/lib/clientMemory";
 import type { EstadoHumano, EsteiraItem, RitualKey } from "./esteiraTipos";
-import { RITUAIS } from "./esteiraMontar";
+import { ONBOARDING, RITUAIS } from "./esteiraMontar";
 
 async function quemSou(): Promise<string | null> {
   const { data } = await supabase.auth.getUser();
@@ -88,18 +88,63 @@ async function concluirItemDeChecklist(key: string): Promise<void> {
   await db.from("project_memory").update({ metadata: { ...(data.metadata ?? {}), items: itens } }).eq("id", memId);
 }
 
-/** "Ja tem": o cliente ja possui este passo de onboarding (ou nao). */
+/** "Ja tem": o cliente ja possui este passo de onboarding (ou nao). Vai para
+    o diario como marco e pede ao dossie para reescrever os avancos, para a
+    Central enxergar sem ninguem digitar. */
 export async function marcarJaTem(clientId: string, passo: string, tem: boolean): Promise<boolean> {
   const db = supabase as any;
   const uid = await quemSou();
   const { data } = await db.from("cycle_client_prefs").select("onboarding_has").eq("client_id", clientId).maybeSingle();
   const atual = (data?.onboarding_has && typeof data.onboarding_has === "object") ? { ...data.onboarding_has } : {};
+  const antes = atual[passo];
   atual[passo] = tem;
   const { error } = await db.from("cycle_client_prefs").upsert(
     { client_id: clientId, onboarding_has: atual, updated_by: uid, updated_at: new Date().toISOString() },
     { onConflict: "client_id" },
   );
-  return !error;
+  if (error) return false;
+  if (antes !== tem) {
+    const rotulo = ONBOARDING.find((p) => p.key === passo)?.rotulo ?? passo;
+    await recordMemory({
+      clientId,
+      kind: "marco",
+      title: tem ? `Já tem · ${rotulo}` : `Ainda não tem · ${rotulo}`,
+      content: tem ? `${rotulo} confirmado como existente.` : `${rotulo} marcado como pendente.`,
+      source: "esteira",
+      metadata: { onboarding: passo, tem },
+    });
+    await atualizarAvancosDoDossie(clientId);
+  }
+  return true;
+}
+
+/** Pede ao banco para reescrever a secao automatica de avancos do dossie.
+    Best-effort: se a funcao nao existir ou falhar, nada quebra. */
+export async function atualizarAvancosDoDossie(clientId: string): Promise<void> {
+  try { await (supabase as any).rpc("dossie_registrar_avancos", { p_client_id: clientId }); } catch { /* silencioso */ }
+}
+
+export interface PlanoDaSemana {
+  foco: string;
+  feito: string[];
+  proximos: Array<{ titulo: string; passo: string; motivo: string }>;
+  source: string;
+  cached: boolean;
+  generated_at?: string;
+}
+
+/** Plano da semana lido do dossie e da historia (funcao esteira-semana). */
+export async function lerPlanoDaSemana(clientId: string, weekStart: string, refresh = false): Promise<PlanoDaSemana | null> {
+  const { data, error } = await supabase.functions.invoke("esteira-semana", { body: { client_id: clientId, week_start: weekStart, refresh } });
+  if (error || !data || (data as any).error) return null;
+  const d = data as any;
+  return { foco: String(d.foco ?? ""), feito: Array.isArray(d.feito) ? d.feito : [], proximos: Array.isArray(d.proximos) ? d.proximos : [], source: String(d.source ?? ""), cached: Boolean(d.cached), generated_at: d.generated_at };
+}
+
+/** Item da esteira nascido do plano do dossie (chave estavel pelo titulo). */
+export function itemDoPlano(clientId: string, p: { titulo: string; passo: string; motivo: string }): EsteiraItem {
+  const slug = p.titulo.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 48);
+  return { key: `dossie:${slug}`, clientId, frente: "geral", fonte: "checklist", titulo: p.titulo, passo: p.passo, gravidade: "normal", fatos: p.motivo ? [p.motivo] : [] };
 }
 
 /** Oculta ou volta a mostrar o cliente numa frente. `ateQuando` null = sempre. */
@@ -117,7 +162,7 @@ export async function ocultarCliente(input: { clientId: string; area: "social" |
 }
 
 /** Ritual da semana marcado (ou desmarcado) para um cliente. */
-export async function marcarRitual(input: { clientId: string; weekStart: string; ritual: RitualKey; feito: boolean; source?: "manual" | "central" }): Promise<boolean> {
+export async function marcarRitual(input: { clientId: string; weekStart: string; ritual: RitualKey; feito: boolean; source?: "manual" | "central"; semDiario?: boolean }): Promise<boolean> {
   const db = supabase as any;
   const rotulo = RITUAIS.find((r) => r.key === input.ritual)?.rotulo ?? input.ritual;
   if (!input.feito) {
@@ -130,6 +175,8 @@ export async function marcarRitual(input: { clientId: string; weekStart: string;
     { onConflict: "client_id,week_start,ritual_key" },
   );
   if (error) return false;
+  // A Central ja grava o ritual no diario com o texto enviado; nao duplicar.
+  if (input.semDiario) return true;
   await recordMemory({
     clientId: input.clientId,
     kind: "ritual",
@@ -154,6 +201,13 @@ export async function anotarNoDiario(item: EsteiraItem, texto: string): Promise<
     metadata: { item_key: item.key, fonte: item.fonte },
   });
 }
+
+/** Tipo de ritual da Central -> chave do Ciclo. */
+export const RITUAL_DA_CENTRAL: Record<string, RitualKey> = {
+  rota_semana: "segunda",
+  meio_semana: "quarta",
+  prova_movimento: "sexta",
+};
 
 /** Texto pronto para copiar (WhatsApp / mensagem ao cliente). */
 export function textoDoItem(item: EsteiraItem): string {

@@ -47,10 +47,10 @@ export function useEsteira(weekStart: string, hoje: Date) {
         avatarUrl: (c.avatar_url as string | null) ?? null,
         tipo: String(c.client_type ?? "recurring"),
         fatos,
-        esteira: montarEsteira(fatos, hoje),
+        esteira: montarEsteira(fatos, hoje, weekStart),
       };
     }).filter((x): x is ClienteDaEsteira => x !== null);
-  }, [ativos, fatosQuery.data, hoje]);
+  }, [ativos, fatosQuery.data, hoje, weekStart]);
 
   const recarregar = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["esteira-fatos"] });

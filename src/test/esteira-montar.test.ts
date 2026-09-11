@@ -168,7 +168,7 @@ describe("esteira: marcacao humana e frentes", () => {
       servicos: { social: true, trafego: true },
       conexoes: [{ provider: "instagram", status: "connected" }, { provider: "meta_ads", status: "connected" }],
       posts: [post({ id: "s", temArte: false })],
-      tarefas: [{ id: "t", titulo: "Ligar para o cliente", status: "todo", dueDate: "2026-09-01", assignedTo: null, source: null }],
+      tarefas: [{ id: "t", titulo: "Ligar para o cliente", status: "todo", dueDate: "2026-09-01", assignedTo: null, source: null, updatedAt: null }],
       campanhas: [{ id: "c", nome: "Campanha X", ativa: true, diario: [] }],
     });
     const e = montarEsteira(f, HOJE);
@@ -179,6 +179,35 @@ describe("esteira: marcacao humana e frentes", () => {
     const social = itensDaFrente(e, "social").map((i) => i.key);
     expect(social).toContain("post:s:arte");
     expect(social.some((k) => k.startsWith("camp:"))).toBe(false);
+  });
+
+  it("tarefas: atrasada, desta semana, proxima semana; concluida na semana vira feito automatico", () => {
+    const f = fatos({
+      tarefas: [
+        { id: "a", titulo: "Atrasada", status: "todo", dueDate: "2026-09-01", assignedTo: "u", source: null, updatedAt: null },
+        { id: "b", titulo: "Desta semana", status: "todo", dueDate: "2026-09-12", assignedTo: "u", source: null, updatedAt: null },
+        { id: "c", titulo: "Proxima semana", status: "todo", dueDate: "2026-09-16", assignedTo: "u", source: null, updatedAt: null },
+        { id: "d", titulo: "Longe e com dono", status: "todo", dueDate: "2026-10-30", assignedTo: "u", source: null, updatedAt: null },
+        { id: "e", titulo: "Feita agora", status: "done", dueDate: null, assignedTo: "u", source: null, updatedAt: "2026-09-10T12:00:00Z" },
+        { id: "f", titulo: "Feita mes passado", status: "done", dueDate: null, assignedTo: "u", source: null, updatedAt: "2026-08-01T12:00:00Z" },
+      ],
+    });
+    const e = montarEsteira(f, HOJE, "2026-09-07");
+    const porKey = Object.fromEntries(e.itens.map((i) => [i.key, i]));
+    expect(porKey["task:a"]?.gravidade).toBe("urgente");
+    expect(porKey["task:b"]?.passo).toBe("Entregar até 12/09");
+    expect(porKey["task:c"]?.passo).toBe("Próxima semana, 16/09");
+    expect(porKey["task:d"]).toBeUndefined();
+    expect(e.feitos.map((i) => i.key)).toEqual(["task:e"]);
+    expect(e.feitos[0].estado?.auto).toBe(true);
+  });
+
+  it("post publicado nesta semana entra em feitos pelo painel", () => {
+    const f = fatos({ posts: [post({ id: "p", titulo: "Decisão", publicacoes: [{ status: "published", scheduledAt: null, publishedAt: "2026-09-09T15:00:00Z" }] })] });
+    const e = montarEsteira(f, HOJE, "2026-09-07");
+    expect(e.feitos.find((i) => i.key === "post:p:publicado")?.passo).toBe("Publicado");
+    expect(e.feitos[0].estado?.auto).toBe(true);
+    expect(e.itens.some((i) => i.key.startsWith("post:p"))).toBe(false);
   });
 
   it("rituais comecam em branco e refletem o que foi marcado", () => {

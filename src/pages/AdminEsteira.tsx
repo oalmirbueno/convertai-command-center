@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Eye, Megaphone, Package, RefreshCw, Share2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -39,6 +39,19 @@ export default function AdminEsteira() {
   const [detalheId, setDetalheId] = useState<string | null>(null);
   const [quemEntraAberto, setQuemEntraAberto] = useState(false);
 
+  // Altura real do topo fixo, medida: o espaco reservado nunca fica menor
+  // nem maior que ele (a faixa de resumo muda de altura em telas estreitas).
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerH, setHeaderH] = useState(96);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setHeaderH(el.getBoundingClientRect().height));
+    ro.observe(el);
+    setHeaderH(el.getBoundingClientRect().height);
+    return () => ro.disconnect();
+  }, []);
+
   const frente: "social" | "trafego" = aba === "trafego" ? "trafego" : "social";
 
   const { visiveis, ocultos } = useMemo(() => {
@@ -62,12 +75,25 @@ export default function AdminEsteira() {
     return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
   }
 
-  const totalUrgentes = visiveis.reduce((a, c) => a + itensDaFrente(c.esteira, frente).filter((i) => i.gravidade === "urgente").length, 0);
+  // Resumo da frente para o topo: o que a semana pede, de relance.
+  const resumo = visiveis.reduce((acc, c) => {
+    const its = itensDaFrente(c.esteira, frente);
+    acc.urgentes += its.filter((i) => i.gravidade === "urgente").length;
+    acc.atencao += its.filter((i) => i.gravidade === "atencao").length;
+    acc.emDia += its.length === 0 ? 1 : 0;
+    acc.entrada += c.esteira.onboardingCompleto ? 0 : 1;
+    acc.rituaisFeitos += c.esteira.rituais.filter((r) => r.feito).length;
+    acc.feitos += c.esteira.feitos.length;
+    return acc;
+  }, { urgentes: 0, atencao: 0, emDia: 0, entrada: 0, rituaisFeitos: 0, feitos: 0 });
+  const totalUrgentes = resumo.urgentes;
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 py-2.5">
+      {/* Topo FIXO (nao sticky): no celular, a rolagem nunca leva a semana
+          junto. O espaco reservado abaixo tem a mesma altura. */}
+      <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 pt-2.5 pb-1.5">
           <div className="flex items-center gap-1">
             <button type="button" aria-label="Semana anterior" onClick={() => setSemanaOffset((v) => v - 1)} className="rounded-lg p-1.5 hover:bg-secondary"><ChevronLeft className="h-4 w-4" /></button>
             <div className="text-center">
@@ -82,14 +108,19 @@ export default function AdminEsteira() {
             <Link to="/dashboard" className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary">Painel</Link>
           </div>
         </div>
+        <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">
+          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{visiveis.length} cliente{visiveis.length === 1 ? "" : "s"}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.urgentes ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"}`}>{resumo.urgentes} urgente{resumo.urgentes === 1 ? "" : "s"}</span>
+          <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.atencao ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>{resumo.atencao} atenção</span>
+          <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 font-semibold text-primary">{resumo.emDia} em dia</span>
+          {resumo.entrada > 0 && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{resumo.entrada} em entrada</span>}
+          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">rituais {resumo.rituaisFeitos}/{visiveis.length * 3}</span>
+          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{resumo.feitos} feito{resumo.feitos === 1 ? "" : "s"} na semana</span>
+        </div>
       </header>
+      <div style={{ height: headerH }} aria-hidden />
 
       <main className="mx-auto max-w-5xl px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-3">
-        {totalUrgentes > 0 && (
-          <p className="mb-3 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px]">
-            <span className="font-semibold">{totalUrgentes} item{totalUrgentes === 1 ? "" : "s"} urgente{totalUrgentes === 1 ? "" : "s"}</span> nesta frente hoje.
-          </p>
-        )}
         {carregando && clientes.length === 0 && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">Lendo a operação de cada cliente…</p>
         )}

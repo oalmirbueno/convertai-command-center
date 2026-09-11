@@ -73,7 +73,7 @@ export async function lerFatosDaEsteira(
 
   const [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs] = await Promise.all([
     db.from("editorial_posts").select("id, client_id, title, production_status, primary_file_id, default_caption, created_at, editorial_publications(status, scheduled_at, published_at)").in("client_id", ids).is("archived_at", null),
-    db.from("projects").select("id, client_id, tasks(id, status, due_date, assigned_to, title, source)").in("client_id", ids).is("deleted_at", null).is("tasks.deleted_at", null),
+    db.from("projects").select("id, client_id, tasks(id, status, due_date, assigned_to, title, source, updated_at)").in("client_id", ids).is("deleted_at", null).is("tasks.deleted_at", null),
     db.from("projects").select("id, client_id, milestones(id, title, status, target_date)").in("client_id", ids).is("deleted_at", null).is("milestones.deleted_at", null),
     db.from("ads_campaigns").select("id, campaign_id, client_id, name, effective_status, status").in("client_id", ids),
     db.from("ads_wallet").select("client_id, balance").in("client_id", ids),
@@ -119,7 +119,7 @@ export async function lerFatosDaEsteira(
     const s = mapa.get(String(pj.client_id));
     if (!s) continue;
     for (const t of (pj.tasks ?? []) as Array<Record<string, any>>) {
-      const tarefa: TarefaFato = { id: String(t.id), titulo: String(t.title ?? "Tarefa"), status: t.status ?? null, dueDate: t.due_date ?? null, assignedTo: t.assigned_to ?? null, source: t.source ?? null };
+      const tarefa: TarefaFato = { id: String(t.id), titulo: String(t.title ?? "Tarefa"), status: t.status ?? null, dueDate: t.due_date ?? null, assignedTo: t.assigned_to ?? null, source: t.source ?? null, updatedAt: t.updated_at ?? null };
       s.tarefas.push(tarefa);
     }
   }

@@ -40,8 +40,9 @@ export interface EsteiraItem {
   bloqueadoPor?: string;
   /** Data limite, quando o fato tem uma. ISO yyyy-mm-dd. */
   vencimento?: string;
-  /** Marcacao humana desta semana, se houver. */
-  estado?: { status: EstadoHumano; note?: string | null; doneAt?: string | null };
+  /** Marcacao desta semana, se houver. `auto` = o painel provou sozinho
+      (post publicado, tarefa concluida); nao se desfaz com o dedo. */
+  estado?: { status: EstadoHumano; note?: string | null; doneAt?: string | null; auto?: boolean };
   /** Posicao fixa dentro da fonte (onboarding usa a ordem do catalogo). */
   ordem?: number;
 }
@@ -108,6 +109,8 @@ export interface TarefaFato {
   dueDate: string | null;
   assignedTo: string | null;
   source: string | null;
+  /** Ultima mexida; e como sabemos que foi concluida NESTA semana. */
+  updatedAt: string | null;
 }
 
 export interface CampanhaDiaFato {

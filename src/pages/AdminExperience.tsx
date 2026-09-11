@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { RITUAL_DA_CENTRAL, marcarRitual } from "@/lib/esteira/esteiraAcoes";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
@@ -422,6 +423,17 @@ export default function AdminExperience() {
     ...AO_VIVO,
   });
 
+  // Ponte com o Ciclo: rituais marcados na esteira nesta semana (por
+  // cliente), para a Central mostrar "feito no Ciclo" mesmo sem relatorio.
+  const semanaDoCiclo = (() => { const x = new Date(); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x.toISOString().slice(0, 10); })();
+  const { data: rituaisDoCiclo = [] } = useQuery({
+    queryKey: ["cycle-rituals-central", semanaDoCiclo],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("cycle_rituals").select("client_id, ritual_key, source, done_at").eq("week_start", semanaDoCiclo);
+      return (data ?? []) as Array<{ client_id: string; ritual_key: string; source: string; done_at: string }>;
+    },
+    staleTime: 30_000,
+  });
   const { data: reports = [] } = useQuery({
     queryKey: ["exp-reports"],
     queryFn: async () => {
@@ -1528,6 +1540,14 @@ export default function AdminExperience() {
         clientVisible: true,
       });
 
+      // Ponte com o Ciclo: o ritual publicado aqui marca a caixinha da
+      // semana la, com origem "central". O diario ja recebeu o texto acima.
+      const chaveCiclo = RITUAL_DA_CENTRAL[String((report.metrics as any)?.ritual_type || "")];
+      if (chaveCiclo) {
+        await marcarRitual({ clientId: report.client_id, weekStart: semanaDoCiclo, ritual: chaveCiclo, feito: true, source: "central", semDiario: true });
+        void queryClient.invalidateQueries({ queryKey: ["cycle-rituals-central"] });
+      }
+
       toast.success("Publicado no portal do cliente e notificado.");
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
@@ -2039,6 +2059,10 @@ export default function AdminExperience() {
             const ritualStatus = (ritual: string) => {
               const rows = (reports || []).filter((r: any) => r.client_id === client.id && (r.metrics as any)?.ritual_type === ritual);
               const latest = rows[0];
+              // Marcado a mao no Ciclo nesta semana: vale como feito.
+              const chaveCiclo = RITUAL_DA_CENTRAL[ritual];
+              const noCiclo = chaveCiclo ? rituaisDoCiclo.find((r) => r.client_id === client.id && r.ritual_key === chaveCiclo) : undefined;
+              if (!latest && noCiclo) return { label: `Feito no Ciclo (${noCiclo.source === "central" ? "daqui" : "à mão"})`, cls: "bg-success/10 text-success" };
               if (!latest) return { label: "Ainda não gerado", cls: "bg-secondary text-muted-foreground" };
               const age = daysSince(latest.created_at) ?? 0;
               if (latest.status !== "published") return { label: `Rascunho na fila (${age}d)`, cls: "bg-warning/10 text-warning" };

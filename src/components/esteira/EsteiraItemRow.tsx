@@ -28,6 +28,7 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
   const [anotando, setAnotando] = useState(false);
   const [nota, setNota] = useState("");
   const feito = item.estado?.status === "done";
+  const auto = Boolean(item.estado?.auto);
 
   const agir = async (fn: () => Promise<boolean>, ok: string) => {
     if (!canWrite) { toast.error("Só admin ou manager marca a esteira."); return; }
@@ -45,7 +46,7 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
       <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${feito ? "bg-primary" : COR[item.gravidade]}`} aria-hidden />
       <div className="min-w-0 flex-1">
         <p className={`text-[13px] font-medium leading-tight text-foreground ${feito ? "line-through" : ""}`}>{item.titulo}</p>
-        <p className="text-[12px] leading-snug text-muted-foreground">{item.passo}</p>
+        <p className="text-[12px] leading-snug text-muted-foreground">{item.passo}{auto ? <span className="ml-1.5 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">pelo painel</span> : null}</p>
         {!compacto && item.fatos.length > 0 && (
           <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/80">{item.fatos.join(" · ")}</p>
         )}
@@ -80,7 +81,7 @@ export default function EsteiraItemRow({ item, weekStart, canWrite, onMudou, com
           <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Feito</span>
         </button>
       )}
-      {!compacto && (
+      {!compacto && !auto && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button type="button" aria-label="Mais ações" className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-secondary">
