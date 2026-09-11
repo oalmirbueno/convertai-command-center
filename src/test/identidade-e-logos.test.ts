@@ -160,6 +160,6 @@ describe("a aba de identidade", () => {
   it("o detalhe deixou de limitar os posts em 25", () => {
     // Agora que a coleta pagina, limitar aqui esconderia justamente os
     // posts que passaram a existir.
-    expect(ler("src/pages/AdminMetricas.tsx")).toContain("useSocialPostMetrics(clientId, 200)");
+    expect(ler("src/pages/AdminMetricas.tsx")).toMatch(/useSocialPostMetrics\(clientId, 200(, accountId)?\)/);
   });
 });

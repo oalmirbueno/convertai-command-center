@@ -705,6 +705,54 @@
       "remote_name": "ordem_autorizada_pecas_aplicadas_a_mao",
       "remote_statements_sha256": "718e051bc4ad0cde22c9a8b902c9c3e650d978e85cbd19a6a70fa0a048441a34",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260904120000",
+      "path": "supabase/migrations/20260904120000_remover_versao_velha_do_social_metrics_url.sql",
+      "local_sha256": "1f619b8c920645e9b7bfb0eab592945467ae57389e85cd5bacb6870ceaaca1ee",
+      "remote_name": "remover_versao_velha_do_social_metrics_url",
+      "remote_statements_sha256": "00ce8c398527b5fefeeaecace357dfe958048b57ef5131483896ae0e67ddd080",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260909100000",
+      "path": "supabase/migrations/20260909100000_admin_apaga_sem_briga.sql",
+      "local_sha256": "98140df18a5a4802599bf76e975851e6ef465a29a2ba1e63fc5084d8a4e82c3f",
+      "remote_name": "admin_apaga_sem_briga",
+      "remote_statements_sha256": "1bbff0168f14c8359a693077fada0c001b68becd7242097d0693a99023915d03",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260909110000",
+      "path": "supabase/migrations/20260909110000_carrossel_inteiro_para_o_cliente.sql",
+      "local_sha256": "86746724689104b61855189ae1d62e28caa1148a1c4bdc7dc84d940af2e1b272",
+      "remote_name": "carrossel_inteiro_para_o_cliente",
+      "remote_statements_sha256": "e85a1d886ff23bf8c414c9877adffec0a990d970a5e0732560fe8d91dd852fd1",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260910200000",
+      "path": "supabase/migrations/20260910200000_ciclo_prova_persistida_e_dossie_com_avancos.sql",
+      "local_sha256": "4dc4260e0142a27e989a995d9671e1b224da075af3483146f2a895623d047064",
+      "remote_name": "ciclo_prova_persistida_e_dossie_com_avancos",
+      "remote_statements_sha256": "faba8658c051b9a167c85c25efff9741aad86bb2abc67394f02d17e768de996f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260911150000",
+      "path": "supabase/migrations/20260911150000_esteira_de_producao.sql",
+      "local_sha256": "1e7959d2e45894fde4344091bcaa47af6cd98fd74578ba3025ebd5e37fe7383a",
+      "remote_name": "esteira_de_producao",
+      "remote_statements_sha256": "921b8ffbaca17ae41a6c7ced8b8d1ca321a534eb9130062f3ab71e2d346f2afc",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260911200000",
+      "path": "supabase/migrations/20260911200000_vendas_de_anuncio.sql",
+      "local_sha256": "e1bd31f6a4279b85bea0fecb2db1d79ed7d13824758e1532670f286fd2a67543",
+      "remote_name": "vendas_de_anuncio",
+      "remote_statements_sha256": "e20f53995c019f857f0d38f276ac4307048d7563dfa9dd62568bc68a203e626c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

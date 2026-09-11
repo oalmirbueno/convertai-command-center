@@ -333,16 +333,17 @@ export default function AdminExperience() {
     queryFn: async () => {
       const desde = new Date();
       desde.setDate(desde.getDate() - 7);
-      const { data, error } = await (supabase as any)
-        .from("tasks")
-        .select("id, title, project_id, updated_at, workstream")
-        .eq("status", "done")
-        .is("deleted_at", null)
-        .gte("updated_at", desde.toISOString())
-        .order("updated_at", { ascending: false })
-        .limit(400);
-      if (error) return [];
-      return (data || []) as any[];
+      const { linhas } = await buscarTodas<any>((de, ate) =>
+        (supabase as any)
+          .from("tasks")
+          .select("id, title, project_id, updated_at, workstream")
+          .eq("status", "done")
+          .is("deleted_at", null)
+          .gte("updated_at", desde.toISOString())
+          .order("updated_at", { ascending: false })
+          .range(de, ate),
+      );
+      return linhas;
     },
     ...AO_VIVO,
   });

@@ -22,7 +22,12 @@ describe("client credential boundary", () => {
     expect(firstAccessFunction).not.toMatch(/portal_password:\s*password/);
     expect(firstAccessFunction).not.toContain("portal_password");
     expect(editClientDrawer).not.toContain("client.portal_password");
-    expect(editClientDrawer).not.toContain("navigator.clipboard");
+    // A area de transferencia so recebe o link de primeiro acesso, nunca senha.
+    const copias = editClientDrawer.match(/navigator\.clipboard\.writeText\(([^)]*)\)/g) || [];
+    for (const copia of copias) {
+      expect(copia).toMatch(/firstAccess/);
+      expect(copia).not.toMatch(/senha|password/i);
+    }
     expect(editClientDrawer).not.toContain("Senha copiada!");
     expect(editClientDrawer).toContain("não pode ser visualizada");
     expect(createClientModal).not.toContain("portal_password:");
