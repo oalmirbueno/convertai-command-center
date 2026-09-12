@@ -61,6 +61,10 @@ jobs:
         id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
 
+      - name: Install Chromium for isolated profile E2E
+        id: e2e_browser
+        run: npx playwright install --with-deps chromium
+
       - name: Verify append-only migration ledger
         shell: bash
         env:
@@ -111,6 +115,7 @@ jobs:
         run: supabase start
 
       - name: Apply migrations
+        id: db_reset
         run: supabase db reset --local --no-seed
 
       - name: Install local PostgreSQL client
@@ -228,6 +233,31 @@ jobs:
             .lovable/mcp/manifest.json \
             supabase/functions/mcp/index.ts
 
+      - name: Validate isolated browser E2E guardrails
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: |
+          node scripts/run-ci-e2e.mjs --self-test
+          node scripts/seed-ci-e2e.mjs --self-test
+          node scripts/guard-ci-e2e-network.mjs --self-test
+          npx tsc -p e2e/tsconfig.json
+
+      - name: Run real Auth browser profile matrix against ephemeral Supabase
+        id: profile_e2e
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/run-ci-e2e.mjs
+
+      - name: Restore synthetic seed hooks before stopping Supabase
+        if: ${{ always() && steps.db_reset.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/seed-ci-e2e.mjs --restore
+
       - name: Stop Supabase local stack
         if: always()
         run: supabase stop --no-backup
+
+      - name: Restore owned CI container firewall rule
+        if: always()
+        run: node scripts/guard-ci-e2e-network.mjs --restore

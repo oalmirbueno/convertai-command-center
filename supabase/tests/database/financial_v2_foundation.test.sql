@@ -486,6 +486,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE
   TO authenticated;
 
 -- V1 monthly-tax permissions are separate from the V2 RPC-only boundary.
+-- The reviewed backend has SELECT/INSERT/UPDATE/DELETE for authenticated on
+-- this V1 table (read-only catalog inspection, 2026-09-12); AreaTributaria
+-- reads/upserts it directly. Its historical migration declares RLS but does
+-- not provision those table grants in the empty CI database. Mirror only that
+-- observed prerequisite inside this BEGIN/ROLLBACK to exercise the real RLS
+-- rules. This does not prove ACL provisioning, change defaults, or grant any
+-- V2 write privilege; the independent V2 ACL assertions above stay intact.
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.financial_tax_rates TO authenticated;
+
 SELECT pg_temp.act_as('f1000000-0000-0000-0000-000000000001');
 
 SELECT lives_ok(
