@@ -51,12 +51,14 @@ jobs:
           version: 2.109.1
 
       - name: Install NPM dependencies
+        id: npm_dependencies
         run: |
           npm install --global npm@11.9.0
           test "$(npm --version)" = "11.9.0"
           npm ci
 
       - name: Install versioned Lovable MCP compatibility dependencies
+        id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
 
       - name: Verify append-only migration ledger
@@ -127,9 +129,13 @@ jobs:
           -f supabase/bootstrap/ci-operator-parents-postcheck.sql
 
       - name: Run pgTAP database tests
+        id: pgtap
         run: supabase test db
 
       - name: Run isolated synthetic SQL contracts
+        # A failing full-schema assertion must not hide independent synthetic
+        # regression checks. The pgTAP failure still fails the job.
+        if: ${{ !cancelled() && (success() || steps.pgtap.outcome == 'failure') }}
         shell: bash
         env:
           PGHOST: 127.0.0.1
@@ -180,12 +186,15 @@ jobs:
 
 
       - name: Run unit tests
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm test -- --run
 
       - name: Run MCP Deno unit tests
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts
 
       - name: Type-check portable and public Edge Functions
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: |
           deno check \
             supabase/functions/brain-client-context/index.ts \
@@ -203,12 +212,15 @@ jobs:
             supabase/functions/workspace-ocr/index.ts
 
       - name: Check TypeScript
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm run typecheck
 
       - name: Build application
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm run build
 
       - name: Validate versioned Lovable MCP compatibility artifacts
+        if: ${{ !cancelled() && steps.compat_dependencies.outcome == 'success' }}
         run: |
           npm --prefix integrations/lovable-mcp-compat run verify
           npm --prefix integrations/lovable-mcp-compat run generate

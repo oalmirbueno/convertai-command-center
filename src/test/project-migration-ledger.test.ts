@@ -102,7 +102,7 @@ describe('project-specific read-only deployment ledger', () => {
   it('emits the same exact triples accepted by the SQL full-join preflight', () => {
     const sql = formatProjectLedgerSqlValues(options);
     expect(sql.split('\n')).toHaveLength(208);
-    expect(sql).toContain("('20260912213638','secure_publication_cancellation_dispatch','729d13f5f279099152e7647925d6efded95470a1ad5e788c3a0a86243baa5190')");
+    expect(sql).toContain("('20260912213638','secure_publication_cancellation_dispatch','40dd111922e09cea6a861cfd7cb4dd8fdbc8e69dd51260eb0d7c9189e612170b')");
     expect(sql).not.toMatch(/\b(?:DELETE|UPDATE|INSERT|ALTER|TRUNCATE|CREATE)\b/);
   });
 

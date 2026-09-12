@@ -11,7 +11,7 @@ Este pacote implementa correções para os 17 achados da revisão do Aceleriq OS
 | SEC-03 | Relatos e ordens de operador restritos ao backend; ações humanas guardadas por papel/cliente | SQL de autorização, ator derivado e histórico |
 | SEC-04 | Wrappers e workers internos sem EXECUTE herdado de PUBLIC | Grants efetivos e chamadas permitidas de cron/serviço |
 | SEC-05 | Cliente edita campos pessoais; campos comerciais exigem admin/backend | UPDATE real permitido/negado, perfil legado integralmente preservado |
-| SEC-06 | Cancelamento e envio serializados; geração e registro de dispatch impedem POST final duplicado | SQL funcional, pg_net simulado e duas conexões dblink concorrentes |
+| SEC-06 | Cancelamento e envio serializados; geração impede POST final duplicado; agendamento/publicação exigem mídia compatível | SQL funcional, pg_net simulado, tipos de mídia e duas conexões dblink concorrentes |
 | SEC-07 | Segundo cérebro resolve perfil e verifica acesso por UUID; equipe recebe notas vinculadas ao cliente | Handler real com sessão ausente, cliente indevido, equipe válida, admin e notas mistas |
 | F-01 | Erros da Esteira são apresentados; último snapshot permanece; cache inclui identidade | Consultas com falha, recuperação, refresh e troca de sessão |
 | F-02 | Cobrança só confirma após INSERT; falha preserva rascunho e bloqueia clique duplicado | Componente Financeiro e serviço de gravação com transporte simulado |
@@ -49,6 +49,8 @@ O pg_net inicia HTTP após o COMMIT. Se o cancelamento obtiver o lock antes do e
 
 Publicações manuais legítimas, inclusive promoção pelo caminho canônico antigo, continuam suportadas. Conteúdo preparado sem fingerprint comprovável é recusado até preparação/retry autorizado. O estágio `cancelled` é terminal também na UI, sem spinner ou botão de retry automático.
 
+O replay completo também revelou que um documento PDF aprovado podia avançar pelo gate genérico de aprovação. A correção mantém sua anexação para revisão, mas exige o predicado canônico de imagem/vídeo antes de agendar, registrar publicação e despachar mídia. Aprovação de conteúdo não substitui compatibilidade de formato. Os testes atuais preservam as decisões versionadas de visibilidade do cronograma e de administração das alíquotas V1, com negações explícitas de acesso entre clientes, edição pelo cliente e escrita direta nas tabelas V2.
+
 O handler do segundo cérebro mantém compatibilidade com `client_name` por busca exata e única de perfil seguida da mesma autorização por UUID. O frontend novo envia `client_id`. Admin continua lendo notas legadas; equipe comum precisa de nota Markdown com um único `client_id` no front matter. Uma menção em ata compartilhada não prova escopo de cliente. A ausência dessas notas só remove contexto complementar, sem impedir a geração pelos fatos/dossiê do painel.
 
 ## Validação local reproduzível
@@ -59,16 +61,19 @@ O handler do segundo cérebro mantém compatibilidade com `client_name` por busc
 - `npm run migrations:verify`; `node scripts/verify-migration-integrity.mjs --base-ref origin/main`.
 - `node scripts/verify-mcp-portability.mjs`; `npm run mcp:test:scripts`.
 - `deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts`.
-- `deno check` dos entrypoints `brain-client-context`, `mcp-server` e `mcp-oauth-metadata`.
+- `deno check` dos 13 entrypoints públicos e portáveis enumerados no workflow, com Deno 2.5.1.
 - `node scripts/test-isolated-db.mjs --self-test` e `node scripts/test-isolated-db.mjs` com PostgreSQL 17 local e pgTAP.
+- `node scripts/test-ci-editorial-replay.mjs` para os pré-requisitos editoriais e de operadores do banco vazio.
 
-O runner SQL cria bancos exclusivos com dados sintéticos em loopback. Foram verificados 95 cenários de autorização/manutenção e 87 de publicação/concorrência. HTTP, Vault e agendamento são simulados. Isso não equivale a executar todas as dependências, triggers e provedores reais do backend; os limites estão nos fixtures e no documento de fronteiras RPC.
+O runner SQL cria bancos exclusivos com dados sintéticos em loopback. Foram verificados 95 cenários de autorização/manutenção e 108 de publicação/concorrência, totalizando 203. HTTP, Vault e agendamento são simulados. Isso não equivale a executar todas as dependências, triggers e provedores reais do backend; os limites estão nos fixtures e no documento de fronteiras RPC. A classificação de mídia usa metadados, sem inspecionar os bytes do arquivo.
 
-Resultados registrados: suíte integrada de aplicação com 192 arquivos e 2.374 testes aprovados; os 11 testes adicionados depois para o ledger por projeto também passaram. Os 60 testes Deno de MCP/segundo cérebro, TypeScript app/node/test, build, geração/validação compat e integridade de migrations passaram. O lint dos 62 arquivos revisados não introduziu diagnóstico novo frente à base (495 erros preexistentes passaram a 492; seis avisos mantidos); os dois arquivos posteriores do ledger por projeto passaram sem diagnóstico. O CI remoto terá resultado próprio no PR.
+Os 60 testes Deno de MCP/segundo cérebro, os 13 entrypoints com Deno 2.5.1, TypeScript app/node/test, build, geração/validação compat e integridade de migrations passaram localmente. O lint dos 62 arquivos iniciais revisados não introduziu diagnóstico novo frente à base (495 erros preexistentes passaram a 492; seis avisos mantidos); os scripts e testes posteriores de deploy foram verificados separadamente sem diagnóstico. Não há alegação de lint global limpo. O resultado final das suítes completas deve ser conferido nos checks do SHA atual do PR.
 
-O CI da aplicação passou no commit `915afd0`: 193 arquivos, 2.385 testes, tipos, build e contêiner com healthcheck/rotas. O fechamento adicional do deploy por projeto passou 45 testes direcionados. O replay completo do banco revelou dois patches históricos que endereçavam a guarda de mídia aprovada pelo nome do helper regular. O código esperado pertence ao helper aprovado; inserir seu corpo final no meio do histórico quebraria patches posteriores.
+O CI da aplicação passou no commit `119c49e`: 195 arquivos, 2.404 testes, tipos, build e contêiner com healthcheck/rotas. O fechamento adicional do deploy por projeto passou 45 testes direcionados. O replay completo do banco exigiu preparação de pré-requisitos ausentes num banco vazio: dois patches históricos endereçavam a guarda de mídia aprovada pelo nome do helper regular, e o organograma posterior esperava os operadores default e atlas. O corpo editorial esperado pertence ao helper aprovado; inserir seu corpo final no meio do histórico quebraria patches posteriores.
 
-O scaffolding de CI usa aliases temporários somente ao redor desses dois patches. Verifica hashes dos cinco arquivos históricos, corpo esperado, banco vazio, OIDs e ACLs; executa os SQL históricos intactos e restaura imediatamente os nomes e metadados. A etapa posterior canônica confirma o resultado. O script só materializa os quatro adaptadores no GitHub CI e os remove por hash ao terminar. Nenhum adaptador integra o manifesto de produção. A validação PostgreSQL local adicional passou 16 testes de bloqueio de mídia ativa, adoção permitida, integridade dos registros e preservação das permissões. O resultado do replay completo permanece discriminado no CI do PR; esses 16 testes não o substituem.
+O scaffolding de CI usa aliases temporários somente ao redor desses dois patches. Verifica hashes das fontes históricas, corpo esperado, banco vazio, OIDs e ACLs; executa os SQL históricos intactos e restaura imediatamente os nomes e metadados. Para o organograma, insere dois operadores sintéticos sem referência de runner e os mantém inativos após o patch, preservando as seis auditorias históricas geradas. O script materializa seis adaptadores somente no GitHub CI e os remove por hash ao terminar. Nenhum adaptador integra o manifesto de produção. A validação PostgreSQL local adicional passou 16 testes editoriais e 20 de operadores. O pós-check completo exige zero vínculos, runs, aprovações, participações, propostas e entregas dos fixtures. O replay de todas as migrations e esse pós-check passaram no run `34724465837`; a suíte completa de permissões tem resultado próprio no PR.
+
+O workflow executa também as verificações independentes quando uma asserção de banco falha, sem `continue-on-error`: a falha original mantém o job vermelho. Isso permite distinguir problemas de SQL, tipos, funções Edge e artefatos compat no mesmo SHA.
 
 ## Preview e aplicação
 

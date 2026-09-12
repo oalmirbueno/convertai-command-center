@@ -86,6 +86,68 @@ BEGIN
   PERFORM public.editorial_autopublish_tick();
   RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http+1,'canonical promoted manual empty snapshot reaches the publisher');
 
+  -- Generic documents may exist in editorial planning, but approval alone
+  -- must never allow a document through schedule, publish or either HTTP gate.
+  p := public.publication_test_create(401,'queued','manual',false,true);
+  UPDATE public.files SET file_name='Synthetic document.pdf',mime_type='application/pdf',file_type='application/pdf',extension='pdf'
+    WHERE id=md5('file-401')::uuid;
+  UPDATE public.editorial_post_internal SET approval_fingerprint=public.editorial_compute_approval_fingerprint(post_id) WHERE post_id=md5('post-401')::uuid;
+  RETURN NEXT ok(public.editorial_file_is_publishable(md5('file-401')::uuid,md5('client-401')::uuid,md5('project-401')::uuid)
+    AND NOT public.editorial_file_is_publishable_media(md5('file-401')::uuid,md5('client-401')::uuid,md5('project-401')::uuid),'approved PDF fixture passes approval and fails actual media classification');
+  RETURN NEXT throws_ok(format('SELECT public.transition_editorial_publication(%L::uuid,''schedule'',1,now()+interval ''1 day'')',p),'P0001','publication requires ready content and approved immutable files','approved PDF cannot schedule through the official transition');
+  RETURN NEXT throws_ok(format('SELECT public.transition_editorial_publication(%L::uuid,''publish'',1,p_permalink=>''https://invalid.example/pdf'')',p),'P0001','publication requires ready content and approved immutable files','approved PDF cannot be marked published through the official transition');
+  RETURN NEXT is((public.editorial_promover_planejados()->>'promovidos')::integer,0,'automatic promotion reports no successful PDF scheduling');
+  RETURN NEXT is((SELECT status FROM public.editorial_publications WHERE id=p),'planned','planned promotion cannot bypass the PDF media gate');
+  RETURN NEXT is((SELECT count(*) FROM social_private.editorial_publication_delivery_requests WHERE publication_id=p),0::bigint,'failed PDF promotion leaves no fabricated delivery snapshot');
+  -- Model a bad historical schedule without deleting or modifying its history.
+  UPDATE public.editorial_publications SET status='scheduled' WHERE id=p;
+  INSERT INTO social_private.autopublish_jobs(publication_id,client_id,stage) VALUES(p,md5('client-401')::uuid,'queued');
+  SELECT count(*) INTO before_http FROM net.publication_test_http;
+  PERFORM public.editorial_autopublish_tick();
+  RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http,'legacy scheduled PDF causes zero preparation HTTP calls');
+  RETURN NEXT throws_ok(format('SELECT social_private.autopublish_http(%L::uuid,''POST'',''https://graph.invalid/account/media_publish'')',p),'55000','publication files require approved image or video media','PDF cannot cross the final HTTP dispatch boundary');
+  RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http,'blocked PDF final dispatch creates no HTTP request');
+
+  p := public.publication_test_create(402,'queued','manual',false,true);
+  UPDATE public.editorial_posts SET content_type='video' WHERE id=md5('post-402')::uuid;
+  UPDATE public.files SET file_name='Synthetic clip.mp4',mime_type='video/mp4',file_type='video',extension='mp4' WHERE id=md5('file-402')::uuid;
+  UPDATE public.editorial_post_internal SET approval_fingerprint=public.editorial_compute_approval_fingerprint(post_id) WHERE post_id=md5('post-402')::uuid;
+  PERFORM public.transition_editorial_publication(p,'schedule',1,p_scheduled_at=>now()-interval '1 minute');
+  SELECT count(*) INTO before_http FROM net.publication_test_http;
+  PERFORM public.editorial_autopublish_tick();
+  RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http+1,'approved manual video remains schedulable and reaches media preparation');
+  RETURN NEXT ok((SELECT url LIKE '%video_url=%' FROM net.publication_test_http ORDER BY id DESC LIMIT 1),'the manual video uses the v5 video route');
+  SELECT net_request_id INTO req FROM social_private.autopublish_jobs WHERE publication_id=p;
+  INSERT INTO net._http_response(id,status_code,content) VALUES(req,200,'{"id":"synthetic-video-container-402"}');
+  PERFORM public.editorial_autopublish_tick();
+  SELECT net_request_id INTO req FROM social_private.autopublish_jobs WHERE publication_id=p;
+  INSERT INTO net._http_response(id,status_code,content) VALUES(req,200,'{"status_code":"FINISHED"}');
+  PERFORM public.editorial_autopublish_tick();
+  PERFORM public.editorial_autopublish_tick();
+  RETURN NEXT is((SELECT count(*) FROM social_private.autopublish_job_events WHERE publication_id=p AND event='publish_dispatched'),1::bigint,'approved video passes the final HTTP media gate');
+  UPDATE public.files SET mime_type='application/pdf' WHERE id=md5('file-402')::uuid;
+  SELECT count(*) INTO before_http FROM net.publication_test_http;
+  RETURN NEXT lives_ok(format('SELECT social_private.autopublish_http(%L::uuid,''GET'',''https://graph.invalid/exact-video/status'')',p),'already dispatched video can reconcile its exact result after metadata changes');
+  RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http+1,'reconciliation after dispatch adds only the allowed GET');
+  RETURN NEXT throws_ok(format('SELECT social_private.autopublish_http(%L::uuid,''POST'',''https://graph.invalid/account/media_publish'')',p),'55000',NULL,'metadata change cannot authorize a second final POST');
+  RETURN NEXT is((SELECT count(*) FROM social_private.autopublish_job_events WHERE publication_id=p AND event='publish_dispatched'),1::bigint,'reconciliation preserves the single final dispatch event');
+
+  p := public.publication_test_create(403,'queued','manual',false,true);
+  UPDATE public.editorial_posts SET content_type='carousel' WHERE id=md5('post-403')::uuid;
+  INSERT INTO public.files(id,client_id,project_id,parent_file_id,file_name,mime_type,requires_approval)
+    VALUES(md5('frame-403')::uuid,md5('client-403')::uuid,md5('project-403')::uuid,md5('file-403')::uuid,'Synthetic frame.png','image/png',true);
+  UPDATE public.editorial_post_internal SET approval_fingerprint=public.editorial_compute_approval_fingerprint(post_id) WHERE post_id=md5('post-403')::uuid;
+  RETURN NEXT ok(public.editorial_file_is_publishable_media(md5('file-403')::uuid,md5('client-403')::uuid,md5('project-403')::uuid),'client_shared carousel retains inherited approval compatibility');
+  PERFORM public.transition_editorial_publication(p,'schedule',1,p_scheduled_at=>now()-interval '1 minute');
+  INSERT INTO social_private.autopublish_jobs(publication_id,client_id,stage) VALUES(p,md5('client-403')::uuid,'queued');
+  RETURN NEXT lives_ok(format('SELECT social_private.autopublish_assert_dispatch(%L::uuid)',p),'released carousel with an approved image child passes dispatch validation');
+  UPDATE public.files SET mime_type='application/pdf' WHERE id=md5('frame-403')::uuid;
+  RETURN NEXT ok(NOT public.editorial_file_is_publishable_media(md5('file-403')::uuid,md5('client-403')::uuid,md5('project-403')::uuid),'a PDF child cannot disguise itself with a PNG name');
+  SELECT count(*) INTO before_http FROM net.publication_test_http;
+  RETURN NEXT throws_ok(format('SELECT social_private.autopublish_http(%L::uuid,''POST'',''https://graph.invalid/account/media_publish'')',p),'55000','publication files require approved image or video media','carousel PDF child blocks the final publication request');
+  PERFORM public.editorial_autopublish_tick();
+  RETURN NEXT is((SELECT count(*) FROM net.publication_test_http),before_http,'carousel with a PDF child issues no HTTP requests');
+
   -- Each mutation occurs after the job was prepared; every dispatch rechecks it.
   FOR test_case IN SELECT * FROM (VALUES
     ('kill switch', 'UPDATE social_private.autopublish_settings SET enabled=false'),

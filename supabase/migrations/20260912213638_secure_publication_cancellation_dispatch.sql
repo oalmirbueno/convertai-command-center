@@ -4,6 +4,42 @@
 -- after which cancellation cannot be promised. Reconcile; never blindly resend.
 BEGIN;
 
+-- Apply the existing root document denylist to every carousel child as well.
+-- A child labelled application/pdf cannot become an image through a .png
+-- filename fallback. Keep inherited approval flags and client_shared support.
+DO $media_frames$
+DECLARE _definition text; _document_guard text;
+  _anchor text := '            OR child.approval_status <> ''none''';
+BEGIN
+  SELECT replace(pg_get_functiondef('public.editorial_file_is_publishable_media(uuid,uuid,uuid)'::regprocedure),E'\r\n',E'\n')
+    INTO _definition;
+  _document_guard := split_part(split_part(_definition,'      AND NOT (',2),E'\n      )\n      AND (',1);
+  IF (length(_definition)-length(replace(_definition,_anchor,'')))/length(_anchor) <> 1
+    OR position('root.mime_type' IN _document_guard)=0
+    OR position('root.storage_path' IN _document_guard)=0
+    OR position('root.file_type' IN _document_guard)=0
+    OR position('child.' IN _document_guard)>0
+    OR position('application/pdf' IN _document_guard)=0 THEN
+    RAISE EXCEPTION 'PUBLICATION_MEDIA_DOCUMENT_GUARD_ANCHOR_MISMATCH';
+  END IF;
+  EXECUTE replace(_definition,_anchor,_anchor || E'\n            OR (' || replace(_document_guard,'root.','child.') || ')');
+END $media_frames$;
+
+-- Approval alone does not make a PDF/document social media. Keep generic
+-- attachments available for editorial review, but require the canonical media
+-- predicate before schedule/publish. Replace only the two final media gates;
+-- the existing scope, version, snapshot and retry checks remain intact.
+DO $media_gate$
+DECLARE _definition text; _old text := 'OR NOT public.editorial_file_is_publishable(';
+BEGIN
+  SELECT pg_get_functiondef('public.transition_editorial_publication_unlocked(uuid,text,integer,timestamptz,text,text,text,text,text,timestamptz)'::regprocedure)
+    INTO _definition;
+  IF (length(_definition)-length(replace(_definition,_old,'')))/length(_old) <> 2 THEN
+    RAISE EXCEPTION 'PUBLICATION_MEDIA_GATE_ANCHOR_MISMATCH';
+  END IF;
+  EXECUTE replace(_definition,_old,'OR NOT public.editorial_file_is_publishable_media(');
+END $media_gate$;
+
 ALTER TABLE social_private.autopublish_jobs
   ADD COLUMN IF NOT EXISTS cancelled_at timestamptz,
   ADD COLUMN IF NOT EXISTS cancelled_by uuid,
@@ -120,9 +156,9 @@ BEGIN
     WHERE id IN (_root, _post.primary_file_id) OR parent_file_id = _root
       OR id IN (SELECT file_id FROM social_private.editorial_publication_assets WHERE publication_id = _pub.id)
     ORDER BY id FOR SHARE;
-  IF NOT COALESCE(public.editorial_file_is_publishable(_root, _pub.client_id, _pub.project_id), false)
-    OR NOT COALESCE(public.editorial_file_is_publishable(_post.primary_file_id, _pub.client_id, _pub.project_id), false) THEN
-    RAISE EXCEPTION 'publication files no longer approved' USING ERRCODE = '55000';
+  IF NOT COALESCE(public.editorial_file_is_publishable_media(_root, _pub.client_id, _pub.project_id), false)
+    OR NOT COALESCE(public.editorial_file_is_publishable_media(_post.primary_file_id, _pub.client_id, _pub.project_id), false) THEN
+    RAISE EXCEPTION 'publication files require approved image or video media' USING ERRCODE = '55000';
   END IF;
   SELECT * INTO _delivery FROM social_private.editorial_publication_delivery_requests WHERE publication_id = _pub.id FOR SHARE;
   SELECT count(*) INTO _assets FROM social_private.editorial_publication_assets WHERE publication_id = _pub.id;

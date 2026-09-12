@@ -1050,8 +1050,8 @@
       "version": "20260912213638",
       "name": "secure_publication_cancellation_dispatch",
       "path": "supabase/migrations/20260912213638_secure_publication_cancellation_dispatch.sql",
-      "local_sha256": "634b5d0177970850fc352735b8541868a5563441c6f41e05d09212310f514c7c",
-      "statements_sha256": "729d13f5f279099152e7647925d6efded95470a1ad5e788c3a0a86243baa5190",
+      "local_sha256": "cdd57555faa5d8545059603baf065333e2deb19f45d5ee1bd61138d5a7415fa9",
+      "statements_sha256": "40dd111922e09cea6a861cfd7cb4dd8fdbc8e69dd51260eb0d7c9189e612170b",
       "hash_mode": "supabase_cli_split"
     }
   ]

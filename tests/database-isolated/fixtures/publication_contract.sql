@@ -26,7 +26,8 @@ CREATE TABLE public.files(id uuid PRIMARY KEY,client_id uuid,project_id uuid,par
   sha256 text, mime_type text DEFAULT 'image/png',size_bytes bigint DEFAULT 12,
   archived_at timestamptz,status text DEFAULT 'ready',agency_approval_status text DEFAULT 'approved',
   visibility text DEFAULT 'client_shared',approval_status text DEFAULT 'none',locked_at timestamptz DEFAULT now(),
-  client_decided_at timestamptz,created_at timestamptz DEFAULT now());
+  client_decided_at timestamptz,created_at timestamptz DEFAULT now(),
+  extension text,file_type text,requires_approval boolean DEFAULT false);
 CREATE TABLE public.external_accounts(id uuid PRIMARY KEY,client_id uuid NOT NULL,platform text NOT NULL DEFAULT 'instagram',status text NOT NULL DEFAULT 'active',UNIQUE(id,client_id));
 CREATE TABLE public.project_external_accounts(project_id uuid,external_account_id uuid,client_id uuid);
 -- Canonical table: 20260728161129_create_editorial_calendar.sql
@@ -1280,6 +1281,161 @@ BEGIN
   RETURN COALESCE(_paths, ARRAY[]::text[]);
 END;
 $function$;
+-- Canonical media predicate (20260730010000) and its client_shared patch.
+CREATE OR REPLACE FUNCTION public.editorial_file_is_publishable_media(
+  _file_id uuid,
+  _client_id uuid,
+  _project_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.files AS root
+    WHERE root.id = _file_id
+      AND public.editorial_file_is_publishable(
+        root.id,
+        _client_id,
+        _project_id
+      )
+      AND NOT (
+        lower(COALESCE(root.mime_type, '')) = 'application/pdf'
+        OR lower(COALESCE(root.mime_type, '')) IN (
+          'application/msword',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.ms-excel',
+          'text/csv'
+        )
+        OR lower(COALESCE(root.mime_type, '')) LIKE
+          'application/vnd.openxmlformats-officedocument.%'
+        OR lower(COALESCE(root.mime_type, '')) LIKE
+          'application/vnd.oasis.opendocument.%'
+        OR lower(COALESCE(root.extension, '')) IN (
+          'pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx',
+          'csv', 'odt', 'ods', 'odp'
+        )
+        OR lower(COALESCE(root.file_name, '')) ~
+          '\.(pdf|docx?|pptx?|xlsx?|csv|odt|ods|odp)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.file_url, '')) ~
+          '\.(pdf|docx?|pptx?|xlsx?|csv|odt|ods|odp)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.storage_path, '')) ~
+          '\.(pdf|docx?|pptx?|xlsx?|csv|odt|ods|odp)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.file_type, '')) IN (
+          'pdf',
+          'application/pdf',
+          'application/msword',
+          'application/vnd.ms-powerpoint',
+          'application/vnd.ms-excel',
+          'document',
+          'documento',
+          'contract',
+          'contrato',
+          'report',
+          'relatorio',
+          'relatório',
+          'office'
+        )
+      )
+      AND (
+        lower(COALESCE(root.mime_type, '')) LIKE 'image/%'
+        OR lower(COALESCE(root.mime_type, '')) LIKE 'video/%'
+        OR lower(COALESCE(root.extension, '')) IN (
+          'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg',
+          'bmp', 'mp4', 'webm', 'mov', 'm4v', 'mkv', 'avi'
+        )
+        OR lower(COALESCE(root.file_name, '')) ~
+          '\.(jpe?g|png|gif|webp|avif|svg|bmp|mp4|webm|mov|m4v|mkv|avi)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.file_url, '')) ~
+          '\.(jpe?g|png|gif|webp|avif|svg|bmp|mp4|webm|mov|m4v|mkv|avi)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.storage_path, '')) ~
+          '\.(jpe?g|png|gif|webp|avif|svg|bmp|mp4|webm|mov|m4v|mkv|avi)([[:space:]_()/#?()-]|\[|\]|$)'
+        OR lower(COALESCE(root.file_type, '')) IN (
+          'image',
+          'imagem',
+          'photo',
+          'foto',
+          'video',
+          'vídeo'
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.files AS child
+        WHERE child.parent_file_id = root.id
+          AND (
+            child.client_id IS DISTINCT FROM root.client_id
+            OR child.project_id IS DISTINCT FROM root.project_id
+            OR child.archived_at IS NOT NULL
+            OR COALESCE(child.status, 'ready') <> 'ready'
+            OR child.agency_approval_status <> 'approved'
+            OR child.visibility <> 'approval'
+            OR child.approval_status <> 'none'
+            OR child.locked_at IS NULL
+            OR NOT (
+              lower(COALESCE(child.mime_type, '')) LIKE 'image/%'
+              OR lower(COALESCE(child.extension, '')) IN (
+                'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg',
+                'bmp'
+              )
+              OR lower(COALESCE(child.file_name, '')) ~
+                '\.(jpe?g|png|gif|webp|avif|svg|bmp)([[:space:]_()/#?()-]|\[|\]|$)'
+              OR lower(COALESCE(child.file_url, '')) ~
+                '\.(jpe?g|png|gif|webp|avif|svg|bmp)([[:space:]_()/#?()-]|\[|\]|$)'
+              OR lower(COALESCE(child.storage_path, '')) ~
+                '\.(jpe?g|png|gif|webp|avif|svg|bmp)([[:space:]_()/#?()-]|\[|\]|$)'
+              OR lower(COALESCE(child.file_type, '')) IN (
+                'image',
+                'imagem',
+                'photo',
+                'foto'
+              )
+            )
+          )
+      )
+  )
+$$;
+-- Liberar o material ao cliente não pode tornar o carrossel inagendável.
+--
+-- MEDIDO NA BASE: os carrosséis do Verzelo têm 7 slides cada — todos
+-- travados, todos aprovados pela agência — e visibility = 'client_shared',
+-- porque o dono LIBEROU o material. A regra dos filhos em
+-- editorial_file_is_publishable_media só aceitava visibility = 'approval'.
+--
+-- A raiz aceita os DOIS estados finais (aprovação concluída OU material
+-- disponibilizado — "disponibilizar dispensa a aprovação" é a regra da casa,
+-- documentada em isEditorialFilePublishable). Os filhos aceitavam só um.
+-- Efeito: o ato de liberar o carrossel ao cliente o tirava da agenda. Na
+-- base inteira, 98 slides estão nesse estado — o problema é sistêmico.
+--
+-- O patch alinha os filhos à regra da raiz: 'approval' OU 'client_shared'.
+-- Todo o resto permanece: travado, agência aprovada, imagem, mesmo cliente
+-- e projeto.
+
+DO $patch$
+DECLARE
+  _fonte text;
+  _alvo text;
+  _sub text;
+BEGIN
+  SELECT pg_get_functiondef(p.oid) INTO _fonte
+  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proname = 'editorial_file_is_publishable_media';
+
+  _alvo := E'            OR child.visibility <> ''approval''\n';
+  _sub  := E'            OR child.visibility NOT IN (''approval'', ''client_shared'')\n';
+
+  IF (length(_fonte) - length(replace(_fonte, _alvo, ''))) / length(_alvo) <> 1 THEN
+    RAISE EXCEPTION 'patch filhos: alvo nao encontrado exatamente 1 vez';
+  END IF;
+  EXECUTE replace(_fonte, _alvo, _sub);
+END
+$patch$;
+
 -- Explicit network/secret dependency mocks. No real keys, queues or HTTP.
 CREATE TABLE IF NOT EXISTS net._http_response(id bigint PRIMARY KEY,status_code integer,content text,timed_out boolean DEFAULT false,error_msg text);
 CREATE TABLE net.publication_test_http(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,method text,url text,body jsonb,created_at timestamptz DEFAULT clock_timestamp());

@@ -39,7 +39,7 @@ try {
  sql('CREATE DATABASE "'+database+'" TEMPLATE template0;',"postgres");
  sql(await readFile(path.join(root,"tests/database-isolated/bootstrap.sql"),"utf8"));
  sql(await readFile(path.join(root,"tests/database-isolated/fixtures/publication_contract.sql"),"utf8"));
- sql("ALTER TABLE public.files ADD COLUMN description text, ADD COLUMN caption text, ADD COLUMN extension text, ADD COLUMN file_type text, ADD COLUMN requires_approval boolean DEFAULT false;");
+ sql("ALTER TABLE public.files ADD COLUMN IF NOT EXISTS description text, ADD COLUMN IF NOT EXISTS caption text, ADD COLUMN IF NOT EXISTS extension text, ADD COLUMN IF NOT EXISTS file_type text, ADD COLUMN IF NOT EXISTS requires_approval boolean DEFAULT false;");
  sql("ALTER TABLE public.tasks ADD COLUMN project_id uuid, ADD COLUMN deleted_at timestamptz;");
  sql(extractFunction(plan.sources.calendar,"editorial_staff_can_access_client").definition);
  sql(extractFunction(plan.sources.calendar,"save_editorial_post").definition);
