@@ -24,7 +24,6 @@ const ABA_KEY = "aceleriq-esteira-aba";
 
 export default function AdminEsteira() {
   const { profile } = useAuth();
-  const canWrite = ["admin", "manager"].includes(profile?.role || "");
   usePwaProfile({ manifestHref: "/ciclo.webmanifest", appleTitle: "Ciclo", appleIcon: "/ciclo-apple-touch-icon.png" });
   const agora = useNow();
 
@@ -38,7 +37,8 @@ export default function AdminEsteira() {
   const segunda = useMemo(() => addDays(mondayOf(agora), semanaOffset * 7), [agora, semanaOffset]);
   const weekStart = localIso(segunda);
 
-  const { clientes, carregando, atualizando, recarregar } = useEsteira(weekStart, agora);
+  const { clientes, carregando, atualizando, erro, recarregar } = useEsteira(weekStart, agora);
+  const canWrite = !erro && ["admin", "manager"].includes(profile?.role || "");
   const clientesParaFoto = useMemo(() => clientes.map((c) => ({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })), [clientes]);
   const { fotoDe } = useFotosDosClientes(clientesParaFoto);
   const [detalheId, setDetalheId] = useState<string | null>(null);
@@ -52,6 +52,10 @@ export default function AdminEsteira() {
     } catch {
       toast.error("Não consegui atualizar agora.");
     }
+  };
+
+  const recarregarAposAcao = () => {
+    void recarregar().catch(() => toast.error("A ação foi salva, mas não consegui atualizar a leitura. Tente atualizar novamente."));
   };
 
   // Altura real do topo fixo, medida: o espaco reservado nunca fica menor
@@ -124,7 +128,8 @@ export default function AdminEsteira() {
           </div>
         </div>
         <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">
-          <button type="button" onClick={() => setComecarAberto(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground"><Compass className="h-3 w-3" />Por onde começar</button>
+          <button type="button" disabled={Boolean(erro) || carregando} onClick={() => setComecarAberto(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground disabled:opacity-50"><Compass className="h-3 w-3" />Por onde começar</button>
+          {erro ? <span className="shrink-0 text-destructive">Leitura indisponível</span> : <>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{visiveis.length} cliente{visiveis.length === 1 ? "" : "s"}</span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.urgentes ? "bg-destructive/15 text-destructive" : "bg-secondary text-muted-foreground"}`}>{resumo.urgentes} urgente{resumo.urgentes === 1 ? "" : "s"}</span>
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${resumo.atencao ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground"}`}>{resumo.atencao} atenção</span>
@@ -132,15 +137,23 @@ export default function AdminEsteira() {
           {resumo.entrada > 0 && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{resumo.entrada} em entrada</span>}
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">rituais {resumo.rituaisFeitos}/{visiveis.length * 3}</span>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{resumo.feitos} feito{resumo.feitos === 1 ? "" : "s"} na semana</span>
+          </>}
         </div>
       </header>
       <div style={{ height: headerH }} aria-hidden />
 
       <main className="mx-auto max-w-5xl px-4 pb-[calc(env(safe-area-inset-bottom)+72px)] pt-3">
+        {erro && (
+          <div role="alert" className="mb-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3 text-[13px]">
+            <p className="font-semibold">Não consegui atualizar a Esteira.</p>
+            <p className="mt-1 text-muted-foreground">{clientes.length > 0 ? "Os dados abaixo são da última leitura concluída. As ações ficam pausadas até atualizar." : "A leitura está indisponível. Isso não significa que não há clientes ou pendências."}</p>
+            <button type="button" disabled={atualizando} onClick={() => void atualizar()} className="mt-2 font-semibold underline disabled:opacity-50">Tentar novamente</button>
+          </div>
+        )}
         {carregando && clientes.length === 0 && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">Lendo a operação de cada cliente…</p>
         )}
-        {!carregando && visiveis.length === 0 && (
+        {!erro && !carregando && visiveis.length === 0 && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">Nenhum cliente nesta frente. Use "Quem entra" para incluir.</p>
         )}
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -175,7 +188,7 @@ export default function AdminEsteira() {
                   </div>
                 </div>
                 <div className="mt-2.5 space-y-1.5">
-                  {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={() => void recarregar()} compacto />)}
+                  {topo.map((it) => <EsteiraItemRow key={it.key} item={it} weekStart={weekStart} canWrite={false} onMudou={recarregarAposAcao} compacto />)}
                   {resto > 0 && <p className="px-1 text-[11px] text-muted-foreground">+ {resto} item{resto === 1 ? "" : "s"}</p>}
                 </div>
                 <div className="mt-2.5 flex items-center gap-1.5">
@@ -209,7 +222,7 @@ export default function AdminEsteira() {
         </div>
       </nav>
 
-      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={() => void recarregar()} />
+      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={recarregarAposAcao} />
 
       {/* Por onde comecar: a carteira ordenada pela urgencia real, com o
           motivo de cada posicao. Toca no cliente e abre a gaveta dele. */}
@@ -270,7 +283,7 @@ export default function AdminEsteira() {
                 <div key={c.id} className="flex items-center justify-between rounded-xl border border-border px-3 py-2">
                   <div className="min-w-0"><p className="truncate text-[13px] font-medium">{c.nome}</p><p className="text-[11px] text-muted-foreground">{estado}</p></div>
                   {temServico && canWrite && (
-                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: c.id, area: frente, ocultar: !oculto, ateQuando: null }); if (ok) void recarregar(); }} className="rounded-lg border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50">{oculto ? "Incluir" : "Ocultar"}</button>
+                    <button type="button" onClick={async () => { const ok = await ocultarCliente({ clientId: c.id, area: frente, ocultar: !oculto, ateQuando: null }); if (ok) recarregarAposAcao(); }} className="rounded-lg border border-border px-2.5 py-1 text-[12px] text-muted-foreground hover:border-primary/50">{oculto ? "Incluir" : "Ocultar"}</button>
                   )}
                 </div>
               );

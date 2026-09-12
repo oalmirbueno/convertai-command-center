@@ -4,6 +4,8 @@
 // para esta URL via header WWW-Authenticate.
 
 import { getMcpRuntimeConfig } from '../_shared/mcp-runtime.ts';
+import { MCP_VERSION } from '../_shared/mcp-release.ts';
+import { MCP_RELEASE_SOURCE } from '../_shared/mcp-release-source.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +21,6 @@ const {
   authorizationServerMetadataUrl: AUTH_SERVER_METADATA,
 } = getMcpRuntimeConfig();
 
-const MCP_VERSION = '1.42.0';
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];
@@ -65,6 +66,7 @@ function protectedResourceMetadata() {
     resource_documentation: `${APP_PUBLIC_URL}/conectar-mcp`,
     resource_name: 'Aceleriq OS MCP',
     mcp: {
+      release: MCP_RELEASE_SOURCE,
       transport: 'streamable-http',
       protocol_version: MCP_PROTOCOL,
       endpoint: RESOURCE,

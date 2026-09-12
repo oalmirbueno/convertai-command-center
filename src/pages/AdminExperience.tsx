@@ -1480,7 +1480,7 @@ export default function AdminExperience() {
     const clientName = c.company_name || c.full_name;
     const [historia, cerebro] = await Promise.all([
       readMemory(c.id, { limit: 12, kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any }).then(memoryAsContext).catch(() => ""),
-      supabase.functions.invoke("brain-client-context", { body: { client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
+      supabase.functions.invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
     ]);
     return [
       collectFacts(c),
@@ -1555,7 +1555,7 @@ export default function AdminExperience() {
               kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any,
             }).then(memoryAsContext),
             supabase.functions
-              .invoke("brain-client-context", { body: { client_name: clientName } })
+              .invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } })
               .then((r) => String(r.data?.context || ""))
               .catch(() => ""),
           ]);

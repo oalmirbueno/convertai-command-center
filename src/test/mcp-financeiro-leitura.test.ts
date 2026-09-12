@@ -1,6 +1,8 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ModuleKind, transpileModule } from "typescript";
 
 /**
  * O Financeiro no MCP: completo para ver, incapaz de mexer.
@@ -176,10 +178,42 @@ describe("o painel financeiro inteiro, mes a mes", () => {
     expect(painel).toContain("equilibrioOperacional / (1 - ALIQUOTA_PADRAO)");
   });
 
-  it("a aliquota vem do plano de cada cliente, com 6% de reserva", () => {
-    // Cliente com plano de aliquota propria nao pode ser tributado pela
-    // taxa ilustrativa: o imposto reservado sairia errado no mes inteiro.
-    expect(painel).toContain("aliquotaDoCliente.get(it.clienteId)) ?? ALIQUOTA_PADRAO");
+  it.each([
+    ["cliente-com-plano", 0.1, 10],
+    ["cliente-com-plano", 0, 0],
+    ["cliente-sem-plano", null, 6],
+    [null, null, 6],
+  ] as const)("usa aliquota do plano ou 6%% quando nao houver cliente/plano: %s, taxa %s", async (clientId, rate, expectedTax) => {
+    // Execute the real dashboard with synthetic read responses. This verifies
+    // the null guard, plan-specific rates and a legitimate zero rate without
+    // coupling the contract to TypeScript's narrowing syntax.
+    const rows: Record<string, unknown> = {
+      billing: [{ client_id: clientId, type: "renewal", amount: 100, status: "paid", paid_date: "2026-09-10" }],
+      profiles: clientId ? [{ id: clientId, plan_name: "Plano sintético", plan_status: "active" }] : [],
+      financial_plans: rate === null ? [] : [{ name: "Plano sintético", financial_plan_versions: [{ tax_rate: rate, is_active: true, valid_from: "2026-01-01" }] }],
+      financial_settings: {},
+    };
+    const db = { from: (table: string) => {
+      const promise = Promise.resolve({ data: rows[table] ?? [], error: null });
+      return Object.assign(promise, {
+        select: () => promise, limit: () => promise, eq: () => promise,
+        is: () => promise, maybeSingle: () => promise,
+      });
+    } };
+    const compiled = transpileModule(painel, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+    const exports: Record<string, unknown> = {};
+    const execute = new Function("exports", "require", "setTimeout", compiled);
+    execute(exports, (dependency: string) => {
+      if (dependency !== "./aceleriq-read-services.ts") throw new Error(`Unexpected test dependency: ${dependency}`);
+      return { db: () => db, READ_LIMITS: { queryTimeoutMs: 8000, maxPageSize: 500 } };
+    }, () => 0);
+    const getDashboard = exports.getFinanceDashboard as (input: { competence: string }) => Promise<{
+      divisao_automatica: { recebido_bruto: number; reserva_tributaria: number; receita_operacional: number };
+    }>;
+    const dashboard = await getDashboard({ competence: "2026-09-01" });
+    expect(dashboard.divisao_automatica).toMatchObject({
+      recebido_bruto: 100, reserva_tributaria: expectedTax, receita_operacional: 100 - expectedTax,
+    });
   });
 
   it("o pro-labore de despesa nao e descontado duas vezes", () => {
@@ -369,8 +403,8 @@ describe("a versão anda junto nos dois lugares", () => {
     const metadata = readFileSync(
       resolve(raiz, "supabase/functions/mcp-oauth-metadata/index.ts"), "utf8",
     );
-    const noServidor = ferramentas.match(/version: '(\d+\.\d+\.\d+)'/)?.[1];
-    const naDescoberta = metadata.match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/)?.[1];
+    const noServidor = MCP_VERSION.match(/(\d+\.\d+\.\d+)/)?.[1];
+    const naDescoberta = MCP_VERSION.match(/(\d+\.\d+\.\d+)/)?.[1];
 
     expect(noServidor).toBeTruthy();
     expect(noServidor).toBe(naDescoberta);

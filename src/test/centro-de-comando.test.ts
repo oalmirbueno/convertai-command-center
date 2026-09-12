@@ -97,8 +97,8 @@ describe("o mcp expoe a participacao", () => {
   });
 
   it("a versao subiu junto nos dois arquivos", () => {
-    expect(tools).toContain("version: '1.42.0'");
-    expect(ler("supabase/functions/mcp-oauth-metadata/index.ts")).toContain("const MCP_VERSION = '1.42.0';");
+    expect(tools).toContain("version: MCP_VERSION");
+    expect(ler("supabase/functions/mcp-oauth-metadata/index.ts")).toContain("import { MCP_VERSION } from '../_shared/mcp-release.ts'");
   });
 
   it("nome ambiguo de pessoa e recusado listando candidatos", () => {

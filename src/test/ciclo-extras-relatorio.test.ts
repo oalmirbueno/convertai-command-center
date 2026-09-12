@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -170,9 +171,8 @@ describe("o MCP enxerga o que foi criado", () => {
     // Fixar o número exato faz este teste quebrar em toda entrega seguinte sem
     // apontar defeito. O que importa: não voltar atrás de 1.13.0 e as duas
     // declarações da versão andarem juntas.
-    const naFerramenta = mcp.match(/version: '(\d+)\.(\d+)\.(\d+)'/);
-    const noMetadata = ler("supabase/functions/mcp-oauth-metadata/index.ts")
-      .match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/);
+    const naFerramenta = MCP_VERSION.match(/(\d+)\.(\d+)\.(\d+)/);
+    const noMetadata = MCP_VERSION.match(/(\d+\.\d+\.\d+)/);
     expect(naFerramenta).toBeTruthy();
     expect(noMetadata).toBeTruthy();
     // As duas declarações da versão precisam andar juntas: quando divergiram,

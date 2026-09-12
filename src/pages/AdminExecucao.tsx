@@ -27,6 +27,7 @@ import {
 } from "@/lib/execucaoBadges";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
+import { operatorRunIsStale } from "../../supabase/functions/_shared/operator-freshness";
 
 /**
  * Execução da equipe: o que os operadores internos (Hermes) estão fazendo,
@@ -141,6 +142,7 @@ export default function AdminExecucao() {
   const [menuCartao, setMenuCartao] = useState<{ x: number; y: number; v: Vinculo } | null>(null);
   const [menuEncaminhar, setMenuEncaminhar] = useState<{ x: number; y: number; tarefaId: string; titulo: string } | null>(null);
   const [atualizando, setAtualizando] = useState(false);
+  const [reconciliando, setReconciliando] = useState(false);
   const [diarioAberto, setDiarioAberto] = useState<{ linkId: string; titulo?: string } | null>(null);
   const [responsavelAberto, setResponsavelAberto] = useState<
     { taskId: string; titulo?: string; atual?: string | null } | null>(null);
@@ -188,38 +190,33 @@ export default function AdminExecucao() {
         // o painel obedece, sem deploy no meio.
         .order("display_order", { ascending: true })
         .order("display_name", { ascending: true });
-      if (error) return [];
+      if (error) throw error;
       return (data || []) as Operador[];
     },
     enabled: flag === "on",
   });
 
-  const { data: vinculos = [], dataUpdatedAt } = useQuery({
+  const { data: vinculos = [], dataUpdatedAt, error: erroVinculos } = useQuery({
     queryKey: ["operador-vinculos"],
     queryFn: async () => {
-      // A leitura expira runs penduradas antes de mostrar: execução sem
-      // heartbeat vira timeout VISÍVEL, nunca "em andamento" eterno.
-      await (supabase as any).rpc("operator_expire_stale_runs");
-      // Proposta e vinculo de tarefa excluida ou concluida perderam o objeto:
-      // fecham aqui, com motivo, antes de a tela pedir decisao sobre eles.
-      await (supabase as any).rpc("operator_fechar_orfaos").catch(() => null);
+      // Consultar e atualizar a tela não alteram execuções nem ordens.
       const { data, error } = await (supabase as any)
         .from("operator_task_links").select("*").order("updated_at", { ascending: false }).limit(300);
-      if (error) return [];
+      if (error) throw error;
       return (data || []) as Vinculo[];
     },
     enabled: flag === "on",
     refetchInterval: 30_000,
   });
 
-  const { data: runs = [] } = useQuery({
+  const { data: runs = [], error: erroRuns } = useQuery({
     queryKey: ["operador-runs"],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("operator_runs")
-        .select("id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, finished_at, error")
+        .select("id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error")
         .order("started_at", { ascending: false }).limit(200);
-      if (error) return [];
+      if (error) throw error;
       return (data || []) as Array<Record<string, any>>;
     },
     enabled: flag === "on",
@@ -495,6 +492,7 @@ export default function AdminExecucao() {
     () => runs.filter((r) => ["failed", "timeout"].includes(String(r.status))),
     [runs],
   );
+  const runsSemHeartbeat = runs.filter((run) => operatorRunIsStale(run)).length;
 
   /* ── Relatórios: gerados dos MESMOS eventos que a tela mostra ── */
   const relatorio = useMemo(() => {
@@ -606,10 +604,26 @@ export default function AdminExecucao() {
         queryClient.invalidateQueries({ queryKey: ["agente-runs"] }),
         queryClient.invalidateQueries({ queryKey: ["agente-trilha"] }),
       ]);
-      toast.success("Quadro atualizado.");
+      const keys = ["operador-vinculos", "operador-runs", "operadores-internos", "operador-tarefas-disponiveis", "operador-tarefas"];
+      if (keys.some(key => queryClient.getQueryCache().findAll({ queryKey: [key] }).some(query => query.state.status === "error"))) {
+        toast.error("Parte do quadro não pôde ser atualizada. Os últimos dados continuam visíveis.");
+      } else toast.success("Quadro atualizado.");
     } finally {
       setAtualizando(false);
     }
+  };
+
+  const reconciliarExecucoes = async () => {
+    if (reconciliando || profile?.role !== "admin") return;
+    setReconciliando(true);
+    try {
+      const result = await supabase.rpc("operator_maintenance_tick");
+      if (result.error) throw result.error;
+      await atualizarTudo();
+      toast.success("Reconciliação registrada. Histórico preservado.");
+    } catch {
+      toast.error("A reconciliação não foi concluída. Atualize o quadro antes de tentar novamente.");
+    } finally { setReconciliando(false); }
   };
 
   /**
@@ -1019,8 +1033,10 @@ export default function AdminExecucao() {
         <h1 className="text-lg font-bold text-foreground">Execução da equipe</h1>
         <p className="text-[12px] text-muted-foreground">
           Operadores internos executam e relatam; o responsável humano continua sendo quem responde.
-          Atualizado {dataCurta(new Date(dataUpdatedAt || Date.now()).toISOString())}.
+          {dataUpdatedAt ? ` Atualizado ${dataCurta(new Date(dataUpdatedAt).toISOString())}.` : " Aguardando a primeira leitura."}
         </p>
+        {(erroVinculos || erroRuns) && <p role="alert" className="mt-1 text-xs text-destructive">Não foi possível ler parte da execução. Os dados exibidos podem estar desatualizados.</p>}
+        {runsSemHeartbeat > 0 && <p className="mt-1 text-xs text-warning">{runsSemHeartbeat} execução(ões) sem sinal dentro do prazo. O estado registrado aguarda reconciliação.</p>}
         {diasSemAgente !== null && diasSemAgente >= 2 && (
           <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 py-1 text-[11.5px] text-warning">
             <PauseCircle className="h-3.5 w-3.5" /> Nenhum agente roda há {diasSemAgente} dias (último em {ultimoRunDosAgentes ? dataCurta(ultimoRunDosAgentes.toISOString()) : "?"}). A fila só anda com o Hermes ligado; o painel não dispara agente.
@@ -1036,6 +1052,12 @@ export default function AdminExecucao() {
           </button>
         )}
         </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+        {profile?.role === "admin" && <button type="button" onClick={() => void reconciliarExecucoes()} disabled={reconciliando}
+          title="Registra timeout de execuções sem sinal e encerra vínculos sem tarefa ativa. Preserva o histórico."
+          className="h-8 rounded-lg border border-border px-2.5 text-[11.5px] text-muted-foreground disabled:opacity-50">
+          {reconciliando ? "Reconciliando…" : "Reconciliar execuções"}
+        </button>}
         <button
           type="button"
           onClick={() => void atualizarTudo()}
@@ -1045,6 +1067,7 @@ export default function AdminExecucao() {
           <RefreshCw className={cn("h-3.5 w-3.5", atualizando && "animate-spin")} />
           Atualizar
         </button>
+        </div>
       </div>
 
       {/* O placar do dia: o que decide a atenção, em números. */}

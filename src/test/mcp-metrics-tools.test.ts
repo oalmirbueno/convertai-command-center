@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -57,7 +58,7 @@ describe("as ferramentas de resultado existem e estão ligadas", () => {
     // conector continua mostrando as antigas. Fixar o número exato, porém, faz
     // este teste quebrar em toda entrega seguinte sem apontar defeito nenhum —
     // o que interessa é não voltar atrás de 1.12.0, quando elas nasceram.
-    const declarada = tools.match(/version: '(\d+)\.(\d+)\.(\d+)'/);
+    const declarada = MCP_VERSION.match(/(\d+)\.(\d+)\.(\d+)/);
     expect(declarada).toBeTruthy();
     const [maior, menor] = [Number(declarada![1]), Number(declarada![2])];
     expect(maior > 1 || (maior === 1 && menor >= 12)).toBe(true);

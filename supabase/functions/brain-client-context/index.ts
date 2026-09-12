@@ -1,110 +1,44 @@
-// Aceleriq OS — O que o segundo cérebro sabe sobre um cliente
-//
-// O painel guarda o que aconteceu dentro dele. O segundo cérebro guarda o
-// resto: contexto de reuniões, decisões de estratégia, histórico que nunca
-// passou por uma tela. Sem essa ponte, o ritual escreve com meio contexto e
-// soa genérico, ou pior, afirma coisa errada por não saber o que já existe.
-//
-// Esta função busca no repositório de memória as notas que mencionam aquele
-// cliente e devolve trechos curtos, prontos para virar contexto de IA.
-//
-// Segurança: só equipe autenticada. O bridge é read-only aqui: nada é escrito.
-
+// Read-only client context. Check authorization before accessing the repository.
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  bridgeStatusPublic,
-  getFile,
-  searchCode,
-  SecondBrainError,
-} from "../_shared/second-brain-github.ts";
+import { bridgeStatusPublic, getFile, searchCode } from "../_shared/second-brain-github.ts";
+import { makeBrainContextHandler } from "../_shared/brain-client-context-handler.ts";
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
+const url = Deno.env.get("SUPABASE_URL")!;
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const authOptions = { persistSession: false, autoRefreshToken: false };
+const admin = createClient(url, serviceKey, { auth: authOptions });
 
-/** Só os pedaços que citam o cliente, com um pouco de contexto em volta. */
-function trechosRelevantes(conteudo: string, termos: string[], max = 3): string[] {
-  const linhas = conteudo.split("\n");
-  const achados: string[] = [];
-  for (let i = 0; i < linhas.length && achados.length < max; i += 1) {
-    const linha = linhas[i];
-    if (!termos.some((termo) => linha.toLowerCase().includes(termo))) continue;
-    const bloco = linhas.slice(Math.max(0, i - 1), i + 3).join(" ").replace(/\s+/g, " ").trim();
-    if (bloco.length > 40) achados.push(bloco.slice(0, 500));
-  }
-  return achados;
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    if (!token) return jsonResponse({ error: "Sessão expirada." }, 401);
-
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    );
-    const { data: userData, error: userError } = await admin.auth.getUser(token);
-    if (userError || !userData?.user) return jsonResponse({ error: "Sessão expirada." }, 401);
-    const { data: isStaff } = await admin.rpc("is_staff", { _user_id: userData.user.id });
-    if (!isStaff) return jsonResponse({ error: "Somente equipe." }, 403);
-
-    // Sem bridge configurado o painel segue funcionando sem este contexto.
-    if (!bridgeStatusPublic().configured) {
-      return jsonResponse({ configured: false, context: "", sources: [] });
-    }
-
-    const body = await req.json().catch(() => ({}));
-    const nome = String(body?.client_name || "").trim();
-    if (nome.length < 2) return jsonResponse({ error: "client_name obrigatório." }, 400);
-
-    // Termos de busca: o nome inteiro e a primeira palavra (as notas raramente
-    // usam a razão social completa).
-    const primeiraPalavra = nome.split(/\s+/)[0];
-    const termos = [nome.toLowerCase(), primeiraPalavra.toLowerCase()];
-
-    let arquivos: Array<{ path: string }> = [];
-    try {
-      arquivos = await searchCode(primeiraPalavra, 5);
-    } catch (error) {
-      if (error instanceof SecondBrainError) {
-        return jsonResponse({ configured: true, context: "", sources: [], note: "busca indisponível" });
-      }
-      throw error;
-    }
-
-    const blocos: string[] = [];
-    const fontes: string[] = [];
-    for (const arquivo of arquivos.slice(0, 4)) {
-      try {
-        const conteudo = await getFile(arquivo.path);
-        const texto = typeof conteudo?.content === "string" ? conteudo.content : "";
-        const trechos = trechosRelevantes(texto, termos);
-        if (trechos.length > 0) {
-          fontes.push(arquivo.path);
-          blocos.push(`[${arquivo.path}]\n${trechos.join("\n")}`);
-        }
-      } catch {
-        /* arquivo ilegível: segue para o próximo */
-      }
-    }
-
-    return jsonResponse({
-      configured: true,
-      context: blocos.join("\n\n").slice(0, 4000),
-      sources: fontes,
-    });
-  } catch (error) {
-    // Contexto extra nunca pode derrubar a geração do ritual.
-    console.warn(`[cerebro] falha: ${error instanceof Error ? error.message : String(error)}`);
-    return jsonResponse({ configured: true, context: "", sources: [] });
-  }
-});
+Deno.serve(makeBrainContextHandler({
+  async authenticate(token) {
+    const { data, error } = await admin.auth.getUser(token);
+    if (error || !data.user) return null;
+    const [staff, role] = await Promise.all([
+      admin.rpc("is_staff", { _user_id: data.user.id }),
+      admin.rpc("has_role", { _user_id: data.user.id, _role: "admin" }),
+    ]);
+    if (staff.error || role.error) throw new Error("Authorization unavailable");
+    return { id: data.user.id, staff: staff.data === true, admin: role.data === true };
+  },
+  async resolveClient(input) {
+    const base = () => admin.from("profiles").select("id, full_name, company_name").is("deleted_at", null);
+    const results = input.id
+      ? [await base().eq("id", input.id).limit(1)]
+      : await Promise.all([base().eq("full_name", input.name!).limit(2), base().eq("company_name", input.name!).limit(2)]);
+    if (results.some(r => r.error)) throw new Error("Client lookup unavailable");
+    const rows = [...new Map(results.flatMap(r => r.data ?? []).map(r => [r.id, r])).values()];
+    if (rows.length !== 1) return null;
+    return { id: rows[0].id, name: rows[0].company_name?.trim() || rows[0].full_name || rows[0].id };
+  },
+  async canAccess(token, clientId) {
+    // can_access_client reads auth.uid(): preserve the caller's JWT in this RPC.
+    const scoped = createClient(url, serviceKey, { auth: authOptions,
+      global: { headers: { Authorization: `Bearer ${token}` } } });
+    const { data, error } = await scoped.rpc("can_access_client", { _client_id: clientId });
+    if (error) throw new Error("Authorization unavailable");
+    return data === true;
+  },
+  configured: () => bridgeStatusPublic().configured,
+  search: searchCode,
+  read: getFile,
+}, corsHeaders));

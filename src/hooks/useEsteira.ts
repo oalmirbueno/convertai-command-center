@@ -1,6 +1,7 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
+import { useAuth } from "@/contexts/AuthContext";
 import { lerFatosDaEsteira } from "@/lib/esteira/esteiraFatos";
 import { montarEsteira } from "@/lib/esteira/esteiraMontar";
 import type { EsteiraDoCliente, FatosDoCliente } from "@/lib/esteira/esteiraTipos";
@@ -14,25 +15,52 @@ export interface ClienteDaEsteira {
   esteira: EsteiraDoCliente;
 }
 
+interface ClienteCadastrado {
+  id: string;
+  company_name?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
+  client_type?: string | null;
+  plan_status?: string | null;
+  deleted_at?: string | null;
+  created_at?: string | null;
+  services_config?: Record<string, unknown> | null;
+}
+
+const filtrarAtivos = (clients: ClienteCadastrado[] | undefined): ClienteCadastrado[] =>
+  (clients ?? []).filter((c) => c.plan_status === "active" && !c.deleted_at);
+
+const chaveDosFatos = (userId: string | undefined, role: string | undefined, weekStart: string, clientes: ClienteCadastrado[]) =>
+  ["esteira-fatos", userId, role, weekStart, clientes.map((c) => c.id).sort().join(",")] as const;
+
+const lerFatos = (clientes: ClienteCadastrado[], weekStart: string) =>
+  lerFatosDaEsteira(clientes.map((c) => ({ id: c.id, created_at: c.created_at ?? null, services_config: c.services_config ?? null })), weekStart);
+
 /**
  * Carrega a carteira ativa, le os fatos item a item e monta a esteira de
  * cada cliente para a semana pedida. Uma leitura por tabela para todos.
  */
 export function useEsteira(weekStart: string, hoje: Date) {
-  const { data: clients, isLoading: carregandoClientes } = useClients();
+  const { user, profile } = useAuth();
+  const userId = user?.id;
+  const role = profile?.role;
+  const clientsQuery = useClients();
+  const { data: clients, isLoading: carregandoClientes } = clientsQuery;
+  const { refetch: refetchClients } = clientsQuery;
   const queryClient = useQueryClient();
+  const [recarregando, setRecarregando] = useState(false);
 
   const ativos = useMemo(
-    () => ((clients ?? []) as Array<Record<string, any>>).filter((c) => c.plan_status === "active" && !c.deleted_at),
+    () => filtrarAtivos(clients),
     [clients],
   );
-  const ids = useMemo(() => ativos.map((c) => String(c.id)).sort().join(","), [ativos]);
 
   const fatosQuery = useQuery({
-    queryKey: ["esteira-fatos", weekStart, ids],
-    enabled: ativos.length > 0,
+    queryKey: chaveDosFatos(userId, role, weekStart, ativos),
+    enabled: Boolean(userId) && ativos.length > 0,
     staleTime: 60_000,
-    queryFn: () => lerFatosDaEsteira(ativos.map((c) => ({ id: String(c.id), created_at: c.created_at ?? null, services_config: c.services_config ?? null })), weekStart),
+    queryFn: () => lerFatos(ativos, weekStart),
   });
 
   const lista = useMemo<ClienteDaEsteira[]>(() => {
@@ -55,16 +83,31 @@ export function useEsteira(weekStart: string, hoje: Date) {
   // Recarrega clientes E fatos; devolve quando os fatos novos chegaram, para
   // o botao poder avisar "atualizado" com verdade.
   const recarregar = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["clients"] });
-    await queryClient.invalidateQueries({ queryKey: ["esteira-fatos"] });
-    await fatosQuery.refetch();
-  }, [queryClient, fatosQuery]);
+    if (!userId) throw new Error("Entre novamente para atualizar a Esteira.");
+    setRecarregando(true);
+    try {
+      const { data: novosClientes } = await refetchClients({ throwOnError: true });
+      const novosAtivos = filtrarAtivos(novosClientes);
+      await queryClient.invalidateQueries({ queryKey: ["esteira-fatos", userId, role], refetchType: "none" });
+      if (novosAtivos.length > 0) {
+        // Usa os clientes que acabaram de chegar, nao os ids capturados
+        // antes da recarga; fetchQuery propaga erros e conserva o cache.
+        await queryClient.fetchQuery({
+          queryKey: chaveDosFatos(userId, role, weekStart, novosAtivos),
+          queryFn: () => lerFatos(novosAtivos, weekStart),
+          staleTime: 0,
+        });
+      }
+    } finally {
+      setRecarregando(false);
+    }
+  }, [queryClient, refetchClients, role, userId, weekStart]);
 
   return {
     clientes: lista,
     carregando: carregandoClientes || fatosQuery.isLoading,
-    atualizando: fatosQuery.isFetching,
-    erro: fatosQuery.error,
+    atualizando: recarregando || clientsQuery.isFetching || fatosQuery.isFetching,
+    erro: clientsQuery.error || fatosQuery.error,
     recarregar,
   };
 }

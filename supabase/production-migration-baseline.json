@@ -769,6 +769,22 @@
       "remote_name": "execucao_destravada",
       "remote_statements_sha256": "e797052004faa1175b5867e07c08f5bfde06fd40864e2459a0cf1c94ea519ef8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260912213530",
+      "path": "supabase/migrations/20260912213530_rpc_caller_boundaries_preserve_data.sql",
+      "local_sha256": "8e4133ac799a589c3e1b1bd32cdc2941cc156dc8fd9bbaa3b57a1c3c85c2821d",
+      "remote_name": "rpc_caller_boundaries_preserve_data",
+      "remote_statements_sha256": "505da45047214f8d5cf9f7d3d42881f7788875b40d653efb42f4d56e8b4b7419",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260912213638",
+      "path": "supabase/migrations/20260912213638_secure_publication_cancellation_dispatch.sql",
+      "local_sha256": "634b5d0177970850fc352735b8541868a5563441c6f41e05d09212310f514c7c",
+      "remote_name": "secure_publication_cancellation_dispatch",
+      "remote_statements_sha256": "729d13f5f279099152e7647925d6efded95470a1ad5e788c3a0a86243baa5190",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

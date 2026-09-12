@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -93,7 +94,7 @@ describe("criar projeto tem fronteira de dinheiro nos dois servidores", () => {
     // Piso, não número exato: pinar a versão faria este teste quebrar em
     // toda entrega legítima seguinte (o alinhamento entre as duas pontas
     // fica com painel-conversa.test.ts).
-    const versao = toolsRico.match(/version: '(\d+)\.(\d+)\.\d+'/);
+    const versao = MCP_VERSION.match(/(\d+)\.(\d+)\.\d+/);
     expect(versao).toBeTruthy();
     expect(Number(versao![2])).toBeGreaterThanOrEqual(15);
   });

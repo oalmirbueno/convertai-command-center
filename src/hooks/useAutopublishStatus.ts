@@ -16,6 +16,7 @@ export interface AutopublishStatus {
   client_id: string;
   stage:
     | "queued"
+    | "sign"
     | "children"
     | "parent"
     | "processing"
@@ -24,7 +25,8 @@ export interface AutopublishStatus {
     | "recover"
     | "permalink"
     | "done"
-    | "failed";
+    | "failed"
+    | "cancelled";
   attempts: number;
   last_error: string | null;
   permalink: string | null;
@@ -34,6 +36,7 @@ export interface AutopublishStatus {
 
 export const AUTOPUBLISH_STAGE_LABELS: Record<AutopublishStatus["stage"], string> = {
   queued: "Na fila para publicar",
+  sign: "Preparando os arquivos para envio",
   children: "Enviando os cartões do carrossel",
   parent: "Montando o carrossel",
   processing: "Instagram processando o vídeo",
@@ -43,6 +46,7 @@ export const AUTOPUBLISH_STAGE_LABELS: Record<AutopublishStatus["stage"], string
   permalink: "Confirmando o link do post",
   done: "Publicado pelo painel",
   failed: "Não conseguiu publicar",
+  cancelled: "Publicação cancelada antes do envio",
 };
 
 /** Reprocessa uma publicação que falhou. Sem risco de post duplicado: se a

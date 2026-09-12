@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CashFlow from "@/components/finance/CashFlow";
@@ -28,6 +28,7 @@ import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
+import { createBilling } from "@/lib/createBilling";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -135,6 +136,8 @@ function LegacyFinanceiro() {
   });
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
+  const [creatingBilling, setCreatingBilling] = useState(false);
+  const creatingBillingRef = useRef(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [addWalletModal, setAddWalletModal] = useState(false);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
@@ -438,18 +441,27 @@ function LegacyFinanceiro() {
   };
 
   const handleCreateBilling = async () => {
-    if (!billForm.client_id || !billForm.amount || !billForm.due_date) { toast.error("Preencha todos os campos"); return; }
-    await supabase.from("billing").insert({
-      client_id: billForm.client_id, type: billForm.type,
-      amount: parseFloat(billForm.amount), due_date: billForm.due_date,
-      description: billForm.description || null,
-    });
-    // Notify client
-    await notifyUser(billForm.client_id, `Nova cobrança de ${fmt(parseFloat(billForm.amount))} registrada`, "billing", "/financeiro");
-    queryClient.invalidateQueries({ queryKey: ["billing"] });
-    toast.success("Cobrança criada");
-    setNewBillingOpen(false);
-    setBillForm({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
+    // A ref tambem cobre dois cliques antes do proximo render do React.
+    if (creatingBillingRef.current) return;
+    creatingBillingRef.current = true;
+    setCreatingBilling(true);
+    try {
+      const { notificationFailed } = await createBilling(billForm);
+      toast.success("Cobrança criada");
+      setNewBillingOpen(false);
+      setBillForm({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
+      if (notificationFailed) toast.warning("A cobrança foi criada, mas não consegui avisar o cliente.");
+      // Uma falha de recarga posterior nao pode apresentar a criacao como
+      // falha e incentivar uma segunda cobranca para o mesmo pedido.
+      void queryClient.invalidateQueries({ queryKey: ["billing"] }).catch(() => {
+        toast.warning("Cobrança criada. Atualize a lista para conferir o lançamento.");
+      });
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível criar a cobrança. Seus dados foram mantidos.");
+    } finally {
+      creatingBillingRef.current = false;
+      setCreatingBilling(false);
+    }
   };
 
   const handleRequestRecharge = async () => {
@@ -1845,21 +1857,24 @@ function LegacyFinanceiro() {
       </div>
 
       {/* New Billing Modal */}
-      <Dialog open={newBillingOpen} onOpenChange={setNewBillingOpen}>
+      <Dialog open={newBillingOpen} onOpenChange={(open) => { if (!creatingBilling) setNewBillingOpen(open); }}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="text-foreground">Nova Cobrança</DialogTitle></DialogHeader>
-          <div className="space-y-3">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Nova Cobrança</DialogTitle>
+            <DialogDescription>Confira os dados. O cliente será avisado depois que a cobrança for criada.</DialogDescription>
+          </DialogHeader>
+          <fieldset disabled={creatingBilling} className="space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground">Cliente</label>
-              <select value={billForm.client_id} onChange={e => setBillForm(f => ({ ...f, client_id: e.target.value }))}
+              <label htmlFor="billing-client" className="text-xs text-muted-foreground">Cliente</label>
+              <select id="billing-client" value={billForm.client_id} onChange={e => setBillForm(f => ({ ...f, client_id: e.target.value }))}
                 className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
                 <option value="">Selecionar...</option>
                 {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Tipo</label>
-              <select value={billForm.type} onChange={e => setBillForm(f => ({ ...f, type: e.target.value }))}
+              <label htmlFor="billing-type" className="text-xs text-muted-foreground">Tipo</label>
+              <select id="billing-type" value={billForm.type} onChange={e => setBillForm(f => ({ ...f, type: e.target.value }))}
                 className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
                 <option value="renewal">Renovação</option>
                 <option value="ads_recharge">Recarga Ads</option>
@@ -1867,23 +1882,23 @@ function LegacyFinanceiro() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Valor (R$)</label>
-              <Input type="number" value={billForm.amount} onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
+              <label htmlFor="billing-amount" className="text-xs text-muted-foreground">Valor (R$)</label>
+              <Input id="billing-amount" type="number" value={billForm.amount} onChange={e => setBillForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Vencimento</label>
-              <Input type="date" value={billForm.due_date} onChange={e => setBillForm(f => ({ ...f, due_date: e.target.value }))} className="mt-1" />
+              <label htmlFor="billing-due-date" className="text-xs text-muted-foreground">Vencimento</label>
+              <Input id="billing-due-date" type="date" value={billForm.due_date} onChange={e => setBillForm(f => ({ ...f, due_date: e.target.value }))} className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Descrição</label>
-              <textarea value={billForm.description} onChange={e => setBillForm(f => ({ ...f, description: e.target.value }))}
+              <label htmlFor="billing-description" className="text-xs text-muted-foreground">Descrição</label>
+              <textarea id="billing-description" value={billForm.description} onChange={e => setBillForm(f => ({ ...f, description: e.target.value }))}
                 className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={2} />
             </div>
-            <button onClick={handleCreateBilling}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none">
-              Criar Cobrança
+            <button onClick={handleCreateBilling} disabled={creatingBilling}
+              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
+              {creatingBilling ? "Criando cobrança…" : "Criar Cobrança"}
             </button>
-          </div>
+          </fieldset>
         </DialogContent>
       </Dialog>
 

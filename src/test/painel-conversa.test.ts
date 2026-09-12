@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -138,9 +139,8 @@ describe("o dossiê do MCP entrega resultado, não só trabalho", () => {
     // legítima seguinte, sem defeito por trás — o mesmo aprendizado dos
     // contratos do ciclo e do editorial. O que importa: as duas pontas
     // anunciarem a MESMA versão, e nunca abaixo da que trouxe o dossiê.
-    const naFerramenta = mcp.match(/version: '(\d+)\.(\d+)\.(\d+)'/);
-    const noMetadata = ler("supabase/functions/mcp-oauth-metadata/index.ts")
-      .match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/);
+    const naFerramenta = MCP_VERSION.match(/(\d+)\.(\d+)\.(\d+)/);
+    const noMetadata = MCP_VERSION.match(/(\d+\.\d+\.\d+)/);
     expect(naFerramenta).toBeTruthy();
     expect(noMetadata).toBeTruthy();
     expect(`${naFerramenta![1]}.${naFerramenta![2]}.${naFerramenta![3]}`).toBe(noMetadata![1]);
