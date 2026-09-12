@@ -255,9 +255,11 @@ jobs:
         run: node scripts/seed-ci-e2e.mjs --restore
 
       - name: Stop Supabase local stack
+        id: supabase_stop
         if: always()
         run: supabase stop --no-backup
 
       - name: Restore owned CI container firewall rule
-        if: always()
+        # A failed stop leaves containment in place until this runner is retired.
+        if: ${{ always() && steps.supabase_stop.outcome == 'success' }}
         run: node scripts/guard-ci-e2e-network.mjs --restore
