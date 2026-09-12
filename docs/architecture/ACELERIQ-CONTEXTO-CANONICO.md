@@ -94,7 +94,7 @@ Planos-base editáveis: R$ 597, R$ 1.197, R$ 2.297, R$ 5.597 e Sob Medida. Servi
 5. Testar, revisar diff e abrir draft PR.
 6. Validar Preview e fluxos de admin/cliente.
 7. Fazer merge após aprovação humana.
-8. Aplicar migrations pelo workflow GitHub forward-only compatível com o ledger do projeto alvo, somente no tip atual de `main`, depois de confirmar backup restaurável e checklist privado real; nunca usar reset, seed, repair, `--include-all` ou escrita manual na ledger de produção. O deployer histórico não deve ser usado no backend novo enquanto exigir o manifesto do projeto anterior; revisar essa compatibilidade antes de qualquer aplicação.
+8. Aplicar migrations pelo workflow GitHub forward-only compatível com o ledger do projeto alvo, somente no tip atual de `main`, depois de confirmar backup restaurável e checklist privado real; nunca usar reset, seed, repair, `--include-all` ou escrita manual na ledger de produção. O workflow atualizado usa a view revisada por projeto, com sentinelas para versões já aplicadas e SQL somente para as pendentes; o gerador histórico permanece fora do caminho de implantação do backend novo.
 9. Confirmar o binding OAuth no banco e só então publicar ou reverter o MCP pelo workflow GitHub a partir de SHA imutável, validando o smoke remoto.
 10. Confirmar sincronização no Lovable e gerar, quando aplicável, o artefato portátil a partir do mesmo commit.
 11. Publish manual no host aprovado somente depois do aceite; o Lovable permanece o destino atual até um corte explicitamente autorizado.

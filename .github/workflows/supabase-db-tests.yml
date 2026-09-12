@@ -100,6 +100,11 @@ jobs:
             supabase/bootstrap/legacy_prerequisites.sql \
             supabase/migrations/20260528163000_legacy_prerequisites.sql
 
+      - name: Stage verified editorial compatibility for empty CI replay
+        run: |
+          node scripts/prepare-ci-editorial-replay.mjs --self-test
+          node scripts/prepare-ci-editorial-replay.mjs --stage
+
       - name: Start Supabase local stack
         run: supabase start
 
@@ -136,6 +141,11 @@ jobs:
           fi
           node scripts/test-isolated-db.mjs --self-test
           node scripts/test-isolated-db.mjs
+          node scripts/test-ci-editorial-replay.mjs
+
+      - name: Restore editorial CI compatibility staging
+        if: always()
+        run: node scripts/prepare-ci-editorial-replay.mjs --restore
 
       - name: Remove CI-only legacy prerequisites migration
         if: always()

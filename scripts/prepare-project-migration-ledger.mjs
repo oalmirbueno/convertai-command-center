@@ -2,8 +2,8 @@
 // Read-only expected-ledger generation. This script never connects to a database,
 // repairs history, builds executable migration views, or applies SQL.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { lstatSync, readFileSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   listProductionLedgerEntries,
@@ -42,7 +42,9 @@ function validateRows(rows, label) {
   }
 }
 
-export function parseReviewedProjectBaseline(input, { projectRef, repoRoot = defaultRepoRoot } = {}) {
+export function parseReviewedProjectBaseline(input, {
+  projectRef, repoRoot = defaultRepoRoot, sourceDir = resolve(repoRoot, 'supabase/migrations'),
+} = {}) {
   if (projectRef !== reviewedProjectRef) fail('project does not have a reviewed catalog snapshot');
   const document = JSON.parse(input);
   exactKeys(document, ['schema_version', 'project_ref', 'reviewed_at', 'origin', 'scope', 'ledger_hash_mode', 'entries', 'pending_migrations'], 'baseline');
@@ -63,7 +65,9 @@ export function parseReviewedProjectBaseline(input, { projectRef, repoRoot = def
     previous = entry.version;
     if (!hashPattern.test(entry.local_sha256) || !hashPattern.test(entry.statements_sha256)
       || !['supabase_cli_split', 'runner_exact_sql'].includes(entry.hash_mode)) fail('pending migration hash contract is invalid');
-    const source = readFileSync(resolve(repoRoot, entry.path));
+    const sourcePath = resolve(sourceDir, basename(entry.path));
+    if (!lstatSync(sourcePath).isFile()) fail(`pending migration must be a regular file at ${entry.version}`);
+    const source = readFileSync(sourcePath);
     if (hash(source) !== entry.local_sha256) fail(`pending migration local hash drift at ${entry.version}`);
     const statementsHash = entry.hash_mode === 'runner_exact_sql' ? hash(source) : supabaseStatementsSha256(source.toString('utf8'));
     if (statementsHash !== entry.statements_sha256) fail(`pending migration statement hash drift at ${entry.version}`);
@@ -76,16 +80,16 @@ export function loadReviewedProjectBaseline(options = {}) {
   return parseReviewedProjectBaseline(readFileSync(resolve(options.repoRoot ?? defaultRepoRoot, baselinePath), 'utf8'), options);
 }
 
-export function listProjectLedgerEntries({ projectRef, repoRoot = defaultRepoRoot } = {}) {
+export function listProjectLedgerEntries({ projectRef, repoRoot = defaultRepoRoot, sourceDir } = {}) {
   if (projectRef === legacyProjectRef) {
     // Explicit legacy rollback target: preserve its existing reviewed contract.
     // No network calls or fallback selection occur here.
-    return listProductionLedgerEntries({ repoRoot }).map((entry) => ({
+    return listProductionLedgerEntries({ repoRoot, sourceDir }).map((entry) => ({
       version: entry.version, name: entry.name, statements_sha256: entry.statementsSha256,
     }));
   }
   if (projectRef !== reviewedProjectRef) fail('unknown project ref; an explicit reviewed baseline is required');
-  return loadReviewedProjectBaseline({ projectRef, repoRoot }).expected;
+  return loadReviewedProjectBaseline({ projectRef, repoRoot, sourceDir }).expected;
 }
 
 export function formatProjectLedgerSqlValues(options) {
@@ -124,10 +128,11 @@ export function main(argv = process.argv.slice(2)) {
   let ledgerCsv;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === '--project-ref' || argument === '--repo-root') {
+    if (argument === '--project-ref' || argument === '--repo-root' || argument === '--source-dir') {
       const value = argv[++index];
       if (!value || value.startsWith('--')) fail(`${argument} requires a value`);
       if (argument === '--project-ref') options.projectRef = value;
+      else if (argument === '--source-dir') options.sourceDir = resolve(value);
       else options.repoRoot = resolve(value);
     } else if (['--ledger-sql-values', '--list-versions', '--check-ledger-csv'].includes(argument)) {
       if (mode) fail('choose exactly one output mode');

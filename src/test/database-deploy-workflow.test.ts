@@ -64,7 +64,8 @@ describe("protected Supabase database release", () => {
     expect(verification).toContain("supabase_migrations.schema_migrations");
     expect(verification).toContain("DATABASE_LEDGER_CURRENT");
     expect(verification).toContain('test "$ledger_status" = "DATABASE_LEDGER_CURRENT"');
-    expect(workflow).toContain("prepare-production-migration-view.mjs");
+    expect(workflow).toContain("prepare-project-migration-view.mjs");
+    expect(workflow).toContain('--project-ref "$SUPABASE_PROJECT_ID"');
     expect(workflow).toContain("production-migration-ledger.sql");
     expect(workflow).toContain("PRODUCTION_BASELINE_SCHEMA_READY");
     expect(verification).toContain("production-expected-versions.txt");
