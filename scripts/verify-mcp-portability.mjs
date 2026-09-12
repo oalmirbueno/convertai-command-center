@@ -194,7 +194,7 @@ function inspectWorkflow(workflow, problems) {
     [/MCP_SMOKE_TOKEN:\s*\$\{\{\s*secrets\.MCP_SMOKE_TOKEN\s*\}\}/, "authenticated smoke token must come from the protected GitHub Environment"],
     [/MCP_SMOKE_EXPECTED_KEY_ID:\s*\$\{\{\s*secrets\.MCP_SMOKE_EXPECTED_KEY_ID\s*\}\}/, "authenticated smoke key id must come from the protected GitHub Environment"],
     [/MCP_SMOKE_EXPECTED_CLIENT_ID:\s*\$\{\{\s*secrets\.MCP_SMOKE_EXPECTED_CLIENT_ID\s*\}\}/, "authenticated smoke client id must come from the protected GitHub Environment"],
-    [/MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{\s*vars\.APP_PUBLIC_URL\s*\}\}/, "smoke must verify the project-wide APP_PUBLIC_URL without mutating it"],
+    [/MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{\s*env\.APP_PUBLIC_URL\s*\}\}/, "smoke must verify the resolved project-wide APP_PUBLIC_URL without mutating it"],
     [/test\s+-n\s+"\$MCP_SMOKE_TOKEN"/, "deployment must reject a missing authenticated smoke token"],
     [/test\s+-n\s+"\$MCP_SMOKE_EXPECTED_KEY_ID"/, "deployment must reject a missing authenticated smoke key id"],
     [/test\s+-n\s+"\$MCP_SMOKE_EXPECTED_CLIENT_ID"/, "deployment must reject a missing authenticated smoke client id"],
@@ -338,7 +338,7 @@ jobs:
       MCP_SMOKE_TOKEN: \${{ secrets.MCP_SMOKE_TOKEN }}
       MCP_SMOKE_EXPECTED_KEY_ID: \${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
       MCP_SMOKE_EXPECTED_CLIENT_ID: \${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
-      MCP_SMOKE_EXPECTED_PUBLIC_URL: \${{ vars.APP_PUBLIC_URL }}
+      MCP_SMOKE_EXPECTED_PUBLIC_URL: \${{ env.APP_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000
       - with:

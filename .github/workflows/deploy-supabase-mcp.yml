@@ -356,7 +356,7 @@ jobs:
           MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
           MCP_SMOKE_EXPECTED_KEY_ID: ${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
           MCP_SMOKE_EXPECTED_CLIENT_ID: ${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
-          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ env.APP_PUBLIC_URL }}
         run: |
           set -euo pipefail
           test -n "$MCP_SMOKE_TOKEN"
@@ -433,7 +433,7 @@ jobs:
           MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
           MCP_SMOKE_EXPECTED_KEY_ID: ${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
           MCP_SMOKE_EXPECTED_CLIENT_ID: ${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
-          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ env.APP_PUBLIC_URL }}
         run: |
           set -euo pipefail
           test -n "$MCP_SMOKE_TOKEN"

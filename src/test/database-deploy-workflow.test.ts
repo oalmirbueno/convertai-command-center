@@ -125,7 +125,8 @@ describe("protected Supabase database release", () => {
     expect(mcpWorkflow).toContain("--output csv");
     expect(mcpWorkflow).toContain("supabase_migrations.schema_migrations");
     expect(mcpWorkflow).toContain("expected_migrations");
-    expect(mcpWorkflow).toContain("prepare-production-migration-view.mjs");
+    expect(mcpWorkflow).toContain("prepare-project-migration-ledger.mjs");
+    expect(mcpWorkflow).toContain('--project-ref "$SUPABASE_PROJECT_ID"');
     expect(mcpWorkflow).toContain("--ledger-sql-values");
     expect(mcpWorkflow).toMatch(/full outer join applied_migrations/);
     expect(mcpWorkflow).toContain("applied.migration_name <> expected.migration_name");
@@ -171,7 +172,7 @@ describe("protected Supabase database release", () => {
       /MCP_SMOKE_EXPECTED_CLIENT_ID:\s*\$\{\{ secrets\.MCP_SMOKE_EXPECTED_CLIENT_ID \}\}/,
     );
     expect(mcpWorkflow).toMatch(
-      /MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{ vars\.APP_PUBLIC_URL \}\}/,
+      /MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{ env\.APP_PUBLIC_URL \}\}/,
     );
     expect(mcpWorkflow).toContain('test -n "$MCP_SMOKE_TOKEN"');
     expect(mcpWorkflow).toContain('test -n "$MCP_SMOKE_EXPECTED_KEY_ID"');
