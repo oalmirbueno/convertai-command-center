@@ -8,7 +8,8 @@ Antes de planejar ou editar, leia `docs/architecture/ACELERIQ-CONTEXTO-CANONICO.
 
 - Repositório: `oalmirbueno/convertai-command-center`.
 - Aplicação: Aceleriq Comando OS, construída com Lovable.
-- Backend: o mesmo Lovable Cloud/Postgres do projeto `gicbrgagstyvbaaumprj`.
+- Backend atual: Supabase/Postgres do projeto `jjjtkowvxemvituvywvf`, com painel em `https://aceleriq.online`.
+- Em 12/09/2026, Almir confirmou que a migração para esse backend já ocorreu. `gicbrgagstyvbaaumprj` é o projeto anterior e permanece somente como referência histórica; não voltar a apontar integrações para ele. Este registro não autoriza outra migração nem replay do histórico.
 - Nunca criar outro projeto Lovable, Cloud, banco ou repositório como atalho.
 - Antes de começar, atualizar a partir do `main` remoto real. Não usar mirrors antigos.
 
