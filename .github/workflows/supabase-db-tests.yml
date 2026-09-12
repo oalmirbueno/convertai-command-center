@@ -111,15 +111,23 @@ jobs:
       - name: Apply migrations
         run: supabase db reset --local --no-seed
 
-      - name: Run pgTAP database tests
-        run: supabase test db
-
       - name: Install local PostgreSQL client
         run: |
           if ! command -v psql >/dev/null; then
             sudo apt-get update
             sudo apt-get install --yes postgresql-client
           fi
+
+      - name: Verify synthetic operator parents remain inert after the full replay
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -f supabase/bootstrap/ci-operator-parents-postcheck.sql
+
+      - name: Run pgTAP database tests
+        run: supabase test db
 
       - name: Run isolated synthetic SQL contracts
         shell: bash

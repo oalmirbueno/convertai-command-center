@@ -25,6 +25,15 @@ function sql(source,db=database) {
  if(result.status!==0) throw new Error("SQL failed: "+(result.stderr||"").slice(-4000));
  return result.stdout||"";
 }
+async function runTap(file) {
+ const tap=sql(await readFile(path.join(root,"tests/database-isolated/tests",file),"utf8")).replaceAll("\r","");
+ const count=[...tap.matchAll(/^ok \d+ /gm)].length;
+ const plans=[...tap.matchAll(/^1\.\.(\d+)$/gm)];
+ if(/^not ok\b|^Bail out!/m.test(tap)||plans.length!==1||Number(plans[0][1])!==count||!count) {
+  throw new Error("pgTAP failed or returned an incomplete plan:\n"+tap);
+ }
+ return count;
+}
 try {
  const plan=await buildReplayPlan();
  sql('CREATE DATABASE "'+database+'" TEMPLATE template0;',"postgres");
@@ -46,13 +55,18 @@ try {
  sql(plan.files[0].sql);sql(plan.sources.reuse);sql(plan.files[1].sql);
  sql(plan.files[2].sql);sql(plan.sources.publications);sql(plan.files[3].sql);
  sql(plan.sources.corrected);
- const tap=sql(await readFile(path.join(root,"tests/database-isolated/tests/editorial_replay.test.sql"),"utf8")).replaceAll("\r","");
- const count=[...tap.matchAll(/^ok \d+ /gm)].length;
- const plans=[...tap.matchAll(/^1\.\.(\d+)\r?$/gm)];
- if(/^not ok\b|^Bail out!/m.test(tap)||plans.length!==1||Number(plans[0][1])!==count||!count) {
-  throw new Error("pgTAP failed or returned an incomplete plan:\n"+tap);
- }
- console.log("Editorial historical replay: "+count+" assertions passed; "+database+" retained.");
+ const editorialCount=await runTap("editorial_replay.test.sql");
+ // The base inserts its four real pilot definitions; the next two fixtures only
+ // supply missing parents. Execute the entire repair, including its empty-link
+ // reconciliation and its guarded organogram, without changing historical SQL.
+ sql(plan.sources.operatorsBase);sql(plan.sources.operatorsHierarchy);
+ sql(plan.files[4].sql);sql(plan.sources.operatorsRepair);sql(plan.files[5].sql);
+ const operatorCount=await runTap("operator_prerequisite.test.sql");
+ // Install the real later table definitions and validate the same read-only
+ // inactivity check that the workflow applies after the complete stack replay.
+ sql(plan.sources.operatorsParticipation);sql(plan.sources.operatorsDeliveries);
+ sql(await readFile(path.join(root,"supabase/bootstrap/ci-operator-parents-postcheck.sql"),"utf8"));
+ console.log("Historical replay: "+editorialCount+" editorial + "+operatorCount+" operator assertions passed; "+database+" retained.");
 } finally {
  const password=process.env.PGPASSWORD||"";
  await writeFile(path.join(logDir,"editorial-replay.log"),password?output.replaceAll(password,"[local-password]"):output);
