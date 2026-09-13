@@ -215,8 +215,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
         }}
       >
-        {/* Left: Logo */}
-        <div className="flex items-center shrink-0">
+        {/* Clip the square bitmap's transparent padding to the navbar so it
+            cannot intercept clicks on the page below. Keep menus unclipped. */}
+        <div className="flex h-full items-center shrink-0 overflow-hidden">
           <img src={aceleriqLogo} alt="Aceleriq" className="h-28 w-auto" />
         </div>
 

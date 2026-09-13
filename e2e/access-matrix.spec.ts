@@ -232,10 +232,22 @@ for (const role of USER_ROLES) {
     if (role === "clientA" || role === "clientB") {
       await list.getByText(fixture.projects[role].name, { exact: true }).click();
       await expect(page.getByRole("heading", { name: fixture.projects[role].name, exact: true })).toBeVisible();
+      const backToProjects = page.getByRole("button", { name: "Voltar aos projetos", exact: true });
+      // The navbar's transparent logo padding used to cover this first action.
+      // Check the real browser hit target without changing scroll or forcing a
+      // click; only this boolean leaves the page, never a DOM or session dump.
+      await expect.poll(() => backToProjects.evaluate((button) => {
+        const bounds = button.getBoundingClientRect();
+        const target = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2,
+        );
+        return target !== null && button.contains(target);
+      }), { message: "The project back button must receive pointer input below the navbar" }).toBe(true);
       await page.getByRole("tab", { name: "Entregas", exact: true }).click();
       await expect(page.getByRole("tab", { name: "Entregas", exact: true })).toHaveAttribute("aria-selected", "true");
       await page.getByRole("tab", { name: "Visão geral", exact: true }).click();
-      await page.getByRole("button", { name: "Voltar aos projetos", exact: true }).click();
+      await backToProjects.click();
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }
 
