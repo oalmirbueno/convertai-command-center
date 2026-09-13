@@ -24,10 +24,10 @@ INSERT INTO project_test_actors VALUES
  ('b7100000-0000-4000-8000-00000000000b','client');
 INSERT INTO auth.users(id,email)
  SELECT id,'projects-rls-' || id::text || '@example.invalid' FROM project_test_actors;
--- The real Auth trigger creates the profile and default client role. Add staff
--- roles through the owner fixture context, as the application does for staff.
+-- The real Auth trigger creates the profile and default client role. The full
+-- schema permits one role per user; set each synthetic actor's role in place.
 INSERT INTO public.user_roles(user_id,role) SELECT id,role FROM project_test_actors
- ON CONFLICT(user_id,role) DO NOTHING;
+ ON CONFLICT(user_id) DO UPDATE SET role=EXCLUDED.role;
 INSERT INTO public.team_client_assignments(user_id,client_id) VALUES
  ('b7100000-0000-4000-8000-000000000002','b7100000-0000-4000-8000-00000000000a'),
  ('b7100000-0000-4000-8000-000000000003','b7100000-0000-4000-8000-00000000000a'),

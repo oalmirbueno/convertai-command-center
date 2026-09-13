@@ -35,6 +35,21 @@ interface ReadResult {
   ids: string[];
   validRows: boolean;
   queryKeys: string[];
+  errorCode: string | null;
+  errorMessage: string | null;
+  taskCards?: { id: string; title: string; status: string }[];
+}
+
+function assertScopedRead(table: "projects" | "tasks", result: ReadResult, allowedIds: string[]) {
+  // Only the synthetic projects/tasks PostgREST errors reach this diagnostic.
+  // No auth response, headers, request body or session is collected.
+  const diagnostic = table + " REST: HTTP " + result.status
+    + (result.errorCode ? " [" + result.errorCode + "]" : "")
+    + (result.errorMessage ? " " + result.errorMessage : "");
+  expect(result.status, diagnostic).toBe(200);
+  expect(result.validRows, diagnostic + "; expected an array of rows").toBe(true);
+  expect(result.ids.filter((id) => !allowedIds.includes(id)),
+    table + " response must not expose cross-client rows").toEqual([]);
 }
 
 function observeWorkReads(page: Page) {
@@ -52,11 +67,22 @@ function observeWorkReads(page: Page) {
       try { rows = await response.json(); } catch { rows = null; }
       const validRows = Array.isArray(rows)
         && rows.every((row) => row && typeof row.id === "string");
+      const error = !validRows && rows && typeof rows === "object"
+        ? rows as { code?: unknown; message?: unknown } : null;
       reads[table].push({
         status: response.status(),
         validRows,
         queryKeys: [...url.searchParams.keys()].sort(),
         ids: validRows ? (rows as { id: string }[]).map((row) => row.id).sort() : [],
+        errorCode: typeof error?.code === "string" ? error.code.slice(0, 24) : null,
+        errorMessage: typeof error?.message === "string"
+          ? error.message.replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 300)
+          : null,
+        taskCards: table === "tasks" && validRows
+          ? (rows as { id: string; title: string; status: string }[])
+            .map((row) => ({ id: row.id, title: row.title, status: row.status }))
+            .sort((left, right) => left.id.localeCompare(right.id))
+          : undefined,
       });
     })();
     pending.add(done);
@@ -105,6 +131,34 @@ async function readProjectsWithoutScopeFilter(page: Page) {
   return result.rows?.sort((left, right) => left.id.localeCompare(right.id));
 }
 
+async function kanbanCardDiagnostic(page: Page, titles: string[]) {
+  // Counts and known synthetic labels only: never dump the page, auth UI,
+  // arbitrary text, user menus or the full accessibility tree.
+  return page.evaluate((knownTitles) => {
+    const boards = Array.from(document.querySelectorAll('[data-tour="kanban-board"]'));
+    const roleButtons = Array.from(document.querySelectorAll('[role="button"][aria-label]'));
+    return {
+      boardCount: boards.length,
+      boardRoleButtonCount: boards.reduce((count, board) => count + board.querySelectorAll('[role="button"]').length, 0),
+      backlogLabelCount: Array.from(document.querySelectorAll("span,button"))
+        .filter((node) => node.textContent?.trim() === "Backlog").length,
+      seededCards: knownTitles.map((title) => {
+        const label = "Abrir tarefa " + title;
+        const cards = roleButtons.filter((node) => node.getAttribute("aria-label") === label);
+        return {
+          label,
+          count: cards.length,
+          nodes: cards.map((node) => ({
+            hasBounds: node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0,
+            ariaHidden: node.closest('[aria-hidden="true"]') !== null,
+            inert: node.closest("[inert]") !== null,
+          })),
+        };
+      }),
+    };
+  }, titles);
+}
+
 for (const role of USER_ROLES) {
   test(`${role}: real login, scoped work, permitted controls and logout`, async ({ page }) => {
     const fixture = readCiFixture();
@@ -116,8 +170,18 @@ for (const role of USER_ROLES) {
     // useTasks asks for the full table, without a client filter. Inspecting
     // this actual browser response catches a leak hidden by frontend filters.
     await expect.poll(() => observation.reads.tasks.length).toBeGreaterThan(0);
+    const expectedTaskCards = allowed.map((key) => ({
+      id: fixture.tasks[key].id, title: fixture.tasks[key].title, status: "backlog",
+    })).sort((left, right) => left.id.localeCompare(right.id));
+    for (const read of observation.reads.tasks) {
+      assertScopedRead("tasks", read, expectedTaskCards.map((task) => task.id));
+      expect(read.taskCards, "Real task reads must return the seeded cards before testing Kanban").toEqual(expectedTaskCards);
+    }
     if (allowed.length > 0) {
       await expect.poll(() => observation.reads.projects.length).toBeGreaterThan(0);
+    }
+    for (const read of observation.reads.projects) {
+      assertScopedRead("projects", read, allowed.map((key) => fixture.projects[key].id));
     }
     if (role === "clientA" || role === "clientB") {
       // The client UI itself already reads projects without id/client_id (or
@@ -175,6 +239,7 @@ for (const role of USER_ROLES) {
       await expect(list.getByText(fixture.projects[role].name, { exact: true })).toBeVisible();
     }
 
+    const readsBeforeKanban = observation.reads.tasks.length;
     await page.goto("/kanban");
     if (role === "clientA" || role === "clientB") {
       await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/dashboard");
@@ -184,10 +249,25 @@ for (const role of USER_ROLES) {
     } else {
       await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/kanban");
       await expect(page.getByRole("heading", { name: "Kanban", exact: true })).toBeVisible();
+      // goto reloads the application. Do not mistake the previous Projects
+      // response for proof that Kanban's new authenticated query succeeded.
+      await expect.poll(() => observation.reads.tasks.length,
+        { message: "Kanban reload must complete a fresh tasks REST response" })
+        .toBeGreaterThan(readsBeforeKanban);
+      for (const read of observation.reads.tasks.slice(readsBeforeKanban)) {
+        assertScopedRead("tasks", read, expectedTaskCards.map((task) => task.id));
+        expect(read.taskCards, "Fresh Kanban read must preserve the seeded cards").toEqual(expectedTaskCards);
+      }
       for (const key of ["clientA", "clientB"] as const) {
         const task = page.getByRole("button", { name: "Abrir tarefa " + fixture.tasks[key].title, exact: true });
-        if ((allowed as readonly string[]).includes(key)) await expect(task).toBeVisible();
-        else await expect(task).toHaveCount(0);
+        try {
+          if ((allowed as readonly string[]).includes(key)) await expect(task).toBeVisible();
+          else await expect(task).toHaveCount(0);
+        } catch (cause) {
+          const diagnostic = await kanbanCardDiagnostic(page,
+            [fixture.tasks.clientA.title, fixture.tasks.clientB.title]);
+          throw new Error("Kanban REST passed; scoped DOM diagnostic: " + JSON.stringify(diagnostic), { cause });
+        }
       }
       if (role === "unassignedStaff") {
         await expect(page.getByText("Nenhuma tarefa encontrada.", { exact: true })).toBeVisible();
@@ -202,11 +282,8 @@ for (const role of USER_ROLES) {
     for (const table of ["projects", "tasks"] as const) {
       const allowedIds = allowed.map((key) => fixture[table][key].id).sort();
       for (const result of observation.reads[table]) {
-        expect(result.status, table + " REST query must succeed").toBe(200);
-        expect(result.validRows, table + " REST query must return rows").toBe(true);
         // Some detail/dashboard queries legitimately narrow the same scope.
-        expect(result.ids.filter((id) => !allowedIds.includes(id)),
-          table + " response must not expose cross-client rows").toEqual([]);
+        assertScopedRead(table, result, allowedIds);
       }
       if (allowed.length > 0) {
         expect(observation.reads[table].some((result) => JSON.stringify(result.ids) === JSON.stringify(allowedIds)),
