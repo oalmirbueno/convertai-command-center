@@ -126,7 +126,8 @@ describe("protected public Edge release", () => {
       workflow.indexOf("Deploy the exact five-function allowlist"),
     );
 
-    expect(preflight).toContain("prepare-production-migration-view.mjs");
+    expect(preflight).toContain("prepare-project-migration-ledger.mjs");
+    expect(preflight).toContain('--project-ref "$SUPABASE_PROJECT_ID"');
     expect(preflight).toContain("--ledger-sql-values");
     expect(preflight).toContain("expected_migrations(version, migration_name, statements_sha256)");
     expect(preflight).toMatch(/full outer join applied_migrations/);

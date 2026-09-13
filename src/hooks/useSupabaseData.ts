@@ -188,19 +188,22 @@ export function useClients() {
     queryFn: async () => {
       if (isTeam) {
         // Team members: clients from assigned tasks OR direct client assignments
-        const [{ data: myTasks }, { data: assigns }] = await Promise.all([
+        const [{ data: myTasks, error: tasksError }, { data: assigns, error: assignmentsError }] = await Promise.all([
           supabase.from("tasks").select("project_id").eq("assigned_to", user!.id).is("deleted_at", null),
           supabase.from("team_client_assignments").select("client_id").eq("user_id", user!.id),
         ]);
+        if (tasksError) throw tasksError;
+        if (assignmentsError) throw assignmentsError;
         const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
         const clientIds = new Set<string>((assigns || []).map((a: any) => a.client_id));
 
         if (projectIds.length > 0) {
-          const { data: projects } = await supabase
+          const { data: projects, error: projectsError } = await supabase
             .from("projects")
             .select("id, client_id")
             .in("id", projectIds)
             .is("deleted_at", null);
+          if (projectsError) throw projectsError;
           (projects || []).forEach((p: any) => p.client_id && clientIds.add(p.client_id));
         }
         if (clientIds.size === 0) return [];
@@ -213,11 +216,12 @@ export function useClients() {
           .is("deleted_at", null);
         if (error) throw error;
 
-        const { data: allProjects } = await supabase
+        const { data: allProjects, error: allProjectsError } = await supabase
           .from("projects")
           .select("client_id")
           .in("client_id", idArr)
           .is("deleted_at", null);
+        if (allProjectsError) throw allProjectsError;
 
         return (data || []).map((p: any) => ({
           ...p,
@@ -249,10 +253,11 @@ export function useClients() {
         .is("deleted_at", null);
       if (error) throw error;
 
-      const { data: projects } = await supabase
+      const { data: projects, error: projectsError } = await supabase
         .from("projects")
         .select("client_id")
         .is("deleted_at", null);
+      if (projectsError) throw projectsError;
 
       return (data || []).map((profile: any) => ({
         ...profile,

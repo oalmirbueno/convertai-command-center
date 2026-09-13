@@ -136,8 +136,7 @@ export async function getFinanceDashboard(input: EntradaFinanceira & { client_id
       'id, full_name, company_name, plan_name, plan_value, plan_status, plan_renewal_date, client_type, brand, services_config',
     ).limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('project_payments').select(
-      'id, project_id, client_id, total_value, entry_amount, installments_count, notes, ' +
-      'project:projects(name, project_type, brand), installments:payment_installments(*)',
+      'id, project_id, client_id, total_value, entry_amount, installments_count, notes, project:projects(name, project_type, brand), installments:payment_installments(*)',
     ).limit(READ_LIMITS.maxPageSize)),
     comPrazo(db().from('expenses').select(
       'id, description, supplier, category, amount, status, recurrence, due_date, paid_date, brand, notes',
@@ -282,7 +281,7 @@ export async function getFinanceDashboard(input: EntradaFinanceira & { client_id
   const bruto = cents(recebidosDoMes.reduce((s, it) => s + it.valor, 0));
   const reservaTributaria = cents(
     recebidosDoMes.reduce(
-      (s, it) => s + it.valor * ((it.clienteId && aliquotaDoCliente.get(it.clienteId)) ?? ALIQUOTA_PADRAO),
+      (s, it) => s + it.valor * ((it.clienteId ? aliquotaDoCliente.get(it.clienteId) : undefined) ?? ALIQUOTA_PADRAO),
       0,
     ),
   );
@@ -551,8 +550,7 @@ export async function listFinanceProjectPayments(opts: { client_id?: string; lim
       db()
         .from('project_payments')
         .select(
-          'id, project_id, client_id, total_value, entry_amount, entry_percentage, installments_count, notes, created_at, ' +
-          'project:projects(name, project_type, brand), installments:payment_installments(*)',
+          'id, project_id, client_id, total_value, entry_amount, entry_percentage, installments_count, notes, created_at, project:projects(name, project_type, brand), installments:payment_installments(*)',
         )
         .limit(READ_LIMITS.maxPageSize),
     ),

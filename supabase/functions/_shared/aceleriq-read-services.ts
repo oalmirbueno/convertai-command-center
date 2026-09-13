@@ -449,7 +449,7 @@ export async function getProject(opts: { project_id: string }, ctx: AuthContext)
 export async function listTasks(opts: {
   project_id?: string; client_id?: string; status?: string; assigned_to?: string;
   delivery_type?: string; workstream?: string;
-  only_open?: boolean; limit?: number; offset?: number;
+  only_open?: boolean; include_archived_projects?: boolean; limit?: number; offset?: number;
 }, ctx: AuthContext) {
   const limit = clampLimit(opts.limit);
   const offset = clampOffset(opts.offset);
@@ -460,9 +460,10 @@ export async function listTasks(opts: {
   if (opts.project_id && !isUuid(opts.project_id)) throw new Error('project_id must be a UUID');
 
   if (opts.project_id) {
+    let projectQuery = db().from('projects').select('id, client_id, deleted_at').eq('id', opts.project_id);
+    if (!opts.include_archived_projects) projectQuery = projectQuery.is('deleted_at', null);
     const project = await withTimeout(
-      db().from('projects').select('id, client_id').eq('id', opts.project_id)
-        .is('deleted_at', null).maybeSingle(),
+      projectQuery.maybeSingle(),
     );
     if (project.error) throw new Error(`projects: ${project.error.message}`);
     if (!project.data) throw new Error('project_id not found or unavailable');
@@ -484,8 +485,9 @@ export async function listTasks(opts: {
   // exact count and page boundaries in PostgREST instead of first collecting
   // project IDs through a separate request that could hit a row ceiling.
   let qb = db().from('tasks')
-    .select(`${F.task}, projects!inner(client_id)`, { count: 'exact' })
+    .select(`${F.task}, projects!inner(client_id, deleted_at)`, { count: 'exact' })
     .is('deleted_at', null);
+  if (!opts.include_archived_projects) qb = qb.is('projects.deleted_at', null);
   if (opts.project_id) qb = qb.eq('project_id', opts.project_id);
   if (opts.client_id) qb = qb.eq('projects.client_id', opts.client_id);
   else if (!ctx.dataScope.unrestricted) {
@@ -509,7 +511,7 @@ export async function listTasks(opts: {
     items: (data ?? []).map((row: any) => {
       const { projects, ...task } = row;
       const project = Array.isArray(projects) ? projects[0] : projects;
-      return { ...task, client_id: project?.client_id ?? scopedClientId };
+      return { ...task, client_id: project?.client_id ?? scopedClientId, project_archived: Boolean(project?.deleted_at) };
     }),
     ...pageMeta(count, limit, offset),
   };

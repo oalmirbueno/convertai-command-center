@@ -115,11 +115,22 @@ export async function lerFatosDaEsteira(
     db.from("ads_sales").select("id, client_id, sold_at, platform, campaign_id, campaign_name, channel, quantity, value, source, note").in("client_id", ids).gte("sold_at", desde5sem).order("sold_at", { ascending: false }),
   ]);
 
+  // Resposta com erro nao significa que o cliente nao tem posts, briefing
+  // ou campanhas. Rejeitar o retrato incompleto preserva o ultimo sucesso
+  // no cache e permite que a tela avise a falha, em vez de inventar faltas.
+  const leituras = [posts, projetos, marcos, campanhas, carteira, adsDiario, conexoes, metricas, briefings, dossies, checklists, estados, rituais, prefs, contasAds, vendas];
+  if (leituras.some((leitura) => leitura.error)) {
+    throw new Error("Não foi possível ler todos os dados da Esteira. Tente atualizar novamente.");
+  }
+
   // Aprovacao da arte vive em files; buscamos so os arquivos que sao arte de post.
   const fileIds = Array.from(new Set(((posts.data ?? []) as Array<{ primary_file_id?: string | null }>).map((p) => p.primary_file_id).filter((x): x is string => Boolean(x))));
   const arquivos = fileIds.length
     ? await db.from("staff_files_secure").select("id, approval_status, agency_approval_status, approval_requested_at").in("id", fileIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (arquivos.error) {
+    throw new Error("Não foi possível conferir as aprovações da Esteira. Tente atualizar novamente.");
+  }
   const arquivoPorId = new Map<string, { approval_status?: string | null; agency_approval_status?: string | null; approval_requested_at?: string | null }>();
   for (const f of (arquivos.data ?? []) as Array<{ id: string }>) arquivoPorId.set(f.id, f as any);
 

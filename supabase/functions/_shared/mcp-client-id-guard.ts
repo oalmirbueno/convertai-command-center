@@ -23,7 +23,26 @@
  * hora; o dado no cliente errado aparece semanas depois, como confusao.
  */
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+// This guard only reads profiles. A structural query contract lets callers
+// using either installed Supabase client version share it without coupling to
+// private client fields or transport-specific Headers representations.
+interface ClientLookupResult {
+  data: unknown;
+  error: { message: string } | null;
+}
+interface ClientLookup {
+  from(table: 'profiles'): unknown;
+}
+interface ProfileLookup {
+  select(columns: string): {
+    eq(column: 'id', value: string): {
+      maybeSingle(): PromiseLike<ClientLookupResult>;
+    };
+    is(column: 'deleted_at', value: null): {
+      limit(count: number): PromiseLike<ClientLookupResult>;
+    };
+  };
+}
 
 interface ClienteConhecido {
   id: string;
@@ -63,12 +82,12 @@ function ehTransposicao(errado: string, certo: string): boolean {
  * permite apontar o registro certo em vez de mandar procurar.
  */
 export async function exigirClienteExistente(
-  sb: SupabaseClient,
+  sb: ClientLookup,
   clientId: string,
   pistaDeTexto?: string,
 ): Promise<void> {
-  const { data: perfil, error } = await sb
-    .from('profiles')
+  const profiles = () => sb.from('profiles') as ProfileLookup;
+  const { data: perfil, error } = await profiles()
     .select('id, deleted_at')
     .eq('id', clientId)
     .maybeSingle();
@@ -76,8 +95,7 @@ export async function exigirClienteExistente(
   if (perfil && !(perfil as { deleted_at: string | null }).deleted_at) return;
 
   // A partir daqui a gravacao JA vai falhar. O que resta e falhar bem.
-  const { data: linhas } = await sb
-    .from('profiles')
+  const { data: linhas } = await profiles()
     .select('id, full_name, company_name, deleted_at')
     .is('deleted_at', null)
     .limit(500);

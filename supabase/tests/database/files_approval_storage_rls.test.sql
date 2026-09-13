@@ -954,30 +954,59 @@ VALUES
     'client/a0000000-0000-0000-0000-00000000000b/workspace-b.txt'
   );
 
+-- Since 20260814170000, clients can read tasks in their own live projects as
+-- calendar schedule entries. A title or source='portal' is not an internal
+-- visibility marker. Comments/checklists remain independently staff-only.
+INSERT INTO public.projects (
+  id, client_id, name, project_type, status, progress,
+  start_date, deadline, billing_mode, deleted_at
+)
+VALUES (
+  'b0000000-0000-0000-0000-00000000000c',
+  'a0000000-0000-0000-0000-00000000000a',
+  'Removed schedule project A', 'recurring', 'active', 0,
+  current_date, current_date + 30, 'included', now()
+);
+
 INSERT INTO public.tasks (
   id,
   project_id,
   title,
   status,
   priority,
-  source
+  source,
+  deleted_at
 )
 VALUES
   (
     'e0000000-0000-0000-0000-00000000000a',
     'b0000000-0000-0000-0000-00000000000a',
-    'Internal task A',
+    'Client A schedule task',
     'backlog',
     'medium',
-    'portal'
+    'portal',
+    NULL
   ),
   (
     'e0000000-0000-0000-0000-00000000000b',
     'b0000000-0000-0000-0000-00000000000b',
-    'Internal task B',
+    'Client B schedule task',
     'backlog',
     'medium',
-    'portal'
+    'portal',
+    NULL
+  ),
+  (
+    'e0000000-0000-0000-0000-00000000000c',
+    'b0000000-0000-0000-0000-00000000000a',
+    'Removed schedule task A',
+    'backlog', 'medium', 'portal', now()
+  ),
+  (
+    'e0000000-0000-0000-0000-00000000000d',
+    'b0000000-0000-0000-0000-00000000000c',
+    'Task in removed schedule project A',
+    'backlog', 'medium', 'portal', NULL
   );
 
 INSERT INTO public.task_comments (id, task_id, author_id, content)
@@ -1443,8 +1472,39 @@ SELECT is(
     FROM public.tasks
     WHERE id = 'e0000000-0000-0000-0000-00000000000a'
   ),
+  1,
+  'client reads its own live project task for the calendar schedule'
+);
+SELECT is(
+  (SELECT count(*)::integer FROM public.tasks
+   WHERE id = 'e0000000-0000-0000-0000-00000000000b'),
   0,
-  'client cannot read its own internal task'
+  'client cannot read a task belonging to another client project'
+);
+SELECT is(
+  (SELECT count(*)::integer FROM public.tasks
+   WHERE id = 'e0000000-0000-0000-0000-00000000000c'),
+  0,
+  'client cannot read its own removed schedule task'
+);
+SELECT is(
+  (SELECT count(*)::integer FROM public.tasks
+   WHERE id = 'e0000000-0000-0000-0000-00000000000d'),
+  0,
+  'client cannot read a task in its own removed project'
+);
+SELECT ok(
+  pg_temp.statement_blocked($sql$
+    UPDATE public.tasks SET title = 'Unauthorized client task edit'
+    WHERE id = 'e0000000-0000-0000-0000-00000000000a'
+  $sql$),
+  'client schedule visibility does not grant task editing'
+);
+SELECT is(
+  (SELECT title FROM public.tasks
+   WHERE id = 'e0000000-0000-0000-0000-00000000000a'),
+  'Client A schedule task',
+  'blocked client edit preserves the schedule task'
 );
 SELECT is(
   (
@@ -1676,7 +1736,7 @@ SELECT is(
     WHERE id = 'e0000000-0000-0000-0000-00000000000a'
   ),
   1,
-  'assigned design sees Client A internal task'
+  'assigned design sees Client A schedule task'
 );
 SELECT is(
   (
@@ -1685,7 +1745,7 @@ SELECT is(
     WHERE id = 'e0000000-0000-0000-0000-00000000000b'
   ),
   0,
-  'assigned design cannot see Client B internal task'
+  'assigned design cannot see Client B schedule task'
 );
 SELECT is(
   (

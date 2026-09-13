@@ -177,7 +177,7 @@ function inspectWorkflow(workflow, problems) {
     [/to_regclass\s*\(\s*["']public\.mcp_oauth_allowed_redirect_origins["']\s*\)/i, "OAuth preflight must verify the redirect-origin table"],
     [/to_regprocedure\s*\(\s*["']public\.is_allowed_mcp_oauth_client\(uuid\)["']\s*\)/i, "OAuth preflight must verify the client-binding function"],
     [/public\.is_allowed_mcp_oauth_client\s*\([\s\S]{0,160}00000000-0000-0000-0000-000000000000[\s\S]{0,80}is\s+false/i, "OAuth preflight must prove an unknown client is rejected"],
-    [/prepare-production-migration-view\.mjs[\s\S]{0,100}--ledger-sql-values/, "MCP deploy must use the audited production migration view"],
+    [/prepare-project-migration-ledger\.mjs[\s\S]{0,120}--project-ref\s+"\$SUPABASE_PROJECT_ID"[\s\S]{0,100}--ledger-sql-values/, "MCP deploy must use the reviewed ledger for the exact target project"],
     [/full\s+outer\s+join\s+applied_migrations/i, "MCP deploy must reject missing or unexpected migration ledger rows"],
     [/applied\.migration_name\s+<>\s+expected\.migration_name/i, "MCP deploy must compare migration names"],
     [/applied\.statements_sha256\s+<>\s+expected\.statements_sha256/i, "MCP deploy must compare migration statement hashes"],
@@ -194,7 +194,7 @@ function inspectWorkflow(workflow, problems) {
     [/MCP_SMOKE_TOKEN:\s*\$\{\{\s*secrets\.MCP_SMOKE_TOKEN\s*\}\}/, "authenticated smoke token must come from the protected GitHub Environment"],
     [/MCP_SMOKE_EXPECTED_KEY_ID:\s*\$\{\{\s*secrets\.MCP_SMOKE_EXPECTED_KEY_ID\s*\}\}/, "authenticated smoke key id must come from the protected GitHub Environment"],
     [/MCP_SMOKE_EXPECTED_CLIENT_ID:\s*\$\{\{\s*secrets\.MCP_SMOKE_EXPECTED_CLIENT_ID\s*\}\}/, "authenticated smoke client id must come from the protected GitHub Environment"],
-    [/MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{\s*vars\.APP_PUBLIC_URL\s*\}\}/, "smoke must verify the project-wide APP_PUBLIC_URL without mutating it"],
+    [/MCP_SMOKE_EXPECTED_PUBLIC_URL:\s*\$\{\{\s*env\.APP_PUBLIC_URL\s*\}\}/, "smoke must verify the resolved project-wide APP_PUBLIC_URL without mutating it"],
     [/test\s+-n\s+"\$MCP_SMOKE_TOKEN"/, "deployment must reject a missing authenticated smoke token"],
     [/test\s+-n\s+"\$MCP_SMOKE_EXPECTED_KEY_ID"/, "deployment must reject a missing authenticated smoke key id"],
     [/test\s+-n\s+"\$MCP_SMOKE_EXPECTED_CLIENT_ID"/, "deployment must reject a missing authenticated smoke client id"],
@@ -338,7 +338,7 @@ jobs:
       MCP_SMOKE_TOKEN: \${{ secrets.MCP_SMOKE_TOKEN }}
       MCP_SMOKE_EXPECTED_KEY_ID: \${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
       MCP_SMOKE_EXPECTED_CLIENT_ID: \${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
-      MCP_SMOKE_EXPECTED_PUBLIC_URL: \${{ vars.APP_PUBLIC_URL }}
+      MCP_SMOKE_EXPECTED_PUBLIC_URL: \${{ env.APP_PUBLIC_URL }}
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000
       - with:
@@ -353,7 +353,7 @@ jobs:
           curl "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID"
           supabase functions list --project-ref "$SUPABASE_PROJECT_ID"
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
-          node ../control/scripts/prepare-production-migration-view.mjs --ledger-sql-values
+          node ../control/scripts/prepare-project-migration-ledger.mjs --project-ref "$SUPABASE_PROJECT_ID" --ledger-sql-values
           full outer join applied_migrations using (version)
           applied.migration_name <> expected.migration_name
           applied.statements_sha256 <> expected.statements_sha256
@@ -534,8 +534,12 @@ async function verifyRepository({ includeCompat, sourceOnly, sourceRoot, rollbac
   }
   checked.push("retired OAuth client bypass absent from deployable MCP source");
 
-  const serverVersion = extractServerInfoVersion(tools);
-  const metadataVersion = extractConstant(metadata, "MCP_VERSION");
+  // Support the shared version module and earlier main ancestors during rollback.
+  const centralized = tools.includes("import { MCP_VERSION } from './mcp-release.ts'")
+    && metadata.includes("import { MCP_VERSION } from '../_shared/mcp-release.ts'");
+  const sharedVersion = centralized ? extractConstant(await load('supabase/functions/_shared/mcp-release.ts', deploymentRoot), 'MCP_VERSION') : null;
+  const serverVersion = centralized && tools.includes('version: MCP_VERSION') ? sharedVersion : extractServerInfoVersion(tools);
+  const metadataVersion = centralized && metadata.includes('version: MCP_VERSION') ? sharedVersion : extractConstant(metadata, "MCP_VERSION");
   if (!serverVersion || !metadataVersion || serverVersion !== metadataVersion) {
     problems.push(`MCP version mismatch: server=${serverVersion || "missing"}, metadata=${metadataVersion || "missing"}`);
   }

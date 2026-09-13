@@ -22,6 +22,7 @@
  */
 
 import { db, isUuid, READ_LIMITS } from './aceleriq-read-services.ts';
+import { operatorRunIsStale } from './operator-freshness.ts';
 
 const texto = (v: unknown): string | null => {
   if (typeof v !== 'string') return null;
@@ -163,6 +164,11 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
     throw new Error('painel_task_id must be a UUID');
   }
 
+  // Retomada é uma escrita explícita. A leitura do quadro nunca expira registros.
+  if (input.event === 'started') {
+    const stale = await comPrazo(db().rpc('operator_expire_stale_runs'));
+    if (stale.error) throw new Error(`operator_expire_stale_runs: ${stale.error.message}`);
+  }
   const { data, error } = await comPrazo(db().rpc('operator_report_event', {
     _operator_slug: input.operator,
     _event: input.event,
@@ -197,14 +203,10 @@ export async function operatorReport(input: OperatorReportInput, actor: string) 
 
 /**
  * O quadro dos operadores: vínculos com contexto humano, runs recentes e
- * incidentes. Antes de listar, expira runs sem heartbeat — a leitura é o
- * momento natural de detectar execução pendurada, sem cron novo.
+ * incidentes. Sem heartbeat é um aviso calculado, sem alterar registros.
  */
 export async function operatorBoard(opts: { operator?: string; status?: string; limit?: number }) {
   const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), READ_LIMITS.maxPageSize);
-
-  // Detecção de pendurados na leitura: barata e sempre atual.
-  await comPrazo(db().rpc('operator_expire_stale_runs'));
 
   const [ops, links, runs] = await Promise.all([
     comPrazo(db().from('internal_operators')
@@ -217,12 +219,13 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       .order('updated_at', { ascending: false })
       .limit(limit)),
     comPrazo(db().from('operator_runs')
-      .select('id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, finished_at, error')
+      .select('id, operator_id, run_key, task_link_id, status, attempt, started_at, heartbeat_at, timeout_seconds, finished_at, error')
       .order('started_at', { ascending: false })
       .limit(limit)),
   ]);
   if (ops.error) throw new Error(`internal_operators: ${ops.error.message}`);
   if (links.error) throw new Error(`operator_task_links: ${links.error.message}`);
+  if (runs.error) throw new Error(`operator_runs: ${runs.error.message}`);
 
   // Aprovacoes e propostas pendentes viajam NO quadro: o agente que nao
   // as ve escolhe trabalho novo enquanto ha decisao humana esperando — e
@@ -357,6 +360,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       kanban_abertas: (abertas ?? []).length,
       sem_operador: disponiveis.length,
       incidentes: incidentes.length,
+      execucoes_sem_heartbeat: execucoes.filter(r => operatorRunIsStale(r)).length,
     },
     tarefas_disponiveis: disponiveis,
     /*
@@ -455,6 +459,7 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
       id: r.id, operador: porId.get(String(r.operator_id))?.slug ?? null,
       run_key: r.run_key, status: r.status, tentativa: r.attempt,
       inicio: r.started_at, heartbeat: r.heartbeat_at, fim: r.finished_at, erro: r.error,
+      sem_heartbeat: operatorRunIsStale(r),
     })),
     incidentes: incidentes.slice(0, 10).map((r) => ({
       operador: porId.get(String(r.operator_id))?.slug ?? null,

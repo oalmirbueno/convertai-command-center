@@ -61,11 +61,11 @@ describe("o tour explica o que o painel virou", () => {
     }
   });
 
-  it("cobre a Central e o Ciclo", () => {
+  it("cobre a Central, a Esteira atual e o acesso ao histórico", () => {
     expect(textoAdmin).toMatch(/Central de Experiência/);
-    expect(textoAdmin).toMatch(/Ciclo da Semana/);
-    // O Ciclo é aplicativo separado: quem faz o tour precisa saber instalar.
-    expect(textoAdmin).toMatch(/tela inicial/i);
+    expect(textoAdmin).toMatch(/Esteira da Semana/);
+    expect(textoAdmin).toContain('/ciclo-antigo');
+    expect(textoAdmin).toMatch(/Social e tráfego/);
   });
 
   it("é honesto sobre o que a IA faz e não faz", () => {

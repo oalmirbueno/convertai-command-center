@@ -4,6 +4,7 @@ import path from "path";
 import { readFileSync } from "fs";
 import { chunkPara, PISO_DE_TAMANHO } from "./config/chunk-strategy";
 import { pluginCsp } from "./config/csp";
+import { buildRevision } from "./config/build-revision";
 
 const PUBLIC_ENV_KEYS = [
   "VITE_SUPABASE_URL",
@@ -68,6 +69,7 @@ export default defineConfig(({ command, mode }) => {
   // Carimbo único por build: o app compara este id com /version.json publicado
   // e se atualiza sozinho quando sai versão nova (fim da tela branca em PWA).
   const buildId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const sourceRevision = command === "build" ? buildRevision() : null;
   define["__APP_BUILD_ID__"] = JSON.stringify(command === "build" ? buildId : "dev");
 
   const { values: defaults, pinned } = loadPublicEnvDefaults();
@@ -147,7 +149,7 @@ export default defineConfig(({ command, mode }) => {
           this.emitFile({
             type: "asset",
             fileName: "version.json",
-            source: JSON.stringify({ buildId }),
+            source: JSON.stringify({ buildId, sourceRevision }),
           });
         },
       },

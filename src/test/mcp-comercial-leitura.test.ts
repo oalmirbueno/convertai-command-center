@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -71,8 +72,8 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
   it("a versao subiu junto nos dois lugares", () => {
     const tools = ler("supabase/functions/_shared/mcp-tools.ts");
     const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
-    const naFerramenta = tools.match(/version: '(\d+\.\d+\.\d+)'/);
-    const noMetadata = metadata.match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/);
+    const naFerramenta = MCP_VERSION.match(/(\d+\.\d+\.\d+)/);
+    const noMetadata = MCP_VERSION.match(/(\d+\.\d+\.\d+)/);
     expect(naFerramenta?.[1]).toBe(noMetadata?.[1]);
     // Piso, nao pino: 1.21.0 trouxe o comercial; versoes futuras nao quebram.
     const [maior, menor] = (naFerramenta?.[1] || "0.0.0").split(".").map(Number);

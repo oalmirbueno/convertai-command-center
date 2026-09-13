@@ -6,6 +6,7 @@
 
 import { authenticate, DataScopeError, type AuthContext, type AuthResult } from "../_shared/mcp-auth.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
 import {
   canInvoke,
@@ -90,6 +91,7 @@ function protectedResourceMetadata() {
     resource_name: "Aceleriq OS MCP",
     resource_documentation: `${APP_PUBLIC_URL}/conectar-mcp`,
     mcp: {
+      release: MCP_RELEASE_SOURCE,
       transport: "streamable-http",
       protocol_version: MCP_PROTOCOL_VERSION,
       server_info: SERVER_INFO,

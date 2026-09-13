@@ -1857,7 +1857,8 @@ SELECT ok(
 );
 
 -- ---------------------------------------------------------------------------
--- 6. Client visibility opens only after the agency and client gates.
+-- 6. The client sees its full schedule (20260814150000), while file access,
+-- internal records and publication execution keep their independent gates.
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.act_as(
   '91000000-0000-0000-0000-00000000000a'
@@ -1867,16 +1868,30 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.editorial_posts
   ),
-  0,
-  'client sees no editorial post before the double gate'
+  1,
+  'client sees its own scheduled work before file approval'
 );
 SELECT is(
   (
     SELECT count(*)::integer
     FROM public.editorial_publications
   ),
+  2,
+  'client sees its own two publication plans before file approval'
+);
+SELECT is(
+  (SELECT count(*)::integer FROM public.files WHERE id IN (
+    '94000000-0000-0000-0000-00000000000a'::uuid,
+    '94000000-0000-0000-0000-00000000000d'::uuid
+  )),
   0,
-  'client sees no publication plan before the double gate'
+  'the visible schedule does not expose unreleased primary or platform files'
+);
+SELECT is(
+  (SELECT count(*)::integer FROM public.editorial_publications
+   WHERE client_id = '91000000-0000-0000-0000-00000000000b'),
+  0,
+  'full schedule visibility never includes another client publication'
 );
 SELECT is(
   (
@@ -1911,7 +1926,7 @@ SELECT lives_ok(
   'assigned design requests review for primary and platform files'
 );
 
-SELECT throws_like(
+SELECT throws_ok(
   $sql$
     SELECT public.save_editorial_post(
       jsonb_set(
@@ -1930,8 +1945,9 @@ SELECT throws_like(
     FROM pg_temp.editorial_test_state AS state
     WHERE state.label = 'client_a'
   $sql$,
-  '%primary file is already under review%',
-  'a new post cannot reuse a primary file already under review'
+  '23505',
+  'duplicate key value violates unique constraint "editorial_posts_primary_file_unique_idx"',
+  'a new post cannot duplicate an active primary-file link during review'
 );
 
 SELECT pg_temp.act_as(
@@ -1977,16 +1993,16 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.editorial_posts
   ),
-  0,
-  'agency approval alone does not expose the editorial post'
+  1,
+  'agency approval preserves visibility of the client own schedule'
 );
 SELECT is(
   (
     SELECT count(*)::integer
     FROM public.editorial_publications
   ),
-  0,
-  'pending client approval does not expose publication plans'
+  2,
+  'pending file approval preserves visibility of the client own plans'
 );
 SELECT lives_ok(
   $sql$
@@ -2012,15 +2028,15 @@ SELECT is(
     FROM public.editorial_posts
   ),
   1,
-  'client sees its post only after both approval gates'
+  'client still sees its own post after both approval gates'
 );
 SELECT is(
   (
     SELECT count(*)::integer
     FROM public.editorial_publications
   ),
-  0,
-  'client still cannot see internal planned publications'
+  2,
+  'client sees its own planned publications after approval'
 );
 SELECT is(
   (
@@ -2123,8 +2139,8 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.editorial_posts
   ),
-  0,
-  'client visibility closes when the approved file hash diverges'
+  1,
+  'an approval hash mismatch preserves schedule visibility while execution stays gated'
 );
 
 SELECT pg_temp.act_as(
@@ -2750,10 +2766,13 @@ SELECT throws_like(
   'an approved media root cannot be linked to a second content'
 );
 
-SELECT ok(
-  pg_temp.statement_fails(
-    $sql$
-      SELECT public.save_editorial_post(
+-- Documents may be attached for editorial review. The execution boundary,
+-- rather than generic attachment, must reject their use as social media.
+SELECT lives_ok(
+  $sql$
+    INSERT INTO pg_temp.editorial_test_state(label,payload,result)
+    SELECT 'pdf_review', payload, public.save_editorial_post(payload, NULL)
+    FROM (SELECT
         jsonb_build_object(
           'client_id', '91000000-0000-0000-0000-00000000000a',
           'project_id', '92000000-0000-0000-0000-00000000000a',
@@ -2763,13 +2782,43 @@ SELECT ok(
           'title', 'PDF must not become social media',
           'content_type', 'static',
           'production_status', 'ready',
-          'publications', jsonb_build_array()
-        ),
-        NULL
-      )
-    $sql$
-  ),
-  'an approved PDF is not accepted as publishable editorial media'
+          'publications', jsonb_build_array(jsonb_build_object(
+            'idempotency_key', '96100000-0000-0000-0000-00000000000f',
+            'external_account_id', (SELECT id FROM public.external_accounts
+              WHERE client_id='91000000-0000-0000-0000-00000000000a'
+                AND platform='instagram' LIMIT 1),
+            'platform','instagram',
+            'scheduled_at',now()+interval '1 day',
+            'scheduled_timezone','America/Sao_Paulo'
+          ))
+        ) AS payload) AS fixture
+  $sql$,
+  'an approved document may remain an editorial attachment for review'
+);
+SELECT throws_ok(
+  $sql$SELECT public.transition_editorial_publication(
+    p.id,'schedule',p.version,p.scheduled_at,p.scheduled_timezone)
+    FROM public.editorial_publications p JOIN pg_temp.editorial_test_state s
+      ON p.post_id=(s.result->>'post_id')::uuid
+    WHERE s.label='pdf_review'$sql$,
+  'P0001','publication requires ready content and approved immutable files',
+  'an approved PDF cannot be scheduled as publishable social media'
+);
+SELECT throws_ok(
+  $sql$SELECT public.transition_editorial_publication(
+    p.id,'publish',p.version,p_permalink=>'https://example.test/editorial/pdf')
+    FROM public.editorial_publications p JOIN pg_temp.editorial_test_state s
+      ON p.post_id=(s.result->>'post_id')::uuid
+    WHERE s.label='pdf_review'$sql$,
+  'P0001','publication requires ready content and approved immutable files',
+  'an approved PDF cannot be marked published through the official flow'
+);
+SELECT results_eq(
+  $$SELECT p.status FROM public.editorial_publications p
+    JOIN pg_temp.editorial_test_state s ON p.post_id=(s.result->>'post_id')::uuid
+    WHERE s.label='pdf_review'$$,
+  $$VALUES ('planned'::text)$$,
+  'rejected PDF execution preserves its review plan without a publication receipt'
 );
 
 SELECT pg_temp.act_as_owner();
@@ -2928,8 +2977,7 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.notifications
     WHERE notification_type = 'publication'
-      AND link =
-        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+      AND link = 'https://example.test/editorial/approved-media'
   ),
   0,
   'scheduling alone sends no published notification'
@@ -3005,11 +3053,23 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.notifications
     WHERE notification_type = 'publication'
-      AND link =
-        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+      AND link = 'https://example.test/editorial/approved-media'
   ),
-  4,
-  'published transition notifies only the assigned Client A staff and admins'
+  5,
+  'published transition notifies assigned staff, admins and the owning client with the public permalink'
+);
+SELECT results_eq(
+  $$SELECT user_id FROM public.notifications
+    WHERE notification_type = 'publication'
+      AND link = 'https://example.test/editorial/approved-media'
+    ORDER BY user_id$$,
+  $$VALUES
+    ('91000000-0000-0000-0000-000000000001'::uuid),
+    ('91000000-0000-0000-0000-000000000002'::uuid),
+    ('91000000-0000-0000-0000-000000000003'::uuid),
+    ('91000000-0000-0000-0000-000000000004'::uuid),
+    ('91000000-0000-0000-0000-00000000000a'::uuid)$$,
+  'publication notification recipients match the exact authorized audience'
 );
 
 SELECT is(
@@ -3017,16 +3077,14 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.notifications
     WHERE notification_type = 'publication'
-      AND link =
-        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+      AND link = 'https://example.test/editorial/approved-media'
       AND user_id IN (
-        '91000000-0000-0000-0000-00000000000a'::uuid,
         '91000000-0000-0000-0000-00000000000b'::uuid,
         '91000000-0000-0000-0000-00000000000e'::uuid
       )
   ),
   0,
-  'published notification never crosses into clients or unassigned staff'
+  'published notification never reaches another client or unassigned staff'
 );
 
 SELECT pg_temp.act_as(
@@ -3069,10 +3127,9 @@ SELECT is(
     SELECT count(*)::integer
     FROM public.notifications
     WHERE notification_type = 'publication'
-      AND link =
-        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+      AND link = 'https://example.test/editorial/approved-media'
   ),
-  4,
+  5,
   'published retry does not duplicate notifications'
 );
 

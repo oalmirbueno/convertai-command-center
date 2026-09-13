@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { itensDaFrente, montarEsteira } from "@/lib/esteira/esteiraMontar";
+import { itemDoPost, itensDaAgenda, itensDaFrente, itensDeAnuncios, itensDeOnboarding, montarEsteira } from "@/lib/esteira/esteiraMontar";
 import type { FatosDoCliente, PostFato } from "@/lib/esteira/esteiraTipos";
 
 const HOJE = new Date("2026-09-11T12:00:00Z");
@@ -44,6 +44,55 @@ function post(over: Partial<PostFato>): PostFato {
     ...over,
   };
 }
+
+describe("esteira: regressao de destinos, rotas e dependencias", () => {
+  it("abre o calendario com cliente e conteudo e anuncios com o filtro aceito pela pagina", () => {
+    const f = fatos({ clientId: "cliente / teste", servicos: { social: true, trafego: true } });
+    const rotaPost = new URL(itemDoPost(f, post({ id: "post / teste" }), HOJE)!.rota!, "https://app.local");
+    expect(rotaPost.pathname).toBe("/calendario");
+    expect(rotaPost.searchParams.get("client")).toBe(f.clientId);
+    expect(rotaPost.searchParams.get("content")).toBe("post / teste");
+    const rotaAgenda = new URL(itensDaAgenda(f, HOJE, true)[0].rota!, "https://app.local");
+    expect(rotaAgenda.pathname).toBe("/calendario");
+    expect(rotaAgenda.searchParams.get("client")).toBe(f.clientId);
+    const rotaAds = new URL(itensDeAnuncios(f, HOJE, true)[0].rota!, "https://app.local");
+    expect(rotaAds.pathname).toBe("/anuncios");
+    expect(rotaAds.searchParams.get("cliente")).toBe(f.clientId);
+  });
+
+  it("trafego exclusivo nao depende de Instagram ausente do onboarding", () => {
+    const onboarding = itensDeOnboarding(fatos({ criadoEm: "2026-09-10", conexoes: [], servicos: { social: false, trafego: true } }), HOJE);
+    expect(onboarding.itens.some((item) => item.key === "onb:instagram")).toBe(false);
+    expect(onboarding.itens.find((item) => item.key === "onb:anuncios")?.bloqueadoPor).toBeUndefined();
+  });
+
+  it("mantem a dependencia de Instagram quando social faz parte do contrato", () => {
+    const onboarding = itensDeOnboarding(fatos({ criadoEm: "2026-09-10", conexoes: [], servicos: { social: true, trafego: true } }), HOJE);
+    expect(onboarding.itens.find((item) => item.key === "onb:anuncios")?.bloqueadoPor).toBe("Instagram");
+  });
+
+  it.each([
+    ["failed", null, "repostar"],
+    ["scheduled", "2026-09-10T12:00:00Z", "nao-publicou"],
+    ["planned", null, "agenda"],
+  ])("um destino publicado nao oculta outro %s", (status, scheduledAt, key) => {
+    const p = post({ publicacoes: [
+      { status: "published", scheduledAt: null, publishedAt: "2026-09-09T12:00:00Z" },
+      { status: status!, scheduledAt, publishedAt: null },
+    ] });
+    expect(itemDoPost(fatos({}), p, HOJE)?.key).toBe(`post:p1:${key}`);
+    expect(montarEsteira(fatos({ posts: [p] }), HOJE).feitos.some((item) => item.key === "post:p1:publicado")).toBe(false);
+  });
+
+  it.each(["published", "cancelled"])("encerra a pendencia quando os destinos restantes estao %s", (status) => {
+    const p = post({ publicacoes: [
+      { status: "published", scheduledAt: null, publishedAt: "2026-09-09T12:00:00Z" },
+      { status, scheduledAt: null, publishedAt: status === "published" ? "2026-09-10T12:00:00Z" : null },
+    ] });
+    expect(itemDoPost(fatos({}), p, HOJE)).toBeNull();
+    expect(montarEsteira(fatos({ posts: [p] }), HOJE).feitos.some((item) => item.key === "post:p1:publicado")).toBe(true);
+  });
+});
 
 describe("esteira: cliente em operacao (cenario Acerbi)", () => {
   const f = fatos({
@@ -171,7 +220,7 @@ describe("esteira: marcacao humana e frentes", () => {
       conexoes: [{ provider: "instagram", status: "connected" }, { provider: "meta_ads", status: "connected" }],
       posts: [post({ id: "s", temArte: false })],
       tarefas: [{ id: "t", titulo: "Ligar para o cliente", status: "todo", dueDate: "2026-09-01", assignedTo: null, source: null, updatedAt: null }],
-      campanhas: [{ id: "c", nome: "Campanha X", ativa: true, diario: [] }],
+      campanhas: [{ id: "c", nome: "Campanha X", ativa: true, plataforma: "meta_ads", diario: [] }],
     });
     const e = montarEsteira(f, HOJE);
     const trafego = itensDaFrente(e, "trafego").map((i) => i.key);
@@ -220,9 +269,9 @@ describe("esteira: marcacao humana e frentes", () => {
         { accountId: "acc", weekStart: "2026-09-07", reach: 174, followers: 500, interactions: 6 },
         { accountId: "acc", weekStart: "2026-08-31", reach: 247, followers: 500, interactions: 27 },
       ],
-      campanhas: [{ id: "c", nome: "Campanha X", ativa: true, diario: [
-        { day: "2026-09-10", spend: 100, leads: 1, frequency: 1.2 },
-        { day: "2026-09-02", spend: 100, leads: 4, frequency: 1.1 },
+      campanhas: [{ id: "c", nome: "Campanha X", ativa: true, plataforma: "meta_ads", diario: [
+        { day: "2026-09-10", spend: 100, leads: 1, frequency: 1.2, compras: 0, valorCompras: 0 },
+        { day: "2026-09-02", spend: 100, leads: 4, frequency: 1.1, compras: 0, valorCompras: 0 },
       ] }],
     });
     const e = montarEsteira(f, HOJE, "2026-09-07");

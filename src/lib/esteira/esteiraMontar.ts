@@ -91,7 +91,8 @@ export function itensDeOnboarding(f: FatosDoCliente, hoje: Date): { itens: Estei
   const abertos = aplicaveis.filter((p) => !feitos.has(p.key));
   const frente: Frente = f.servicos.social ? "social" : f.servicos.trafego ? "trafego" : "geral";
   const itens: EsteiraItem[] = abertos.map((p) => {
-    const bloqueado = p.depende && !feitos.has(p.depende) ? p.depende : undefined;
+    const dependeSeAplica = p.depende && aplicaveis.some((passo) => passo.key === p.depende);
+    const bloqueado = dependeSeAplica && !feitos.has(p.depende!) ? p.depende : undefined;
     const rotuloBloqueio = bloqueado ? ONBOARDING.find((x) => x.key === bloqueado)?.rotulo : undefined;
     return {
       ordem: ONBOARDING.findIndex((x) => x.key === p.key),
@@ -133,9 +134,12 @@ function diasDesde(iso: string | null, hoje: Date): number | null {
 }
 
 export function itemDoPost(f: FatosDoCliente, p: PostFato, hoje: Date): EsteiraItem | null {
-  const base = { clientId: f.clientId, frente: "social" as Frente, fonte: "post" as const, titulo: p.titulo, rota: "/agenda" };
-  const pubs = p.publicacoes;
-  if (pubs.some((x) => x.status === "published")) return null;
+  const base = { clientId: f.clientId, frente: "social" as Frente, fonte: "post" as const, titulo: p.titulo, rota: `/calendario?client=${encodeURIComponent(f.clientId)}&content=${encodeURIComponent(p.id)}` };
+  const pubs = p.publicacoes.filter((x) => x.status !== "cancelled");
+  // Um destino no ar nao resolve os demais. Falhas e datas perdidas
+  // continuam visiveis ate cada publicacao necessaria ser resolvida.
+  const pendentes = pubs.filter((x) => x.status !== "published");
+  if (pubs.length > 0 && pendentes.length === 0) return null;
 
   const falhou = pubs.find((x) => ["failed", "error", "rejected"].includes(x.status));
   if (falhou) {
@@ -145,7 +149,7 @@ export function itemDoPost(f: FatosDoCliente, p: PostFato, hoje: Date): EsteiraI
   if (perdeu) {
     return { ...base, key: `post:${p.id}:nao-publicou`, passo: "Não publicou na data, conferir", gravidade: "urgente", fatos: [`Estava marcado para ${fmtDia(perdeu.scheduledAt)}`] };
   }
-  if (pubs.some((x) => x.status === "scheduled")) return null; // agendado, em dia
+  if (pendentes.length > 0 && pendentes.every((x) => x.status === "scheduled")) return null; // todos os destinos restantes agendados
 
   if (!p.temArte) {
     const idade = diasDesde(p.criadoEm, hoje);
@@ -174,7 +178,7 @@ export function itemDoPost(f: FatosDoCliente, p: PostFato, hoje: Date): EsteiraI
 export function itensDaAgenda(f: FatosDoCliente, hoje: Date, onboardingCompleto: boolean): EsteiraItem[] {
   if (!f.servicos.social || !onboardingCompleto) return [];
   const futuros = f.posts.flatMap((p) => p.publicacoes.filter((x) => x.status === "scheduled" && x.scheduledAt && new Date(x.scheduledAt).getTime() >= hoje.getTime()));
-  const base = { clientId: f.clientId, frente: "social" as Frente, fonte: "agenda" as const, titulo: "Agenda", rota: "/agenda" };
+  const base = { clientId: f.clientId, frente: "social" as Frente, fonte: "agenda" as const, titulo: "Agenda", rota: `/calendario?client=${encodeURIComponent(f.clientId)}` };
   if (futuros.length === 0) {
     return [{ ...base, key: "agenda:vazia", passo: "Agenda vazia, colocar posts", gravidade: "urgente", fatos: ["Nenhum post agendado daqui para a frente"] }];
   }
@@ -287,7 +291,7 @@ export function plataformasDoCliente(f: FatosDoCliente, hoje: Date = new Date())
 
 export function itensDeAnuncios(f: FatosDoCliente, hoje: Date, onboardingCompleto: boolean): EsteiraItem[] {
   if (!f.servicos.trafego || !onboardingCompleto) return [];
-  const base = { clientId: f.clientId, frente: "trafego" as Frente, fonte: "anuncio" as const, rota: "/trafego" };
+  const base = { clientId: f.clientId, frente: "trafego" as Frente, fonte: "anuncio" as const, rota: `/anuncios?cliente=${encodeURIComponent(f.clientId)}` };
   const itens: EsteiraItem[] = [];
   const ativas = f.campanhas.filter((c) => c.ativa);
 
@@ -398,6 +402,8 @@ export function feitosAutomaticos(f: FatosDoCliente, weekStart: string): Esteira
   const dentro = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= ini && t < fim; };
   const out: EsteiraItem[] = [];
   for (const p of f.posts) {
+    const destinos = p.publicacoes.filter((x) => x.status !== "cancelled");
+    if (!destinos.length || destinos.some((x) => x.status !== "published")) continue;
     const pub = p.publicacoes.find((x) => x.status === "published" && dentro(x.publishedAt));
     if (pub) out.push({ key: `post:${p.id}:publicado`, clientId: f.clientId, frente: "social", fonte: "post", titulo: p.titulo, passo: "Publicado", gravidade: "normal", fatos: [`No ar em ${fmtDia(pub.publishedAt)}`], estado: { status: "done", doneAt: pub.publishedAt, auto: true } });
   }

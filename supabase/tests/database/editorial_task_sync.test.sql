@@ -104,11 +104,11 @@ SELECT ok(
           procedure_row.oid,
           'EXECUTE'
         )
-        AND NOT has_function_privilege(
+        AND has_function_privilege(
           'service_role',
           procedure_row.oid,
           'EXECUTE'
-        )
+        ) = (expected.signature = 'public.save_editorial_post_unlocked(jsonb,integer)')
       )
     FROM (
       VALUES
@@ -139,7 +139,7 @@ SELECT ok(
     JOIN pg_proc AS procedure_row
       ON procedure_row.oid = to_regprocedure(expected.signature)
   ),
-  'editorial synchronization helpers and unlocked RPCs are private'
+  'editorial helpers deny public, anon and authenticated; only the versioned regular save helper allows service_role'
 );
 
 SELECT ok(

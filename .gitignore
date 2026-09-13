@@ -14,6 +14,12 @@ dist-ssr
 *.local
 supabase/.temp/
 
+# Disposable CI identities and browser artifacts must never be committed.
+e2e/.auth/
+e2e/.empty-env/
+playwright-report/
+test-results/
+
 # Local environment files. Use the tracked .env.example as the public contract
 # and keep real environment values outside Git.
 .env

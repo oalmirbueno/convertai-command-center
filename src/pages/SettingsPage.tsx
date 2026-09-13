@@ -1,17 +1,18 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useState } from "react";
 import { useTheme } from "@/contexts/ThemeContext";
+import NotificationsPanel from "@/components/NotificationsPanel";
 import { User, Bell, Shield, Sun, Moon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function SettingsPage() {
-  const { profile } = useAuth();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const sections = [
     { icon: User, label: "Perfil", desc: "Editar nome, empresa e foto", action: () => navigate("/perfil") },
-    { icon: Bell, label: "Notificações", desc: "Preferências de alerta e comunicação", action: () => {} },
-    { icon: Shield, label: "Segurança", desc: "Alterar senha e autenticação", action: () => {} },
+    { icon: Bell, label: "Notificações", desc: "Consultar avisos e acompanhar atualizações", action: () => setNotificationsOpen(true) },
+    { icon: Shield, label: "Segurança", desc: "Alterar sua senha na página de perfil", action: () => navigate("/perfil") },
   ];
 
   return (
@@ -19,7 +20,7 @@ export default function SettingsPage() {
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
         <p className="heading-page">Configurações</p>
         <p className="text-sm text-muted-foreground mt-1">
-          Personalize a experiência, gerencie perfil, notificações e segurança.
+          Personalize a aparência, consulte avisos e acesse seu perfil e senha.
         </p>
       </div>
 
@@ -75,6 +76,7 @@ export default function SettingsPage() {
           ))}
         </div>
       </div>
+      {notificationsOpen && <NotificationsPanel open={notificationsOpen} onOpenChange={setNotificationsOpen} />}
     </div>
   );
 }

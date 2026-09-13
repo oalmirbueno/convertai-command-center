@@ -182,23 +182,23 @@ export const adminTourSteps: TourStep[] = [
   // ── Ciclo da Semana ──
   {
     target: "[data-tour='nav-ciclo']",
-    title: "Ciclo da Semana",
+    title: "Esteira da Semana",
     description:
-      "O checklist de bolso da operação, que também é um aplicativo separado: abra aceleriq.online/ciclo no celular e adicione à tela inicial. São seis etapas por cliente, por semana.",
+      "Abra aceleriq.online/ciclo para acompanhar as ações da semana. A Esteira usa o dossiê geral, o histórico e os fatos do painel para mostrar o que cada cliente precisa agora.",
     placement: "bottom",
   },
   {
     target: "[data-tour='nav-ciclo']",
-    title: "Três etapas fixas, três que giram",
+    title: "Social e tráfego com planos próprios",
     description:
-      "Criar o conteúdo, atualizar o painel e agendar acontecem toda semana. As outras três mudam por cliente e por semana, tiradas de um acervo organizado pelas fases do método: quem entrou agora recebe tarefas de diagnóstico, quem já tem rotina fechando recebe tarefas de escala. Assim o checklist não vira burocracia.",
+      "As ações respeitam os serviços contratados e os fatos de cada frente. Confira bloqueios, responsáveis e prioridades de social e de tráfego antes de executar.",
     placement: "bottom",
   },
   {
     target: "[data-tour='nav-ciclo']",
     title: "Toque no cliente para ver tudo",
     description:
-      "Dentro de cada cliente: a etapa com nome inteiro, quem marcou e quando, a semana passada para corrigir o que ficou, uma lista rápida que você descreve e o sistema monta, e a história completa da parceria. Fechar a semana registra tudo automaticamente.",
+      "Abra o cliente para consultar seu contexto e as ações sugeridas. O antigo checklist de seis etapas continua disponível em /ciclo-antigo, preservando as semanas anteriores.",
     placement: "bottom",
   },
 

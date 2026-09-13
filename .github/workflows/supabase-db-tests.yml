@@ -51,13 +51,19 @@ jobs:
           version: 2.109.1
 
       - name: Install NPM dependencies
+        id: npm_dependencies
         run: |
           npm install --global npm@11.9.0
           test "$(npm --version)" = "11.9.0"
           npm ci
 
       - name: Install versioned Lovable MCP compatibility dependencies
+        id: compat_dependencies
         run: npm ci --prefix integrations/lovable-mcp-compat
+
+      - name: Install Chromium for isolated profile E2E
+        id: e2e_browser
+        run: npx playwright install --with-deps chromium
 
       - name: Verify append-only migration ledger
         shell: bash
@@ -100,14 +106,75 @@ jobs:
             supabase/bootstrap/legacy_prerequisites.sql \
             supabase/migrations/20260528163000_legacy_prerequisites.sql
 
+      - name: Stage verified editorial compatibility for empty CI replay
+        run: |
+          node scripts/prepare-ci-editorial-replay.mjs --self-test
+          node scripts/prepare-ci-editorial-replay.mjs --stage
+
       - name: Start Supabase local stack
         run: supabase start
 
       - name: Apply migrations
+        id: db_reset
         run: supabase db reset --local --no-seed
 
+      - name: Install local PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Verify synthetic operator parents remain inert after the full replay
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -f supabase/bootstrap/ci-operator-parents-postcheck.sql
+
+      - name: Restore reviewed legacy milestone read access in the empty CI stack
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -c "SET aceleriq.ci_legacy_read_grants='on'"
+          -f supabase/bootstrap/ci-milestones-read-access.sql
+
       - name: Run pgTAP database tests
+        id: pgtap
         run: supabase test db
+
+      - name: Run isolated synthetic SQL contracts
+        # A failing full-schema assertion must not hide independent synthetic
+        # regression checks. The pgTAP failure still fails the job.
+        if: ${{ !cancelled() && (success() || steps.pgtap.outcome == 'failure') }}
+        shell: bash
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '54322'
+          PGUSER: postgres
+          # Public default for the disposable Supabase local container only.
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          # SET SESSION AUTHORIZATION exercises the real authenticator request
+          # boundary. Supabase local may demote postgres; elevate only for this
+          # synthetic CI step and restore the original role on success/failure.
+          superuser="$(psql -X -q -t -A -w -h 127.0.0.1 -p 54322 -U postgres -d postgres -c "SELECT rolsuper FROM pg_roles WHERE rolname='postgres'")"
+          if [[ "$superuser" == 'f' ]]; then
+            psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U supabase_admin -d postgres -c 'ALTER ROLE postgres SUPERUSER'
+            trap "psql -X -q -w -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U supabase_admin -d postgres -c 'ALTER ROLE postgres NOSUPERUSER'" EXIT
+          fi
+          node scripts/test-isolated-db.mjs --self-test
+          node scripts/test-isolated-db.mjs
+          node scripts/test-ci-editorial-replay.mjs
+          node scripts/test-ci-milestones-read-access.mjs
+
+      - name: Restore editorial CI compatibility staging
+        if: always()
+        run: node scripts/prepare-ci-editorial-replay.mjs --restore
 
       - name: Remove CI-only legacy prerequisites migration
         if: always()
@@ -134,14 +201,18 @@ jobs:
 
 
       - name: Run unit tests
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm test -- --run
 
       - name: Run MCP Deno unit tests
-        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts supabase/functions/_shared/notification-write-response_test.ts
 
       - name: Type-check portable and public Edge Functions
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: |
           deno check \
+            supabase/functions/brain-client-context/index.ts \
             supabase/functions/admin-reset-client-access/index.ts \
             supabase/functions/api-gateway/index.ts \
             supabase/functions/client-first-access/index.ts \
@@ -156,12 +227,15 @@ jobs:
             supabase/functions/workspace-ocr/index.ts
 
       - name: Check TypeScript
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm run typecheck
 
       - name: Build application
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
         run: npm run build
 
       - name: Validate versioned Lovable MCP compatibility artifacts
+        if: ${{ !cancelled() && steps.compat_dependencies.outcome == 'success' }}
         run: |
           npm --prefix integrations/lovable-mcp-compat run verify
           npm --prefix integrations/lovable-mcp-compat run generate
@@ -169,6 +243,33 @@ jobs:
             .lovable/mcp/manifest.json \
             supabase/functions/mcp/index.ts
 
+      - name: Validate isolated browser E2E guardrails
+        if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
+        run: |
+          node scripts/run-ci-e2e.mjs --self-test
+          node scripts/seed-ci-e2e.mjs --self-test
+          node scripts/guard-ci-e2e-network.mjs --self-test
+          npx tsc -p e2e/tsconfig.json
+
+      - name: Run real Auth browser profile matrix against ephemeral Supabase
+        id: profile_e2e
+        if: ${{ !cancelled() && steps.db_reset.outcome == 'success' && steps.e2e_browser.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/run-ci-e2e.mjs
+
+      - name: Restore synthetic seed hooks before stopping Supabase
+        if: ${{ always() && steps.db_reset.outcome == 'success' }}
+        env:
+          PGPASSWORD: postgres
+        run: node scripts/seed-ci-e2e.mjs --restore
+
       - name: Stop Supabase local stack
+        id: supabase_stop
         if: always()
         run: supabase stop --no-backup
+
+      - name: Restore owned CI container firewall rule
+        # A failed stop leaves containment in place until this runner is retired.
+        if: ${{ always() && steps.supabase_stop.outcome == 'success' }}
+        run: node scripts/guard-ci-e2e-network.mjs --restore

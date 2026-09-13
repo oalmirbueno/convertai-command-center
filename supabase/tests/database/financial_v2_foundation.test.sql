@@ -138,11 +138,22 @@ SELECT is(
     SELECT count(*)::integer
     FROM pg_policies
     WHERE schemaname = 'public'
-      AND tablename LIKE 'financial_%'
+      -- V1 monthly tax rates intentionally allow admin writes. The V2
+      -- RPC-only boundary covers these eight tables, not every shared prefix.
+      AND tablename IN (
+        'financial_plans',
+        'financial_plan_versions',
+        'financial_client_terms',
+        'financial_recurring_rules',
+        'financial_entries',
+        'financial_settlements',
+        'financial_settings',
+        'financial_period_closures'
+      )
       AND cmd <> 'SELECT'
   ),
   0,
-  'no authenticated direct-write RLS policy exists'
+  'no direct-write RLS policy exists on the eight Financeiro V2 tables'
 );
 
 SELECT ok(
@@ -474,6 +485,67 @@ GRANT SELECT, INSERT, UPDATE, DELETE
   ON TABLE financial_test_state, financial_test_metrics
   TO authenticated;
 
+-- V1 monthly-tax permissions are separate from the V2 RPC-only boundary.
+-- The reviewed backend has SELECT/INSERT/UPDATE/DELETE for authenticated on
+-- this V1 table (read-only catalog inspection, 2026-09-12); AreaTributaria
+-- reads/upserts it directly. Its historical migration declares RLS but does
+-- not provision those table grants in the empty CI database. Mirror only that
+-- observed prerequisite inside this BEGIN/ROLLBACK to exercise the real RLS
+-- rules. This does not prove ACL provisioning, change defaults, or grant any
+-- V2 write privilege; the independent V2 ACL assertions above stay intact.
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.financial_tax_rates TO authenticated;
+
+SELECT pg_temp.act_as('f1000000-0000-0000-0000-000000000001');
+
+SELECT lives_ok(
+  $$INSERT INTO public.financial_tax_rates (competence, rate, note)
+    VALUES ('2199-11-01', 0.07, 'Synthetic monthly-tax permission fixture')$$,
+  'admin can maintain the V1 monthly tax rate'
+);
+
+SELECT throws_ok(
+  $$INSERT INTO public.financial_plans (name) VALUES ('Forbidden direct V2 write')$$,
+  '42501', NULL,
+  'even admin cannot insert directly into V2 plans'
+);
+
+SELECT pg_temp.act_as('f1000000-0000-0000-0000-00000000000c');
+
+SELECT is(
+  (SELECT rate FROM public.financial_tax_rates WHERE competence = '2199-11-01'),
+  0.07::numeric,
+  'manager can read the V1 monthly tax rate'
+);
+
+SELECT throws_ok(
+  $$INSERT INTO public.financial_tax_rates (competence, rate)
+    VALUES ('2199-12-01', 0.08)$$,
+  '42501', NULL,
+  'manager cannot insert a V1 monthly tax rate'
+);
+
+WITH changed AS (
+  UPDATE public.financial_tax_rates SET rate = 0.08
+  WHERE competence = '2199-11-01' RETURNING competence
+)
+SELECT is(
+  (SELECT count(*)::integer FROM changed),
+  0,
+  'manager cannot update a V1 monthly tax rate'
+);
+
+WITH changed AS (
+  DELETE FROM public.financial_tax_rates
+  WHERE competence = '2199-11-01' RETURNING competence
+)
+SELECT is(
+  (SELECT count(*)::integer FROM changed),
+  0,
+  'manager cannot delete a V1 monthly tax rate'
+);
+
+-- Continue the independent V2 guarded RPC scenarios.
 SELECT pg_temp.act_as('f1000000-0000-0000-0000-00000000000a');
 
 SELECT ok(

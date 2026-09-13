@@ -137,7 +137,7 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_ID" \
             --password "$SUPABASE_DB_PASSWORD"
 
-      - name: Verify the audited Lovable baseline and build the production view
+      - name: Verify the reviewed project baseline and build the production view
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -149,16 +149,19 @@ jobs:
           normalized_migrations="$RUNNER_TEMP/production-migrations"
           repository_migrations="$RUNNER_TEMP/repository-migrations"
           expected_versions="$RUNNER_TEMP/production-expected-versions.txt"
+          attestation_sql="$RUNNER_TEMP/project-baseline-attestation.sql"
 
           test ! -e "$normalized_migrations"
           test ! -e "$repository_migrations"
+          node scripts/prepare-project-baseline-attestation.mjs \
+            --project-ref "$SUPABASE_PROJECT_ID" > "$attestation_sql"
           supabase db query --linked \
             --output csv \
             "$(cat supabase/production-migration-ledger.sql)" \
             > "$migration_ledger"
           supabase db query --linked \
             --output csv \
-            "$(cat supabase/production-baseline-attestation.sql)" \
+            "$(cat "$attestation_sql")" \
             > "$attestation_result"
           attestation_status="$(
             tr -d '\r' < "$attestation_result" \
@@ -166,10 +169,12 @@ jobs:
           )"
           test "$attestation_status" = "PRODUCTION_BASELINE_SCHEMA_READY"
 
-          node scripts/prepare-production-migration-view.mjs \
+          node scripts/prepare-project-migration-view.mjs \
+            --project-ref "$SUPABASE_PROJECT_ID" \
             --ledger-csv "$migration_ledger" \
             --output-dir "$normalized_migrations"
-          node scripts/prepare-production-migration-view.mjs \
+          node scripts/prepare-project-migration-ledger.mjs \
+            --project-ref "$SUPABASE_PROJECT_ID" \
             --list-versions \
             > "$expected_versions"
           test -s "$expected_versions"
@@ -205,7 +210,7 @@ jobs:
             "$current_ledger"
           supabase db query --linked \
             --output csv \
-            "$(cat supabase/production-baseline-attestation.sql)" \
+            "$(cat "$RUNNER_TEMP/project-baseline-attestation.sql")" \
             > "$attestation_result"
           attestation_status="$(
             tr -d '\r' < "$attestation_result" \
@@ -256,13 +261,14 @@ jobs:
             --output csv \
             "$(cat supabase/production-migration-ledger.sql)" \
             > "$final_migration_ledger"
-          node scripts/prepare-production-migration-view.mjs \
+          node scripts/prepare-project-migration-view.mjs \
+            --project-ref "$SUPABASE_PROJECT_ID" \
             --ledger-csv "$final_migration_ledger" \
             --source-dir "$RUNNER_TEMP/repository-migrations" \
             --output-dir "$RUNNER_TEMP/postflight-production-migrations"
           supabase db query --linked \
             --output csv \
-            "$(cat supabase/production-baseline-attestation.sql)" \
+            "$(cat "$RUNNER_TEMP/project-baseline-attestation.sql")" \
             > "$final_attestation"
           final_attestation_status="$(
             tr -d '\r' < "$final_attestation" \

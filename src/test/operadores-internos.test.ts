@@ -80,9 +80,12 @@ describe("execucao com trava, idempotencia e retomada", () => {
   it("run sem heartbeat vira timeout visivel e libera a trava", () => {
     expect(migracao).toContain("operator_expire_stale_runs");
     expect(migracao).toContain("make_interval(secs => r.timeout_seconds)");
-    // A leitura do quadro expira antes de listar: deteccao sem cron novo.
+    // A retomada explícita mantém a manutenção; consultas são somente leitura.
     expect(servicos).toContain("rpc('operator_expire_stale_runs')");
-    expect(pagina).toContain('rpc("operator_expire_stale_runs")');
+    expect(pagina).toContain('rpc("operator_maintenance_tick")');
+    const board = servicos.slice(servicos.indexOf('export async function operatorBoard('), servicos.indexOf('/* ─────────────────────────── O cofre'));
+    expect(board).not.toContain(".rpc(");
+    expect(board).toContain("operatorRunIsStale");
   });
 
   it("nao se promete zero falha: incidentes e ultima falha sao visiveis", () => {

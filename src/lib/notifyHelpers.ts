@@ -44,3 +44,30 @@ export async function notifyUser(userId: string, message: string, type: string, 
     console.error("[notifyUser] failed:", e);
   }
 }
+
+/** Checked variant for callers that must report whether persistence was accepted.
+ * Existing best-effort consumers keep using notifyUser unchanged. */
+export async function notifyUserChecked(
+  userId: string, message: string, type: string, link: string,
+): Promise<{ accepted: boolean }> {
+  try {
+    const { error } = await supabase.from("notifications").insert({
+      user_id: userId, message, notification_type: type, link,
+    });
+    if (!error) return { accepted: true };
+    // A transport failure can arrive as an error without a database code.
+    // Its INSERT may already have committed; do not repeat an uncertain write.
+    if (!error.code) return { accepted: false };
+  } catch {
+    return { accepted: false };
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke("notify-admin", {
+      body: { target_user_id: userId, message, notification_type: type, link },
+    });
+    return { accepted: !error && data?.ok === true };
+  } catch {
+    return { accepted: false };
+  }
+}

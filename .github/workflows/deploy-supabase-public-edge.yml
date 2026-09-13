@@ -162,7 +162,8 @@ jobs:
             --password "$SUPABASE_DB_PASSWORD"
 
           expected_ledger_file="$RUNNER_TEMP/public-edge-expected-migration-ledger.sql"
-          node scripts/prepare-production-migration-view.mjs \
+          node scripts/prepare-project-migration-ledger.mjs \
+            --project-ref "$SUPABASE_PROJECT_ID" \
             --ledger-sql-values \
             > "$expected_ledger_file"
           test "$(wc -l < "$expected_ledger_file")" -gt 0

@@ -15,7 +15,7 @@ import { requireAuth, supabaseForUser } from "../supabase";
 export default defineTool({
   name: "list_tasks",
   title: "Listar tarefas",
-  description: "Lista tarefas do Kanban visíveis ao usuário autenticado (RLS aplicado).",
+  description: "Lista tarefas de projetos ativos visíveis ao usuário autenticado (RLS aplicado). Inclua projetos arquivados explicitamente para consultar o histórico; project_archived identifica a origem histórica.",
   inputSchema: {
     client_id: z.string().uuid().optional(),
     project_id: z.string().uuid().optional(),
@@ -26,6 +26,8 @@ export default defineTool({
       .describe("Correspondência exata da origem da tarefa."),
     only_open: z.boolean().optional()
       .describe("Exclui tarefas done, archived e cancelled."),
+    include_archived_projects: z.boolean().optional()
+      .describe("Inclui tarefas de projetos arquivados dentro do mesmo acesso. Padrão: false."),
     limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   },
@@ -60,13 +62,14 @@ export default defineTool({
     }
     let q = sb.from("tasks")
       .select(
-        "id, title, description, status, priority, due_date, project_id, assigned_to, workstream, delivery_type, source, created_at, updated_at, projects!inner(client_id)",
+        "id, title, description, status, priority, due_date, project_id, assigned_to, workstream, delivery_type, source, created_at, updated_at, projects!inner(client_id, deleted_at)",
         { count: "exact" },
       )
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .order("id", { ascending: true })
       .range(pageOffset, pageOffset + pageLimit - 1);
+    if (!input.include_archived_projects) q = q.is("projects.deleted_at", null);
     if (input.client_id) q = q.eq("projects.client_id", input.client_id);
     else if (!scope.unrestricted) {
       q = q.in("projects.client_id", scope.clientIds);
@@ -89,7 +92,7 @@ export default defineTool({
     const tasks = (data ?? []).map((row) => {
       const { projects: _projects, ...task } = row;
       const projectScope = Array.isArray(_projects) ? _projects[0] : _projects;
-      return { ...task, client_id: projectScope?.client_id ?? null };
+      return { ...task, client_id: projectScope?.client_id ?? null, project_archived: Boolean(projectScope?.deleted_at) };
     });
     const meta = buildPageMeta(
       count ?? tasks.length,

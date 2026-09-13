@@ -6,6 +6,7 @@
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { AuthContext } from './mcp-auth.ts';
 import { dataScopeAllowsTool } from './mcp-security.ts';
+import { MCP_VERSION } from './mcp-release.ts';
 import {
   ALLOWED_ENTITY_TYPES,
   fetchEntity,
@@ -308,7 +309,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.42.0',
+  version: MCP_VERSION,
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -624,7 +625,7 @@ const getProjectTool = makeRead(
 const listTasksTool = makeRead(
   'aceleriq_list_tasks',
   'Listar tarefas',
-  'Lista tarefas dentro do escopo de clientes da credencial, com client_id derivado do projeto, paginação completa e filtros por projeto, cliente, status, responsável, tipo de entrega, área ou apenas abertas.',
+  'Lista tarefas de projetos ativos dentro do escopo de clientes da credencial, com client_id derivado do projeto, paginação completa e filtros por projeto, cliente, status, responsável, tipo de entrega, área ou apenas abertas. include_archived_projects permite consultar o histórico no mesmo escopo; project_archived identifica tarefas desses projetos.',
   z.object({
     project_id: UUID.optional(),
     client_id: UUID.optional(),
@@ -633,6 +634,7 @@ const listTasksTool = makeRead(
     delivery_type: z.string().max(64).optional(),
     workstream: z.enum(['general', 'design', 'content', 'video', 'traffic', 'development', 'operations']).optional(),
     only_open: z.boolean().optional(),
+    include_archived_projects: z.boolean().optional(),
     limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
@@ -646,6 +648,7 @@ const listTasksTool = makeRead(
       delivery_type: { type: 'string', enum: [...TASK_DELIVERY_TYPE_VALUES] },
       workstream: { type: 'string', enum: ['general', 'design', 'content', 'video', 'traffic', 'development', 'operations'] },
       only_open: { type: 'boolean' },
+      include_archived_projects: { type: 'boolean', description: 'Incluir tarefas de projetos arquivados dentro do mesmo acesso. Padrão: false.' },
       limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
@@ -2634,7 +2637,7 @@ const operatorReportTool: ToolDefinition = {
 const operatorBoardTool = makeRead(
   'aceleriq_operator_board',
   'Quadro dos operadores internos',
-  'A area Execucao da equipe em dados, com MANUAL DE USO no proprio retorno (como_usar), RESUMO em numeros e as TAREFAS DISPONIVEIS do Kanban (com kanban_task_id pronto, cliente, projeto e prazo) para o operador escolher trabalho real em vez de inventar id. Traz tambem: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Antes de listar, expira runs sem heartbeat (timeout vira visivel e a trava libera para retomada segura). Filtra por operador e status. SOMENTE LEITURA.',
+  'A area Execucao da equipe em dados, com MANUAL DE USO no proprio retorno (como_usar), RESUMO em numeros e as TAREFAS DISPONIVEIS do Kanban (com kanban_task_id pronto, cliente, projeto e prazo) para o operador escolher trabalho real em vez de inventar id. Traz tambem: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Indica execucoes sem heartbeat sem alterar o estado registrado. A reconciliacao e uma acao explicita do administrador; reportar started tambem verifica timeouts para retomada. Filtra por operador e status. SOMENTE LEITURA.',
   z.object({
     operator: z.string().regex(/^[a-z][a-z0-9-]{1,38}$/).optional(),
     status: z.enum(['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked']).optional(),
@@ -2816,7 +2819,8 @@ const operatorDigestTool = makeRead(
  * isso em vez de deixar o agente adivinhar.
  */
 const MAPA_DO_PAINEL = [
-  { area: 'Ciclo', rota: '/ciclo', para: 'A semana de cada cliente, etapa por etapa.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
+  { area: 'Esteira', rota: '/ciclo', para: 'Acoes da semana a partir do dossie geral, historico e fatos, separadas entre social e trafego.', pelo_mcp: 'aceleriq_get_client_dossier, aceleriq_get_client_context' },
+  { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
@@ -2830,7 +2834,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
-  { area: 'Contratos', rota: '/config', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
+  { area: 'Contratos', rota: '/contratos', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
 
 const operatorQueueTool = makeRead(

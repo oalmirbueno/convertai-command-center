@@ -1,3 +1,4 @@
+import { MCP_VERSION } from "../../supabase/functions/_shared/mcp-release";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -67,6 +68,6 @@ describe("MCP enxerga a história e o ciclo do painel", () => {
     // Sem pinar o número: pinado, o teste quebra a cada atualização legítima
     // sem que exista defeito nenhum. O alinhamento entre as duas pontas é
     // verificado no contrato do MCP legado.
-    expect(ferramentas).toMatch(/version: '\d+\.\d+\.\d+'/);
+    expect(MCP_VERSION).toMatch(/\d+\.\d+\.\d+/);
   });
 });

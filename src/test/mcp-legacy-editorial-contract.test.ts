@@ -21,10 +21,11 @@ describe("legacy MCP editorial contract", () => {
     // MCP precisam anunciar a mesma versão, senão o cliente descobre um
     // catálogo e conversa com outro. Pinar o número fazia o teste quebrar a
     // cada atualização legítima do servidor, sem defeito nenhum por trás.
-    const versaoNasFerramentas = tools.match(/version: '(\d+\.\d+\.\d+)'/)?.[1];
-    const versaoNaDescoberta = metadata.match(/const MCP_VERSION = '(\d+\.\d+\.\d+)'/)?.[1];
-    expect(versaoNasFerramentas).toBeDefined();
-    expect(versaoNaDescoberta).toBe(versaoNasFerramentas);
+    expect(read('supabase/functions/_shared/mcp-release.ts')).toMatch(/export const MCP_VERSION = '\d+\.\d+\.\d+'/);
+    expect(tools).toContain("import { MCP_VERSION } from './mcp-release.ts'");
+    expect(metadata).toContain("import { MCP_VERSION } from '../_shared/mcp-release.ts'");
+    expect(tools).toContain('version: MCP_VERSION');
+    expect(metadata).toContain('version: MCP_VERSION');
     expect(server).toContain("listChanged: false");
   });
 

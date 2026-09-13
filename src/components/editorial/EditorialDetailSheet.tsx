@@ -163,7 +163,7 @@ function publicationFileReady(
  * mostrando "Programado" como se estivesse tudo certo. Agora a falha aparece
  * aqui, com o passo em que parou e o motivo.
  */
-function PublicationDeliveryStatus({ publicationId }: { publicationId: string }) {
+export function PublicationDeliveryStatus({ publicationId }: { publicationId: string }) {
   const queryClient = useQueryClient();
   const { data } = useAutopublishStatus(publicationId);
   const [retrying, setRetrying] = useState(false);
@@ -171,6 +171,7 @@ function PublicationDeliveryStatus({ publicationId }: { publicationId: string })
 
   const failed = data.stage === "failed";
   const done = data.stage === "done";
+  const cancelled = data.stage === "cancelled";
   if (done && !data.last_error) return null;
 
   const handleRetry = async () => {
@@ -197,6 +198,10 @@ function PublicationDeliveryStatus({ publicationId }: { publicationId: string })
     >
       {failed ? (
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+      ) : cancelled ? (
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      ) : done ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-sky-500" />
       ) : (
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-500" />
       )}
@@ -207,7 +212,7 @@ function PublicationDeliveryStatus({ publicationId }: { publicationId: string })
               durante o processo assustava sem motivo. Só aparece na falha. */}
           {failed && data.attempts > 1 && ` · ${data.attempts} idas à Meta`}
         </p>
-        {failed && data.last_error && (
+        {(failed || cancelled) && data.last_error && (
           <p className="mt-0.5 break-words text-xs text-muted-foreground">{data.last_error}</p>
         )}
         {failed && (
