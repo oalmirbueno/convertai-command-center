@@ -1042,8 +1042,8 @@
       "version": "20260912213530",
       "name": "rpc_caller_boundaries_preserve_data",
       "path": "supabase/migrations/20260912213530_rpc_caller_boundaries_preserve_data.sql",
-      "local_sha256": "8e4133ac799a589c3e1b1bd32cdc2941cc156dc8fd9bbaa3b57a1c3c85c2821d",
-      "statements_sha256": "505da45047214f8d5cf9f7d3d42881f7788875b40d653efb42f4d56e8b4b7419",
+      "local_sha256": "71e1e5b95de2001511d63bde39201b4d891d333cd2a86b2104c8e103093ee27f",
+      "statements_sha256": "dae83e5b5bb3a8b58e5feb5f1e9b4772c4b4074e493d3d68553781fdb5c15af2",
       "hash_mode": "supabase_cli_split"
     },
     {

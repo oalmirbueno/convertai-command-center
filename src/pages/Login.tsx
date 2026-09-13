@@ -49,6 +49,7 @@ function getPasswordStrength(pw: string): { level: number; label: string; color:
 export default function Login() {
   const { user, profile, loading, loginWithCredentials, signup } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -68,13 +69,15 @@ export default function Login() {
   const satisfacao = useCountUp(98, 1000, 900);
   const avaliacao = useCountUp(49, 1000, 1000); // 4.9 → animate as 49, display /10
 
-  const next = new URLSearchParams(window.location.search).get("next");
+  // O histórico muda antes de uma rota lazy terminar de carregar. Enquanto
+  // o login ainda está visível, use o mesmo snapshot do Router: uma nova
+  // atualização do perfil não pode perder o next e mandar para o dashboard.
+  const next = new URLSearchParams(location.search).get("next");
   const safeNext = safeInternalPath(next) ?? "/dashboard";
 
   // Quem acabou de criar a senha no primeiro acesso e nao conseguiu entrar
   // sozinho chega aqui com o e-mail ja preenchido e o aviso de que a senha
   // vale. Sem isso a pessoa achava que o cadastro tinha falhado.
-  const location = useLocation();
   const handoff = (location.state || {}) as { email?: string; passwordJustCreated?: boolean };
   useEffect(() => {
     if (handoff.email) setEmail(handoff.email);

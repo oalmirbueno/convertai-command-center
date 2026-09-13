@@ -347,5 +347,56 @@ SELECT ok((SELECT runs IS NOT DISTINCT FROM (SELECT jsonb_agg(to_jsonb(x) ORDER 
  AND links IS NOT DISTINCT FROM (SELECT jsonb_agg(to_jsonb(x) ORDER BY id) FROM public.operator_task_links x)
  AND proposals IS NOT DISTINCT FROM (SELECT jsonb_agg(to_jsonb(x) ORDER BY id) FROM public.assignment_proposals x)
  FROM maintenance_after_first),'repeated maintenance is idempotent over every field and timestamp');
+-- Project reads use the same client boundary as the existing child resources.
+-- These extra actors/rows are added after the earlier preservation assertions.
+INSERT INTO public.profiles(id,full_name,email) VALUES
+ ('10000000-0000-4000-8000-000000000006','Unassigned manager fixture','manager-unassigned@example.invalid'),
+ ('10000000-0000-4000-8000-000000000007','Unassigned traffic fixture','traffic-unassigned@example.invalid');
+INSERT INTO public.user_roles VALUES
+ ('10000000-0000-4000-8000-000000000006','manager'),
+ ('10000000-0000-4000-8000-000000000007','traffic');
+INSERT INTO public.projects VALUES
+ ('30000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000001','Archived Project A','2026-09-01T00:00:00Z'),
+ ('30000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000002','Archived Project B','2026-09-01T00:00:00Z');
+INSERT INTO public.tasks(id,project_id,title,assigned_to) VALUES
+ ('40000000-0000-4000-8000-000000000005','30000000-0000-4000-8000-000000000002','Assignment alone is not client authorization','10000000-0000-4000-8000-000000000005');
+CREATE TEMP TABLE project_scope_before AS
+ SELECT jsonb_agg(to_jsonb(p) ORDER BY id) AS rows FROM public.projects p;
+SELECT ok((SELECT relrowsecurity FROM pg_class WHERE oid='public.projects'::regclass),'project SELECT tests execute with RLS enabled');
+SELECT is((SELECT oid FROM pg_policy WHERE polrelid='public.projects'::regclass AND polname='projects_select'),
+ (SELECT projects_policy_oid FROM public.security_test_before_migration),'ALTER preserves the existing projects_select policy identity');
+SELECT ok(has_table_privilege('authenticated','public.projects','SELECT'),'authenticated project SELECT grant exists independently of RLS');
+
+CREATE FUNCTION pg_temp.check_project_scope(_uid uuid,_client uuid,_label text)
+RETURNS SETOF text LANGUAGE plpgsql SECURITY INVOKER AS $$
+BEGIN
+  PERFORM pg_temp.act_as(_uid);
+  RETURN NEXT is((SELECT count(*)::integer FROM public.projects WHERE client_id=_client AND deleted_at IS NULL),1,_label || ' reads the assigned or owned active project');
+  RETURN NEXT is((SELECT count(*)::integer FROM public.projects WHERE client_id=_client AND deleted_at IS NOT NULL),1,_label || ' retains authorized project history');
+  RETURN NEXT is((SELECT count(*)::integer FROM public.projects WHERE client_id<>_client),0,_label || ' cannot read another client active or archived project');
+END $$;
+SELECT pg_temp.request_context();
+SELECT * FROM pg_temp.check_project_scope('10000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000001','assigned design');
+SELECT * FROM pg_temp.check_project_scope('10000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000002','assigned manager');
+SELECT * FROM pg_temp.check_project_scope('10000000-0000-4000-8000-000000000004','20000000-0000-4000-8000-000000000001','assigned traffic');
+SELECT * FROM pg_temp.check_project_scope('20000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','client A');
+SELECT * FROM pg_temp.check_project_scope('20000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','client B');
+SELECT pg_temp.act_as('10000000-0000-4000-8000-000000000005');
+SELECT is((SELECT count(*)::integer FROM public.projects),0,'unassigned design cannot read any project even with an assigned task');
+SELECT pg_temp.act_as('10000000-0000-4000-8000-000000000006');
+SELECT is((SELECT count(*)::integer FROM public.projects),0,'unassigned manager cannot read any project');
+SELECT pg_temp.act_as('10000000-0000-4000-8000-000000000007');
+SELECT is((SELECT count(*)::integer FROM public.projects),0,'unassigned traffic cannot read any project');
+SELECT pg_temp.act_as('10000000-0000-4000-8000-000000000001');
+SELECT is((SELECT count(*)::integer FROM public.projects),4,'admin retains every active and archived project without assignments');
+SELECT pg_temp.act_as(NULL,'anon');
+SELECT is((SELECT count(*)::integer FROM public.projects),0,'anonymous request cannot read projects despite table SELECT privilege');
+SELECT pg_temp.act_as(NULL);
+SELECT is((SELECT count(*)::integer FROM public.projects),0,'authenticated request without uid cannot read projects');
+SELECT pg_temp.act_as(NULL,'service_role');
+SELECT is((SELECT count(*)::integer FROM public.projects),4,'trusted service retains all project history');
+SELECT pg_temp.owner_context();
+SELECT is((SELECT jsonb_agg(to_jsonb(p) ORDER BY id) FROM public.projects p),(SELECT rows FROM project_scope_before),
+ 'project authorization checks preserve every project field and archived record');
 SELECT * FROM finish();
 ROLLBACK;

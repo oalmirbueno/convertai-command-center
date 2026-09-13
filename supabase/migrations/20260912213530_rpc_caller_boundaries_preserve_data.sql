@@ -3,6 +3,31 @@
 -- guarded replacement below fails closed if a known routine changes shape.
 -- No data migration, job dispatch, token rotation or history cleanup occurs.
 
+-- The March projects SELECT policy allowed every staff role every client.
+-- Reuse the existing caller-bound helper: admin globally, client owner, and
+-- manager/design/traffic only through team_client_assignments. This lookup
+-- never queries projects or tasks, so it cannot restore their old RLS cycle.
+-- ALTER preserves the policy identity, authenticated target and write rules;
+-- existing soft-deleted history remains available within the same client scope.
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policy policy JOIN pg_class relation ON relation.oid=policy.polrelid
+    WHERE policy.polrelid='public.projects'::regclass AND relation.relrowsecurity
+      AND policy.polname='projects_select' AND policy.polcmd='r' AND policy.polpermissive
+      AND policy.polroles=ARRAY['authenticated'::regrole::oid]
+  ) OR EXISTS (
+    SELECT 1 FROM pg_policy policy
+    WHERE policy.polrelid='public.projects'::regclass AND policy.polcmd IN ('r','*')
+      AND policy.polpermissive AND policy.polname<>'projects_select'
+  ) THEN
+    RAISE EXCEPTION 'PROJECT_READ_POLICY_SHAPE_CHANGED';
+  END IF;
+END;
+$migration$;
+ALTER POLICY projects_select ON public.projects
+  USING (public.can_access_client(client_id));
+
 CREATE OR REPLACE FUNCTION app_private.rpc_trusted_backend()
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY INVOKER

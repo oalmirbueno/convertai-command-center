@@ -1,11 +1,12 @@
 # Limites de chamada das RPCs — 12/09/2026
 
-A migration `20260912213530_rpc_caller_boundaries_preserve_data.sql` trata SEC-01 a SEC-05 da revisão em `e081a3b`. Fecha execução herdada de PUBLIC, acrescenta autorização por cliente às RPCs humanas e protege os campos comerciais do perfil. Preserva registros de negócio e histórico e não dispara filas, OAuth ou e-mail durante a aplicação. Mantém assinaturas, parâmetros opcionais, tipos de retorno e OIDs existentes. Registra manutenção periódica SQL que só será ativada após aprovação e aplicação da migration.
+A migration `20260912213530_rpc_caller_boundaries_preserve_data.sql` trata SEC-01 a SEC-05 da revisão em `e081a3b`. Fecha execução herdada de PUBLIC, acrescenta autorização por cliente às RPCs humanas e à leitura de projetos pela equipe, e protege os campos comerciais do perfil. Preserva registros de negócio e histórico e não dispara filas, OAuth ou e-mail durante a aplicação. Mantém assinaturas, parâmetros opcionais, tipos de retorno e OIDs existentes. Registra manutenção periódica SQL que só será ativada após aprovação e aplicação da migration.
 
 ## Consumidores e acesso preservado
 
 | RPC/grupo | Consumidor observado | Fronteira após correção |
 |---|---|---|
+| SELECT projects | `useProjects`, detalhes de projeto e Data API autenticada | Admin global e cliente proprietário; design/traffic/manager somente com vínculo em team_client_assignments. RLS também vale para consulta REST sem filtros da UI. Service_role mantém seu acesso de backend. |
 | upsert_current_dossier | `_shared/mcp-write-services.ts:878`, rotinas de avanços | Admin global; manager/design/traffic vinculados ao cliente; service_role e login postgres de cron. Cliente e uid ausente em authenticated recusados. |
 | dossie_registrar_avancos / dossie_avancos_texto | `src/lib/esteira/esteiraAcoes.ts:127`, MCP de avanços, cron | Mesmo escopo de equipe por cliente. Versão e conteúdo anteriores preservados. |
 | dossie_registrar_avancos_todos | Cron `dossie-avancos-semanais` | Somente backend/owner, sem chamada global por browser. |
@@ -27,6 +28,18 @@ A migration `20260912213530_rpc_caller_boundaries_preserve_data.sql` trata SEC-0
 | UPDATE profiles | ProfilePage:33/:44, AuthContext:229, AppLayout:192, UI administrativa financeira | Cliente edita nome, empresa, email, telefone, avatar e confirmação do tour. Admin e service_role mantêm campos comerciais. Novos campos não entram automaticamente na allowlist pessoal. |
 
 O ator de comandos humanos de dossiê, organograma e atribuição passa a `painel:<auth.uid()>`. O valor fornecido pelo browser não governa a auditoria. Em chamadas backend o contrato do ator emitido pelo serviço MCP é mantido.
+
+## Escopo de leitura de projetos
+
+A policy `projects_select` de 09/03 permitia leitura global aos três papéis de equipe, embora seu comentário descrevesse projetos atribuídos. O histórico de 23/02 registra que a abertura começou como contorno da recursão entre projetos e tarefas. O cadastro `team_client_assignments` e o helper `can_access_client(uuid)` posteriores definem o vínculo usado nos demais recursos por cliente; o filtro de `useProjects` não substitui essa autorização no banco.
+
+A correção altera somente o predicado da policy existente para `public.can_access_client(client_id)`. O helper já existente deriva a identidade de `auth.uid()`, consulta os papéis persistidos e o vínculo com o cliente, tem `SECURITY DEFINER`, `STABLE`, `search_path` vazio e EXECUTE para authenticated/service_role, sem anon. Seu corpo não consulta projetos nem tarefas: não reintroduz o ciclo de RLS. Admin continua global, o cliente com papel client lê seus próprios projetos e a equipe lê os clientes aos quais está vinculada. Atribuição de tarefa isolada não substitui o vínculo de equipe com o cliente.
+
+O `ALTER POLICY` mantém o OID e o alvo authenticated. As policies administrativas de escrita, dados, datas, grants da tabela e histórico de projetos removidos logicamente permanecem intactos. O teste de leitura usa consulta sem filtro de cliente/ID, cobre os três papéis de equipe com e sem vínculo, admin, clientes distintos e visitante; a matriz E2E usa login real e o singleton da aplicação, sem extrair tokens.
+
+A aplicação falha antes do `ALTER` se RLS estiver desligada, se `projects_select` não for a policy SELECT permissiva exclusiva para authenticated ou se outra policy permissiva SELECT/ALL puder reabrir a leitura. O helper consulta o par coberto pela chave única existente `(user_id, client_id)` de `team_client_assignments`; não adiciona joins de tarefas à leitura de projetos nem exige índice novo.
+
+O ramo `assigned_to` de `useProjects` consulta tarefas pela sessão normal. A policy atual `tasks_staff_select` chama `can_staff_access_project`, cujo corpo já exige `can_access_client` e ignora `assigned_to`. Portanto, uma tarefa individual atribuída sem vínculo com o cliente já não aparece nessa consulta; o ramo é redundante sob a RLS atual. A correção mantém essa negação e não cria um helper privilegiado que expanda o acesso por atribuição isolada.
 
 ## Por que não usar current_user ou uid vazio
 
@@ -54,13 +67,15 @@ Fixture: `tests/database-isolated/fixtures/security_contract.sql`. Testes: `test
 
 O fixture contém tabelas sintéticas mínimas e 17 definições reais específicas do banco novo, verificadas sem segredos. Rotinas inalteradas fora dos cenários de negócio possuem stubs declarados para o teste de ACL; os ticks downstream registram dispatch local, Vault é uma tabela fictícia e cron.schedule apenas registra o comando em tabela. Assim, o teste executa as funções reais modificadas e os fluxos reais de dossiê/operador/token/manutenção, sem chamar Meta nem agendar processos reais.
 
-Validação em PostgreSQL 17.11 portátil, pgTAP 1.3.4, localhost:55432, banco aceleriq_security_maintenance: **95 asserts, zero falhas**. Inclui session_user=authenticator com SET ROLE; anon; authenticated sem uid; cliente; design/traffic/manager por tenant; admin sem assignments; service_role; cron postgres; ator não forjável; grants transitivos; Vault inerte; zero dispatch nas chamadas recusadas; alterações reais permitidas; fotografia integral de perfil legado/dossiê inseridos antes da migration; e manutenção repetida com contagens zero e comparação integral de campos/timestamps/histórico.
+Validação atual pelo runner em PostgreSQL 17.11 portátil, pgTAP 1.3.4, localhost:55432, bancos descartáveis `acq_isolated_*`: **121 asserts de segurança, zero falhas**. Inclui session_user=authenticator com SET ROLE; anon; authenticated sem uid; cliente; design/traffic/manager por tenant; admin sem assignments; service_role; cron postgres; ator não forjável; grants transitivos; Vault inerte; zero dispatch nas chamadas recusadas; alterações reais permitidas; fotografia integral de perfil legado/dossiê inseridos antes da migration; e manutenção repetida com contagens zero e comparação integral de campos/timestamps/histórico. A leitura de projetos inclui os três papéis de equipe com e sem vínculo, clientes próprios/cruzados, acesso admin/serviço, preservação de projetos arquivados e OID da policy inalterado.
 
 As assertions positivas verificam persistência e retorno quando relevante, evitando confundir UPDATE de zero linhas com sucesso. Os testes de segurança correm em transação e terminam em ROLLBACK. O log local consolidado está em `work/security-sql-tests.log` da tarefa de revisão.
 
 Runner versionado: `node scripts/test-isolated-db.mjs`, depois de `node scripts/test-isolated-db.mjs --self-test`. Usa PSQL_PATH (ou psql no PATH), PGHOST literal de loopback, PGPORT (padrão 54322), PGUSER=postgres e senha local opcional em PGPASSWORD. Descarta PGDATABASE/PGSERVICE/PGOPTIONS recebidos e gera nomes exclusivos `acq_isolated_security_*` e `acq_isolated_publication_*`. Cria cada banco vazio, aplica o bootstrap versionado, o fixture e sua migration, depois executa os testes. Não reutiliza o banco da aplicação e não apaga bancos automaticamente. Logs ficam em `logs/database-isolated/` (ignorados pelo Git), sem imprimir senha. Erros SQL, TAP negativo e plano incompleto/duplicado fazem o processo falhar.
 
-O CI executa esses contratos após `supabase test db` no PostgreSQL do contêiner Supabase local (127.0.0.1:54322). A senha postgres ali é a configuração pública do contêiner descartável. SET SESSION AUTHORIZATION exige superuser para simular authenticator: se postgres estiver despromovido nesse contêiner, o passo CI usa supabase_admin local para elevar somente durante os contratos sintéticos, com trap para restaurar o papel original inclusive na falha. O runner genérico não eleva papéis; o bootstrap recusa um ambiente sem esse requisito. O runner local integrado passou **182 testes: 95 de segurança, 76 de publicação e 11 concorrentes por dblink**. A conexão dblink permanece em loopback e só usa a senha local temporária recebida por stdin; não acessa serviços externos.
+O CI executa esses contratos após `supabase test db` no PostgreSQL do contêiner Supabase local (127.0.0.1:54322). A senha postgres ali é a configuração pública do contêiner descartável. SET SESSION AUTHORIZATION exige superuser para simular authenticator: se postgres estiver despromovido nesse contêiner, o passo CI usa supabase_admin local para elevar somente durante os contratos sintéticos, com trap para restaurar o papel original inclusive na falha. O runner genérico não eleva papéis; o bootstrap recusa um ambiente sem esse requisito. O runner local integrado passou **229 testes: 121 de segurança, 97 de publicação e 11 concorrentes por dblink**. A conexão dblink permanece em loopback e só usa a senha local temporária recebida por stdin; não acessa serviços externos.
+
+O teste `supabase/tests/database/projects_rls.test.sql` roda separadamente no schema completo do CI. Exercita também o join entre tarefas e projetos sem recursão e confirma que `assigned_to` sem vínculo de cliente não concede leitura da tarefa nem do projeto. A confirmação do replay completo e da matriz E2E com Auth real depende desse CI; a suíte isolada não substitui essas verificações.
 
 ## Aceite antes de qualquer aplicação real
 

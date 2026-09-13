@@ -11,12 +11,20 @@ A/B and an unauthenticated visitor. It exercises successful and rejected real
 password login, protected routes, project filters, client detail tabs, cancelling
 an unsaved admin form and logout. It does not save or dispatch work.
 
-The actual UI's unfiltered task REST responses verify row isolation. Project
-responses and cards verify the queries made by the UI: staff project queries
-already contain an ID filter, and unassigned staff need not query projects at
-all. They do **not** attest that the historical staff project SELECT policy
-rejects an arbitrary unfiltered API query. Database authorization tests remain
-separate.
+The actual UI's unfiltered task REST responses verify row isolation. Client
+A/B project requests are also asserted to contain no client/project ID filter.
+Staff project cards alone would not prove authorization because their UI
+queries contain an ID filter.
+
+To verify the backend for all five authenticated roles, each scenario also
+reuses the application's Supabase singleton inside the browser after normal UI
+login and performs a real project GET selecting only IDs and ownership. Its only
+predicate excludes deleted projects; the request query keys are asserted.
+Expected rows are both projects for admin, A for assigned staff, none for
+unassigned staff, and the respective project for each client. No session,
+token, auth response or request headers are extracted. This exercises the
+incremental SEC01 project policy through PostgREST; database tests separately
+cover the policy's SQL permission contract.
 
 Every context installs HTTP and WebSocket guards before its first page exists.
 Only the two exact loopback origins are forwarded. HTTP upstream reads use

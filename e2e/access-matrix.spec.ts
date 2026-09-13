@@ -1,4 +1,5 @@
 import type { Page, Response } from "@playwright/test";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { CI_E2E_API_ORIGIN, CI_E2E_APP_ORIGIN } from "../config/ci-e2e-environment";
 import { readCiFixture, USER_ROLES, type UserRole } from "./support/ci-fixture";
 import { test, expect, isLocalEndpoint } from "./support/network";
@@ -29,7 +30,12 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login$/);
 }
 
-interface ReadResult { status: number; ids: string[]; validRows: boolean }
+interface ReadResult {
+  status: number;
+  ids: string[];
+  validRows: boolean;
+  queryKeys: string[];
+}
 
 function observeWorkReads(page: Page) {
   const reads: Record<"projects" | "tasks", ReadResult[]> = { projects: [], tasks: [] };
@@ -49,6 +55,7 @@ function observeWorkReads(page: Page) {
       reads[table].push({
         status: response.status(),
         validRows,
+        queryKeys: [...url.searchParams.keys()].sort(),
         ids: validRows ? (rows as { id: string }[]).map((row) => row.id).sort() : [],
       });
     })();
@@ -65,6 +72,39 @@ function observeWorkReads(page: Page) {
   };
 }
 
+async function readProjectsWithoutScopeFilter(page: Page) {
+  const requestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === "GET" && url.origin === CI_E2E_API_ORIGIN
+      && url.pathname === "/rest/v1/projects"
+      && url.searchParams.get("select") === "id,client_id";
+  });
+  const result = await page.evaluate(async () => {
+    // Reuse the real application's Vite module and its normal authenticated
+    // client. Neither the test nor Node reads storage, getSession, headers or
+    // the Auth response. The JWT stays inside the normal browser SDK flow.
+    const modulePath = "/src/integrations/supabase/client.ts";
+    const { supabase } = await import(modulePath) as { supabase: SupabaseClient };
+    const { data, error, status } = await supabase
+      .from("projects")
+      .select("id,client_id")
+      .is("deleted_at", null);
+    return {
+      status,
+      errorCode: error?.code ?? null,
+      rows: data?.map((row) => ({ id: row.id as string, client_id: row.client_id as string })) ?? null,
+    };
+  });
+  const url = new URL((await requestPromise).url());
+  // Assert the real browser request cannot quietly turn into a scoped UI
+  // query. The only predicate permitted here excludes deleted projects.
+  expect([...url.searchParams.keys()].sort()).toEqual(["deleted_at", "select"]);
+  expect(url.searchParams.get("deleted_at")).toBe("is.null");
+  expect(result.status, "Unfiltered project read must succeed through RLS").toBe(200);
+  expect(result.errorCode).toBeNull();
+  return result.rows?.sort((left, right) => left.id.localeCompare(right.id));
+}
+
 for (const role of USER_ROLES) {
   test(`${role}: real login, scoped work, permitted controls and logout`, async ({ page }) => {
     const fixture = readCiFixture();
@@ -79,6 +119,20 @@ for (const role of USER_ROLES) {
     if (allowed.length > 0) {
       await expect.poll(() => observation.reads.projects.length).toBeGreaterThan(0);
     }
+    if (role === "clientA" || role === "clientB") {
+      // The client UI itself already reads projects without id/client_id (or
+      // another scope predicate); these REST responses also attest client RLS.
+      expect(observation.reads.projects.some((read) =>
+        JSON.stringify(read.queryKeys) === JSON.stringify(["deleted_at", "order", "select"])),
+      "Client UI must make an unfiltered project read, not hide cross-client rows with a request filter").toBe(true);
+    }
+    const expectedProjects = allowed.map((key) => ({
+      id: fixture.projects[key].id,
+      client_id: fixture.projects[key].clientId,
+    })).sort((left, right) => left.id.localeCompare(right.id));
+    expect(await readProjectsWithoutScopeFilter(page),
+      "Backend must restrict unfiltered projects for every logged-in role").toEqual(expectedProjects);
+
     const list = page.locator('[data-tour="projects-list"]');
     for (const key of ["clientA", "clientB"] as const) {
       const project = list.getByText(fixture.projects[key].name, { exact: true });

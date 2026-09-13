@@ -145,6 +145,15 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
     OR (public.is_staff(auth.uid()) AND EXISTS (
       SELECT 1 FROM public.team_client_assignments WHERE user_id=auth.uid() AND client_id=_client_id)))
 $$;
+-- Real pre-patch SELECT policy from 20260309150308; the new migration alters
+-- this policy in place. No tasks lookup is added to the permission helper.
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY projects_select ON public.projects FOR SELECT TO authenticated
+  USING (client_id=auth.uid() OR public.has_role(auth.uid(),'admin')
+    OR public.has_role(auth.uid(),'design') OR public.has_role(auth.uid(),'traffic')
+    OR public.has_role(auth.uid(),'manager'));
+GRANT SELECT ON public.projects TO anon,authenticated;
+
 CREATE FUNCTION public.operator_status_do_run(_event text)
 RETURNS text LANGUAGE sql IMMUTABLE AS $$ SELECT CASE _event
   WHEN 'heartbeat' THEN 'progress' WHEN 'review' THEN 'review'
@@ -1305,6 +1314,9 @@ $function$;
 
 -- Reproduce the vulnerable inherited PUBLIC grants before applying the migration.
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO PUBLIC,anon,authenticated,service_role;
+-- This existing RLS helper was already restricted in the actual schema.
+REVOKE ALL ON FUNCTION public.can_access_client(uuid) FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.can_access_client(uuid) TO authenticated,service_role;
 
 -- Snapshot populated BEFORE the new migration, including protected legacy
 -- columns. It is synthetic data, not a password/token from any real system.
@@ -1316,4 +1328,5 @@ VALUES ('70000000-0000-4000-8000-000000000009','20000000-0000-4000-8000-00000000
   'Historical dossier fixture: must be preserved by the migration','fixture:historical');
 CREATE TABLE public.security_test_before_migration AS SELECT
   (SELECT to_jsonb(p) FROM public.profiles p WHERE id='20000000-0000-4000-8000-000000000009') AS profile,
-  (SELECT to_jsonb(d) FROM public.client_dossiers d WHERE id='70000000-0000-4000-8000-000000000009') AS dossier;
+  (SELECT to_jsonb(d) FROM public.client_dossiers d WHERE id='70000000-0000-4000-8000-000000000009') AS dossier,
+  (SELECT oid FROM pg_policy WHERE polrelid='public.projects'::regclass AND polname='projects_select') AS projects_policy_oid;
