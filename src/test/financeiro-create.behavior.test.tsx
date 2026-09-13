@@ -40,6 +40,17 @@ function fillBilling() {
 }
 
 describe("Financeiro: confirmacao e rascunho de cobranca", () => {
+  it("confirma a cobranca salva e mostra aviso separado quando a notificacao falha", async () => {
+    state.create.mockResolvedValue({ notificationFailed: true });
+    const dialog = fillBilling();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Criar Cobrança" }));
+    await waitFor(() => expect(state.warning).toHaveBeenCalledWith("A cobrança foi criada, mas não consegui avisar o cliente."));
+    expect(state.success).toHaveBeenCalledWith("Cobrança criada");
+    expect(state.error).not.toHaveBeenCalled();
+    expect(state.create).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("mantem o modal e os valores quando a persistencia falha, sem toast de sucesso", async () => {
     state.create.mockRejectedValue(new Error("Falha sintética ao gravar"));
     const dialog = fillBilling();

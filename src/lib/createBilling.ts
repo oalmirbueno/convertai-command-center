@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { notifyUser } from "@/lib/notifyHelpers";
+import { notifyUserChecked } from "@/lib/notifyHelpers";
 
 export interface BillingDraft {
   client_id: string;
@@ -31,8 +31,8 @@ export async function createBilling(draft: BillingDraft): Promise<{ notification
 
   try {
     const formatted = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
-    await notifyUser(draft.client_id, `Nova cobrança de ${formatted} registrada`, "billing", "/financeiro");
-    return { notificationFailed: false };
+    const notification = await notifyUserChecked(draft.client_id, `Nova cobrança de ${formatted} registrada`, "billing", "/financeiro");
+    return { notificationFailed: !notification.accepted };
   } catch {
     return { notificationFailed: true };
   }

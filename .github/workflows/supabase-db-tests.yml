@@ -133,6 +133,15 @@ jobs:
           -h 127.0.0.1 -p 54322 -U postgres -d postgres
           -f supabase/bootstrap/ci-operator-parents-postcheck.sql
 
+      - name: Restore reviewed legacy milestone read access in the empty CI stack
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -w -v ON_ERROR_STOP=1
+          -h 127.0.0.1 -p 54322 -U postgres -d postgres
+          -c "SET aceleriq.ci_legacy_read_grants='on'"
+          -f supabase/bootstrap/ci-milestones-read-access.sql
+
       - name: Run pgTAP database tests
         id: pgtap
         run: supabase test db
@@ -161,6 +170,7 @@ jobs:
           node scripts/test-isolated-db.mjs --self-test
           node scripts/test-isolated-db.mjs
           node scripts/test-ci-editorial-replay.mjs
+          node scripts/test-ci-milestones-read-access.mjs
 
       - name: Restore editorial CI compatibility staging
         if: always()
@@ -196,7 +206,7 @@ jobs:
 
       - name: Run MCP Deno unit tests
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}
-        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts supabase/functions/_shared/brain-client-context-handler_test.ts supabase/functions/_shared/notification-write-response_test.ts
 
       - name: Type-check portable and public Edge Functions
         if: ${{ !cancelled() && steps.npm_dependencies.outcome == 'success' }}

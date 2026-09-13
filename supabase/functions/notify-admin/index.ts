@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { resolvePublicAppUrl } from "../_shared/public-url.ts";
+import { notificationReadRows, notificationWriteResponse, type NotificationRow } from "../_shared/notification-write-response.ts";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const APP_ORIGIN = new URL(resolvePublicAppUrl()).origin;
@@ -112,9 +113,9 @@ Deno.serve(async (req) => {
     if (target_user_id) {
       targets = [target_user_id];
     } else {
-      const { data: admins } = await supabase
-        .from("user_roles").select("user_id").eq("role", "admin");
-      targets = (admins || []).map((a: any) => a.user_id);
+      const admins = notificationReadRows(await supabase
+        .from("user_roles").select("user_id").eq("role", "admin"));
+      targets = admins.map((a) => a.user_id);
     }
 
     if (targets.length === 0) {
@@ -125,28 +126,23 @@ Deno.serve(async (req) => {
 
     // Dedup: skip if same message+type for same user within 5 minutes
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    const inserts: any[] = [];
+    const inserts: NotificationRow[] = [];
     for (const uid of targets) {
-      const { data: dup } = await supabase
+      const dup = notificationReadRows(await supabase
         .from("notifications")
         .select("id")
         .eq("user_id", uid)
         .eq("notification_type", notification_type)
         .eq("message", message)
         .gte("created_at", fiveMinAgo)
-        .limit(1);
-      if (!dup || dup.length === 0) {
+        .limit(1));
+      if (dup.length === 0) {
         inserts.push({ user_id: uid, message, notification_type, link: link || null });
       }
     }
 
-    if (inserts.length > 0) {
-      await supabase.from("notifications").insert(inserts);
-    }
-
-    return new Response(JSON.stringify({ ok: true, inserted: inserts.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return notificationWriteResponse(inserts,
+      (rows) => supabase.from("notifications").insert(rows), corsHeaders);
   } catch (error: unknown) {
     console.error("notify-admin failed", {
       error: error instanceof Error ? error.name : "unknown_error",
