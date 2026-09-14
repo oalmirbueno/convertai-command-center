@@ -3,7 +3,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -113,8 +113,9 @@ function LoadingScreen() {
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`} replace />;
   return <>{children}</>;
 }
 
@@ -151,7 +152,7 @@ function ComercialRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const { user, profile, loading } = useAuth();
   if (loading) return <LoadingScreen />;
 
@@ -186,6 +187,7 @@ function AppRoutes() {
       {/* /ciclo e a Esteira (le o estado real). O Ciclo anterior fica em
           /ciclo-antigo para comparacao e retorno rapido. */}
       <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AdminEsteira /></StaffRoute></ProtectedRoute>} />
+      <Route path="/ciclo/revisao" element={<ProtectedRoute><StaffRoute>{profile?.role === "admin" ? <AdminExperience cycleReview /> : <Navigate to="/ciclo" replace />}</StaffRoute></ProtectedRoute>} />
       <Route path="/ciclo-antigo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
       {/* Endereço antigo do app instalado: leva para o atual. */}
       <Route path="/ciclo.html" element={<Navigate to="/ciclo" replace />} />
