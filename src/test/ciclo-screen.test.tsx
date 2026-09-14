@@ -102,7 +102,7 @@ describe("tela do Ciclo da Semana", () => {
 
     // Mirante está em onboarding: 6 do ciclo + 4 do trilho de entrada.
     expect(screen.getByText("0/10")).toBeInTheDocument();
-    expect(screen.getByText(/Novo/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Novo$/i)).toBeInTheDocument();
     // Acerbi já roda em rotina: fica só com as 6 etapas do ciclo.
     expect(naTela("0/6")).toBe(true);
   }, 20000);

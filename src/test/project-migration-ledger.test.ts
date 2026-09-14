@@ -19,19 +19,19 @@ const snapshot = () => loadReviewedProjectBaseline(options).document;
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 describe('project-specific read-only deployment ledger', () => {
-  it('keeps the 206 reviewed rows and explicitly requires both reviewed migrations', () => {
+  it('keeps the 206 reviewed rows and explicitly requires all three reviewed migrations', () => {
     const expected = listProjectLedgerEntries(options);
     expect(snapshot().entries).toHaveLength(206);
-    expect(expected).toHaveLength(208);
+    expect(expected).toHaveLength(209);
     expect(expected.slice(0, 206)).toEqual(snapshot().entries);
-    expect(expected.slice(-2).map((entry) => entry.version)).toEqual(['20260912213530', '20260912213638']);
-    expect(new Set(expected.map((entry) => entry.version)).size).toBe(208);
+    expect(expected.slice(-3).map((entry) => entry.version)).toEqual(['20260912213530', '20260912213638', '20260914174905']);
+    expect(new Set(expected.map((entry) => entry.version)).size).toBe(209);
   });
 
-  it('reports the current snapshot as pending two, never ready', () => {
+  it('reports the current snapshot as pending three, never ready', () => {
     expect(compareProjectLedger(snapshot().entries, options)).toMatchObject({
-      status: 'pending', expected_count: 208, actual_count: 206,
-      pending_versions: ['20260912213530', '20260912213638'],
+      status: 'pending', expected_count: 209, actual_count: 206,
+      pending_versions: ['20260912213530', '20260912213638', '20260914174905'],
       missing_reviewed_versions: [], unexpected_versions: [], changed_versions: [],
     });
   });
@@ -40,11 +40,11 @@ describe('project-specific read-only deployment ledger', () => {
     const expected = listProjectLedgerEntries(options);
     expect(compareProjectLedger(expected, options).status).toBe('ready');
     expect(compareProjectLedger(expected.slice(0, -1), options)).toMatchObject({
-      status: 'pending', pending_versions: ['20260912213638'],
+      status: 'pending', pending_versions: ['20260914174905'],
     });
     const tampered = clone(expected);
     tampered.at(-1)!.statements_sha256 = 'f'.repeat(64);
-    expect(compareProjectLedger(tampered, options)).toMatchObject({ status: 'drift', changed_versions: ['20260912213638'] });
+    expect(compareProjectLedger(tampered, options)).toMatchObject({ status: 'drift', changed_versions: ['20260914174905'] });
   });
 
   it('rejects missing, extra, renamed and hash-drifted historical rows', () => {
@@ -101,7 +101,7 @@ describe('project-specific read-only deployment ledger', () => {
 
   it('emits the same exact triples accepted by the SQL full-join preflight', () => {
     const sql = formatProjectLedgerSqlValues(options);
-    expect(sql.split('\n')).toHaveLength(208);
+    expect(sql.split('\n')).toHaveLength(209);
     expect(sql).toContain("('20260912213638','secure_publication_cancellation_dispatch','40dd111922e09cea6a861cfd7cb4dd8fdbc8e69dd51260eb0d7c9189e612170b')");
     expect(sql).not.toMatch(/\b(?:DELETE|UPDATE|INSERT|ALTER|TRUNCATE|CREATE)\b/);
   });
@@ -112,7 +112,7 @@ describe('project-specific read-only deployment ledger', () => {
     const before = readFileSync(file, 'utf8');
     const good = spawnSync(process.execPath, [script, '--project-ref', reviewedProjectRef, '--ledger-sql-values'], { encoding: 'utf8' });
     expect(good.status).toBe(0);
-    expect(good.stdout.trim().split('\n')).toHaveLength(208);
+    expect(good.stdout.trim().split('\n')).toHaveLength(209);
     expect(readFileSync(file, 'utf8')).toBe(before);
     const bad = spawnSync(process.execPath, [script, '--ledger-sql-values'], { encoding: 'utf8' });
     expect(bad.status).toBe(1);

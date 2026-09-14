@@ -8,6 +8,15 @@ import assert from "node:assert/strict";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const suites = [
   {
+    name: "central",
+    fixture: "tests/database-isolated/fixtures/central_review_contract.sql",
+    migration: "supabase/migrations/20260914174905_central_review_versioned_approval.sql",
+    tests: [
+      "tests/database-isolated/tests/central_review.test.sql",
+      "tests/database-isolated/tests/central_review_concurrency.test.sql",
+    ],
+  },
+  {
     name: "security",
     fixture: "tests/database-isolated/fixtures/security_contract.sql",
     migration: "supabase/migrations/20260912213530_rpc_caller_boundaries_preserve_data.sql",
@@ -40,7 +49,7 @@ function connectionSettings(env) {
 }
 
 function assertDatabase(database) {
-  if (!/^acq_isolated_(security|publication)_[a-z0-9_]+$/.test(database) || database.length > 63) {
+  if (!/^acq_isolated_(security|publication|central)_[a-z0-9_]+$/.test(database) || database.length > 63) {
     throw new Error("Refusing database outside the generated acq_isolated_ namespace.");
   }
 }
@@ -72,6 +81,7 @@ async function main() {
     assert.throws(() => assertDatabase("postgres"));
     assert.throws(() => assertDatabase("acq_isolated_security_x;DROP DATABASE postgres"));
     assertDatabase("acq_isolated_security_test_123");
+    assertDatabase("acq_isolated_central_test_123");
     assert.equal(verifyTap("ok 1 - positive\nok 2 - negative\n1..2\n"), 2);
     for (const invalid of ["not ok 1 - bad\n1..1\n", "Bail out! error\n", "ok 1 - partial\n1..2\n", "ok 2 - missing\n1..1\n", "1..0\n", "ok 1 - duplicate plan\n1..1\n1..1\n"]) {
       assert.throws(() => verifyTap(invalid));

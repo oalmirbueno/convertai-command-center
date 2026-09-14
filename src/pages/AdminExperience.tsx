@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { RITUAL_DA_CENTRAL, marcarRitual } from "@/lib/esteira/esteiraAcoes";
@@ -19,6 +19,8 @@ import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
+import CentralReviewQueue from "@/components/central/CentralReviewQueue";
+import { applyCentralAiDraft, assertCentralReviewSource, captureCentralGenerationContext, centralGenerationFacts, centralCachedPlanFacts, centralFactsProvenance, persistCentralReviewDraft, readCentralReportPage, type CentralGenerationContext, type CentralGenerationProject } from "@/lib/centralReviewSource";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
@@ -126,8 +128,10 @@ interface DraftPreview {
   draft: any;
 }
 
-export default function AdminExperience() {
+export default function AdminExperience({ cycleReview = false }: { cycleReview?: boolean }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const reviewClientId = cycleReview ? new URLSearchParams(location.search).get("client") : null;
   const queryClient = useQueryClient();
 
   /**
@@ -147,6 +151,8 @@ export default function AdminExperience() {
   const [genClientId, setGenClientId] = useState("__all__");
   const [genRitual, setGenRitual] = useState<string>(ritualForToday());
   const [genPreviews, setGenPreviews] = useState<DraftPreview[] | null>(null);
+  const confirmingDrafts = useRef(false);
+  const generatingDrafts = useRef(false);
   /** Ideia do Radar escolhida pela equipe para virar mensagem do cliente. */
   const [genIdeaId, setGenIdeaId] = useState<string | null>(null);
   /** Ideias geradas com IA e busca na web, por cliente. */
@@ -161,7 +167,10 @@ export default function AdminExperience() {
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
-  const [activeTab, setActiveTab] = useState("carteira");
+  const [activeTab, setActiveTab] = useState(cycleReview ? "fila" : "carteira");
+  useEffect(() => {
+    if (cycleReview || new URLSearchParams(location.search).has("review")) setActiveTab("fila");
+  }, [location.search, cycleReview]);
   /** Historico: um cliente so, ou a carteira inteira. */
   const [historicoClientId, setHistoricoClientId] = useState<string>("__all__");
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
@@ -507,10 +516,11 @@ export default function AdminExperience() {
     queryKey: ["exp-reports"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        readCentralReportPage((withReviewVersion) =>
         supabase.from("reports")
-          .select("id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, client:profiles!reports_client_id_fkey(full_name, company_name)")
+          .select(`id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, ${withReviewVersion ? "review_version, " : ""}client:profiles!reports_client_id_fkey(full_name, company_name)`)
           .order("created_at", { ascending: false })
-          .range(de, ate),
+          .range(de, ate)),
       );
       cortes.current.relatorios = truncado;
       return linhas;
@@ -833,10 +843,10 @@ export default function AdminExperience() {
   // ───────── Rascunhos: montagem com dados reais e processo explicado ─────────
   // Estrutura oficial de cada mensagem: o que fizemos, por que fizemos,
   // qual sinal vamos observar e quando revisamos.
-  const buildDraft = (client: any, ritual: string) => {
+  const buildDraft = (client: any, ritual: string, generationProjects?: CentralGenerationProject[]) => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
-    const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
+    const clientProjects = generationProjects ?? (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
     const activeProjects = clientProjects.filter((p: any) => p.status !== "done");
     const activeProject = activeProjects[0] || clientProjects[0] || null;
     const releasedWeek = (releasedFiles || []).filter(
@@ -1252,11 +1262,12 @@ export default function AdminExperience() {
     setLastSync(Date.now());
   }, [pendingApprovalFiles, releasedFiles, allPublications, reports]);
 
-  const collectFacts = (client: any): string => {
+  const collectFacts = (cachedClient: any, generation?: CentralGenerationContext): string => {
+    const client = generation?.client ?? cachedClient;
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
     const nome = client.company_name || client.full_name;
-    const clientProjects = (projects || []).filter(
+    const clientProjects = generation?.projects ?? (projects || []).filter(
       (p: any) => p.client_id === client.id && !p.deleted_at,
     );
     const ativos = clientProjects.filter((p: any) => p.status !== "done");
@@ -1431,6 +1442,9 @@ export default function AdminExperience() {
       // O dossiê atual é a fonte de verdade do "onde estamos": entra inteiro
       // (resumido) para a IA escrever a partir dele, não do nome do cliente.
       (() => {
+        // A geração recebe o dossiê integral antes dos fatos operacionais,
+        // em centralGenerationFacts; não repetir uma versão resumida do cache.
+        if (generation) return "";
         const d = dossieDe(client.id);
         if (!d?.geral) return "";
         const texto = String(d.geral.content || d.geral.summary || "").trim();
@@ -1443,13 +1457,9 @@ export default function AdminExperience() {
         return `DOSSIÊ GERAL ATUAL (${d.substituto ? "sem geral: usando o mais recente" : `v${d.geral.version ?? "?"}`}, escrito há ${idade ?? "?"} dia(s)) — fonte da verdade do "onde estamos" e do "para onde vamos":\n${texto.slice(0, 1800)}${mudancas}${outros}`;
       })(),
       (() => {
-        const p = planoDe(client.id);
-        if (!p) return "";
-        return [
-          p.foco ? `PLANO DA SEMANA PELA ESTEIRA — foco: ${p.foco}` : "",
-          p.feito.length ? `Esteira provou como feito nesta semana: ${p.feito.join("; ")}` : "",
-          p.proximos.length ? `Próximos passos combinados (traduza para a língua do cliente, nunca como pendência): ${p.proximos.map((x) => `${x.titulo}: ${x.passo}`).join("; ")}` : "",
-        ].filter(Boolean).join("\n");
+        // O plano histórico da Esteira não registra a versão da fonte usada.
+        // Continua visível no painel, mas não define compromissos da geração nova.
+        return centralCachedPlanFacts(planoDe(client.id), generation?.source);
       })(),
       (() => {
         const v = vendasDe(client.id);
@@ -1476,17 +1486,15 @@ export default function AdminExperience() {
    * os mesmos que o gerador de rituais usa. Uma funcao so, para a mensagem
    * do momento e o rascunho do ritual nunca lerem contextos diferentes.
    */
-  const fatosCompletos = async (c: any): Promise<string> => {
-    const clientName = c.company_name || c.full_name;
+  const fatosCompletos = async (c: any, captured?: CentralGenerationContext): Promise<{ facts: string; context: CentralGenerationContext }> => {
+    // CONTEXTO DO SEGUNDO CÉREBRO complementa a base persistida, sem redefinir seu escopo.
+    const context = captured ?? await captureCentralGenerationContext(c.id);
+    const clientName = context.client.company_name || context.client.full_name;
     const [historia, cerebro] = await Promise.all([
       readMemory(c.id, { limit: 12, kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any }).then(memoryAsContext).catch(() => ""),
       supabase.functions.invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
     ]);
-    return [
-      collectFacts(c),
-      historia ? `HISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}` : "",
-      cerebro ? `CONTEXTO DO SEGUNDO CÉREBRO (anotações fora do painel; trate como verdade sobre o cliente, mas nunca cite a fonte para ele):\n${cerebro}` : "",
-    ].filter(Boolean).join("\n\n");
+    return { facts: centralGenerationFacts(context, collectFacts(c, context), historia, cerebro), context };
   };
 
   const escreverMomentoComIA = async (client: any, moment: "abertura" | "meio" | "fechamento") => {
@@ -1494,11 +1502,15 @@ export default function AdminExperience() {
     if (aiMomentLoading) return;
     setAiMomentLoading(chave);
     try {
-      const fatos = await fatosCompletos(client);
-      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: client.company_name || client.full_name, facts: fatos } });
+      const { facts, context } = await fatosCompletos(client);
+      const provenance = await centralFactsProvenance(facts);
+      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: context.client.company_name || context.client.full_name, facts: provenance.facts } });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto do painel continua disponível."); return; }
+      await assertCentralReviewSource(client.id, context.source);
       setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: Array.isArray(data.alertas) ? data.alertas : [], model: data.model ?? null } }));
       setGroupMsgPreview(moment);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível conferir o contexto da mensagem.");
     } finally { setAiMomentLoading(null); }
   };
 
@@ -1512,6 +1524,7 @@ export default function AdminExperience() {
 
   // Passo 1: pré-visualizar. Nada é criado antes de você ver.
   const previewDrafts = async () => {
+    if (generatingDrafts.current || confirmingDrafts.current) return;
     // O avulso também merece acompanhamento: enquanto o projeto dele está em
     // andamento, a experiência é a mesma da carteira. "Todos" continua
     // significando a carteira recorrente; o avulso entra quando escolhido.
@@ -1520,15 +1533,12 @@ export default function AdminExperience() {
       ? portfolioClients
       : universo.filter((c: any) => c.id === genClientId);
     if (targets.length === 0) { toast.error("Selecione um cliente"); return; }
-    // O banco exige projeto no registro: cliente sem projeto não entra no lote.
-    const withProject = targets.filter((c: any) =>
-      (projects || []).some((p: any) => p.client_id === c.id && !p.deleted_at)
-    );
-    const skippedNoProject = targets.length - withProject.length;
+    // Elegibilidade usa os projetos relidos, não a lista possivelmente antiga da tela.
+    let skippedNoProject = 0;
     // Gerar e SEMPRE reler o painel agora: rascunho recente nao barra mais
     // (era o "nao atualiza"). O rascunho antigo do mesmo ritual sai da fila
     // quando o novo e criado.
-    const alvos = withProject;
+    const alvos = targets;
     if (alvos.length === 0 && skippedNoProject === 0) {
       toast.info("Nenhum cliente elegível.");
       return;
@@ -1537,54 +1547,49 @@ export default function AdminExperience() {
     // A IA escreve cada ritual a partir dos fatos reais do cliente. O texto de
     // molde vai junto como reserva: se a IA não responder, o rascunho sai
     // mesmo assim, e o dono revisa antes de qualquer coisa ser enviada.
+    generatingDrafts.current = true;
     setGenerating(true);
-    const previews: DraftPreview[] = await Promise.all(
+    setGenPreviews(null);
+    const errors: string[] = [];
+    const results = await Promise.all(
       alvos.map(async (c: any) => {
-        const draft: any = buildDraft(c, genRitual);
         const clientName = c.company_name || c.full_name;
         try {
+          const captured = await captureCentralGenerationContext(c.id);
+          if (!captured.projects.length) { skippedNoProject += 1; return null; }
+          let draft: any = { ...buildDraft(captured.client, genRitual, captured.projects), id: crypto.randomUUID() };
           // Três camadas de contexto: os números da semana, a história dentro
           // do painel e o que o segundo cérebro sabe daquele cliente fora
           // dele. Sem a terceira, a mensagem escreve com meio contexto.
-          const [historia, cerebro] = await Promise.all([
-            // Só o que conta história (decisão, marco, nota, resumo): os 8
-            // últimos registros de qualquer tipo eram ciclo e entrega, e a IA
-            // não recebia nenhuma decisão.
-            readMemory(c.id, {
-              limit: 12,
-              kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any,
-            }).then(memoryAsContext),
-            supabase.functions
-              .invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } })
-              .then((r) => String(r.data?.context || ""))
-              .catch(() => ""),
-          ]);
-          const fatos = [
-            collectFacts(c),
-            historia
-              ? `HISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}`
-              : "",
-            cerebro
-              ? `CONTEXTO DO SEGUNDO CÉREBRO (anotações fora do painel; trate como verdade sobre o cliente, mas nunca cite a fonte para ele):\n${cerebro}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-          const { data } = await supabase.functions.invoke("ritual-writer", {
-            body: { ritual: genRitual, client_name: clientName, facts: fatos },
-          });
-          if (data?.body) {
-            draft.summary = data.body;
-            if (data.title) draft.title = String(data.title).slice(0, 80);
-            draft.metrics = { ...(draft.metrics || {}), written_by: "ai", model: data.model || null, alertas: Array.isArray(data.alertas) ? data.alertas : [], substitui_recente: hasRecentDraft(c.id, genRitual) };
+          const { facts: fatos } = await fatosCompletos(c, captured);
+          const provenance = await centralFactsProvenance(fatos);
+          try {
+            const { data, error } = await supabase.functions.invoke("ritual-writer", {
+              body: { ritual: genRitual, client_name: captured.client.company_name || captured.client.full_name, facts: provenance.facts },
+            });
+            if (!error && data?.body) draft = applyCentralAiDraft(draft, data);
+          } catch {
+            // Falha da IA mantém o texto de reserva; falha da fonte nunca é ignorada.
           }
-        } catch {
-          /* sem IA agora: segue com o texto de reserva */
+          await assertCentralReviewSource(c.id, captured.source);
+          draft.metrics = {
+            ...(draft.metrics || {}),
+            central_review_source: captured.source,
+            central_review_generated_at: new Date().toISOString(),
+            central_review_facts: provenance.metadata,
+            substitui_recente: hasRecentDraft(c.id, genRitual),
+          };
+          return { clientId: c.id, clientName, draft } as DraftPreview;
+        } catch (error) {
+          errors.push(`${clientName}: ${error instanceof Error ? error.message : "Não foi possível conferir o contexto."}`);
+          return null;
         }
-        return { clientId: c.id, clientName, draft };
       }),
     );
+    const previews = results.filter((preview): preview is DraftPreview => preview !== null);
+    generatingDrafts.current = false;
     setGenerating(false);
+    if (errors.length) toast.error(errors.join("\n"));
     if (skippedNoProject > 0) {
       toast.info(`${skippedNoProject} cliente(s) sem projeto cadastrado ficaram fora. Crie um projeto para eles entrarem nos rituais.`);
     }
@@ -1594,24 +1599,31 @@ export default function AdminExperience() {
 
   // Passo 2: confirmar e criar os rascunhos revisados.
   const confirmDrafts = async () => {
-    if (!genPreviews || genPreviews.length === 0) return;
+    if (!genPreviews || genPreviews.length === 0 || confirmingDrafts.current) return;
+    confirmingDrafts.current = true;
     setGenerating(true);
     let created = 0;
-    let failed = 0;
-    for (const preview of genPreviews) {
-      const { error } = await supabase.from("reports").insert(preview.draft as any);
-      if (error) failed += 1;
-      else created += 1;
-    }
-    setGenerating(false);
-    if (created > 0) {
-      toast.success(`${created} rascunho(s) criados na fila de revisão${failed > 0 ? ` · ${failed} falharam` : ""}.`);
-      queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
-      setGeneratorOpen(false);
-      setGenPreviews(null);
-    } else {
-      toast.error("Não foi possível criar os rascunhos.");
+    const failed: DraftPreview[] = [];
+    try {
+      for (const preview of genPreviews) {
+        try {
+          await persistCentralReviewDraft(preview.draft);
+          created += 1;
+        } catch (error) {
+          failed.push(preview);
+          toast.error(`${preview.clientName}: ${error instanceof Error ? error.message : "Não foi possível salvar. A prévia foi preservada."}`);
+        }
+      }
+      setGenPreviews(failed.length ? failed : null);
+      if (created > 0) {
+        toast.success(`${created} rascunho(s) criados na fila de revisão${failed.length ? ` · ${failed.length} não salvos, prévias preservadas` : ""}.`);
+        void queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+        void queryClient.invalidateQueries({ queryKey: ["reports"] });
+        if (!failed.length) setGeneratorOpen(false);
+      }
+    } finally {
+      confirmingDrafts.current = false;
+      setGenerating(false);
     }
   };
 
@@ -1930,10 +1942,11 @@ export default function AdminExperience() {
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
 
   return (
-    <div className="space-y-7">
+    <div className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 py-5 text-foreground" : "space-y-7"}>
+      {cycleReview && <nav aria-label="Navegação da revisão do Ciclo" className="flex flex-wrap items-center gap-3 text-sm"><Link to="/ciclo" className="font-medium text-primary">Voltar ao Ciclo</Link>{reviewClientId && <Link to="/ciclo/revisao" className="text-primary">Ver todos os clientes</Link>}</nav>}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="heading-page">Central de Experiência</h1>
+          <h1 className="heading-page">{cycleReview ? "Ciclo · Revisão por cliente" : "Central de Experiência"}</h1>
           {/* Se alguma consulta voltar cortada, a tela DIZ. Dado incompleto
               apresentado como completo é o defeito que estamos matando; dado
               incompleto que se anuncia é aceitável. */}
@@ -1948,8 +1961,9 @@ export default function AdminExperience() {
             </p>
           )}
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente.
+            {cycleReview ? "Revise os rituais de cada cliente, confira o plano e registre sua decisão. A geração usa a mesma Central; aprovar não envia mensagens." : "Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."}
           </p>
+          {reviewClientId && <p className="mt-2 text-sm font-medium">Cliente selecionado: {clients?.find(client => client.id === reviewClientId)?.company_name || clients?.find(client => client.id === reviewClientId)?.full_name || "não encontrado nesta carteira"}</p>}
           {/* Sinal de vida: a tela mostra quando os números foram lidos por
               último e deixa forçar a leitura, em vez de parecer parada. */}
           <button
@@ -1963,7 +1977,7 @@ export default function AdminExperience() {
         </div>
         <button
           data-tour="central-gerador"
-          onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
+          onClick={() => { setGenClientId(reviewClientId || "__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
           <Sparkles className="w-4 h-4" /> Gerar mensagens de hoje
@@ -1971,7 +1985,7 @@ export default function AdminExperience() {
       </div>
 
       {/* Missões de hoje: a Central puxa você para a ação certa do dia */}
-      {(() => {
+      {!cycleReview && (() => {
         const todayRitual = ritualMeta(ritualForToday())!;
         const stuckApprovals = healthRows.filter((r) => r.alerts.some((a) => a.kind === "aprovacao")).length;
         const financialAlerts = healthRows.filter((r) => r.alerts.some((a) => a.kind === "financeiro")).length;
@@ -2031,7 +2045,7 @@ export default function AdminExperience() {
       })()}
 
       {/* Resumo vivo: cada cartao e um atalho para a aba onde se age */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5 xl:gap-4">
+      {!cycleReview && <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5 xl:gap-4">
         {[
           { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse, tab: "carteira" },
           { label: "Em atenção", value: attention, color: "text-warning", icon: Clock, tab: "carteira" },
@@ -2052,17 +2066,17 @@ export default function AdminExperience() {
             <p className="text-[11px] text-muted-foreground">{s.label}</p>
           </button>
         ))}
-      </div>
+      </div>}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
+        {!cycleReview && <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
           <TabsTrigger value="perfis" className="text-[13px] rounded-md shrink-0">Perfis</TabsTrigger>
           <TabsTrigger value="avulsos" className="text-[13px] rounded-md shrink-0">Avulsos ({oneOffClients.length})</TabsTrigger>
           <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar de ideias ({allRadarIdeas.length})</TabsTrigger>
           <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
           <TabsTrigger value="historico" className="text-[13px] rounded-md shrink-0">Histórico ({publishedReports.length})</TabsTrigger>
-        </TabsList>
+        </TabsList>}
 
         {/* O que esta aba faz, em uma linha: guia sem precisar aprender */}
         <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
@@ -2071,7 +2085,7 @@ export default function AdminExperience() {
             perfis: "Tudo de um cliente em um só lugar: o que enviar na semana, a mensagem pronta do grupo e o Diário do Trabalho.",
             avulsos: "Os clientes de projeto fechado: entrega, prazo e a próxima oferta natural.",
             radar: "As ideias de diferenciação do mês, uma por cliente, montadas do contexto real dele.",
-            fila: "O que foi gerado e espera a sua revisão. Revise, edite e publique: o cliente vê na hora.",
+            fila: "O que foi gerado e espera a sua revisão. Confira cada versão e registre sua decisão; aprovação não comprova publicação ou envio.",
             historico: "A linha do tempo completa do que já aconteceu e foi enviado.",
           } as Record<string, string>)[activeTab]}
         </p>
@@ -2680,6 +2694,9 @@ export default function AdminExperience() {
 
         {/* ── Fila de revisão ── */}
         <TabsContent value="fila">
+          <CentralReviewQueue key={reviewClientId || "all-clients"} reports={reviewClientId ? reports.filter(report => report.client_id === reviewClientId) : reports} clients={reviewClientId ? (clients || []).filter(client => client.id === reviewClientId) : clients || []} isAdmin={isAdmin} onRefresh={async () => {
+            await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+          }} />
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-4 sm:px-5 py-3 border-b border-border">
               <div className="flex items-center gap-2">
@@ -2696,7 +2713,7 @@ export default function AdminExperience() {
                   Fila vazia. Use "Gerar mensagens de hoje" para criar os rituais do dia com os dados de cada cliente.
                 </p>
               )}
-              {draftReports.map((r: any) => {
+              {draftReports.filter((r) => !r.metrics?.central_review_source && (!reviewClientId || r.client_id === reviewClientId)).map((r: any) => {
                 const meta = ritualMeta(r.metrics?.ritual_type);
                 const open = expandedDraft === r.id;
                 const edits = draftEdits[r.id] || { summary: r.summary || "", next_steps: r.next_steps || "" };
@@ -3030,6 +3047,9 @@ export default function AdminExperience() {
                   </div>
                   <div>
                     <label className="text-[9px] uppercase tracking-wider text-muted-foreground">Próxima etapa</label>
+                    {preview.draft.metrics?.central_review_next_steps_required && (
+                      <p className="text-[11px] text-warning">A IA não propôs uma próxima etapa separada. Revise este campo na fila antes de aprovar.</p>
+                    )}
                     <textarea
                       value={preview.draft.next_steps}
                       onChange={(e) =>

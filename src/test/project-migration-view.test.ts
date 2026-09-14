@@ -34,12 +34,12 @@ const csv = (entries: LedgerEntry[]) => 'remote_version,remote_name,remote_state
 const plan = (entries = baseline().document.entries) => planProjectMigrationView({ ...options, ledgerCsv: csv(entries) });
 
 describe('reviewed project forward-only migration view', () => {
-  it('preserves all 206 historical versions as aborting sentinels and includes only the two reviewed SQL files', () => {
+  it('preserves all 206 historical versions as aborting sentinels and includes only the three reviewed SQL files', () => {
     const view = plan();
-    expect(view).toMatchObject({ status: 'pending', actual_count: 206, expected_count: 208, reviewed_count: 206, sentinel_count: 206 });
-    expect(view.pending_versions).toEqual(['20260912213530', '20260912213638']);
-    expect(view.files).toHaveLength(208);
-    expect(new Set(view.files.map((file) => file.version)).size).toBe(208);
+    expect(view).toMatchObject({ status: 'pending', actual_count: 206, expected_count: 209, reviewed_count: 206, sentinel_count: 206 });
+    expect(view.pending_versions).toEqual(['20260912213530', '20260912213638', '20260914174905']);
+    expect(view.files).toHaveLength(209);
+    expect(new Set(view.files.map((file) => file.version)).size).toBe(209);
     for (const file of view.files.filter((file) => file.kind === 'sentinel')) {
       expect(file.bytes.toString('utf8')).toContain(`RAISE EXCEPTION 'Refusing to execute audited migration sentinel ${file.version}'`);
       expect(file.bytes.toString('utf8')).not.toMatch(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+(?:supabase_migrations\.)?schema_migrations/i);
@@ -53,16 +53,27 @@ describe('reviewed project forward-only migration view', () => {
   });
 
   it('resumes after the first pending migration without replaying it', () => {
-    const view = plan(baseline().expected.slice(0, -1));
+    const view = plan(baseline().expected.slice(0, -2));
     expect(view.sentinel_count).toBe(207);
-    expect(view.pending_versions).toEqual(['20260912213638']);
-    expect(view.files.at(-2)?.kind).toBe('sentinel');
+    expect(view.pending_versions).toEqual(['20260912213638', '20260914174905']);
+    expect(view.files.at(-3)?.kind).toBe('sentinel');
+    expect(view.files.at(-2)?.kind).toBe('pending');
     expect(view.files.at(-1)?.kind).toBe('pending');
   });
 
-  it('emits only sentinels when all 208 exact rows are already applied', () => {
+  it('preserves the deployed 208 rows and prepares only Central for the incremental release', () => {
+    const view = plan(baseline().expected.slice(0, 208));
+    expect(view).toMatchObject({ status: 'pending', actual_count: 208, expected_count: 209, sentinel_count: 208 });
+    expect(view.pending_versions).toEqual(['20260914174905']);
+    const pending = view.files.filter((file) => file.kind === 'pending');
+    expect(pending).toHaveLength(1);
+    expect(pending[0].filename).toBe('20260914174905_central_review_versioned_approval.sql');
+    expect(pending[0].bytes.equals(readFileSync(resolve(repoRoot, 'supabase/migrations/20260914174905_central_review_versioned_approval.sql')))).toBe(true);
+  });
+
+  it('emits only sentinels when all 209 exact rows are already applied', () => {
     const view = plan(baseline().expected);
-    expect(view).toMatchObject({ status: 'ready', sentinel_count: 208, pending_versions: [] });
+    expect(view).toMatchObject({ status: 'ready', sentinel_count: 209, pending_versions: [] });
     expect(view.files.every((file) => file.kind === 'sentinel')).toBe(true);
   });
 
@@ -99,7 +110,7 @@ describe('reviewed project forward-only migration view', () => {
     for (const source of baseline().document.pending_migrations) cpSync(resolve(repoRoot, source.path), join(sourceDir, basename(source.path)));
     const postflight = { projectRef: reviewedProjectRef, repoRoot: isolatedRepo, sourceDir };
     expect(compareProjectLedger(baseline().expected, postflight).status).toBe('ready');
-    expect(planProjectMigrationView({ ...postflight, ledgerCsv: csv(baseline().expected) }).sentinel_count).toBe(208);
+    expect(planProjectMigrationView({ ...postflight, ledgerCsv: csv(baseline().expected) }).sentinel_count).toBe(209);
     const ledgerCsvPath = join(root, 'postflight.csv');
     writeFileSync(ledgerCsvPath, csv(baseline().expected));
     const commonArgs = ['--project-ref', reviewedProjectRef, '--repo-root', isolatedRepo, '--source-dir', sourceDir];
@@ -113,8 +124,8 @@ describe('reviewed project forward-only migration view', () => {
       ...commonArgs, '--ledger-csv', ledgerCsvPath, '--output-dir', outputDir], { encoding: 'utf8' });
     expect(build.stderr).toBe('');
     expect(build.status).toBe(0);
-    expect(JSON.parse(build.stdout)).toMatchObject({ status: 'ready', sentinel_count: 208, pending_versions: [] });
-    expect(readdirSync(outputDir)).toHaveLength(208);
+    expect(JSON.parse(build.stdout)).toMatchObject({ status: 'ready', sentinel_count: 209, pending_versions: [] });
+    expect(readdirSync(outputDir)).toHaveLength(209);
     const first = join(sourceDir, basename(baseline().document.pending_migrations[0].path));
     writeFileSync(first, '-- changed source\n');
     expect(() => planProjectMigrationView({ ...postflight, ledgerCsv: csv(baseline().expected) })).toThrow(/local hash drift/);
@@ -144,8 +155,8 @@ describe('reviewed project forward-only migration view', () => {
       '--project-ref', reviewedProjectRef, '--ledger-csv', ledgerCsvPath, '--output-dir', outputDir], { encoding: 'utf8' });
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ pending_versions: ['20260912213530', '20260912213638'], sentinel_count: 206 });
-    expect(readdirSync(outputDir)).toHaveLength(208);
+    expect(JSON.parse(result.stdout)).toMatchObject({ pending_versions: ['20260912213530', '20260912213638', '20260914174905'], sentinel_count: 206 });
+    expect(readdirSync(outputDir)).toHaveLength(209);
     expect(readFileSync(join(outputDir, basename(source.path))).equals(before)).toBe(true);
     expect(readFileSync(resolve(repoRoot, source.path)).equals(before)).toBe(true);
     expect(() => buildProjectMigrationView({ ...options, ledgerCsvPath, outputDir })).toThrow(/already exists/);

@@ -16,6 +16,7 @@ import Escritorio from "@/components/execucao/Escritorio";
 import DefinirResponsavel from "@/components/execucao/DefinirResponsavel";
 import { falarComoGente } from "@/lib/falarComoGente";
 import { precisaDecisao } from "@/lib/precisaDecisao";
+import { vinculoEncerrado } from "@/lib/execucaoVinculos";
 import OrdensAutorizadas from "@/components/execucao/OrdensAutorizadas";
 import OQueFoiFeito from "@/components/execucao/OQueFoiFeito";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
@@ -152,7 +153,7 @@ export default function AdminExecucao() {
   const [busca, setBusca] = useState("");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroPrazo, setFiltroPrazo] = useState<"todas" | "vencidas" | "semana">("todas");
-  /** Vinculo cuja tarefa foi excluida: encerrado. Fica fora do quadro por padrao. */
+  /** Vínculo sem tarefa ativa fica no histórico, fora do quadro por padrão. */
   const [mostrarEncerradas, setMostrarEncerradas] = useState(false);
   const queryClient = useQueryClient();
   const destacadoRef = useRef<HTMLDivElement | null>(null);
@@ -239,7 +240,7 @@ export default function AdminExecucao() {
       // created_by, e sem escolher o caminho a consulta inteira e recusada.
       const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+        .select("id, title, status, deleted_at, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("id", taskIds);
       // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
       // sem projeto nem cliente, como se o dado nao existisse.
@@ -249,6 +250,8 @@ export default function AdminExecucao() {
       return mapa;
     },
     enabled: flag === "on" && taskIds.length > 0,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const humanIds = useMemo(() => {
@@ -299,9 +302,9 @@ export default function AdminExecucao() {
   const hoje = new Date().toISOString().slice(0, 10);
 
   /** Os números do quadro, uma vez só: cabeçalho, cartões e vazios usam. */
-  // Encerrado = a tarefa do vinculo nao existe mais (excluida). Continua na
-  // trilha, mas nao e trabalho: sai do quadro, das contagens e das abas.
-  const encerrado = (v: Vinculo) => Boolean(v.kanban_task_id) && tarefasProntas && taskIds.length > 0 && !tarefas.has(String(v.kanban_task_id));
+  // A tarefa concluída/arquivada pode ainda ter um vínculo aguardando insumo.
+  // Preservamos seu estado histórico sem apresentá-lo como trabalho ativo.
+  const encerrado = (v: Vinculo) => vinculoEncerrado(v, tarefas, tarefasProntas);
   const vinculosAtivos = useMemo(() => vinculos.filter((v) => !encerrado(v)), [vinculos, tarefas, tarefasProntas, taskIds]);
   const totalEncerradas = vinculos.length - vinculosAtivos.length;
   const diasParado = (v: Vinculo) => Math.floor((Date.now() - new Date(v.updated_at).getTime()) / 86_400_000);
@@ -334,7 +337,7 @@ export default function AdminExecucao() {
   }, [vinculosAtivos, disponiveis, tarefas, hoje]);
 
   const numerosDoOperador = (operatorId: string) => {
-    const meus = vinculos.filter((v) => v.operator_id === operatorId);
+    const meus = vinculosAtivos.filter((v) => v.operator_id === operatorId);
     return {
       fila: meus.filter((v) => ["queued", "in_progress"].includes(v.status)).length,
       andamento: meus.filter((v) => v.status === "in_progress").length,
@@ -519,11 +522,11 @@ export default function AdminExecucao() {
       lista.length ? `${titulo} (${lista.length})\n${lista.map(linha).join("\n")}` : `${titulo}: nada`;
 
     const feitasHoje = vinculos.filter((v) => v.status === "done" && doDia(v.updated_at));
-    const emRevisao = vinculos.filter((v) => v.status === "review");
-    const aguardando = vinculos.filter((v) => v.status === "awaiting_input");
-    const bloqueadas = vinculos.filter((v) => v.status === "blocked");
-    const andamento = vinculos.filter((v) => v.status === "in_progress");
-    const prazoCritico = vinculos.filter((v) => {
+    const emRevisao = vinculosAtivos.filter((v) => v.status === "review");
+    const aguardando = vinculosAtivos.filter((v) => v.status === "awaiting_input");
+    const bloqueadas = vinculosAtivos.filter((v) => v.status === "blocked");
+    const andamento = vinculosAtivos.filter((v) => v.status === "in_progress");
+    const prazoCritico = vinculosAtivos.filter((v) => {
       const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
       return t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
     });
@@ -531,7 +534,7 @@ export default function AdminExecucao() {
     const abertura = [
       `ABERTURA · ${new Date().toLocaleDateString("pt-BR")}`,
       bloco("Em andamento", andamento),
-      bloco("Na fila", vinculos.filter((v) => v.status === "queued")),
+      bloco("Na fila", vinculosAtivos.filter((v) => v.status === "queued")),
       bloco("Aguardando insumo", aguardando),
     ].join("\n\n");
 
@@ -539,7 +542,7 @@ export default function AdminExecucao() {
       `EXCECOES · ${new Date().toLocaleDateString("pt-BR")}`,
       bloco("Bloqueadas", bloqueadas),
       bloco("Prazo critico (vence hoje ou venceu)", prazoCritico),
-      bloco("Aprovacoes pendentes", vinculos.filter((v) => precisaDecisao(v))),
+      bloco("Aprovacoes pendentes", vinculosAtivos.filter((v) => precisaDecisao(v))),
       incidentes.length
         ? `Falhas de execucao (${incidentes.length})\n` + incidentes.slice(0, 10).map((r) =>
             `- ${opDe(String(r.operator_id))?.display_name || "?"} · run ${r.run_key} · ${r.status}${r.error ? " · " + r.error : ""}`,
@@ -565,7 +568,7 @@ export default function AdminExecucao() {
     ].join("\n\n");
 
     return { abertura, excecoes, fechamento, semanal };
-  }, [vinculos, runs, incidentes, tarefas, humanos, operadores, hoje]);
+  }, [vinculos, vinculosAtivos, runs, incidentes, tarefas, humanos, operadores, hoje]);
 
 
   const copiar = async (texto: string, rotulo: string) => {
@@ -823,7 +826,7 @@ export default function AdminExecucao() {
           : null,
       };
     }),
-    [operadores, vinculos],
+    [operadores, vinculosAtivos],
   );
 
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
@@ -990,7 +993,7 @@ export default function AdminExecucao() {
         )}
         {encerrado(v) && (
           <p className="mt-1 rounded-lg border border-border bg-secondary px-2 py-1 text-[11px] text-muted-foreground">
-            encerrado: a tarefa foi excluída, este vínculo ficou só como histórico.
+            encerrado: a tarefa foi concluída, arquivada ou excluída; este vínculo ficou como histórico.
           </p>
         )}
         {!encerrado(v) && ["blocked", "awaiting_input", "review", "queued"].includes(v.status) && diasParado(v) >= 3 && (
@@ -1048,7 +1051,7 @@ export default function AdminExecucao() {
             onClick={() => setMostrarEncerradas((v) => !v)}
             className="mt-1.5 block text-[11px] text-muted-foreground underline-offset-2 hover:underline"
           >
-            {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"} (tarefa excluída)
+            {mostrarEncerradas ? "Esconder" : "Mostrar"} {totalEncerradas} vínculo{totalEncerradas === 1 ? "" : "s"} encerrado{totalEncerradas === 1 ? "" : "s"} (tarefa concluída, arquivada ou excluída)
           </button>
         )}
         </div>

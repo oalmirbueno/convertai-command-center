@@ -127,20 +127,20 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 legacy + 2 attestations + 98 forward + 12 alias contract", () => {
+  it("validates the explicit 96 legacy + 2 attestations + 99 forward + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(98);
-    expect(plan.forwardMigrations).toHaveLength(98);
+    expect(plan.manifest.forward_migrations).toHaveLength(99);
+    expect(plan.forwardMigrations).toHaveLength(99);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(98);
-    expect(versions).toHaveLength(194);
+    expect(plan.forwardLedger).toHaveLength(99);
+    expect(versions).toHaveLength(195);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
@@ -149,7 +149,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(86);
+    expect(unaliased).toHaveLength(87);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
@@ -174,7 +174,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(194);
+    expect(sqlValues.split("\n")).toHaveLength(195);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -196,7 +196,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     const cliSplit = entries.filter(
       (entry) => entry.remote_hash_mode === "supabase_cli_split",
     );
-    expect(cliSplit).toHaveLength(93);
+    expect(cliSplit).toHaveLength(94);
     const hardening = cliSplit.find((entry) => entry.version === "20260809044000")!;
     const hardeningSource = plan.forwardMigrations.find(
       (source) => source.version === hardening.version,
@@ -307,13 +307,13 @@ describe("production migration view", { timeout: 30000 }, () => {
     })).toThrow(/forward statement SHA-256 mismatch/);
   });
 
-  it("accepts the complete declared 194-row raw ledger and rejects normalized rows", () => {
+  it("accepts the complete declared 195-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(98);
-    expect(rows).toHaveLength(194);
+    const rows = remoteRows(99);
+    expect(rows).toHaveLength(195);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
-    expect(reconciliation.appliedForward).toHaveLength(98);
+    expect(reconciliation.appliedForward).toHaveLength(99);
     expect(reconciliation.appliedAliases).toHaveLength(12);
 
     const normalizedAlias = structuredClone(rows);
@@ -344,10 +344,10 @@ describe("production migration view", { timeout: 30000 }, () => {
       aliases: 96,
       appliedForward: 0,
       appliedAliases: 0,
-      pendingForward: 98,
-      files: 194,
+      pendingForward: 99,
+      files: 195,
     });
-    expect(filenames).toHaveLength(194);
+    expect(filenames).toHaveLength(195);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -363,17 +363,17 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("reconciles the complete aliased ledger to sentinels only and zero pending forward", () => {
     const plan = loadProductionMigrationPlan();
-    const { outputDir, result } = buildFixture(98);
+    const { outputDir, result } = buildFixture(99);
     const filenames = readdirSync(outputDir).sort();
 
     expect(result).toEqual({
       aliases: 96,
-      appliedForward: 98,
+      appliedForward: 99,
       appliedAliases: 12,
       pendingForward: 0,
-      files: 194,
+      files: 195,
     });
-    expect(filenames).toHaveLength(194);
+    expect(filenames).toHaveLength(195);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
@@ -397,7 +397,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     }
   }, TEMPO_PACOTE_COMPLETO);
 
-  it("keeps only the two new forwards pending over the old 192-row baseline without replaying history", () => {
+  it("keeps only the three new forwards pending over the old 192-row baseline without replaying history", () => {
     const plan = loadProductionMigrationPlan();
     const oldRows = remoteRows(96);
     expect(oldRows).toHaveLength(192);
@@ -405,11 +405,11 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(reconciliation.appliedForward).toHaveLength(96);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual([
-      "20260912213530", "20260912213638",
+      "20260912213530", "20260912213638", "20260914174905",
     ]);
 
     const { outputDir, result } = buildFixture(96);
-    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 2, files: 194 });
+    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 3, files: 195 });
     // Applied rows become sentinels that fail closed if accidentally replayed.
     for (const legacy of plan.legacyEntries) {
       const emitted = readFileSync(join(outputDir, `${legacy.remote_version}_production_ledger_sentinel.sql`), "utf8");
@@ -431,13 +431,23 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(executableFiles.sort()).toEqual(reconciliation.pendingForward.map((entry) => entry.filename).sort());
   }, TEMPO_PACOTE_COMPLETO);
 
+  it("preserves the prior 194-row declared ledger and leaves only Central pending", () => {
+    const plan = loadProductionMigrationPlan();
+    const prior = parseRemoteLedgerCsv(ledgerCsv(remoteRows(98)));
+    expect(prior).toHaveLength(194);
+    const reconciliation = validateRemoteLedger(plan, prior);
+    expect(reconciliation.appliedForward).toHaveLength(98);
+    expect(reconciliation.appliedAliases).toHaveLength(12);
+    expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905"]);
+  });
+
   it("turns an applied forward prefix into sentinels and leaves only its suffix pending", () => {
     const plan = loadProductionMigrationPlan();
     const { outputDir, result } = buildFixture(2);
 
     expect(result.appliedForward).toBe(2);
     expect(result.appliedAliases).toBe(2);
-    expect(result.pendingForward).toBe(96);
+    expect(result.pendingForward).toBe(97);
     for (const applied of plan.forwardLedger.slice(0, 2)) {
       expect(readFileSync(
         join(outputDir, `${applied.version}_production_ledger_sentinel.sql`),
@@ -452,7 +462,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(194);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(195);
   });
 
   it("applies canonical-only migrations when the shadow files are excluded in CI", () => {
@@ -529,16 +539,16 @@ describe("production migration view", { timeout: 30000 }, () => {
 
   it("keeps a future unaliased forward migration pending after the current package", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(98)));
+    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(99)));
     const future = { ...plan.forwardLedger.at(-1)! };
     const syntheticPlan = {
       ...plan,
       forwardLedger: [
         ...plan.forwardLedger,
         {
-          canonical: { ...future.canonical, version: "20260809120000" },
+          canonical: { ...future.canonical, version: "20260915120000" },
           alias: null,
-          version: "20260809120000",
+          version: "20260915120000",
           name: "future_forward_migration",
           statementsSha256: future.statementsSha256,
         },
@@ -546,13 +556,13 @@ describe("production migration view", { timeout: 30000 }, () => {
     };
 
     const reconciliation = validateRemoteLedger(syntheticPlan, rows);
-    expect(reconciliation.appliedForward).toHaveLength(98);
+    expect(reconciliation.appliedForward).toHaveLength(99);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward).toHaveLength(1);
-    expect(reconciliation.pendingForward[0].version).toBe("20260809120000");
+    expect(reconciliation.pendingForward[0].version).toBe("20260915120000");
 
     const withFuture = [...rows, {
-      remoteVersion: "20260809120000",
+      remoteVersion: "20260915120000",
       remoteName: "future_forward_migration",
       remoteStatementsSha256: future.statementsSha256,
     }];
@@ -670,7 +680,7 @@ describe("production migration view", { timeout: 30000 }, () => {
       ],
     };
 
-    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(98)));
+    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(99)));
     const pending = validateRemoteLedger(syntheticPlan, live);
     expect(pending.pendingForward).toHaveLength(1);
     expect(pending.pendingForward[0].bytes).toEqual(canonical.bytes);

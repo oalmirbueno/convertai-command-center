@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Minus, RefreshCw, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
@@ -102,12 +103,13 @@ interface Props {
   frente: "social" | "trafego";
   weekStart: string;
   canWrite: boolean;
+  canReview?: boolean;
   aberta: boolean;
   onFechar: () => void;
   onMudou: () => void;
 }
 
-export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrite, aberta, onFechar, onMudou }: Props) {
+export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrite, canReview = false, aberta, onFechar, onMudou }: Props) {
   const queryClient = useQueryClient();
   const [feitosAbertos, setFeitosAbertos] = useState(false);
   const [jaTemAberto, setJaTemAberto] = useState(false);
@@ -284,6 +286,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
         <section className="mt-4">
           <p className="mb-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">Rituais desta semana</p>
+          {canReview && <Link to={`/ciclo/revisao?client=${encodeURIComponent(cliente.id)}`} className="mb-2 inline-flex rounded-lg border border-primary/40 px-3 py-2 text-[12px] font-medium text-primary">Revisar rituais deste cliente</Link>}
           <div className="grid grid-cols-3 gap-2">
             {e.rituais.map((r) => (
               <label key={r.key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-2.5 py-2 text-[12px] ${r.feito ? "border-primary/50 bg-primary/10" : "border-border"}`}>

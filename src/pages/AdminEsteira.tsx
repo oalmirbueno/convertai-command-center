@@ -128,6 +128,7 @@ export default function AdminEsteira() {
           </div>
         </div>
         <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">
+          {profile?.role === "admin" && <Link to="/ciclo/revisao" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 px-2.5 py-0.5 font-semibold text-primary">Revisão por cliente</Link>}
           <button type="button" disabled={Boolean(erro) || carregando} onClick={() => setComecarAberto(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground disabled:opacity-50"><Compass className="h-3 w-3" />Por onde começar</button>
           {erro ? <span className="shrink-0 text-destructive">Leitura indisponível</span> : <>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{visiveis.length} cliente{visiveis.length === 1 ? "" : "s"}</span>
@@ -222,7 +223,7 @@ export default function AdminEsteira() {
         </div>
       </nav>
 
-      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={recarregarAposAcao} />
+      <EsteiraClientSheet cliente={detalhe} frente={frente} weekStart={weekStart} canWrite={canWrite} canReview={profile?.role === "admin"} aberta={detalhe !== null} onFechar={() => setDetalheId(null)} onMudou={recarregarAposAcao} />
 
       {/* Por onde comecar: a carteira ordenada pela urgencia real, com o
           motivo de cada posicao. Toca no cliente e abre a gaveta dele. */}
