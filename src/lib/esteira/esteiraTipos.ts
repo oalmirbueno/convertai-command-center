@@ -224,6 +224,8 @@ export interface ConexaoFato {
 export interface MetricaSemanaFato {
   accountId: string;
   weekStart: string;
+  weekEnd?: string | null;
+  capturedAt?: string | null;
   reach: number | null;
   followers: number | null;
   interactions: number | null;

@@ -26,6 +26,7 @@ import type {
   RitualDaSemana,
   RitualKey,
 } from "./esteiraTipos";
+import { periodoSocial } from "./periodoSocial";
 
 const DIA = 86_400_000;
 
@@ -365,7 +366,7 @@ export function itensDeTarefas(f: FatosDoCliente, hoje: Date, weekStart: string)
   const hojeStr = hoje.toISOString().slice(0, 10);
   const fimSemana = somaDias(weekStart, 6);
   const fimProxima = somaDias(weekStart, 13);
-  const abertas = f.tarefas.filter((t) => !tarefaConcluida(t.status) && (t.status ?? "").toLowerCase() !== "cancelled");
+  const abertas = f.tarefas.filter((t) => !tarefaConcluida(t.status) && !["cancelled", "archived"].includes((t.status ?? "").toLowerCase()));
   const itens: EsteiraItem[] = [];
   for (const t of abertas) {
     const base = { clientId: f.clientId, frente: "geral" as Frente, fonte: "tarefa" as const, titulo: t.titulo, rota: "/kanban", vencimento: t.dueDate ?? undefined, key: `task:${t.id}` };
@@ -462,13 +463,12 @@ export function insightsDoCliente(f: FatosDoCliente, hoje: Date): Insight[] {
     const porConta = new Map<string, typeof f.metricas>();
     for (const m of f.metricas) porConta.set(m.accountId, [...(porConta.get(m.accountId) ?? []), m]);
     for (const [conta, lista] of porConta) {
-      const ord = [...lista].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
-      const [s0, s1, s2] = ord;
-      if (!s0 || s0.reach === null) continue;
-      const anteriores = [s1?.reach, s2?.reach].filter((x): x is number => typeof x === "number");
-      const v = s1?.reach != null ? pct(s0.reach, s1.reach) : null;
+      const periodo = periodoSocial(lista, hoje);
+      const { atual: s0, anterior: s1 } = periodo;
+      const anteriores = s1?.reach != null ? [s1.reach] : [];
+      const v = s0?.reach != null && s1?.reach != null ? pct(s0.reach, s1.reach) : null;
       const sufixo = porConta.size > 1 ? ` (${conta.slice(-4)})` : "";
-      out.push({ key: `reach:${conta}`, clientId: f.clientId, frente: "social", titulo: `Alcance${sufixo}`, atual: s0.reach, anteriores, variacao: v, tendencia: tendencia(v), texto: anteriores.length ? `${s0.reach} nesta semana, ${anteriores.join(" e ")} nas anteriores${v !== null ? ` (${v > 0 ? "+" : ""}${v}%)` : ""}` : `${s0.reach} nesta semana, sem base anterior` });
+      out.push({ key: `reach:${conta}`, clientId: f.clientId, frente: "social", titulo: `Alcance${sufixo}`, atual: s0?.reach ?? null, anteriores, variacao: v, tendencia: tendencia(v), texto: `${s0?.reach != null ? `Alcance ${s0.reach}` : "Alcance indisponível"}${v !== null ? ` (${v > 0 ? "+" : ""}${v}%)` : ""} · ${periodo.descricao}` });
     }
   }
   if (f.servicos.trafego && f.campanhas.length) {
@@ -515,15 +515,15 @@ export function leiturasDoCliente(f: FatosDoCliente, hoje: Date, itens: EsteiraI
     const porConta = new Map<string, typeof f.metricas>();
     for (const m of f.metricas) porConta.set(m.accountId, [...(porConta.get(m.accountId) ?? []), m]);
     const principal = [...porConta.values()].sort((a, b) => (Math.max(...b.map((x) => x.followers ?? 0)) - Math.max(...a.map((x) => x.followers ?? 0))))[0];
-    const ord = [...principal].sort((a, b) => b.weekStart.localeCompare(a.weekStart));
-    const [s0, s1] = ord;
-    if (s0) {
+    const periodo = periodoSocial(principal, hoje);
+    const { atual: s0, anterior: s1 } = periodo;
+    {
       const nums = [
-        numero("Seguidores", s0.followers, s1?.followers ?? null),
-        numero("Alcance", s0.reach, s1?.reach ?? null),
-        numero("Interações", s0.interactions, s1?.interactions ?? null),
+        numero("Seguidores", s0?.followers ?? null, s1?.followers ?? null),
+        numero("Alcance", s0?.reach ?? null, s1?.reach ?? null),
+        numero("Interações", s0?.interactions ?? null, s1?.interactions ?? null),
       ];
-      const l: Leitura = { frente: "social", numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: s1 ? `semana de ${fmtDia(s0.weekStart)} contra ${fmtDia(s1.weekStart)}` : `semana de ${fmtDia(s0.weekStart)}` };
+      const l: Leitura = { frente: "social", numeros: nums, subiu: [], parado: [], caiu: [], fazer: [], periodo: periodo.descricao };
       classificar(nums, l);
       // O que fazer nasce do numero + do que a esteira ja sabe.
       const agendados = f.posts.flatMap((p) => p.publicacoes.filter((x) => x.status === "scheduled" && x.scheduledAt && new Date(x.scheduledAt).getTime() >= hoje.getTime())).length;

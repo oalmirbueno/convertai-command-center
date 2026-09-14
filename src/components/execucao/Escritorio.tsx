@@ -197,7 +197,7 @@ export default function Escritorio({
   const alternar = (area: string, urgencia: number) =>
     setEscolhas((atual) => ({ ...atual, [area]: !(atual[area] ?? urgencia < 90) }));
 
-  const esperandoVoce = useMemo(
+  const totalEsperandoVoce = useMemo(
     () => trabalhos.filter(
       // Concluido nao espera nada, mesmo que tenha esperado no passado.
       (t) => esperandoVoce(t),
@@ -210,10 +210,10 @@ export default function Escritorio({
       {/* A frase que resume o dia. Um número sozinho não diz o que fazer. */}
       <div className="rounded-xl border border-border bg-secondary/40 px-3.5 py-2.5">
         <p className="text-[12.5px] text-foreground">
-          {esperandoVoce > 0 ? (
+          {totalEsperandoVoce > 0 ? (
             <>
-              <strong className="font-mono">{esperandoVoce}</strong>{" "}
-              {esperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
+              <strong className="font-mono">{totalEsperandoVoce}</strong>{" "}
+              {totalEsperandoVoce === 1 ? "trabalho está" : "trabalhos estão"} parado esperando uma
               decisão sua. Eles aparecem primeiro na lista.
             </>
           ) : (

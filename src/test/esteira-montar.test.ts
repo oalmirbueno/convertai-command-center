@@ -103,9 +103,9 @@ describe("esteira: cliente em operacao (cenario Acerbi)", () => {
       post({ id: "d", titulo: "Oficina Gestão do tempo", productionStatus: "production", aprovCliente: "rejected" }),
     ],
     metricas: [
-      { accountId: "acc", weekStart: "2026-09-07", reach: 174, followers: 500, interactions: 6 },
-      { accountId: "acc", weekStart: "2026-08-31", reach: 247, followers: 500, interactions: 27 },
-      { accountId: "acc", weekStart: "2026-08-24", reach: 164, followers: 500, interactions: 9 },
+      { accountId: "acc", weekStart: "2026-09-07", weekEnd: "2026-09-13", capturedAt: "2026-09-11T08:00:00Z", reach: 174, followers: 500, interactions: 6 },
+      { accountId: "acc", weekStart: "2026-08-31", weekEnd: "2026-09-06", capturedAt: "2026-09-07T08:00:00Z", reach: 247, followers: 500, interactions: 27 },
+      { accountId: "acc", weekStart: "2026-08-24", weekEnd: "2026-08-30", capturedAt: "2026-08-31T08:00:00Z", reach: 164, followers: 500, interactions: 9 },
     ],
   });
   const e = montarEsteira(f, HOJE);
@@ -133,10 +133,10 @@ describe("esteira: cliente em operacao (cenario Acerbi)", () => {
 
   it("entrega a comparacao de alcance pronta, sem virar tarefa", () => {
     const reach = e.insights.find((i) => i.key.startsWith("reach:"));
-    expect(reach?.atual).toBe(174);
-    expect(reach?.anteriores).toEqual([247, 164]);
-    expect(reach?.variacao).toBe(-30);
-    expect(reach?.tendencia).toBe("cai");
+    expect(reach?.atual).toBe(247);
+    expect(reach?.anteriores).toEqual([164]);
+    expect(reach?.variacao).toBe(51);
+    expect(reach?.tendencia).toBe("sobe");
     expect(e.itens.some((i) => /alcance/i.test(i.passo))).toBe(false);
   });
 });
@@ -266,8 +266,8 @@ describe("esteira: marcacao humana e frentes", () => {
       servicos: { social: true, trafego: true },
       conexoes: [{ provider: "instagram", status: "connected" }, { provider: "meta_ads", status: "connected" }],
       metricas: [
-        { accountId: "acc", weekStart: "2026-09-07", reach: 174, followers: 500, interactions: 6 },
-        { accountId: "acc", weekStart: "2026-08-31", reach: 247, followers: 500, interactions: 27 },
+        { accountId: "acc", weekStart: "2026-08-31", weekEnd: "2026-09-06", capturedAt: "2026-09-07T08:00:00Z", reach: 174, followers: 500, interactions: 6 },
+        { accountId: "acc", weekStart: "2026-08-24", weekEnd: "2026-08-30", capturedAt: "2026-08-31T08:00:00Z", reach: 247, followers: 500, interactions: 27 },
       ],
       campanhas: [{ id: "c", nome: "Campanha X", ativa: true, plataforma: "meta_ads", diario: [
         { day: "2026-09-10", spend: 100, leads: 1, frequency: 1.2, compras: 0, valorCompras: 0 },
