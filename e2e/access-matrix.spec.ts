@@ -23,11 +23,13 @@ async function login(page: Page, role: UserRole) {
 }
 
 async function logout(page: Page) {
+  const previous = new URL(page.url());
+  const returnPath = previous.pathname + previous.search + previous.hash;
   await page.locator('[data-tour="nav-user"] > button').click();
   await page.getByRole("button", { name: "Sair", exact: true }).click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=" + encodeURIComponent(returnPath));
   await page.goto("/projetos");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=%2Fprojetos");
 }
 
 interface ReadResult {
@@ -307,9 +309,9 @@ for (const role of USER_ROLES) {
 }
 
 test("visitor cannot open protected work routes", async ({ page }) => {
-  for (const path of ["/projetos", "/kanban", "/clientes"]) {
+  for (const path of ["/projetos", "/kanban", "/clientes", "/ciclo/revisao?review=synthetic-request"]) {
     await page.goto(path);
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=" + encodeURIComponent(path));
     await expect(page.getByRole("heading", { name: "Bem-vindo de volta" })).toBeVisible();
     await expect(page.locator('[data-tour="projects-list"]')).toHaveCount(0);
   }
@@ -326,9 +328,9 @@ test("wrong password is rejected by real local Auth", async ({ page }) => {
   await page.locator('form button[type="submit"]').click();
   expect((await denied).status()).toBe(400);
   await expect(page.getByText("Email ou senha incorretos", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login");
   await page.goto("/projetos");
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(CI_E2E_APP_ORIGIN + "/login?next=%2Fprojetos");
 });
 
 test("HTTP and WebSocket egress fail closed, including wrong loopback ports", async ({ page, egress }) => {
