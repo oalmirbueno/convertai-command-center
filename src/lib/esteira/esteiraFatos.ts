@@ -104,7 +104,7 @@ export async function lerFatosDaEsteira(
     db.from("ads_wallet").select("client_id, balance").in("client_id", ids),
     db.from("ads_campaign_daily").select("client_id, campaign_id, campaign_name, day, spend, actions, action_values, frequency").in("client_id", ids).gte("day", desde14),
     db.from("external_account_connections").select("client_id, provider, connection_status").in("client_id", ids),
-    db.from("social_metrics_weekly").select("client_id, external_account_id, week_start, reach, followers, total_interactions").in("client_id", ids).gte("week_start", desde5sem),
+    db.from("social_metrics_weekly").select("client_id, external_account_id, week_start, week_end, captured_at, reach, followers, total_interactions").in("client_id", ids).gte("week_start", desde5sem),
     db.from("briefings").select("client_id").in("client_id", ids).eq("submitted", true),
     db.from("client_dossiers").select("client_id, summary").in("client_id", ids).eq("is_current", true),
     db.from("project_memory").select("id, client_id, title, metadata").in("client_id", ids).eq("kind", "checklist").order("created_at", { ascending: false }),
@@ -214,7 +214,7 @@ export async function lerFatosDaEsteira(
   }
   for (const m of (metricas.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(m.client_id));
-    if (s) s.metricas.push({ accountId: String(m.external_account_id ?? "conta"), weekStart: String(m.week_start), reach: m.reach == null ? null : num(m.reach), followers: m.followers == null ? null : num(m.followers), interactions: m.total_interactions == null ? null : num(m.total_interactions) });
+    if (s) s.metricas.push({ accountId: String(m.external_account_id ?? "conta"), weekStart: String(m.week_start), weekEnd: m.week_end == null ? null : String(m.week_end), capturedAt: m.captured_at == null ? null : String(m.captured_at), reach: m.reach == null ? null : num(m.reach), followers: m.followers == null ? null : num(m.followers), interactions: m.total_interactions == null ? null : num(m.total_interactions) });
   }
   for (const b of (briefings.data ?? []) as Array<Record<string, any>>) {
     const s = mapa.get(String(b.client_id));
