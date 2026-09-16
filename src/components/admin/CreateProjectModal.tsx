@@ -488,7 +488,7 @@ export default function CreateProjectModal({ open, onClose, editProject, default
               </div>
 
               {financialMode !== "none" && (
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
                     <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00"

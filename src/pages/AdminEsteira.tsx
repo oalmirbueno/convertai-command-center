@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Compass, Eye, Megaphone, Package, RefreshCw, Share2 } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Compass, Eye, Megaphone, Package, RefreshCw, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNow } from "@/hooks/useNow";
@@ -111,20 +111,22 @@ export default function AdminEsteira() {
     <div className="min-h-dvh bg-background text-foreground">
       {/* Topo FIXO (nao sticky): no celular, a rolagem nunca leva a semana
           junto. O espaco reservado abaixo tem a mesma altura. */}
-      <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 pt-2.5 pb-1.5">
-          <div className="flex items-center gap-1">
+      {/* Mesma altura de respiro do topo do painel (safe area + 12px): o
+          Voltar fica a esquerda, na linha do titulo, como nas outras telas. */}
+      <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-border bg-background/95 backdrop-blur pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-3 pb-1.5 sm:px-4">
+          <div className="flex min-w-0 items-center gap-1">
+            <Link to="/dashboard" aria-label="Voltar ao painel" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
             <button type="button" aria-label="Semana anterior" onClick={() => setSemanaOffset((v) => v - 1)} className="rounded-lg p-1.5 hover:bg-secondary"><ChevronLeft className="h-4 w-4" /></button>
-            <div className="text-center">
-              <p className="text-[13px] font-semibold leading-tight">{weekLabel(segunda)}</p>
+            <div className="min-w-0 text-center">
+              <p className="truncate text-[13px] font-semibold leading-tight">{weekLabel(segunda)}</p>
               <p className="text-[11px] text-muted-foreground">{semanaOffset === 0 ? "Semana atual" : semanaOffset < 0 ? "Semana passada" : "Semana futura"}</p>
             </div>
             <button type="button" aria-label="Próxima semana" onClick={() => setSemanaOffset((v) => v + 1)} className="rounded-lg p-1.5 hover:bg-secondary"><ChevronRight className="h-4 w-4" /></button>
           </div>
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setQuemEntraAberto(true)} className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary"><span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />Quem entra</span></button>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button type="button" onClick={() => setQuemEntraAberto(true)} className="rounded-lg px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary"><span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" /><span className="hidden sm:inline">Quem entra</span></span></button>
             <button type="button" aria-label="Atualizar" disabled={atualizando} onClick={() => void atualizar()} className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-60"><RefreshCw className={`h-4 w-4 ${atualizando ? "animate-spin" : ""}`} /></button>
-            <Link to="/dashboard" className="rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground hover:bg-secondary">Painel</Link>
           </div>
         </div>
         <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">

@@ -77,7 +77,7 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
         )}
       </div>
 
-      <div className="mt-2 grid grid-cols-3 gap-2">
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="rounded-xl bg-secondary/60 px-2.5 py-2">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">7 dias</p>
           <p className="text-[20px] font-bold leading-tight tabular-nums text-foreground">{r7.total}</p>
@@ -88,7 +88,7 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
           <p className="text-[20px] font-bold leading-tight tabular-nums text-foreground">{r30.total}</p>
           <p className="text-[11px] text-muted-foreground">{r30.receita > 0 ? fmtBrl(r30.receita) : r30.total > 0 ? "sem valor" : "nenhuma"}</p>
         </div>
-        <div className="rounded-xl bg-secondary/60 px-2.5 py-2">
+        <div className="col-span-2 rounded-xl bg-secondary/60 px-2.5 py-2 sm:col-span-1">
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Por onde (30d)</p>
           {r30.porCanal.length === 0 ? (
             <p className="text-[12px] text-muted-foreground/80">–</p>
@@ -106,8 +106,8 @@ export default function TrafegoVendas({ fatos, plataforma, hoje, canWrite, onMud
 
       {aberto && (
         <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
-          <div className="grid grid-cols-3 gap-2">
-            <label className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Dia
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <label className="col-span-2 text-[10.5px] uppercase tracking-wider text-muted-foreground sm:col-span-1">Dia
               <input type="date" value={data} max={hojeBrt()} onChange={(e) => setData(e.target.value)} className="mt-0.5 w-full rounded-lg border border-border bg-card px-2 py-1.5 text-[13px] normal-case tracking-normal text-foreground" />
             </label>
             <label className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Quantas

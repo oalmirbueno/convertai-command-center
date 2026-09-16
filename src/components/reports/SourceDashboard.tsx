@@ -382,8 +382,8 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
               Distribuição
             </h3>
             <p className="text-[10.5px] text-muted-foreground mb-3">Participação por <span className="font-mono text-foreground/80">{pieKey}</span></p>
-            <div className="grid grid-cols-5 gap-3 items-center">
-              <div className="col-span-2 h-44 relative">
+            <div className="grid grid-cols-1 gap-3 items-center sm:grid-cols-5">
+              <div className="h-44 relative sm:col-span-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieData} cx="50%" cy="50%" innerRadius={42} outerRadius={72} paddingAngle={3} dataKey="value"

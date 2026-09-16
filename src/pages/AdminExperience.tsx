@@ -2220,10 +2220,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   const servicos = Object.entries(SERVICE_NAMES).filter(([k]) => (client.services_config || {})[k] === true).map(([, n]) => n);
                   const dias = daysSince(client.created_at);
                   return (
-                    <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4">
-                      <FotoDoCliente nome={client.company_name || client.full_name || ""} foto={fotoDe({ id: String(client.id), nome: client.company_name || client.full_name, avatar_url: client.avatar_url })} tamanho="xl" />
+                    <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-3.5 sm:items-center sm:gap-4 sm:p-4">
+                      <FotoDoCliente nome={client.company_name || client.full_name || ""} foto={fotoDe({ id: String(client.id), nome: client.company_name || client.full_name, avatar_url: client.avatar_url })} tamanho="xl" className="!h-14 !w-14 sm:!h-16 sm:!w-16" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[17px] font-semibold leading-tight text-foreground">{client.company_name || client.full_name}</p>
+                        <p className="break-words text-[16px] font-semibold leading-tight text-foreground sm:truncate sm:text-[17px]">{client.company_name || client.full_name}</p>
                         <p className="mt-0.5 text-[11.5px] text-muted-foreground">
                           {[servicos.length ? servicos.join(" + ") : "sem frente marcada", client.plan_name || null, dias !== null ? `${dias} dias na casa` : null].filter(Boolean).join(" · ")}
                         </p>
@@ -2322,7 +2322,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
                   {/* Mensagens do grupo por momento + contexto */}
                   <div className="space-y-4">
-                    <div className="bg-card border border-border rounded-xl p-5 space-y-2.5">
+                    <div className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2.5">
                       {/* A mensagem é montada da leitura ao vivo do painel. Se
                           alguém acabou de liberar material, marcar etapa ou
                           registrar decisão, o botão traz o texto já com isso —
@@ -2366,9 +2366,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         const textoParaCopiar = escrita ? escrita.body : buildGroupMessage(client, m.moment);
                         return (
                         <div key={m.moment} className="rounded-lg border border-border bg-secondary/30 overflow-hidden">
-                          <div className="w-full flex items-center justify-between px-3.5 py-2.5">
+                          <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2.5 sm:px-3.5">
                             <span className="text-[12px] text-foreground">{m.label}</span>
-                            <span className="flex items-center gap-3">
+                            <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1">
                               <button
                                 type="button"
                                 onClick={() => setGroupMsgPreview(isPreviewOpen ? null : m.moment)}

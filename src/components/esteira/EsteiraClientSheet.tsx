@@ -208,7 +208,7 @@ export default function EsteiraClientSheet({ cliente, frente, weekStart, canWrit
 
   return (
     <Sheet open={aberta} onOpenChange={(v) => { if (!v) onFechar(); }}>
-      <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto rounded-t-2xl pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-2xl [&>button]:right-4 [&>button]:top-6 [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100">
+      <SheetContent side="bottom" className="max-h-[92dvh] overflow-y-auto rounded-t-2xl px-4 pt-2.5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:mx-auto sm:max-w-2xl sm:px-6 [&>button]:right-3 [&>button]:top-[1.65rem] [&>button]:h-9 [&>button]:w-9 [&>button]:opacity-100 sm:[&>button]:right-5">
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-border" aria-hidden />
         <SheetHeader className="pr-12 text-left">
           <SheetTitle className="text-base">{cliente.nome}</SheetTitle>
