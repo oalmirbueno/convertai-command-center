@@ -47,7 +47,7 @@ import {
 } from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, Clock, FileText, HeartPulse, Loader2, Radar, RefreshCw, Send, ShieldAlert, Sparkles, Star, Trash2, UserCircle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeDollarSign, BookOpen, CheckCircle2, Clock, FileText, HeartPulse, Loader2, Radar, RefreshCw, Send, ShieldAlert, Sparkles, Star, Trash2, UserCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1942,8 +1942,17 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
 
   return (
-    <div className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 py-5 text-foreground" : "space-y-7"}>
-      {cycleReview && <nav aria-label="Navegação da revisão do Ciclo" className="flex flex-wrap items-center gap-3 text-sm"><Link to="/ciclo" className="font-medium text-primary">Voltar ao Ciclo</Link>{reviewClientId && <Link to="/ciclo/revisao" className="text-primary">Ver todos os clientes</Link>}</nav>}
+    <div className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-0 text-foreground" : "space-y-7"}>
+      {/* Mesmo cabecalho do Ciclo: respiro da safe area + 12px, Voltar com
+          seta a esquerda. Antes era um link solto a 20px do topo. */}
+      {cycleReview && (
+        <header className="sticky top-0 z-30 -mx-4 border-b border-border bg-background/95 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+0.75rem)] backdrop-blur">
+          <nav aria-label="Navegação da revisão do Ciclo" className="flex items-center gap-2 text-sm">
+            <Link to="/ciclo" aria-label="Voltar ao Ciclo" className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Voltar ao Ciclo</Link>
+            {reviewClientId && <Link to="/ciclo/revisao" className="ml-auto text-[12.5px] text-primary">Ver todos os clientes</Link>}
+          </nav>
+        </header>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="heading-page">{cycleReview ? "Ciclo · Revisão por cliente" : "Central de Experiência"}</h1>
