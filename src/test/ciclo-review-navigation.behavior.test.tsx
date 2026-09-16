@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { configure } from "@testing-library/react";
+
+// A tela inteira (rotas com import preguicoso) e montada em cada caso; na
+// suite completa, com a maquina cheia, o findBy de 1s estourava e o teste
+// falhava sem defeito. Folga, nao afrouxo: as assercoes continuam iguais.
+configure({ asyncUtilTimeout: 8_000 });
+vi.setConfig({ testTimeout: 60_000 });
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { AppRoutes } from "@/App";
 import type { ReviewReport } from "@/lib/centralReview";
