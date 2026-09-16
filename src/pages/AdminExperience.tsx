@@ -1490,15 +1490,33 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
    * os mesmos que o gerador de rituais usa. Uma funcao so, para a mensagem
    * do momento e o rascunho do ritual nunca lerem contextos diferentes.
    */
+  // A mensagem fala com uma pessoa: o primeiro nome de quem recebe, nao a
+  // razao social. Quando so ha o nome da empresa, a IA usa a empresa.
+  const nomeDoContato = (client: any): string => {
+    const pessoa = String(client?.full_name || "").trim();
+    const empresa = String(client?.company_name || "").trim();
+    if (!pessoa || (empresa && pessoa.toLowerCase() === empresa.toLowerCase())) return "";
+    return pessoa.split(/\s+/)[0] || "";
+  };
+
   const fatosCompletos = async (c: any, captured?: CentralGenerationContext): Promise<{ facts: string; context: CentralGenerationContext }> => {
     // CONTEXTO DO SEGUNDO CÉREBRO complementa a base persistida, sem redefinir seu escopo.
     const context = captured ?? await captureCentralGenerationContext(c.id);
     const clientName = context.client.company_name || context.client.full_name;
-    const [historia, cerebro] = await Promise.all([
+    const [historia, cerebro, ultima] = await Promise.all([
       readMemory(c.id, { limit: 12, kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any }).then(memoryAsContext).catch(() => ""),
       supabase.functions.invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
+      // A ultima mensagem que chegou ao cliente, inteira: e o que a de hoje
+      // retoma para mostrar avanco ("combinamos X; X ja esta no ar").
+      readMemory(c.id, { limit: 1, kinds: ["ritual"] as any }).then((rows) => {
+        const r = rows[0];
+        if (!r) return "";
+        const quando = new Date(r.created_at).toLocaleDateString("pt-BR");
+        return `ÚLTIMA MENSAGEM ENVIADA AO CLIENTE (${quando}; retome o que ela prometeu e mostre o que virou realidade):\n${String(r.content || "").slice(0, 1600)}`;
+      }).catch(() => ""),
     ]);
-    return { facts: centralGenerationFacts(context, collectFacts(c, context), historia, cerebro), context };
+    const painel = [collectFacts(c, context), ultima].filter(Boolean).join("\n\n");
+    return { facts: centralGenerationFacts(context, painel, historia, cerebro), context };
   };
 
   // Aprimorar um rascunho ja gerado: a IA rele os fatos de AGORA, mantem o
@@ -1516,7 +1534,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       const provenance = await centralFactsProvenance(facts);
       const ritual = String((report.metrics as any)?.ritual_type || "meio_semana");
       const { data, error } = await supabase.functions.invoke("ritual-writer", {
-        body: { ritual, client_name: context.client.company_name || context.client.full_name, facts: provenance.facts, improve: atual },
+        body: { ritual, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, improve: atual },
       });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto atual foi mantido."); return; }
       const novo = { summary: String(data.body), next_steps: completarProximoPasso(typeof data.next_steps === "string" ? data.next_steps : "", String(data.body)) };
@@ -1545,7 +1563,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     try {
       const { facts, context } = await fatosCompletos(client);
       const provenance = await centralFactsProvenance(facts);
-      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: context.client.company_name || context.client.full_name, facts: provenance.facts } });
+      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts } });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto do painel continua disponível."); return; }
       await assertCentralReviewSource(client.id, context.source);
       setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: Array.isArray(data.alertas) ? data.alertas : [], model: data.model ?? null } }));
@@ -1606,7 +1624,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           const provenance = await centralFactsProvenance(fatos);
           try {
             const { data, error } = await supabase.functions.invoke("ritual-writer", {
-              body: { ritual: genRitual, client_name: captured.client.company_name || captured.client.full_name, facts: provenance.facts },
+              body: { ritual: genRitual, client_name: captured.client.company_name || captured.client.full_name, contact_name: nomeDoContato(captured.client), facts: provenance.facts },
             });
             if (!error && data?.body) draft = applyCentralAiDraft(draft, data);
           } catch {
@@ -1644,12 +1662,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     confirmingDrafts.current = true;
     setGenerating(true);
     let created = 0;
+    let primeiroCriado: string | null = null;
     const failed: DraftPreview[] = [];
     try {
       for (const preview of genPreviews) {
         try {
           await persistCentralReviewDraft(preview.draft);
           created += 1;
+          if (!primeiroCriado) primeiroCriado = String(preview.draft.id);
         } catch (error) {
           failed.push(preview);
           toast.error(`${preview.clientName}: ${error instanceof Error ? error.message : "Não foi possível salvar. A prévia foi preservada."}`);
@@ -1657,10 +1677,16 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       }
       setGenPreviews(failed.length ? failed : null);
       if (created > 0) {
-        toast.success(`${created} rascunho(s) criados na fila de revisão${failed.length ? ` · ${failed.length} não salvos, prévias preservadas` : ""}.`);
+        toast.success(`${created} mensagem(ns) pronta(s). Abra, copie para o grupo e registre o envio.${failed.length ? ` ${failed.length} não salvas, prévias preservadas.` : ""}`);
         void queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
         void queryClient.invalidateQueries({ queryKey: ["reports"] });
-        if (!failed.length) setGeneratorOpen(false);
+        if (!failed.length) {
+          // Caminho curto: fecha o gerador ja na fila, com a primeira mensagem
+          // aberta, em vez de deixar a pessoa procurar onde ela foi parar.
+          setGeneratorOpen(false);
+          setActiveTab("fila");
+          if (primeiroCriado) setExpandedDraft(primeiroCriado);
+        }
       }
     } finally {
       confirmingDrafts.current = false;
@@ -3116,11 +3142,20 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           ) : (
             <div className="space-y-3">
               <p className="text-[11px] text-muted-foreground">
-                Revise e edite a mensagem de cada cliente aqui mesmo. Só depois de confirmar os rascunhos são criados, e mesmo assim nada vai ao cliente antes de você publicar na fila.
+                Leia, ajuste se quiser e confirme. Se já estiver bom, copie daqui mesmo e mande no grupo; ao confirmar, a mensagem vai para a fila já aberta, para você registrar o envio.
               </p>
               {genPreviews.map((preview, index) => (
                 <div key={preview.clientId} className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
-                  <p className="text-[12px] font-medium text-foreground">{preview.clientName}{preview.draft.metrics?.substitui_recente ? <span className="ml-1.5 text-[10px] text-muted-foreground">substitui o rascunho recente</span> : null}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[12px] font-medium text-foreground">{preview.clientName}{preview.draft.metrics?.substitui_recente ? <span className="ml-1.5 text-[10px] text-muted-foreground">substitui o rascunho recente</span> : null}</p>
+                    <button
+                      type="button"
+                      onClick={() => copyText(preview.draft.summary || "", `Mensagem de ${preview.clientName} copiada. É só colar no grupo.`)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1 text-[10.5px] font-medium text-primary hover:bg-primary/20 cursor-pointer border-none"
+                    >
+                      <Send className="w-3 h-3" /> Copiar para o grupo
+                    </button>
+                  </div>
                   <p className="text-[11px] font-medium text-primary">{preview.draft.title}{preview.draft.metrics?.written_by === "ai" ? <span className="ml-1.5 text-[9px] text-muted-foreground">IA · {preview.draft.metrics?.model || "modelo"}</span> : <span className="ml-1.5 text-[9px] text-warning">texto de reserva (IA não respondeu)</span>}</p>
                   {Array.isArray(preview.draft.metrics?.alertas) && preview.draft.metrics.alertas.length > 0 && (
                     <div className="rounded-lg border border-warning/30 bg-warning/5 px-2.5 py-1.5">

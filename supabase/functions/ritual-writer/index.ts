@@ -72,6 +72,9 @@ REGRAS ABSOLUTAS:
 12. NÚMEROS E VENDAS: quando os fatos trouxerem números (seguidores, alcance, leads, gasto, vendas, receita), eles entram em um bloco próprio, com o número exato e a comparação que os fatos deram, seguido de UMA frase do que faremos por causa disso. Venda registrada é o resultado mais importante da mensagem: nunca fica de fora.
 13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
 14. FRENTES SEPARADAS: conteúdo (Instagram, posts, artes) e tráfego pago (campanhas, leads, verba) são frentes diferentes; cada uma tem seu próprio bloco ou frase, e nunca repita a mesma ação nas duas.
+15. NOME E PESSOA: a mensagem é para uma pessoa com nome. Abra com o primeiro nome da pessoa de contato ("Boa tarde, Priscila.") e cite o nome do negócio uma vez, de forma natural, no corpo. Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
+16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO: escreva como se explicasse para um dono de negócio que não é do marketing. Troque sempre: "tráfego pago" por "anúncios"; "leads" por "pessoas interessadas" ou "contatos"; "conversão" por "pedidos", "orçamentos" ou "mensagens"; "alcance" por "pessoas que viram"; "impressões" por "vezes que o anúncio apareceu"; "criativos" por "artes" ou "vídeos dos anúncios"; "copy" por "texto"; "CPC/CTR/CPM/ROAS/CPA/KPI" por o que o número significa em reais ou em pessoas; "funil" por "caminho até a compra"; "landing page" por "página"; "briefing" por "orientação"; "otimizar" por "ajustar". Todo número vem com o que ele significa na prática ("R$ 55 investidos trouxeram 2 conversas no WhatsApp: cada conversa custou cerca de R$ 28").
+17. AVANÇO SEMPRE VISÍVEL: toda mensagem precisa deixar claro o que andou desde a última vez. Quando os fatos trouxerem a ÚLTIMA MENSAGEM ENVIADA, o bloco *O que avançou* começa retomando o que foi prometido nela e mostrando o que virou realidade ("Na última mensagem a gente combinou X; X já está no ar"). Sem mensagem anterior, mostre o avanço em relação ao começo da semana. Avanço é sempre concreto e com nome; nunca "seguimos trabalhando".
 
 ESTRUTURA (com os títulos em negrito de WhatsApp, nesta ordem, pulando o bloco que não tiver fato):
 Linha de abertura: cumprimento com o nome e uma frase que diga o momento (segunda abre a semana, quarta mostra o meio, sexta fecha).
@@ -150,6 +153,8 @@ Deno.serve(async (req) => {
     const ritual = MOMENTO[String(body?.moment || "")] || String(body?.ritual || "");
     const facts = String(body?.facts || "").slice(0, 12000);
     const clientName = String(body?.client_name || "Cliente").slice(0, 120);
+    // Primeiro nome da pessoa de contato: a mensagem fala com gente, nao com CNPJ.
+    const contactName = String(body?.contact_name || "").trim().split(/\s+/)[0]?.slice(0, 40) || "";
     if (!RITUAL_BRIEF[ritual] || !facts) {
       return jsonResponse({ error: "Ritual ou fatos ausentes." }, 400);
     }
@@ -171,7 +176,8 @@ Deno.serve(async (req) => {
           role: "user",
           content:
             `TIPO DE MENSAGEM: ${RITUAL_BRIEF[ritual]}\n\n` +
-            `CLIENTE: ${clientName}\n\n` +
+            `NEGÓCIO: ${clientName}\n` +
+            `PESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${contactName || "não informado; use o nome do negócio"}\n\n` +
             `FATOS REAIS DESTA SEMANA (do painel):\n${facts}` +
             (textoAtual
               ? `\n\nTEXTO ATUAL (aprimorar e complementar com os fatos acima; manter o que esta certo):\n${textoAtual}` +

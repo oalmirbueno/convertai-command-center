@@ -73,6 +73,23 @@ describe("a Central encurta o caminho e o Hermes fica com a revisão formal", ()
     expect(central).toContain('(cycleReview || new URLSearchParams(location.search).has("review")) && (');
   });
 
+  it("a IA fala com a pessoa pelo nome, em linguagem simples, e sempre mostra o avanço", () => {
+    expect(escritor).toContain("15. NOME E PESSOA");
+    expect(escritor).toContain("16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO");
+    expect(escritor).toContain("17. AVANÇO SEMPRE VISÍVEL");
+    expect(escritor).toContain("PESSOA DE CONTATO (abra a mensagem com este primeiro nome)");
+    // O painel manda o primeiro nome da pessoa e a ultima mensagem enviada.
+    expect(central).toContain("const nomeDoContato = (client: any): string =>");
+    expect(central.match(/contact_name: nomeDoContato\(/g)?.length).toBe(3);
+    expect(central).toContain("ÚLTIMA MENSAGEM ENVIADA AO CLIENTE (");
+  });
+
+  it("depois de gerar, a fila abre com a primeira mensagem expandida e dá para copiar da prévia", () => {
+    expect(central).toContain('setActiveTab("fila");');
+    expect(central).toContain("if (primeiroCriado) setExpandedDraft(primeiroCriado);");
+    expect(central).toContain("Mensagem de ${preview.clientName} copiada.");
+  });
+
   it("o escritor aceita o texto atual para aprimorar e devolve next_steps separado", () => {
     expect(escritor).toContain("body?.improve");
     expect(escritor).toContain("TEXTO ATUAL (aprimorar e complementar");
