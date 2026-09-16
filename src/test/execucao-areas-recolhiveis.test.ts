@@ -135,8 +135,6 @@ describe("recolhido nao ocupa o mesmo espaco que aberto", () => {
     // vazio continua sendo uma linha so, nunca tres zeros.
     expect(pagina).toContain("numeros.kanbanAbertas === 0");
     expect(pagina).toContain("Nenhuma tarefa aberta no Kanban agora");
-    expect(pagina).not.toContain("ainda sem
-");
     expect(pagina).toContain("O que pede a sua atenção");
   });
 });

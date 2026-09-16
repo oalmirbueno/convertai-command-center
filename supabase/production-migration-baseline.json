@@ -793,6 +793,14 @@
       "remote_name": "central_review_versioned_approval",
       "remote_statements_sha256": "4c41ae9a95765b07beb21834c8f030cb3a5f60abacb80a2517992c0f7aa931c3",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260916100000",
+      "path": "supabase/migrations/20260916100000_revisao_do_ciclo_avisa.sql",
+      "local_sha256": "fac6c61a06b69a18a55eecfeb37d3d1d4977a4e0e563598afcc7be499e9d6206",
+      "remote_name": "revisao_do_ciclo_avisa",
+      "remote_statements_sha256": "db231ad04abd4d4a487cbe7501ad700ef0bfe804dfc90ddbf3dfc6396ff6e35c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
