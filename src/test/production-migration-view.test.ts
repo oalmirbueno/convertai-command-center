@@ -397,7 +397,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     }
   }, TEMPO_PACOTE_COMPLETO);
 
-  it("keeps only the three new forwards pending over the old 192-row baseline without replaying history", () => {
+  it("keeps only the four new forwards pending over the old 192-row baseline without replaying history", () => {
     const plan = loadProductionMigrationPlan();
     const oldRows = remoteRows(96);
     expect(oldRows).toHaveLength(192);
@@ -405,11 +405,11 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(reconciliation.appliedForward).toHaveLength(96);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual([
-      "20260912213530", "20260912213638", "20260914174905",
+      "20260912213530", "20260912213638", "20260914174905", "20260916100000",
     ]);
 
     const { outputDir, result } = buildFixture(96);
-    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 3, files: 196 });
+    expect(result).toEqual({ aliases: 96, appliedForward: 96, appliedAliases: 12, pendingForward: 4, files: 196 });
     // Applied rows become sentinels that fail closed if accidentally replayed.
     for (const legacy of plan.legacyEntries) {
       const emitted = readFileSync(join(outputDir, `${legacy.remote_version}_production_ledger_sentinel.sql`), "utf8");
@@ -431,14 +431,14 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(executableFiles.sort()).toEqual(reconciliation.pendingForward.map((entry) => entry.filename).sort());
   }, TEMPO_PACOTE_COMPLETO);
 
-  it("preserves the prior 194-row declared ledger and leaves only Central pending", () => {
+  it("preserves the prior 194-row declared ledger and leaves Central and the review notice pending", () => {
     const plan = loadProductionMigrationPlan();
     const prior = parseRemoteLedgerCsv(ledgerCsv(remoteRows(98)));
     expect(prior).toHaveLength(194);
     const reconciliation = validateRemoteLedger(plan, prior);
     expect(reconciliation.appliedForward).toHaveLength(98);
     expect(reconciliation.appliedAliases).toHaveLength(12);
-    expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905"]);
+    expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905", "20260916100000"]);
   });
 
   it("turns an applied forward prefix into sentinels and leaves only its suffix pending", () => {
@@ -447,7 +447,7 @@ describe("production migration view", { timeout: 30000 }, () => {
 
     expect(result.appliedForward).toBe(2);
     expect(result.appliedAliases).toBe(2);
-    expect(result.pendingForward).toBe(97);
+    expect(result.pendingForward).toBe(98);
     for (const applied of plan.forwardLedger.slice(0, 2)) {
       expect(readFileSync(
         join(outputDir, `${applied.version}_production_ledger_sentinel.sql`),
