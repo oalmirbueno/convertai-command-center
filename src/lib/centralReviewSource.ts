@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lerDossieDoCliente, type DossieDoCliente } from "@/lib/dossieGeral";
 import type { Database } from "@/integrations/supabase/types";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
+import { completarProximoPasso } from "@/lib/ritualTexto";
 
 /** Public-safe provenance only. Never put dossier, memory or brain text in reports.metrics. */
 export interface CentralReviewSource {
@@ -189,7 +190,10 @@ export function applyCentralAiDraft<T extends { summary: string; next_steps: str
   draft: T, response: { body?: unknown; title?: unknown; next_steps?: unknown; model?: unknown; alertas?: unknown },
 ): T {
   if (typeof response.body !== "string" || !response.body.trim()) return draft;
-  const nextSteps = typeof response.next_steps === "string" ? response.next_steps.trim() : "";
+  // O proximo passo vem separado quando a IA manda; senao sai do proprio
+  // texto (*O que vem agora* / *Precisamos de voce*). Campo vazio travava a
+  // aprovacao com "Proximo passo ausente" sem motivo.
+  const nextSteps = completarProximoPasso(typeof response.next_steps === "string" ? response.next_steps : "", response.body);
   return {
     ...draft,
     summary: response.body,

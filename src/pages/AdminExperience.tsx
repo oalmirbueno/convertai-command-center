@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { RITUAL_DA_CENTRAL, marcarRitual } from "@/lib/esteira/esteiraAcoes";
+import { RITUAL_DA_CENTRAL, marcarRitual, atualizarAvancosDoDossie } from "@/lib/esteira/esteiraAcoes";
+import { completarProximoPasso } from "@/lib/ritualTexto";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
@@ -177,6 +178,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const [historicoClientId, setHistoricoClientId] = useState<string>("__all__");
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
+  const [aprimorando, setAprimorando] = useState<string | null>(null);
 
   // Tudo com atualização automática: a Central reflete a movimentação em tempo real.
   // A Central e a tela que o dono deixa aberta o dia todo: alem do intervalo
@@ -1499,6 +1501,43 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     return { facts: centralGenerationFacts(context, collectFacts(c, context), historia, cerebro), context };
   };
 
+  // Aprimorar um rascunho ja gerado: a IA rele os fatos de AGORA, mantem o
+  // que esta certo, completa o que faltou e devolve o proximo passo separado.
+  // O resultado ja e salvo no rascunho; nao precisa de mais um passo.
+  const aprimorarRascunho = async (report: any) => {
+    if (aprimorando) return;
+    const client = portfolioClients.find((c: any) => c.id === report.client_id) || (clients || []).find((c: any) => c.id === report.client_id);
+    if (!client) { toast.error("Cliente deste rascunho não está na carteira carregada."); return; }
+    setAprimorando(report.id);
+    try {
+      const edits = draftEdits[report.id];
+      const atual = { summary: edits?.summary || report.summary || "", next_steps: edits?.next_steps || report.next_steps || "" };
+      const { facts, context } = await fatosCompletos(client);
+      const provenance = await centralFactsProvenance(facts);
+      const ritual = String((report.metrics as any)?.ritual_type || "meio_semana");
+      const { data, error } = await supabase.functions.invoke("ritual-writer", {
+        body: { ritual, client_name: context.client.company_name || context.client.full_name, facts: provenance.facts, improve: atual },
+      });
+      if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto atual foi mantido."); return; }
+      const novo = { summary: String(data.body), next_steps: completarProximoPasso(typeof data.next_steps === "string" ? data.next_steps : "", String(data.body)) };
+      const { error: saveError } = await supabase.from("reports").update({
+        summary: novo.summary,
+        next_steps: novo.next_steps,
+        title: typeof data.title === "string" && data.title.trim() ? data.title.slice(0, 80) : report.title,
+        metrics: {
+          ...((report.metrics as any) || {}), written_by: "ai", model: data.model ?? null, improved_at: new Date().toISOString(),
+          alertas: Array.isArray(data.alertas) ? data.alertas.slice(0, 4) : [],
+        },
+      }).eq("id", report.id);
+      if (saveError) throw saveError;
+      setDraftEdits((prev) => ({ ...prev, [report.id]: novo }));
+      toast.success("Rascunho aprimorado e salvo, com o próximo passo separado.");
+      queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+    } catch (err: any) {
+      toast.error(err?.message || "Não foi possível aprimorar agora.");
+    } finally { setAprimorando(null); }
+  };
+
   const escreverMomentoComIA = async (client: any, moment: "abertura" | "meio" | "fechamento") => {
     const chave = `${client.id}:${moment}`;
     if (aiMomentLoading) return;
@@ -1644,19 +1683,26 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     }
   };
 
-  const publishDraft = async (report: any) => {
+  // canal "portal": publica no portal e avisa o cliente. canal "grupo": a
+  // pessoa ja mandou no WhatsApp; aqui so registra (historico, dossie, Ciclo)
+  // e tira da fila. Nos dois casos o proximo passo nunca fica vazio.
+  const publishDraft = async (report: any, canal: "portal" | "grupo" = "portal") => {
     try {
       const edits = draftEdits[report.id];
-      const payload: any = { status: "published" };
-      if (edits) { payload.summary = edits.summary; payload.next_steps = edits.next_steps; }
+      const textoFinal = edits?.summary || report.summary || "";
+      const proximoPasso = completarProximoPasso(edits?.next_steps || report.next_steps, textoFinal);
+      const payload: any = {
+        status: "published",
+        summary: textoFinal,
+        next_steps: proximoPasso,
+        metrics: { ...((report.metrics as any) || {}), sent_channel: canal === "grupo" ? "whatsapp_group" : "portal", sent_at: new Date().toISOString() },
+      };
       const { error } = await supabase.from("reports").update(payload).eq("id", report.id);
       if (error) throw error;
-      await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/onde-estamos");
+      if (canal === "portal") await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/onde-estamos");
 
       // A mensagem enviada entra na história do cliente: é o que a próxima
       // vai retomar, em vez de recomeçar do zero.
-      const textoFinal = edits?.summary || report.summary || "";
-      const proximoPasso = edits?.next_steps || report.next_steps || "";
       await recordMemory({
         clientId: report.client_id,
         projectId: report.project_id || null,
@@ -1671,9 +1717,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           report_id: report.id,
           ritual_type: (report.metrics as any)?.ritual_type || null,
           written_by: (report.metrics as any)?.written_by || "modelo",
+          sent_channel: canal === "grupo" ? "whatsapp_group" : "portal",
         },
         clientVisible: true,
       });
+      // O dossie geral recebe a secao de avancos com a mensagem enviada.
+      await atualizarAvancosDoDossie(report.client_id);
 
       // Ponte com o Ciclo: o ritual publicado aqui marca a caixinha da
       // semana la, com origem "central". O diario ja recebeu o texto acima.
@@ -1683,9 +1732,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         void queryClient.invalidateQueries({ queryKey: ["cycle-rituals-central"] });
       }
 
-      toast.success("Publicado no portal do cliente e notificado.");
+      toast.success(canal === "grupo" ? "Envio registrado: histórico, dossiê e Ciclo atualizados." : "Publicado no portal do cliente e notificado.");
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      queryClient.invalidateQueries({ queryKey: ["exp-memory"] });
     } catch (err: any) {
       toast.error(err.message || "Erro ao publicar");
     }
@@ -2276,9 +2326,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   </button>
                 </div>
 
-                <div data-tour="central-carteira" className="lista-longa grid gap-4 auto-rows-fr lg:grid-cols-2 xl:gap-5">
+                {/* No celular as duas colunas viram uma so; sem o auto-rows-fr
+                    o cartao dos rituais deixava de ser esticado ate a altura do
+                    vizinho (um vazio imenso entre a lista e o rodape). */}
+                <div data-tour="central-carteira" className="lista-longa grid gap-4 lg:auto-rows-fr lg:grid-cols-2 xl:gap-5">
                   {/* Plano de mensagens do período */}
-                  <div className="bg-card border border-border rounded-xl overflow-hidden h-full flex flex-col">
+                  <div className="bg-card border border-border rounded-xl overflow-hidden lg:h-full flex flex-col">
                     <div className="px-5 py-3 border-b border-border">
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">O que enviar e quando · com o contexto deste cliente</span>
                     </div>
@@ -2710,17 +2763,23 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
         {/* ── Fila de revisão ── */}
         <TabsContent value="fila">
-          <CentralReviewQueue key={reviewClientId || "all-clients"} reports={reviewClientId ? reports.filter(report => report.client_id === reviewClientId) : reports} clients={reviewClientId ? (clients || []).filter(client => client.id === reviewClientId) : clients || []} isAdmin={isAdmin} onRefresh={async () => {
-            await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
-          }} />
+          {/* A revisao formal (preparar, decidir, registrar envio) e a area do
+              Hermes em Ciclo > Revisao. Na Central ela so aparece quando um
+              link de pedido chega (?review=...). O resto e caminho curto:
+              gerar, aprimorar, copiar para o grupo, publicar. */}
+          {(cycleReview || new URLSearchParams(location.search).has("review")) && (
+            <CentralReviewQueue key={reviewClientId || "all-clients"} reports={reviewClientId ? reports.filter(report => report.client_id === reviewClientId) : reports} clients={reviewClientId ? (clients || []).filter(client => client.id === reviewClientId) : clients || []} isAdmin={isAdmin} onRefresh={async () => {
+              await queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+            }} />
+          )}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-4 sm:px-5 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileText className="w-3.5 h-3.5 text-warning shrink-0" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Fila de revisão</span>
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Mensagens geradas · prontas para usar</span>
               </div>
               <p className="text-[10px] text-muted-foreground mt-1">
-                Nada daqui chegou ao cliente ainda. Toque em um rascunho para ler o texto completo, ajustar do seu jeito e publicar quando aprovar.
+                Nada daqui chegou ao cliente ainda. Abra a mensagem, aprimore com a IA se quiser, copie para o grupo ou publique no portal. Ao registrar o envio, ela entra no histórico, no dossiê e marca o ritual no Ciclo. A revisão formal com o Hermes fica em Ciclo › Revisão.
               </p>
             </div>
             <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
@@ -2729,7 +2788,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   Fila vazia. Use "Gerar mensagens de hoje" para criar os rituais do dia com os dados de cada cliente.
                 </p>
               )}
-              {draftReports.filter((r) => !r.metrics?.central_review_source && (!reviewClientId || r.client_id === reviewClientId)).map((r: any) => {
+              {draftReports.filter((r) => !reviewClientId || r.client_id === reviewClientId).map((r: any) => {
                 const meta = ritualMeta(r.metrics?.ritual_type);
                 const open = expandedDraft === r.id;
                 const edits = draftEdits[r.id] || { summary: r.summary || "", next_steps: r.next_steps || "" };
@@ -2785,12 +2844,35 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           />
                         </div>
                         <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                          <button
+                            onClick={() => void aprimorarRascunho(r)}
+                            disabled={aprimorando !== null}
+                            className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none disabled:opacity-50"
+                            title="A IA relê os fatos de agora, mantém o que está certo, completa o que falta e separa o próximo passo"
+                          >
+                            <Sparkles className={`w-3 h-3 shrink-0 ${aprimorando === r.id ? "animate-pulse" : ""}`} /> {aprimorando === r.id ? "Aprimorando…" : "Aprimorar com IA"}
+                          </button>
+                          <button
+                            onClick={() => copyText(edits.summary || r.summary || "", "Mensagem copiada. É só colar no grupo.")}
+                            className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-secondary text-foreground hover:bg-secondary/70 transition-colors cursor-pointer border border-border"
+                          >
+                            <Send className="w-3 h-3 shrink-0" /> Copiar para o grupo
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => publishDraft(r, "grupo")}
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                              title="Registra que a mensagem foi enviada no grupo: entra no histórico, no dossiê e marca o ritual no Ciclo"
+                            >
+                              <CheckCircle2 className="w-3 h-3 shrink-0" /> Enviei no grupo
+                            </button>
+                          )}
                           {isAdmin && (
                             <button
                               onClick={() => publishDraft(r)}
                               className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
                             >
-                              <Send className="w-3 h-3 shrink-0" /> Publicar
+                              <Send className="w-3 h-3 shrink-0" /> Publicar no portal
                             </button>
                           )}
                           <button

@@ -6,6 +6,7 @@ import { callReviewRpc, prepareCentralReview, saveCentralReviewDraft, useCentral
 import { centralReviewError, centralReviewLink, latestReviewReports, reviewAlerts, reviewContentComplete, reviewDecisionArgs, reviewLane } from "@/lib/centralReview";
 import type { CentralApproval, ReviewClient, ReviewDecision, ReviewDestination, ReviewDraftEdits, ReviewLane, ReviewReport } from "@/lib/centralReview";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
+import { proximoPassoDoTexto } from "@/lib/ritualTexto";
 
 const LANES: { value: ReviewLane; label: string }[] = [
   { value: "decisao", label: "Precisa decisão" }, { value: "revisar", label: "Pronto para revisar" }, { value: "aguardando", label: "Aprovados · a enviar" }, { value: "enviado", label: "Enviados" },
@@ -204,7 +205,11 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
     <div className="text-sm"><h4 className="text-xs font-semibold uppercase">{scope ? "Plano e frentes deste pedido" : "Plano e frentes no cadastro atual"}</h4><p>{planName || "Plano não registrado"} · {services.length ? services.map(key => SERVICE_LABELS[key] ?? key).join(" · ") : "Frentes não registradas"}</p></div>
     {alerts.length > 0 && <div role="note" className="rounded-lg border border-warning p-3 text-sm"><strong>Pontos que precisam de decisão</strong><ul className="list-disc pl-5">{alerts.map((alert, index) => <li key={index}>{alert}</li>)}</ul></div>}
     <div><h4 className="text-xs font-semibold uppercase">Mensagem preparada</h4><p className="mt-1 whitespace-pre-wrap text-sm">{frozen.summary || "Mensagem ausente: volte ao rascunho antes de aprovar."}</p></div>
-    <div><h4 className="text-xs font-semibold uppercase">Próximo passo e expectativa</h4><p className="mt-1 whitespace-pre-wrap text-sm">{frozen.next_steps || "Próximo passo ausente. Edite o rascunho e registre a próxima ação antes de preparar ou aprovar."}</p></div>
+    <div><h4 className="text-xs font-semibold uppercase">Próximo passo e expectativa</h4><p className="mt-1 whitespace-pre-wrap text-sm">{frozen.next_steps || "Próximo passo ausente. Edite o rascunho e registre a próxima ação antes de preparar ou aprovar."}</p>
+      {editable && !editing && !currentReport?.next_steps?.trim() && proximoPassoDoTexto(currentReport?.summary) && (
+        <button type="button" disabled={disabled} onClick={() => void onSave(currentReport!, { summary: currentReport!.summary ?? "", next_steps: proximoPassoDoTexto(currentReport!.summary) })} className="mt-2 rounded border border-primary/40 bg-primary/5 px-3 py-2 text-sm">Completar próximo passo a partir do texto</button>
+      )}
+    </div>
     {editable && !editing && <button type="button" disabled={disabled} onClick={() => { setEdits({ summary: currentReport!.summary ?? "", next_steps: currentReport!.next_steps ?? "" }); setReviewedIdentity(null); setEditingReport(currentReport!); }} className="rounded border px-3 py-2 text-sm">Editar rascunho atual</button>}
     {editing && <div className="rounded-lg border p-3 space-y-2">
       <p className="text-sm">Editando a versão {editingReport.review_version}. Salvar invalida a aprovação deste item; depois prepare uma nova revisão.</p>

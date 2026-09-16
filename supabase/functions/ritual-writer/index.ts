@@ -86,7 +86,30 @@ ANTES DE RESPONDER, releia o texto e remova qualquer frase que fale do que não 
 
 ALERTAS INTERNOS (nunca vão para o cliente): liste em "alertas" o que você precisou e NÃO encontrou nos fatos, ou afirmou com pouca firmeza (ex.: "sem registro do estado das campanhas", "dossiê com mais de 20 dias", "nenhum número de Instagram", "objetivo do cliente não consta"). Máximo 4, frases curtas, para a equipe completar o painel. Se não houver, lista vazia.
 
-Responda SOMENTE com JSON válido: {"title":"...","body":"...","alertas":["..."]}`;
+PRÓXIMO PASSO SEPARADO: além do texto, devolva em "next_steps" UMA frase objetiva (até 240 caracteres) com a próxima ação combinada e o que se espera dela, tirada do que você escreveu em *O que vem agora* e *Precisamos de você*. Nunca vazio.
+
+QUANDO HOUVER "TEXTO ATUAL": a tarefa é APRIMORAR E COMPLEMENTAR, não recomeçar. Mantenha o que está certo e no tom, corrija o que os fatos contradizem, complete com os fatos que faltaram (números, vendas, frentes sem menção), separe o que estiver misturado entre conteúdo e tráfego, e devolva o texto inteiro já pronto.
+
+Responda SOMENTE com JSON válido: {"title":"...","body":"...","next_steps":"...","alertas":["..."]}`;
+
+/** O proximo passo tambem pode ser lido do proprio texto, quando a IA esquecer o campo. */
+function proximoPassoDoTexto(body: string): string {
+  const linhas = body.split(/\r?\n/);
+  const escolhidas: string[] = [];
+  let dentro = false;
+  for (const bruta of linhas) {
+    const linha = bruta.trim();
+    const titulo = linha.match(/^\*([^*]{2,60})\*:?\s*(.*)$/);
+    if (titulo) {
+      dentro = /o que vem agora|precisamos de voc|pr[oó]ximos? passos?/i.test(titulo[1]);
+      if (dentro && titulo[2]) escolhidas.push(titulo[2].trim());
+      continue;
+    }
+    if (!linha) { dentro = false; continue; }
+    if (dentro) escolhidas.push(linha.replace(/^[•\-–]\s*/, ""));
+  }
+  return escolhidas.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -95,7 +118,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function extractJson(raw: string): { title?: string; body?: string; alertas?: unknown } {
+function extractJson(raw: string): { title?: string; body?: string; next_steps?: unknown; alertas?: unknown } {
   const trimmed = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
@@ -130,6 +153,11 @@ Deno.serve(async (req) => {
     if (!RITUAL_BRIEF[ritual] || !facts) {
       return jsonResponse({ error: "Ritual ou fatos ausentes." }, 400);
     }
+    // Aprimorar: o painel manda o texto atual e a IA melhora e complementa,
+    // em vez de escrever outro do zero e perder o que a pessoa ja ajustou.
+    const atual = body?.improve && typeof body.improve === "object" ? body.improve as { summary?: unknown; next_steps?: unknown } : null;
+    const textoAtual = atual ? String(atual.summary || "").slice(0, 8000).trim() : "";
+    const passoAtual = atual ? String(atual.next_steps || "").slice(0, 1000).trim() : "";
 
     const providers = resolveAiProviderChain({
       primaryModels: PRIMARY_MODEL_CHAIN,
@@ -144,10 +172,14 @@ Deno.serve(async (req) => {
           content:
             `TIPO DE MENSAGEM: ${RITUAL_BRIEF[ritual]}\n\n` +
             `CLIENTE: ${clientName}\n\n` +
-            `FATOS REAIS DESTA SEMANA (do painel):\n${facts}`,
+            `FATOS REAIS DESTA SEMANA (do painel):\n${facts}` +
+            (textoAtual
+              ? `\n\nTEXTO ATUAL (aprimorar e complementar com os fatos acima; manter o que esta certo):\n${textoAtual}` +
+                (passoAtual ? `\n\nPROXIMO PASSO ATUAL: ${passoAtual}` : "")
+              : ""),
         },
       ],
-      temperature: 0.5,
+      temperature: textoAtual ? 0.35 : 0.5,
     });
 
     if (!response.ok) {
@@ -161,9 +193,10 @@ Deno.serve(async (req) => {
     const text = String(parsed?.body || "").trim();
     if (!text) return jsonResponse({ title: null, body: null, source: "fallback" });
     const alertas = Array.isArray(parsed?.alertas) ? (parsed.alertas as unknown[]).map((a) => String(a).slice(0, 160)).filter(Boolean).slice(0, 4) : [];
+    const nextSteps = (String(parsed?.next_steps || "").trim() || proximoPassoDoTexto(text) || passoAtual).slice(0, 600);
     const usage = completion?.usage ?? null;
 
-    return jsonResponse({ title: title || null, body: text, alertas, source: "ai", model: provider.model, usage });
+    return jsonResponse({ title: title || null, body: text, next_steps: nextSteps, alertas, source: "ai", model: provider.model, usage, improved: !!textoAtual });
   } catch (error) {
     // Falha aqui nunca pode travar o ritual: o painel usa o texto de reserva.
     console.warn(`[ritual] falha: ${error instanceof Error ? error.message : String(error)}`);
