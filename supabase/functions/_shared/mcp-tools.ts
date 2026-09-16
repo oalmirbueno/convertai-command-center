@@ -41,6 +41,10 @@ import {
   operatorDiary,
   operatorProposeAssignee,
   operatorRequestApproval,
+  centralReviewFila,
+  centralReviewPreparar,
+  centralReviewDecidir,
+  centralReviewMarcarEnviado,
   operatorDigest,
   operatorOrganize,
   operatorQueue,
@@ -2823,6 +2827,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Ciclo legado', rota: '/ciclo-antigo', para: 'Checklist historico de seis etapas; preservado para consulta.', pelo_mcp: 'aceleriq_get_weekly_cycle' },
   { area: 'Execucao da equipe', rota: '/execucao', para: 'Quadro dos operadores, hierarquia, runs e trilha.', pelo_mcp: 'aceleriq_operator_queue, aceleriq_operator_report, aceleriq_operator_board, aceleriq_operator_diary, aceleriq_operator_request_approval, aceleriq_operator_propose_assignee' },
   { area: 'Central de experiencia', rota: '/central', para: 'Saude do cliente e rituais de relacionamento.', pelo_mcp: 'aceleriq_get_client_context' },
+  { area: 'Revisao do Ciclo', rota: '/ciclo/revisao', para: 'Area de trabalho do Hermes: rascunhos de ritual viram pedido, o dono decide (no painel ou no WhatsApp), quem envia registra o envio. Esta area E a aprovacao; nao existe outra fila.', pelo_mcp: 'aceleriq_central_review_fila, aceleriq_central_review_preparar, aceleriq_central_review_decidir, aceleriq_central_review_marcar_enviado' },
   { area: 'Dossie do cliente', rota: '/clientes', para: 'O retrato inteiro de um cliente.', pelo_mcp: 'aceleriq_get_client_dossier' },
   { area: 'Kanban', rota: '/kanban', para: 'Tarefas da producao.', pelo_mcp: 'aceleriq_list_tasks, aceleriq_create_task, aceleriq_update_task, aceleriq_operator_assign' },
   { area: 'Workspace', rota: '/workspace', para: 'Quadro livre, notas, imagens e o Estudio.', pelo_mcp: 'aceleriq_list_workspace_nodes, aceleriq_studio_read, aceleriq_studio_draft' },
@@ -3023,6 +3028,149 @@ const operatorProposeAssigneeTool: ToolDefinition = {
   },
 };
 
+/*
+ * Revisao do Ciclo como area nativa do agente (v1.43.0).
+ *
+ * O dono foi claro: essa tela E a aprovacao. O Hermes le a fila, prepara o
+ * pedido a partir do rascunho, registra a decisao que o dono deu no
+ * WhatsApp (com a mensagem dele como evidencia) e, depois de enviar no
+ * grupo, registra o envio com a prova. O painel reflete cada passo na
+ * hora e avisa no sino; a pessoa que decide no painel aparece para o
+ * Hermes na proxima leitura da fila. Vice-versa, sem fila paralela.
+ */
+const centralReviewFilaTool: ToolDefinition = {
+  name: 'aceleriq_central_review_fila',
+  title: 'Fila da Revisao do Ciclo (area do Hermes)',
+  description:
+    'A Revisao do Ciclo (/ciclo/revisao) inteira, do jeito que o agente precisa para agir: rascunhos_sem_pedido (rituais gerados que ainda nao viraram pedido), esperando_decisao (pedidos preparados, com a mensagem completa e o destino congelado, para levar ao dono), aprovados_para_enviar (decididos e ainda nao enviados) e enviados_recentes. Cada item traz cliente, ritual, mensagem, proximo passo, versao e hash. O campo como_agir diz o proximo passo de cada lista. Fila vazia nao e erro.',
+  scopes: READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que le (ex.: default, mercurio).' },
+    },
+    required: ['operator'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const parsed = z.object({ operator: z.string().min(2).max(40) }).strict().safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await centralReviewFila(parsed.data);
+  },
+};
+
+const centralReviewPrepararTool: ToolDefinition = {
+  name: 'aceleriq_central_review_preparar',
+  title: 'Preparar pedido de revisao a partir de um rascunho',
+  description:
+    'Transforma um rascunho de ritual (reports.status = draft) em pedido de revisao na Revisao do Ciclo, congelando texto, fonte (dossie e plano atuais) e destino. Pode ajustar summary e next_steps na mesma chamada. No WhatsApp, recipient e o nome exato do grupo ou contato; no portal o destinatario e o proprio cliente. Um pedido novo para o mesmo cliente, ritual e periodo substitui o anterior. NAO envia nada e NAO aprova: o dono decide no painel ou pelo Hermes no WhatsApp. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador.' },
+      report_id: { type: 'string', description: 'UUID do rascunho (veja rascunhos_sem_pedido na fila ou aceleriq_create_report_draft).' },
+      channel: { type: 'string', description: 'whatsapp ou portal.' },
+      recipient: { type: 'string', description: 'No WhatsApp: nome exato do grupo ou contato. No portal pode ficar vazio.' },
+      idempotency_key: { type: 'string', description: 'Chave estavel desta preparacao (8 a 128 caracteres). Repetir a chave devolve o mesmo pedido.' },
+      summary: { type: 'string', description: 'Texto final da mensagem, se quiser ajustar antes de preparar.' },
+      next_steps: { type: 'string', description: 'Proximo passo e expectativa, se quiser ajustar.' },
+    },
+    required: ['operator', 'report_id', 'channel', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      report_id: UUID,
+      channel: z.enum(['portal', 'whatsapp']),
+      recipient: z.string().max(250).optional(),
+      idempotency_key: z.string().min(8).max(128),
+      summary: z.string().max(6000).optional(),
+      next_steps: z.string().max(4000).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await centralReviewPreparar(parsed.data);
+  },
+};
+
+const centralReviewDecidirTool: ToolDefinition = {
+  name: 'aceleriq_central_review_decidir',
+  title: 'Registrar a decisao do dono sobre um pedido de revisao',
+  description:
+    'Registra na Revisao do Ciclo a decisao que o dono deu ao Hermes (normalmente no WhatsApp): aprovado, rejeitado, alteracoes_pedidas ou comentario. A evidencia e obrigatoria e deve citar a mensagem do dono (data, hora e texto), porque a trilha do painel mostra "[via Hermes <slug>] ... | evidencia: ...". O agente NAO decide por conta propria: sem mensagem do dono, nao chame. Aprovar nao envia: depois de aprovado, envie ao destino congelado e registre com aceleriq_central_review_marcar_enviado. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador.' },
+      approval_id: { type: 'string', description: 'UUID do pedido (esperando_decisao na fila).' },
+      decision: { type: 'string', description: 'aprovado, rejeitado, alteracoes_pedidas ou comentario.' },
+      evidence: { type: 'string', description: 'A mensagem do dono que autorizou, com data e hora. Obrigatoria.' },
+      comment: { type: 'string', description: 'Resumo ou ajuste pedido (obrigatorio em rejeitado, alteracoes_pedidas e comentario).' },
+      idempotency_key: { type: 'string', description: 'Chave estavel desta decisao (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'approval_id', 'decision', 'evidence', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      approval_id: UUID,
+      decision: z.enum(['aprovado', 'rejeitado', 'alteracoes_pedidas', 'comentario']),
+      evidence: z.string().min(3).max(2000),
+      comment: z.string().max(4000).optional(),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await centralReviewDecidir(parsed.data);
+  },
+};
+
+const centralReviewMarcarEnviadoTool: ToolDefinition = {
+  name: 'aceleriq_central_review_marcar_enviado',
+  title: 'Registrar que a mensagem aprovada foi enviada',
+  description:
+    'Depois de enviar a mensagem aprovada ao destino congelado (o grupo do cliente no WhatsApp, por exemplo), registra o envio na Revisao do Ciclo com a evidencia (quando, onde, o que). So pedido aprovado e ainda nao enviado aceita; o painel passa a mostrar "Enviado" e avisa o dono no sino. Sem este registro o painel considera a mensagem NAO enviada. Nao envia nada por si. Idempotente pela idempotency_key.',
+  scopes: WRITE,
+  annotations: { readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      operator: { type: 'string', description: 'Slug do operador que enviou.' },
+      approval_id: { type: 'string', description: 'UUID do pedido aprovado (aprovados_para_enviar na fila).' },
+      evidence: { type: 'string', description: 'Prova do envio: grupo, data, hora e, se houver, id da mensagem.' },
+      idempotency_key: { type: 'string', description: 'Chave estavel deste envio (8 a 128 caracteres).' },
+    },
+    required: ['operator', 'approval_id', 'evidence', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      operator: z.string().min(2).max(40),
+      approval_id: UUID,
+      evidence: z.string().min(3).max(2000),
+      idempotency_key: z.string().min(8).max(128),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await centralReviewMarcarEnviado(parsed.data);
+  },
+};
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -3069,6 +3217,11 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   operatorDiaryTool,
   operatorRequestApprovalTool,
   operatorProposeAssigneeTool,
+  // Revisao do Ciclo como area do Hermes (v1.43.0)
+  centralReviewFilaTool,
+  centralReviewPrepararTool,
+  centralReviewDecidirTool,
+  centralReviewMarcarEnviadoTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

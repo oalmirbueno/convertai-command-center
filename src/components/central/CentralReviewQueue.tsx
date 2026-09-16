@@ -8,11 +8,27 @@ import type { CentralApproval, ReviewClient, ReviewDecision, ReviewDestination, 
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 
 const LANES: { value: ReviewLane; label: string }[] = [
-  { value: "decisao", label: "Precisa decisão" }, { value: "revisar", label: "Pronto para revisar" }, { value: "aguardando", label: "Aguardando" },
+  { value: "decisao", label: "Precisa decisão" }, { value: "revisar", label: "Pronto para revisar" }, { value: "aguardando", label: "Aprovados · a enviar" }, { value: "enviado", label: "Enviados" },
 ];
 const STATUS: Record<string, string> = { pendente: "Preparado · aguardando revisão", aprovado: "Aprovado · envio não realizado", rejeitado: "Rejeitado", alteracoes_pedidas: "Ajuste solicitado", adiado: "Adiado", expirado: "Desatualizado · nova revisão necessária" };
 const text = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value) : "Não registrado";
 const detailText = (value: unknown) => typeof value === "string" && value.trim() ? value : Array.isArray(value) ? value.filter(item => typeof item === "string").join("\n") : "";
+const quando = (iso?: string | null) => { const d = iso ? new Date(iso) : null; return d && Number.isFinite(d.getTime()) ? d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "data não registrada"; };
+const viaHermes = (note?: string | null) => typeof note === "string" && note.startsWith("[via Hermes");
+function statusLabel(approval: CentralApproval): string {
+  if (approval.executed_at) return `Enviado · registrado em ${quando(approval.executed_at)}`;
+  return STATUS[approval.status] || approval.status;
+}
+
+/** O que a pessoa cola no WhatsApp do Hermes para ele assumir esta área. */
+export const PEDIDO_PARA_O_HERMES = [
+  "Hermes, assuma a Revisão do Ciclo (/ciclo/revisao) pelo MCP:",
+  "1. aceleriq_central_review_fila (operator: default) — leia rascunhos_sem_pedido, esperando_decisao e aprovados_para_enviar.",
+  "2. Rascunho sem pedido: revise o texto e prepare com aceleriq_central_review_preparar (channel whatsapp, recipient = nome exato do grupo).",
+  "3. Pedido esperando decisão: me mande a mensagem aqui; quando eu responder, registre com aceleriq_central_review_decidir citando minha mensagem como evidence.",
+  "4. Aprovado: envie no grupo do cliente e registre com aceleriq_central_review_marcar_enviado com a evidência do envio.",
+  "Nunca decida por conta própria e nunca envie sem aprovação registrada.",
+].join("\n");
 
 export interface CentralReviewQueueProps {
   reports: readonly ReviewReport[]; clients: readonly ReviewClient[]; isAdmin: boolean;
@@ -78,13 +94,40 @@ export default function CentralReviewQueue({ reports, clients, isAdmin, onRefres
     await saveCentralReviewDraft(report, edits);
     toast.success("Rascunho salvo. A alteração exige um novo pedido de revisão desta versão.");
   });
+  // Envio registrado por quem enviou (a pessoa, aqui). O Hermes registra o dele
+  // pelo MCP na mesma tabela; os dois lados leem o mesmo estado.
+  const markSent = (approval: CentralApproval, evidence: string) => run(approval.report_id, async () => {
+    if (evidence.trim().length < 3) throw new Error("Diga onde e quando enviou (grupo, data e hora) para registrar o envio.");
+    const key = keyFor(JSON.stringify(["sent", approval.id, evidence.trim()]));
+    await callReviewRpc("central_review_marcar_enviado", { _approval_id: approval.id, _evidence: evidence.trim(), _idempotency_key: key });
+    toast.success("Envio registrado. O Hermes vê isso na próxima leitura da fila.");
+  });
+  const copyHermesRequest = async () => {
+    try { await navigator.clipboard.writeText(PEDIDO_PARA_O_HERMES); toast.success("Pedido copiado. Cole no WhatsApp do Hermes."); }
+    catch { toast.error("Não foi possível copiar o pedido."); }
+  };
+  const esperando = approvals.filter(a => ["pendente", "adiado"].includes(a.status) && !a.executed_at && !(a.valid_until && Date.parse(a.valid_until) <= Date.now())).length;
+  const aEnviar = approvals.filter(a => a.status === "aprovado" && !a.executed_at).length;
+  const enviados = approvals.filter(a => !!a.executed_at).length;
+  const ultimosDoHermes = approvals.filter(a => viaHermes(a.decision_note) || (a.executed_at && /pelo Hermes|via Hermes/i.test(a.execution_evidence ?? ""))).slice(0, 3);
 
   if (!isAdmin) return null;
   return <section aria-label="Revisão por cliente" className="mb-6 space-y-3">
     <div className="rounded-xl border border-border bg-card p-4">
       <h2 className="font-semibold">Revisão por cliente e ritual</h2>
       <p className="mt-1 text-sm text-muted-foreground">Confira a mensagem, a base usada e o destinatário. A revisão de materiais e a aprovação do cliente continuam no fluxo de conteúdo.</p>
-      <p className="mt-2 text-xs text-muted-foreground">WhatsApp: use o link autenticado deste pedido. Envio automático e respostas nativas dependem de conexão validada.</p>
+      {!focusId && <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs" aria-label="Hermes nesta área">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-medium text-foreground">Hermes trabalha nesta fila pelo MCP: lê, prepara, registra a sua decisão do WhatsApp e marca o envio.</p>
+          <button type="button" onClick={() => void copyHermesRequest()} className="rounded border border-primary/40 bg-card px-2.5 py-1.5 text-[12px] font-medium">Copiar pedido para o Hermes</button>
+        </div>
+        <p className="mt-1.5 text-muted-foreground">
+          {esperando} esperando decisão · {aEnviar} aprovado{aEnviar === 1 ? "" : "s"} a enviar · {enviados} enviado{enviados === 1 ? "" : "s"}. Decidiu aqui? O Hermes vê. Decidiu no WhatsApp do Hermes? Aparece aqui com a sua mensagem como evidência.
+        </p>
+        {ultimosDoHermes.length > 0 && <ul className="mt-1.5 space-y-0.5 text-muted-foreground">
+          {ultimosDoHermes.map(a => <li key={a.id}>{quando(a.executed_at ?? a.created_at)} · {a.payload?.report?.title ?? "pedido"} · {a.executed_at ? "envio registrado pelo Hermes" : a.decision_note}</li>)}
+        </ul>}
+      </div>}
       {focusId && <button type="button" onClick={() => { const next = new URLSearchParams(params); next.delete("review"); setParams(next); }} className="mt-2 rounded border px-3 py-2 text-sm">Voltar à fila</button>}
       {!focusId && <div className="mt-3 flex flex-wrap gap-2">
         {LANES.map(item => <button key={item.value} type="button" aria-pressed={lane === item.value} onClick={() => setLane(item.value)} className={`rounded-lg border px-3 py-2 text-sm ${lane === item.value ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
@@ -103,18 +146,20 @@ export default function CentralReviewQueue({ reports, clients, isAdmin, onRefres
     {visible.map(({ report, approval }) => {
       const currentReport = reports.find(item => item.id === report.id) ?? approval?.current_report;
       const current = approval?.current_report && (approval.current_report.review_version ?? 0) >= (currentReport?.review_version ?? 0) ? approval.current_report : currentReport;
-      return <ReviewCard key={`${approval?.id ?? report.id}:${approval?.payload_hash ?? ""}`} report={report} currentReport={current ?? undefined} historical={!!focusId} approval={approval} client={clients.find(client => client.id === report.client_id)} busy={busyId === report.id} disabled={!!query.error || !!busyId} onPrepare={prepare} onDecide={decide} onSave={save} />;
+      return <ReviewCard key={`${approval?.id ?? report.id}:${approval?.payload_hash ?? ""}`} report={report} currentReport={current ?? undefined} historical={!!focusId} approval={approval} client={clients.find(client => client.id === report.client_id)} busy={busyId === report.id} disabled={!!query.error || !!busyId} onPrepare={prepare} onDecide={decide} onSave={save} onMarkSent={markSent} />;
     })}
   </section>;
 }
 
-function ReviewCard({ report, currentReport, historical, approval, client, busy, disabled, onPrepare, onDecide, onSave }: {
+function ReviewCard({ report, currentReport, historical, approval, client, busy, disabled, onPrepare, onDecide, onSave, onMarkSent }: {
   report: ReviewReport; currentReport?: ReviewReport; historical: boolean; approval?: CentralApproval; client?: ReviewClient; busy: boolean; disabled: boolean;
   onPrepare: (report: ReviewReport, destination: ReviewDestination) => Promise<boolean>;
   onDecide: (approval: CentralApproval, decision: ReviewDecision, comment: string) => Promise<boolean>;
   onSave: (report: ReviewReport, edits: ReviewDraftEdits) => Promise<boolean>;
+  onMarkSent: (approval: CentralApproval, evidence: string) => Promise<boolean>;
 }) {
   const [comment, setComment] = useState("");
+  const [evidence, setEvidence] = useState("");
   const [reviewedIdentity, setReviewedIdentity] = useState<string | null>(null);
   const [channel, setChannel] = useState<ReviewDestination["channel"]>(approval?.payload.destination.channel ?? "portal");
   const [recipient, setRecipient] = useState(approval?.payload.destination.recipient ?? "");
@@ -131,6 +176,14 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
   const alerts = reviewAlerts(frozen);
   const expired = !!approval?.valid_until && Date.parse(approval.valid_until) <= Date.now();
   const decidable = approval && sameVersion && currentReport?.status === "draft" && !expired && ["pendente", "adiado"].includes(approval.status);
+  // Aprovado e ainda nao enviado: e a vez de quem tem o canal. O texto e o
+  // congelado no pedido, nunca o rascunho editado depois.
+  const sendable = !!approval && approval.status === "aprovado" && !approval.executed_at;
+  const mensagemParaEnviar = approval ? [approval.payload.report.summary ?? "", approval.payload.report.next_steps ? `\n${approval.payload.report.next_steps}` : ""].join("").trim() : "";
+  const copyMessage = async () => {
+    try { await navigator.clipboard.writeText(mensagemParaEnviar); toast.success("Mensagem aprovada copiada."); }
+    catch { toast.error("Não foi possível copiar a mensagem."); }
+  };
   const editable = currentReport?.status === "draft" && Number.isInteger(currentReport.review_version);
   const preparable = editable && (!approval || !sameVersion || expired || ["expirado", "rejeitado", "alteracoes_pedidas"].includes(approval.status));
   const scope = showingSnapshot ? approval?.payload.scope : undefined;
@@ -144,7 +197,8 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
   };
   return <article className="rounded-xl border border-border bg-card p-4 space-y-3" aria-label={`Revisão de ${client?.company_name || client?.full_name || report.client_id}`}>
     <header><p className="text-xs text-muted-foreground">{client?.company_name || client?.full_name || report.client_id} · {text(frozen.metrics?.ritual_type)} · versão {showingSnapshot ? approval?.payload_version : report.review_version ?? "não carregada"}</p>
-      <h3 className="mt-1 font-semibold">{frozen.title}</h3><p className="text-xs mt-1">{approval ? STATUS[approval.status] || approval.status : "Rascunho · pedido ainda não preparado"}</p></header>
+      <h3 className="mt-1 font-semibold">{frozen.title}</h3><p className="text-xs mt-1">{approval ? statusLabel(approval) : "Rascunho · pedido ainda não preparado"}{approval && viaHermes(approval.decision_note) ? " · decidido pelo Hermes" : ""}</p></header>
+    {approval?.executed_at && <p className="rounded-lg border border-success/40 bg-success/5 p-2 text-xs"><strong>Enviado.</strong> {approval.execution_evidence || "Sem detalhe do envio."}</p>}
     {approval && !sameVersion && <p role="note" className="text-sm text-warning">Este pedido corresponde a outra versão. {currentReport ? `A versão atual é ${currentReport.review_version}. Prepare um novo pedido após conferir a edição.` : "A versão atual não está disponível; atualize a fila antes de decidir."}</p>}
     {expired && <p role="note" className="text-sm text-warning">O prazo deste pedido venceu. Prepare uma nova revisão para conferir a fonte e o destinatário novamente.</p>}
     <div className="text-sm"><h4 className="text-xs font-semibold uppercase">{scope ? "Plano e frentes deste pedido" : "Plano e frentes no cadastro atual"}</h4><p>{planName || "Plano não registrado"} · {services.length ? services.map(key => SERVICE_LABELS[key] ?? key).join(" · ") : "Frentes não registradas"}</p></div>
@@ -171,6 +225,16 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
       </dl>
     </details>
     {destination && <p className="text-sm"><strong>Destino congelado:</strong> {destination.channel === "portal" ? "Portal do cliente" : "WhatsApp"} · {destination.recipient}</p>}
+    {sendable && <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2" aria-label="Enviar e registrar">
+      <p className="text-sm font-medium">Aprovado. Agora é enviar e registrar.</p>
+      <p className="text-xs text-muted-foreground">Envie o texto congelado ao destino acima (ou deixe o Hermes enviar pelo WhatsApp dele). Quem enviar registra aqui; sem o registro, a fila continua mostrando "não enviado".</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => void copyMessage()} className="rounded border px-3 py-2 text-sm">Copiar mensagem aprovada</button>
+        {destination?.channel === "whatsapp" && <a href={`https://wa.me/?text=${encodeURIComponent(mensagemParaEnviar)}`} target="_blank" rel="noopener noreferrer" className="rounded border px-3 py-2 text-sm">Abrir no WhatsApp</a>}
+      </div>
+      <label className="block text-xs">Evidência do envio<input value={evidence} onChange={event => setEvidence(event.target.value)} placeholder="Ex.: enviado no grupo do cliente hoje às 10h15" className="mt-1 block w-full rounded border bg-card p-2 text-sm" /></label>
+      <button type="button" disabled={disabled || evidence.trim().length < 3} onClick={() => void onMarkSent(approval!, evidence)} className="rounded bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-50">{busy ? "Registrando…" : "Marcar como enviado"}</button>
+    </div>}
     {preparable && !editing && <div className="flex flex-wrap gap-2">
         <label className="text-xs">Canal<select value={channel} onChange={event => setChannel(event.target.value as ReviewDestination["channel"])} className="block rounded border bg-card p-2"><option value="portal">Portal do cliente</option><option value="whatsapp">WhatsApp — destino a confirmar</option></select></label>
         {channel === "whatsapp" && <label className="text-xs flex-1">Destinatário identificado<input value={recipient} onChange={event => setRecipient(event.target.value)} placeholder="Identificação exata do grupo ou destinatário" className="block w-full rounded border bg-card p-2" /></label>}
@@ -186,7 +250,7 @@ function ReviewCard({ report, currentReport, historical, approval, client, busy,
         <button type="button" disabled={disabled || !comment.trim()} onClick={() => void onDecide(approval, "comentario", comment)} className="rounded border px-3 py-2 text-sm disabled:opacity-50">Comentar</button>
         <button type="button" onClick={() => void copyLink()} className="rounded border px-3 py-2 text-sm">Copiar link autenticado</button>
       </div>
-      <p className="text-xs text-muted-foreground">A decisão fica neste mesmo pedido, independentemente de onde o link foi aberto. Aprovação não comprova publicação ou envio.</p>
+      <p className="text-xs text-muted-foreground">A decisão fica neste mesmo pedido, seja dada aqui ou ao Hermes no WhatsApp. Aprovar não envia: o envio é registrado à parte, com evidência.</p>
     </>}
   </article>;
 }

@@ -1087,3 +1087,85 @@ export async function operatorProposeAssignee(input: {
   if (error) throw new Error(`operator_propor_responsavel: ${error.message}`);
   return data;
 }
+
+/*
+ * Revisao do Ciclo (/ciclo/revisao) como area de trabalho do agente.
+ *
+ * Os RPCs oficiais da revisao exigem um administrador autenticado. Estes
+ * wrappers chamam as versoes *_por_agente do banco: o operador e validado,
+ * a identidade do administrador que o Hermes representa e assumida so
+ * naquela transacao, e a trilha registra "[via Hermes <slug>]" mais a
+ * evidencia. Nada aqui manda mensagem: o envio e feito por quem tem o
+ * canal (o Hermes no WhatsApp ou a pessoa no painel) e depois REGISTRADO.
+ */
+export async function centralReviewFila(input: { operator: string }) {
+  const { data, error } = await comPrazo(db().rpc('central_review_fila_para_agente', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+  }));
+  if (error) throw new Error(`central_review_fila_para_agente: ${error.message}`);
+  return data;
+}
+
+export async function centralReviewPreparar(input: {
+  operator: string;
+  report_id: string;
+  channel: 'portal' | 'whatsapp';
+  recipient?: string;
+  idempotency_key: string;
+  summary?: string;
+  next_steps?: string;
+}) {
+  if (!isUuid(input.report_id)) throw new Error('report_id must be a UUID');
+  const recipient = texto(input.recipient);
+  if (input.channel === 'whatsapp' && !recipient) {
+    throw new Error('recipient e obrigatorio no WhatsApp: o nome exato do grupo ou do contato, como esta no aparelho do Hermes.');
+  }
+  const { data, error } = await comPrazo(db().rpc('central_review_preparar_por_agente', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _report_id: input.report_id,
+    _destination: { channel: input.channel, recipient: input.channel === 'portal' ? 'portal' : recipient },
+    _idempotency_key: input.idempotency_key,
+    _summary: texto(input.summary),
+    _next_steps: texto(input.next_steps),
+  }));
+  if (error) throw new Error(`central_review_preparar_por_agente: ${error.message}`);
+  return data;
+}
+
+export async function centralReviewDecidir(input: {
+  operator: string;
+  approval_id: string;
+  decision: 'aprovado' | 'rejeitado' | 'alteracoes_pedidas' | 'comentario';
+  evidence: string;
+  comment?: string;
+  idempotency_key: string;
+}) {
+  if (!isUuid(input.approval_id)) throw new Error('approval_id must be a UUID');
+  const { data, error } = await comPrazo(db().rpc('central_review_decidir_por_agente', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _approval_id: input.approval_id,
+    _decision: input.decision,
+    _comment: texto(input.comment),
+    _evidence: String(input.evidence || '').trim(),
+    _idempotency_key: input.idempotency_key,
+  }));
+  if (error) throw new Error(`central_review_decidir_por_agente: ${error.message}`);
+  return data;
+}
+
+export async function centralReviewMarcarEnviado(input: {
+  operator: string;
+  approval_id: string;
+  evidence: string;
+  idempotency_key: string;
+}) {
+  if (!isUuid(input.approval_id)) throw new Error('approval_id must be a UUID');
+  const { data, error } = await comPrazo(db().rpc('central_review_marcar_enviado_por_agente', {
+    _operator_slug: String(input.operator || '').trim().toLowerCase(),
+    _approval_id: input.approval_id,
+    _evidence: String(input.evidence || '').trim(),
+    _idempotency_key: input.idempotency_key,
+  }));
+  if (error) throw new Error(`central_review_marcar_enviado_por_agente: ${error.message}`);
+  return data;
+}

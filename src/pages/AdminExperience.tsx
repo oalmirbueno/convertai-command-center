@@ -1977,7 +1977,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             </p>
           )}
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            {cycleReview ? "Revise os rituais de cada cliente, confira o plano e registre sua decisão. A geração usa a mesma Central; aprovar não envia mensagens." : "Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."}
+            {cycleReview ? "Esta área é a aprovação: o rascunho vira pedido, você decide (aqui ou pelo Hermes no WhatsApp) e quem envia registra o envio. O Hermes lê e escreve nesta mesma fila pelo MCP." : "Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente."}
           </p>
           {reviewClientId && <p className="mt-2 text-sm font-medium">Cliente selecionado: {clients?.find(client => client.id === reviewClientId)?.company_name || clients?.find(client => client.id === reviewClientId)?.full_name || "não encontrado nesta carteira"}</p>}
           {/* Sinal de vida: a tela mostra quando os números foram lidos por

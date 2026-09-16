@@ -1,5 +1,5 @@
 export type ReviewDecision = "aprovado" | "rejeitado" | "alteracoes_pedidas" | "comentario";
-export type ReviewLane = "decisao" | "revisar" | "aguardando";
+export type ReviewLane = "decisao" | "revisar" | "aguardando" | "enviado";
 export interface ReviewReport {
   id: string; client_id: string; project_id?: string | null; title: string;
   summary?: string | null; next_steps?: string | null; highlights?: string | null; created_at: string;
@@ -11,6 +11,8 @@ export interface CentralApproval {
   id: string; report_id: string; client_id: string; payload_version: number;
   payload_hash: string; status: string; created_at: string; decision_note?: string | null;
   valid_until?: string | null;
+  /** Envio registrado (pelo painel ou pelo Hermes). Sem isto, a mensagem conta como nao enviada. */
+  executed_at?: string | null; execution_evidence?: string | null;
   current_report?: ReviewReport | null;
   events?: { id: string; event: string; comment?: string | null; created_at: string }[];
   payload: { report: ReviewReport; destination: ReviewDestination; source?: Record<string, unknown>; scope?: { plan_name?: string | null; service_keys?: string[] } };
@@ -44,6 +46,8 @@ export function reviewAlerts(report: ReviewReport): string[] {
 }
 
 export function reviewLane(report: ReviewReport, approval?: CentralApproval): ReviewLane {
+  // Enviado e o fim da linha: a mensagem chegou ao cliente e o registro diz quando.
+  if (approval?.executed_at) return "enviado";
   if (approval && approval.payload_version !== report.review_version) return "decisao";
   if (approval?.valid_until && Date.parse(approval.valid_until) <= Date.now()) return "decisao";
   if (approval && ["aprovado", "adiado"].includes(approval.status)) return "aguardando";
