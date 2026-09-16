@@ -809,6 +809,14 @@
       "remote_name": "revisao_do_ciclo_com_hermes",
       "remote_statements_sha256": "1cb4342dcf784da4bca0858a94431ec52d6ce94536e90c10c4b40d5b23d12ab4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260916150000",
+      "path": "supabase/migrations/20260916150000_acoes_feitas_entram_no_dossie.sql",
+      "local_sha256": "1565bb151de7eeb4e98c6a49d3358090daef7fd6b9fe571bbab5b6449c240f94",
+      "remote_name": "acoes_feitas_entram_no_dossie",
+      "remote_statements_sha256": "b62c53638114e29d1e4b8c1f7ce25f314bebacde83f3787397915eb355c2871e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
