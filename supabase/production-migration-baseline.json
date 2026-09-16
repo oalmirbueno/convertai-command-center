@@ -801,6 +801,14 @@
       "remote_name": "revisao_do_ciclo_avisa",
       "remote_statements_sha256": "db231ad04abd4d4a487cbe7501ad700ef0bfe804dfc90ddbf3dfc6396ff6e35c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260916120000",
+      "path": "supabase/migrations/20260916120000_revisao_do_ciclo_com_hermes.sql",
+      "local_sha256": "06d4674e80ff42180ba00c7a0ef2f79e2ba17b70c69acb807d79bee8e74adcbf",
+      "remote_name": "revisao_do_ciclo_com_hermes",
+      "remote_statements_sha256": "1cb4342dcf784da4bca0858a94431ec52d6ce94536e90c10c4b40d5b23d12ab4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
