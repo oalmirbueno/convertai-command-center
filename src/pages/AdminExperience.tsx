@@ -25,6 +25,7 @@ import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/con
 import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
+import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import {
@@ -168,6 +169,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
   const [activeTab, setActiveTab] = useState(cycleReview ? "fila" : "carteira");
+  const revisoes = useCentralReviewPendentes(cycleReview);
   useEffect(() => {
     if (cycleReview || new URLSearchParams(location.search).has("review")) setActiveTab("fila");
   }, [location.search, cycleReview]);
@@ -1951,6 +1953,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
             <Link to="/ciclo" aria-label="Voltar ao Ciclo" className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Voltar ao Ciclo</Link>
             {reviewClientId && <Link to="/ciclo/revisao" className="ml-auto text-[12.5px] text-primary">Ver todos os clientes</Link>}
           </nav>
+          <p className={`mt-1 text-[11.5px] ${revisoes.total > 0 ? "font-medium text-warning" : "text-muted-foreground"}`}>
+            {revisoes.total > 0
+              ? `${revisoes.total} ${revisoes.total === 1 ? "pedido espera" : "pedidos esperam"} a sua decisão${reviewClientId && revisoes.porCliente.get(reviewClientId) ? ` (${revisoes.porCliente.get(reviewClientId)} deste cliente)` : ""}. Você recebe um aviso no sino a cada pedido novo e a cada decisão.`
+              : "Nada esperando decisão agora. Quando um pedido de revisão for preparado, ele aparece aqui e no sino."}
+          </p>
         </header>
       )}
       <div className="flex items-center justify-between flex-wrap gap-3">

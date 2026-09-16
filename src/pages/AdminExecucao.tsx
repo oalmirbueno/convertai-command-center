@@ -28,6 +28,19 @@ import {
 } from "@/lib/execucaoBadges";
 import { MenuDeContexto, type ItemDeMenu } from "@/components/ui/menu-de-contexto";
 import { alternarFechadas, areaComecaFechada } from "@/lib/execucaoAreas";
+import { excluirTarefa } from "@/lib/taskDelete";
+
+/** Estado de uma execucao do agente, em palavras. */
+const RUN_EM_PALAVRAS: Record<string, string> = {
+  started: "começou",
+  progress: "em andamento",
+  done: "concluída",
+  review: "esperando sua revisão",
+  awaiting_input: "esperando uma resposta sua",
+  failed: "falhou",
+  timeout: "parou sem dar sinal",
+};
+const runEmPalavras = (status: unknown) => RUN_EM_PALAVRAS[String(status)] ?? String(status);
 import { operatorRunIsStale } from "../../supabase/functions/_shared/operator-freshness";
 
 /**
@@ -240,7 +253,7 @@ export default function AdminExecucao() {
       // created_by, e sem escolher o caminho a consulta inteira e recusada.
       const { data, error } = await (supabase as any)
         .from("tasks")
-        .select("id, title, status, deleted_at, due_date, assigned_to, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
+        .select("id, title, status, deleted_at, due_date, assigned_to, project_id, source, ops_node_id, project:projects!tasks_project_id_fkey(name, client:profiles!projects_client_id_fkey(full_name, company_name))")
         .in("id", taskIds);
       // Erro nao vira mapa vazio: um mapa vazio faz a tela desenhar tarefa
       // sem projeto nem cliente, como se o dado nao existisse.
@@ -545,7 +558,7 @@ export default function AdminExecucao() {
       bloco("Aprovacoes pendentes", vinculosAtivos.filter((v) => precisaDecisao(v))),
       incidentes.length
         ? `Falhas de execucao (${incidentes.length})\n` + incidentes.slice(0, 10).map((r) =>
-            `- ${opDe(String(r.operator_id))?.display_name || "?"} · run ${r.run_key} · ${r.status}${r.error ? " · " + r.error : ""}`,
+            `- ${opDe(String(r.operator_id))?.display_name || "Um agente"} ${runEmPalavras(r.status)}${r.error ? ": " + falarComoGente(String(r.error)).humano : ""}`,
           ).join("\n")
         : "Falhas de execucao: nenhuma",
     ].join("\n\n");
@@ -719,7 +732,21 @@ export default function AdminExecucao() {
           atual: t?.assigned_to ?? null,
         }),
       });
-      itens.push({ rotulo: "Copiar ID da tarefa", acao: () => void copiar(String(v.kanban_task_id), "ID") });
+      itens.push({ rotulo: "Copiar código da tarefa (uso técnico)", acao: () => void copiar(String(v.kanban_task_id), "Código") });
+      // Excluir aqui e excluir de verdade, pela mesma regra do Kanban: a tarefa
+      // sai, o vinculo vira "encerrado" e o diario do cliente guarda o descarte.
+      if (t) {
+        itens.push({
+          rotulo: "Excluir tarefa",
+          acao: async () => {
+            if (!window.confirm(`Excluir "${t.title}" de vez? Comentários, checklist e anexos vão junto; o diário do cliente guarda que ela foi descartada.`)) return;
+            const r = await excluirTarefa({ id: String(t.id), title: t.title, project_id: t.project_id ?? null, source: t.source ?? null, ops_node_id: t.ops_node_id ?? null } as any, { motivo: "excluída pela Execução" });
+            if (!r.ok) { toast.error(r.mensagem); return; }
+            toast.success("Tarefa excluída. O vínculo do agente ficou como histórico.");
+            for (const chave of ["operador-vinculos", "operador-tarefas", "operador-tarefas-disponiveis", "tasks", "execucao"]) void queryClient.invalidateQueries({ queryKey: [chave] });
+          },
+        });
+      }
     }
     itens.push({ separador: true });
     for (const c of COLUNAS) {
@@ -1073,50 +1100,43 @@ export default function AdminExecucao() {
         </div>
       </div>
 
-      {/* O placar do dia: o que decide a atenção, em números. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
-        {[
-          { rotulo: "Em andamento", valor: numeros.andamento, tom: "text-info" },
-          { rotulo: "Feitas com evidência", valor: numeros.feitas, tom: "text-success" },
-          { rotulo: "Em revisão", valor: numeros.revisao, tom: "text-warning" },
-          { rotulo: "Aguardando insumo", valor: numeros.aguardando, tom: "text-muted-foreground" },
-          { rotulo: "Bloqueadas", valor: numeros.bloqueadas, tom: "text-destructive" },
-          { rotulo: "Prazo estourado", valor: numeros.vencidas, tom: "text-destructive" },
-        ].map((k) => (
-          <div key={k.rotulo} className="rounded-xl border border-border bg-card px-3 py-2.5">
-            <p className={cn("text-[19px] font-bold tabular-nums leading-none", k.valor > 0 ? k.tom : "text-muted-foreground/50")}>
-              {k.valor}
+      {/* O que pede a sua atencao, em frases e na ordem de urgencia. Seis
+          caixinhas com numero soltavam sete numeros na cara sem dizer o que
+          fazer com eles; aqui cada linha e uma coisa para decidir e leva
+          para a visao certa com um toque. */}
+      {(() => {
+        const linhas: Array<{ chave: string; texto: string; tom: string; visao: string }> = [];
+        if (numeros.aprovacoes > 0) linhas.push({ chave: "aprov", texto: `${numeros.aprovacoes} ${numeros.aprovacoes === 1 ? "ação espera a sua aprovação" : "ações esperam a sua aprovação"}`, tom: "text-warning", visao: "aprovacao" });
+        if (numeros.vencidas > 0) linhas.push({ chave: "venc", texto: `${numeros.vencidas} ${numeros.vencidas === 1 ? "tarefa passou do prazo" : "tarefas passaram do prazo"}`, tom: "text-destructive", visao: "quadro" });
+        if (numeros.aguardando > 0) linhas.push({ chave: "aguard", texto: `${numeros.aguardando} ${numeros.aguardando === 1 ? "agente espera uma resposta sua" : "agentes esperam uma resposta sua"}`, tom: "text-warning", visao: "awaiting_input" });
+        if (numeros.revisao > 0) linhas.push({ chave: "rev", texto: `${numeros.revisao} ${numeros.revisao === 1 ? "entrega pronta para você revisar" : "entregas prontas para você revisar"}`, tom: "text-warning", visao: "review" });
+        if (numeros.bloqueadas > 0) linhas.push({ chave: "bloq", texto: `${numeros.bloqueadas} ${numeros.bloqueadas === 1 ? "tarefa travada" : "tarefas travadas"} (o motivo está no cartão)`, tom: "text-destructive", visao: "blocked" });
+        if (numeros.andamento > 0) linhas.push({ chave: "and", texto: `${numeros.andamento} em andamento agora`, tom: "text-info", visao: "in_progress" });
+        if (numeros.feitas > 0) linhas.push({ chave: "feitas", texto: `${numeros.feitas} ${numeros.feitas === 1 ? "concluída com prova" : "concluídas com prova"}`, tom: "text-success", visao: "done" });
+        return (
+          <div className="rounded-xl border border-border bg-card px-3.5 py-3">
+            <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">O que pede a sua atenção</p>
+            {linhas.length === 0 ? (
+              <p className="mt-1 text-[12.5px] text-muted-foreground">Nada esperando você agora.</p>
+            ) : (
+              <ul className="mt-1.5 space-y-1">
+                {linhas.map((l) => (
+                  <li key={l.chave}>
+                    <button type="button" onClick={() => { setVisao(l.visao as (typeof VISOES)[number]["id"]); }} className={cn("text-left text-[12.5px] font-medium hover:underline", l.tom)}>
+                      • {l.texto}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-2 text-[11.5px] text-muted-foreground">
+              {numeros.kanbanAbertas === 0
+                ? "Nenhuma tarefa aberta no Kanban agora."
+                : `${numeros.kanbanAbertas} ${numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban${numeros.semOperador.length > 0 ? `, ${numeros.semOperador.length} ainda sem agente` : ", todas com agente"}.`}
             </p>
-            <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{k.rotulo}</p>
           </div>
-        ))}
-      </div>
-
-      {/* A ponte com o Kanban.
-          Com o Kanban vazio, a versão anterior escrevia "0 tarefas abertas
-          · 0 com operador · 0 ainda sem": três zeros dizendo a mesma coisa
-          e ocupando uma faixa inteira. Nada para ler não merece o mesmo
-          espaço que algo para fazer. */}
-      <div className="rounded-xl border border-border bg-card px-3.5 py-2.5">
-        <p className="text-[12px] text-foreground">
-          {numeros.kanbanAbertas === 0 ? (
-            <span className="text-muted-foreground">
-              Nenhuma tarefa aberta no Kanban agora. Quando houver, ela aparece aqui
-              para encaminhar a um agente.
-            </span>
-          ) : (
-            <>
-              <strong className="tabular-nums">{numeros.kanbanAbertas}</strong>{" "}
-              {numeros.kanbanAbertas === 1 ? "tarefa aberta" : "tarefas abertas"} no Kanban ·{" "}
-              <strong className="tabular-nums">{numeros.kanbanAbertas - numeros.semOperador.length}</strong> com operador ·{" "}
-              <strong className="tabular-nums">{numeros.semOperador.length}</strong> ainda sem
-            </>
-          )}
-          {numeros.aprovacoes > 0 && (
-            <> · <span className="font-semibold text-warning">{numeros.aprovacoes} esperando sua aprovação</span></>
-          )}
-        </p>
-      </div>
+        );
+      })()}
 
       {/* AS AREAS COMO FAIXA, e nao como pilha.
           Minha versao anterior recolhia cada area numa barra de largura
@@ -1261,9 +1281,11 @@ export default function AdminExecucao() {
           </p>
           <div className="mt-1 space-y-0.5">
             {incidentes.slice(0, 5).map((r) => (
-              <p key={String(r.id)} className="text-[11px] text-muted-foreground">
-                {opDe(String(r.operator_id))?.display_name || "?"} · run {String(r.run_key)} · {String(r.status)}
-                {r.error ? ` · ${String(r.error)}` : ""} {r.attempt > 1 ? ` · tentativa ${r.attempt}` : ""}
+              <p key={String(r.id)} className="text-[11px] text-muted-foreground" title={`execução ${String(r.run_key)}`}>
+                <strong className="text-foreground/85">{opDe(String(r.operator_id))?.display_name || "Um agente"}</strong>{" "}
+                {runEmPalavras(r.status)} {dataCurta(String(r.finished_at || r.started_at))}
+                {r.error ? `: ${falarComoGente(String(r.error)).humano}` : ""}
+                {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
               </p>
             ))}
           </div>

@@ -12,6 +12,7 @@ import { addDays, localIso, mondayOf, weekLabel } from "@/lib/cycleWeek";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import EsteiraClientSheet from "@/components/esteira/EsteiraClientSheet";
 import EsteiraItemRow from "@/components/esteira/EsteiraItemRow";
+import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 
@@ -38,6 +39,7 @@ export default function AdminEsteira() {
   const weekStart = localIso(segunda);
 
   const { clientes, carregando, atualizando, erro, recarregar } = useEsteira(weekStart, agora);
+  const { total: revisoesPendentes } = useCentralReviewPendentes(profile?.role === "admin");
   const canWrite = !erro && ["admin", "manager"].includes(profile?.role || "");
   const clientesParaFoto = useMemo(() => clientes.map((c) => ({ id: c.id, nome: c.nome, avatar_url: c.avatarUrl })), [clientes]);
   const { fotoDe } = useFotosDosClientes(clientesParaFoto);
@@ -130,7 +132,7 @@ export default function AdminEsteira() {
           </div>
         </div>
         <div className="mx-auto flex max-w-5xl items-center gap-1.5 overflow-x-auto px-4 pb-2 text-[11px] [scrollbar-width:none]">
-          {profile?.role === "admin" && <Link to="/ciclo/revisao" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 px-2.5 py-0.5 font-semibold text-primary">Revisão por cliente</Link>}
+          {profile?.role === "admin" && <Link to="/ciclo/revisao" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/40 px-2.5 py-0.5 font-semibold text-primary">Revisão por cliente{revisoesPendentes > 0 && <span className="ml-0.5 rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground" aria-label={`${revisoesPendentes} esperando decisão`}>{revisoesPendentes}</span>}</Link>}
           <button type="button" disabled={Boolean(erro) || carregando} onClick={() => setComecarAberto(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 font-semibold text-primary-foreground disabled:opacity-50"><Compass className="h-3 w-3" />Por onde começar</button>
           {erro ? <span className="shrink-0 text-destructive">Leitura indisponível</span> : <>
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-muted-foreground">{visiveis.length} cliente{visiveis.length === 1 ? "" : "s"}</span>

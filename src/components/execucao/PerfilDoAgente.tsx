@@ -455,11 +455,11 @@ export default function PerfilDoAgente({
                             : ["failed", "timeout"].includes(String(r.status)) ? "text-destructive"
                             : "text-muted-foreground",
                         )}>
-                          {String(r.status)}
+                          {({ started: "começou", progress: "em andamento", done: "concluída", review: "para revisar", awaiting_input: "esperando você", failed: "falhou", timeout: "parou sem sinal" } as Record<string, string>)[String(r.status)] ?? String(r.status)}
                         </span>
-                        <span className="min-w-0 truncate text-muted-foreground">
-                          {String(r.run_key)}{r.attempt > 1 ? ` · tentativa ${r.attempt}` : ""}
-                          {r.error ? ` · ${String(r.error)}` : ""}
+                        <span className="min-w-0 truncate text-muted-foreground" title={`execução ${String(r.run_key)}`}>
+                          {r.error ? String(r.error) : r.status === "done" ? "sem ocorrências" : ""}
+                          {r.attempt > 1 ? ` (${r.attempt}ª tentativa)` : ""}
                         </span>
                         <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
                           {quando(r.finished_at || r.started_at)}

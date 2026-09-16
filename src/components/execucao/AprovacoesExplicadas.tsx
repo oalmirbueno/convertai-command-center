@@ -166,7 +166,7 @@ export default function AprovacoesExplicadas({
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-bold text-warning">
                 <ShieldAlert className="h-3 w-3" />
-                {ROTULO_ACAO[a.action_kind] || a.action_kind} · v{a.payload_version}
+                {ROTULO_ACAO[a.action_kind] || a.action_kind}
               </span>
               <span className="text-[11px] text-muted-foreground">
                 pedido por <strong className="text-foreground/90">{nomesDeAgentes.get(a.operator_id) || "operador"}</strong>
@@ -226,7 +226,7 @@ export default function AprovacoesExplicadas({
                   className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-muted-foreground hover:text-foreground"
                 >
                   <ChevronDown className={cn("h-3 w-3 transition-transform", payloadAberto[a.id] && "rotate-180")} />
-                  payload exato da ação (o que será executado se você aprovar)
+                  ver exatamente o que será executado se você aprovar (uso técnico)
                 </button>
                 {payloadAberto[a.id] && (
                   <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-secondary p-2 text-[10px] leading-relaxed text-foreground/90">
