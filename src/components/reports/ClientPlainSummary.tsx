@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import RitualEstruturado from "@/components/client/RitualEstruturado";
+import { estruturaDoRitual } from "@/lib/ritualTexto";
 import {
   Eye, UserPlus, MessageCircle, ShoppingBag, Wallet,
   TrendingUp, Lightbulb, ArrowRight, CheckCircle2,
@@ -326,7 +328,9 @@ export default function ClientPlainSummary({
             <Lightbulb className="h-3.5 w-3.5" /> O que isso significa
           </p>
           <p className="mt-2.5 text-[13px] leading-relaxed text-foreground">{interpretation}</p>
-          {summary && (
+          {summary && estruturaDoRitual(summary).blocos.length > 0 ? (
+            <div className="mt-3 border-t border-primary/15 pt-3"><RitualEstruturado body={summary} /></div>
+          ) : summary && (
             <p className="mt-3 whitespace-pre-line border-t border-primary/15 pt-3 text-[13px] leading-relaxed text-muted-foreground">
               {summary}
             </p>
@@ -354,7 +358,7 @@ export default function ClientPlainSummary({
             <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-600">
               <CheckCircle2 className="h-3.5 w-3.5" /> O próximo passo
             </p>
-            <p className="mt-2.5 whitespace-pre-line text-[13px] leading-relaxed text-foreground">{nextSteps}</p>
+            <p className="mt-2.5 whitespace-pre-line text-[13px] leading-relaxed text-foreground">{nextSteps.replace(/\*/g, "")}</p>
           </div>
         )}
       </div>

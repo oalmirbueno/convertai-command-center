@@ -7,10 +7,32 @@
  */
 const BLOCOS_DE_PROXIMO_PASSO = [/o que vem agora/i, /precisamos de voc/i, /pr[oó]ximos? passos?/i, /o que vem/i];
 
-function blocosDoTexto(body: string): Array<{ titulo: string; linhas: string[] }> {
-  const blocos: Array<{ titulo: string; linhas: string[] }> = [];
-  let atual: { titulo: string; linhas: string[] } | null = null;
-  for (const bruta of body.split(/\r?\n/)) {
+export interface BlocoDoRitual { titulo: string; linhas: string[] }
+
+/**
+ * O ritual inteiro, separado: a linha de abertura (cumprimento com o nome),
+ * os blocos titulados e a despedida. E o que o portal do cliente usa para
+ * mostrar a mensagem organizada, sem os asteriscos do WhatsApp.
+ */
+export interface RitualEstruturado {
+  abertura: string;
+  blocos: BlocoDoRitual[];
+  fechamento: string;
+  /** Texto que nao coube em bloco nenhum (mensagem antiga, sem formato). */
+  solto: string[];
+}
+
+export function blocosDoTexto(body: string): BlocoDoRitual[] {
+  return estruturaDoRitual(body).blocos;
+}
+
+export function estruturaDoRitual(body: string | null | undefined): RitualEstruturado {
+  const blocos: BlocoDoRitual[] = [];
+  const solto: string[] = [];
+  let abertura = "";
+  let fechamento = "";
+  let atual: BlocoDoRitual | null = null;
+  for (const bruta of (body ?? "").split(/\r?\n/)) {
     const linha = bruta.trim();
     const titulo = linha.match(/^\*([^*]{2,60})\*:?\s*(.*)$/);
     if (titulo) {
@@ -21,9 +43,25 @@ function blocosDoTexto(body: string): Array<{ titulo: string; linhas: string[] }
     // Linha em branco fecha o bloco: no WhatsApp cada bloco termina assim, e a
     // frase de despedida no fim nao pertence ao ultimo bloco.
     if (!linha) { atual = null; continue; }
-    if (atual) atual.linhas.push(linha.replace(/^[•\-–]\s*/, ""));
+    if (atual) { atual.linhas.push(linha.replace(/^[•\-–]\s*/, "")); continue; }
+    // Fora de bloco: antes do primeiro e a abertura; depois do ultimo e o
+    // fechamento; qualquer outra coisa fica solta (texto sem formato).
+    const semAsterisco = linha.replace(/\*/g, "");
+    if (blocos.length === 0 && !abertura) abertura = semAsterisco;
+    else if (blocos.length > 0) fechamento = fechamento ? `${fechamento} ${semAsterisco}` : semAsterisco;
+    else solto.push(semAsterisco);
   }
-  return blocos;
+  // A despedida com "Tudo detalhado no painel" nao faz sentido dentro do painel.
+  fechamento = fechamento.replace(/\s*Tudo detalhado no painel:?\s*aceleriq\.online\.?/i, "").trim();
+  return { abertura, blocos, fechamento, solto };
+}
+
+/** Uma frase de resumo para cartoes e linha do tempo: abertura + primeiro bloco. */
+export function resumoDoRitual(body: string | null | undefined, max = 220): string {
+  const e = estruturaDoRitual(body);
+  const primeiro = e.blocos[0] ? `${e.blocos[0].titulo}: ${e.blocos[0].linhas.join(" ")}` : e.solto.join(" ");
+  const texto = [e.abertura, primeiro].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return texto.length > max ? `${texto.slice(0, max).replace(/\s+\S*$/, "")}…` : texto;
 }
 
 /** Devolve o próximo passo contido no texto, ou "" quando o texto não tem. */

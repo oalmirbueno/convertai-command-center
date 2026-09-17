@@ -2,6 +2,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import ClientPlainSummary from "@/components/reports/ClientPlainSummary";
 import RichText from "@/components/shared/RichText";
+import RitualEstruturado from "@/components/client/RitualEstruturado";
+import { estruturaDoRitual } from "@/lib/ritualTexto";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -1488,7 +1490,11 @@ export default function ReportDetail() {
             </div>
           </div>
           <div className="px-6 py-5">
-            <RichText text={report.summary} />
+            {/* Ritual escrito em blocos de WhatsApp aparece como secoes do
+                painel, sem asteriscos; relatorio comum segue no RichText. */}
+            {estruturaDoRitual(report.summary).blocos.length > 0
+              ? <RitualEstruturado body={report.summary} nextSteps={report.next_steps} />
+              : <RichText text={report.summary} />}
           </div>
         </section>
       )}

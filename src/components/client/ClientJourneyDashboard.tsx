@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import CircularProgress from "./CircularProgress";
 import { FadeUp, StaggerContainer } from "./motion";
 import ProjectJournal from "@/components/shared/ProjectJournal";
+import { estruturaDoRitual, resumoDoRitual } from "@/lib/ritualTexto";
 import {
   daysUntil,
   formatDateShort,
@@ -556,16 +557,27 @@ export default function ClientJourneyDashboard({
                 <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
               </div>
             )}
-            {latestReport.summary && (
-              <div className="mt-3">
-                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
-                <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
-              </div>
-            )}
+            {latestReport.summary && (() => {
+              // Cartao de entrada: a abertura e o primeiro bloco inteiros, sem
+              // asteriscos e sem "..." no meio da frase; o resto fica em
+              // "Onde Estamos", que e para onde o cartao leva.
+              const e = estruturaDoRitual(latestReport.summary);
+              const resumo = e.blocos.length > 0 ? resumoDoRitual(latestReport.summary, 260) : String(latestReport.summary);
+              const demais = e.blocos.slice(1).map((b) => b.titulo.replace(/[:*]/g, "").trim());
+              return (
+                <div className="mt-3">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
+                  <p className={`mt-1 text-[11px] leading-relaxed text-muted-foreground ${e.blocos.length > 0 ? "" : "line-clamp-4 whitespace-pre-line"}`}>{resumo}</p>
+                  {demais.length > 0 && (
+                    <p className="mt-1 text-[10px] text-muted-foreground/80">Também nesta atualização: {demais.join(" · ")}.</p>
+                  )}
+                </div>
+              );
+            })()}
             {latestReport.next_steps && (
               <div className="mt-3">
                 <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{String(latestReport.next_steps).replace(/\*/g, "").split(/(?<=[.!?])\s+/)[0]}</p>
               </div>
             )}
             <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">

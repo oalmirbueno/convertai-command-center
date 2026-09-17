@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
 import { readMemory } from "@/lib/clientMemory";
+import RitualEstruturado from "@/components/client/RitualEstruturado";
+import { estruturaDoRitual } from "@/lib/ritualTexto";
 import {
   formatMetricNumber,
   useSocialMetricsWeekly,
@@ -176,9 +178,16 @@ function ClientHistory({ clientId }: { clientId: string }) {
                 {entry.title}
               </p>
             )}
-            <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
-              {entry.content.length > 320 ? `${entry.content.slice(0, 320)}...` : entry.content}
-            </p>
+            {/* Capitulo escrito como ritual (blocos de WhatsApp) aparece
+                organizado: abertura + dois blocos inteiros, nunca uma frase
+                cortada no meio com reticencias e asteriscos. */}
+            {estruturaDoRitual(entry.content).blocos.length > 0 ? (
+              <RitualEstruturado body={entry.content} compact className="mt-2" />
+            ) : (
+              <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
+                {entry.content.length > 320 ? `${entry.content.slice(0, 320).replace(/\s+\S*$/, "")}…` : entry.content}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -939,22 +948,25 @@ export default function ClientJourneyUpdates() {
                   </span>
                 </div>
                 <h3 className="mt-3 text-sm font-semibold text-foreground">{update.title}</h3>
-                {update.summary && (
-                  <div
-                    className={`mt-3 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground ${isLatest ? "" : "line-clamp-6"}`}
-                  >
-                    {update.summary}
-                  </div>
-                )}
-                {update.next_steps && (
-                  <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-3.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
-                      Próximo passo
-                    </p>
-                    <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-foreground">
-                      {update.next_steps}
-                    </p>
-                  </div>
+                {/* A mesma mensagem do grupo, mas do jeito do painel: secoes
+                    com titulo, listas de verdade, sem asteriscos; a mais
+                    recente inteira, as antigas resumidas sem frase cortada. */}
+                {update.summary && estruturaDoRitual(update.summary).blocos.length > 0 ? (
+                  <RitualEstruturado body={update.summary} nextSteps={update.next_steps} compact={!isLatest} className="mt-3" />
+                ) : (
+                  <>
+                    {update.summary && (
+                      <div className={`mt-3 whitespace-pre-line text-[13px] leading-relaxed text-muted-foreground ${isLatest ? "" : "line-clamp-6"}`}>
+                        {update.summary}
+                      </div>
+                    )}
+                    {update.next_steps && (
+                      <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-3.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">Próximo passo</p>
+                        <p className="mt-1 whitespace-pre-line text-[13px] leading-relaxed text-foreground">{update.next_steps}</p>
+                      </div>
+                    )}
+                  </>
                 )}
                 {!isLatest && (
                   <button

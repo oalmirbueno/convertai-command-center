@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { completarProximoPasso, proximoPassoDoTexto } from "@/lib/ritualTexto";
+import { completarProximoPasso, estruturaDoRitual, proximoPassoDoTexto, resumoDoRitual } from "@/lib/ritualTexto";
 import { applyCentralAiDraft } from "@/lib/centralReviewSource";
 
 /**
@@ -52,6 +52,43 @@ describe("próximo passo extraído do texto do ritual", () => {
     expect(aplicado.metrics?.central_review_next_steps_required).toBe(false);
     const explicito = applyCentralAiDraft(draft, { body: TEXTO, next_steps: "Aprovar até quarta." });
     expect(explicito.next_steps).toBe("Aprovar até quarta.");
+  });
+});
+
+describe("o portal do cliente mostra o ritual organizado, não o texto do WhatsApp", () => {
+  it("separa abertura, blocos e despedida, e tira o 'tudo detalhado no painel'", () => {
+    const e = estruturaDoRitual(TEXTO);
+    expect(e.abertura).toBe("Boa tarde, Priscila. Chegamos ao meio da semana.");
+    expect(e.blocos.map((b) => b.titulo)).toEqual(["Onde estamos", "O que vem agora", "Precisamos de você"]);
+    expect(e.blocos[1].linhas).toHaveLength(2);
+    expect(e.blocos[1].linhas[1]).toBe("O foco é transformar as conversas em orçamentos reais.");
+    expect(e.fechamento).toBe("Qualquer dúvida, estamos à disposição.");
+    expect(JSON.stringify(e)).not.toContain("*");
+  });
+
+  it("o resumo do cartão termina em palavra inteira e nunca traz asterisco", () => {
+    const resumo = resumoDoRitual(TEXTO, 80);
+    expect(resumo.length).toBeLessThanOrEqual(81);
+    expect(resumo.endsWith("…")).toBe(true);
+    expect(resumo).not.toContain("*");
+    expect(resumo).toContain("Boa tarde, Priscila.");
+    // Texto sem formato continua funcionando como antes.
+    expect(estruturaDoRitual("Só uma linha.").blocos).toHaveLength(0);
+    expect(estruturaDoRitual("Só uma linha.").abertura).toBe("Só uma linha.");
+  });
+
+  it("as três áreas do portal e o relatório completo usam o renderizador estruturado", () => {
+    const atualizacoes = ler("src/pages/ClientJourneyUpdates.tsx");
+    const painel = ler("src/components/client/ClientJourneyDashboard.tsx");
+    const relatorio = ler("src/pages/ReportDetail.tsx");
+    const leitura = ler("src/components/reports/ClientPlainSummary.tsx");
+    expect(atualizacoes).toContain("<RitualEstruturado body={update.summary} nextSteps={update.next_steps} compact={!isLatest}");
+    expect(atualizacoes).toContain("<RitualEstruturado body={entry.content} compact");
+    expect(atualizacoes).not.toContain("entry.content.slice(0, 320)}...");
+    expect(painel).toContain("resumoDoRitual(latestReport.summary, 260)");
+    expect(painel).not.toContain("line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground\">{latestReport.summary}");
+    expect(relatorio).toContain("<RitualEstruturado body={report.summary} nextSteps={report.next_steps} />");
+    expect(leitura).toContain("RitualEstruturado");
   });
 });
 
