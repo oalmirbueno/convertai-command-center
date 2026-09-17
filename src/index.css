@@ -146,9 +146,39 @@
    * que está perto da tela. O navegador pula o trabalho do resto e a rolagem
    * fica leve mesmo com dezenas de cartões pesados abertos.
    */
-  .lista-longa > * {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 220px;
+  /*
+   * So no computador. No celular isto deixava cartao com a caixa reservada e
+   * o conteudo sem desenhar (um vazio enorme, sem toque): o Safari do iPhone
+   * erra a hora de redesenhar o que "pulou", e as listas de la sao curtas.
+   */
+  @media (min-width: 1024px) {
+    .lista-longa > * {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 220px;
+    }
+  }
+
+  /*
+   * Central no celular: nada vaza para o lado. Filho de grade e de flex pode
+   * encolher (o padrao do navegador e nao encolher abaixo do conteudo), e
+   * palavra sem espaco (link, codigo, identificador) quebra em vez de empurrar
+   * a tela. Vazamento lateral e o que fazia o dedo "prender" ao rolar.
+   */
+  @media (max-width: 639px) {
+    .central-celular {
+      max-width: 100%;
+      overflow-x: clip;
+    }
+    .central-celular :where(.grid) > *,
+    .central-celular :where(.flex) > :where(div, p, span, section, article, ul, dl) {
+      min-width: 0;
+    }
+    .central-celular :where(p, li, dd, span, h1, h2, h3, h4, summary, label) {
+      overflow-wrap: anywhere;
+    }
+    .central-celular :where(textarea, input, select) {
+      max-width: 100%;
+    }
   }
 
   /*

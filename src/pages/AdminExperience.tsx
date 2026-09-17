@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { RITUAL_DA_CENTRAL, marcarRitual, atualizarAvancosDoDossie } from "@/lib/esteira/esteiraAcoes";
-import { completarProximoPasso } from "@/lib/ritualTexto";
+import { completarProximoPasso, resumoDoRitual } from "@/lib/ritualTexto";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
@@ -2020,7 +2020,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
 
   return (
-    <div className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-0 text-foreground" : "space-y-7"}>
+    <div className={cycleReview ? "mx-auto min-h-dvh max-w-6xl space-y-5 bg-background px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-0 text-foreground central-celular" : "space-y-7 central-celular"}>
       {/* Mesmo cabecalho do Ciclo: respiro da safe area + 12px, Voltar com
           seta a esquerda. Antes era um link solto a 20px do topo. */}
       {cycleReview && (
@@ -2194,7 +2194,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 Cada cliente recebe uma nota de 0 a 100 calculada dos dados reais (financeiro, aprovações, entregas, Pulso). Toque em um cliente para ver o porquê da nota e as ações prontas: mensagem do grupo, ritual e cadastro.
               </p>
             </div>
-            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+            <div className="divide-y divide-border sm:max-h-[560px] sm:overflow-y-auto">
               {healthRows.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nenhum cliente ativo na carteira.</p>
               )}
@@ -2355,9 +2355,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 {/* No celular as duas colunas viram uma so; sem o auto-rows-fr
                     o cartao dos rituais deixava de ser esticado ate a altura do
                     vizinho (um vazio imenso entre a lista e o rodape). */}
-                <div data-tour="central-carteira" className="lista-longa grid gap-4 lg:auto-rows-fr lg:grid-cols-2 xl:gap-5">
+                <div data-tour="central-carteira" className="grid gap-4 lg:auto-rows-fr lg:grid-cols-2 xl:gap-5">
                   {/* Plano de mensagens do período */}
-                  <div className="bg-card border border-border rounded-xl overflow-hidden lg:h-full flex flex-col">
+                  <div className="min-w-0 bg-card border border-border rounded-xl overflow-hidden lg:h-full flex flex-col">
                     <div className="px-5 py-3 border-b border-border">
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">O que enviar e quando · com o contexto deste cliente</span>
                     </div>
@@ -2416,7 +2416,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   </div>
 
                   {/* Mensagens do grupo por momento + contexto */}
-                  <div className="space-y-4">
+                  <div className="min-w-0 space-y-4">
                     <div className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2.5">
                       {/* A mensagem é montada da leitura ao vivo do painel. Se
                           alguém acabou de liberar material, marcar etapa ou
@@ -2463,11 +2463,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <div key={m.moment} className="rounded-lg border border-border bg-secondary/30 overflow-hidden">
                           <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-3 py-2.5 sm:px-3.5">
                             <span className="text-[12px] text-foreground">{m.label}</span>
-                            <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto sm:gap-x-3 sm:gap-y-1">
                               <button
                                 type="button"
                                 onClick={() => setGroupMsgPreview(isPreviewOpen ? null : m.moment)}
-                                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+                                className="flex min-h-9 items-center gap-1 rounded-lg border border-border px-2.5 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer sm:min-h-0 sm:border-0 sm:px-0 sm:text-[10px]"
                               >
                                 {isPreviewOpen ? "Fechar" : "Ver"}
                               </button>
@@ -2475,7 +2475,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                                 type="button"
                                 onClick={() => void escreverMomentoComIA(client, m.moment)}
                                 disabled={aiMomentLoading !== null}
-                                className="text-[10px] text-primary flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                className="flex min-h-9 items-center gap-1 rounded-lg border border-primary/30 px-2.5 text-[11px] text-primary cursor-pointer disabled:opacity-50 sm:min-h-0 sm:border-0 sm:px-0 sm:text-[10px]"
                                 title="Escreve esta mensagem com a IA a partir do dossiê, da esteira, dos números e das vendas de agora"
                               >
                                 <Sparkles className={`w-3 h-3 ${aiMomentLoading === chaveIA ? "animate-pulse" : ""}`} /> {aiMomentLoading === chaveIA ? "Escrevendo…" : escrita ? "Reescrever com IA" : "Escrever com IA"}
@@ -2483,7 +2483,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               <button
                                 type="button"
                                 onClick={() => copyText(textoParaCopiar, `Mensagem de ${m.label.toLowerCase()} copiada!`)}
-                                className="text-[10px] text-primary flex items-center gap-1 cursor-pointer"
+                                className="flex min-h-9 items-center gap-1 rounded-lg border border-primary/30 px-2.5 text-[11px] text-primary cursor-pointer sm:min-h-0 sm:border-0 sm:px-0 sm:text-[10px]"
                               >
                                 <Send className="w-3 h-3" /> Copiar{escrita ? " (IA)" : ""}
                               </button>
@@ -2534,7 +2534,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         <div className="bg-card border border-primary/25 rounded-xl p-5 space-y-1.5">
                           <span className="text-[11px] uppercase tracking-wider text-primary font-medium">Onde estamos com este cliente</span>
                           <p className="text-[12px] font-medium text-foreground">{lastRitual.title}</p>
-                          <p className="text-[11px] text-muted-foreground whitespace-pre-line line-clamp-6 leading-relaxed">{lastRitual.summary}</p>
+                          <p className="text-[11px] leading-relaxed text-muted-foreground">{resumoDoRitual(lastRitual.summary, 420)}</p>
                           <button
                             onClick={() => navigate(`/relatorios/${lastRitual.id}`)}
                             className="text-[10px] text-primary flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 hover:opacity-80"
@@ -2582,7 +2582,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Clientes avulsos · pós-entrega e reativação</span>
               <span className="text-[10px] text-muted-foreground ml-auto">Cada avulso bem atendido é um recorrente em potencial</span>
             </div>
-            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+            <div className="divide-y divide-border sm:max-h-[560px] sm:overflow-y-auto">
               {oneOffClients.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nenhum cliente avulso cadastrado.</p>
               )}
@@ -2808,7 +2808,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 Nada daqui chegou ao cliente ainda. Abra a mensagem, aprimore com a IA se quiser, copie para o grupo ou publique no portal. Ao registrar o envio, ela entra no histórico, no dossiê e marca o ritual no Ciclo. A revisão formal com o Hermes fica em Ciclo › Revisão.
               </p>
             </div>
-            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+            <div className="divide-y divide-border sm:max-h-[560px] sm:overflow-y-auto">
               {draftReports.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">
                   Fila vazia. Use "Gerar mensagens de hoje" para criar os rituais do dia com os dados de cada cliente.
@@ -3019,7 +3019,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 ))}
               </select>
             </div>
-            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+            <div className="divide-y divide-border sm:max-h-[560px] sm:overflow-y-auto">
               {timeline.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nenhum movimento registrado ainda.</p>
               )}
@@ -3047,7 +3047,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               <CheckCircle2 className="w-3.5 h-3.5 text-success" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Atualizações enviadas aos clientes</span>
             </div>
-            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
+            <div className="divide-y divide-border sm:max-h-[400px] sm:overflow-y-auto">
               {publishedReports.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nada publicado ainda.</p>
               )}

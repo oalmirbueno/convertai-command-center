@@ -364,7 +364,7 @@ export default function ProjectJournal({
         </div>
       ) : (
         <>
-        <div className="relative max-h-[380px] space-y-0 overflow-y-auto rounded-xl border border-border/60 bg-secondary/[0.15] p-3 pr-2">
+        <div className="relative space-y-0 rounded-xl border border-border/60 bg-secondary/[0.15] p-3 pr-2 sm:max-h-[380px] sm:overflow-y-auto">
           {(() => {
             // Agrupado por dia: a linha do tempo vira leitura, não lista solta.
             const visible = showAll ? entries : entries.slice(0, 12);
