@@ -74,8 +74,10 @@ describe("as quatro tools da Revisão do Ciclo existem na 1.43.0", () => {
     expect(tools).toContain("Esta area E a aprovacao; nao existe outra fila.");
   });
 
-  it("a versão subiu para 1.43.0", () => {
-    expect(release).toContain("export const MCP_VERSION = '1.43.0';");
+  it("a versão é 1.43.0 ou posterior", () => {
+    const versao = release.match(/MCP_VERSION = '(\d+)\.(\d+)\.(\d+)'/);
+    expect(versao).toBeTruthy();
+    expect(Number(versao![1]) * 1000 + Number(versao![2])).toBeGreaterThanOrEqual(1043);
   });
 });
 

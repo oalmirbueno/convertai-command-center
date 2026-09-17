@@ -486,7 +486,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 // canInvoke() in mcp-tools.ts. Inlined to avoid a circular import.
 const SCOPE_EXPANSIONS_LOCAL: Record<string, string[]> = {
   'aceleriq:read': ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','commercial:read','contracts:read','editorial:read'],
-  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write','editorial:write'],
+  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write','editorial:write','commercial:write'],
 };
 export function expandScopesLocal(granted: readonly string[]): Set<string> {
   const out = new Set<string>();

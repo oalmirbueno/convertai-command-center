@@ -57,6 +57,7 @@ import {
   salvarCampanha,
   salvarLead,
   salvarMeta,
+  ultimoErroDoComercial,
 } from "@/lib/comercial";
 
 /**
@@ -996,6 +997,10 @@ function EditorDeLead({
   const [salvando, setSalvando] = useState(false);
   const [nota, setNota] = useState("");
   const [motivo, setMotivo] = useState("");
+  // O que estava no banco quando o editor abriu: e contra isto que se sabe se
+  // ha edicao por salvar (a barra de salvar avisa, e fechar nao perde nada).
+  const [formInicial] = useState(() => JSON.stringify(form));
+  const sujo = JSON.stringify(form) !== formInicial;
 
   const { data: historico = [] } = useQuery({
     queryKey: ["comercial-historico", lead?.id],
@@ -1003,10 +1008,10 @@ function EditorDeLead({
     enabled: Boolean(lead?.id),
   });
 
-  const salvar = async () => {
+  const salvar = async (opcoes?: { manterAberto?: boolean }) => {
     if (form.name.trim().length < 2) {
       toast.error("O lead precisa de um nome.");
-      return;
+      return false;
     }
     setSalvando(true);
     const id = await salvarLead({
@@ -1028,11 +1033,23 @@ function EditorDeLead({
     } as never);
     setSalvando(false);
     if (!id) {
-      toast.error("Não foi possível salvar o lead.");
-      return;
+      toast.error(`Não foi possível salvar o lead.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
+      return false;
     }
     await onSalvo();
-    toast.success(lead ? "Lead atualizado." : "Lead criado.");
+    toast.success(lead ? "Alterações salvas." : "Lead criado.");
+    if (!opcoes?.manterAberto) onFechar();
+    return true;
+  };
+
+  // Fechar com edicao pendente salva sozinho: a pessoa editava, fechava no X
+  // e a edicao sumia sem aviso (o botao de salvar ficava no meio da janela).
+  const fechar = async () => {
+    if (lead && sujo && !salvando) {
+      const ok = await salvar();
+      if (!ok) return;
+      return;
+    }
     onFechar();
   };
 
@@ -1050,7 +1067,7 @@ function EditorDeLead({
   };
 
   return (
-    <Dialog open onOpenChange={(aberto) => !aberto && onFechar()}>
+    <Dialog open onOpenChange={(aberto) => { if (!aberto) void fechar(); }}>
       <DialogContent className="max-h-[92dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{lead ? lead.name : "Novo lead"}</DialogTitle>
@@ -1248,14 +1265,16 @@ function EditorDeLead({
             />
           </Campo>
 
-          <div className="flex gap-2">
+          {/* Barra de salvar grudada no pe da janela: aparece em qualquer ponto
+              da rolagem e diz quando ha edicao por salvar. */}
+          <div className="sticky bottom-0 z-10 -mx-1 flex gap-2 rounded-xl border border-border bg-background/95 p-1.5 backdrop-blur">
             <button
               type="button"
               onClick={() => void salvar()}
               disabled={salvando}
               className="h-11 flex-1 rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground disabled:opacity-50"
             >
-              {lead ? "Salvar alterações" : "Criar lead"}
+              {salvando ? "Salvando…" : lead ? (sujo ? "Salvar alterações •" : "Salvar alterações") : "Criar lead"}
             </button>
             {lead && (
               <button

@@ -311,7 +311,7 @@ export default function FunilKanban({
             </div>
           )}
 
-          <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
+          <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-3 [scrollbar-width:thin]">
             {ESTAGIOS_ABERTOS.map((estagio) => (
               <Coluna
                 key={estagio}
@@ -397,7 +397,9 @@ function Coluna({
   return (
     <div
       ref={setNodeRef}
-      className={`w-[240px] shrink-0 rounded-2xl border p-2.5 transition-colors ${
+      // A coluna tem altura maxima e a lista rola por dentro: com dez leads em
+      // "Novo" a coluna empurrava a pagina inteira e as outras sumiam da tela.
+      className={`flex max-h-[calc(100dvh-15rem)] min-h-[12rem] w-[260px] shrink-0 flex-col rounded-2xl border p-2.5 transition-colors sm:w-[270px] ${
         isOver
           ? "border-primary bg-primary/[0.07]"
           : arrastandoAlgo
@@ -405,7 +407,7 @@ function Coluna({
             : "border-border bg-card/60"
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <p
           title={ajuda}
           className="truncate text-[11px] font-bold uppercase tracking-wide text-foreground"
@@ -416,12 +418,12 @@ function Coluna({
           {leads.length}
         </span>
       </div>
-      <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+      <p className="mt-0.5 shrink-0 text-[10px] tabular-nums text-muted-foreground">
         {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
         {leads.length > 0 && ` · ${qualificadas}/${leads.length} qualificadas`}
       </p>
 
-      <div className="mt-2 space-y-1.5">
+      <div className="-mr-1.5 mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain pr-1.5 [scrollbar-width:thin]">
         {leads.map((lead) => (
           <Cartao
             key={lead.id}
@@ -430,8 +432,11 @@ function Coluna({
             onAbrir={onAbrir}
           />
         ))}
+      </div>
+      {/* O alvo de soltar fica fora da rolagem: sempre visivel no pe da coluna. */}
+      <div className="mt-1.5 shrink-0">
         <div
-          className={`rounded-xl border border-dashed px-2 py-4 text-center text-[10px] transition-colors ${
+          className={`rounded-xl border border-dashed px-2 py-3 text-center text-[10px] transition-colors ${
             isOver
               ? "border-primary text-primary"
               : "border-border text-muted-foreground"

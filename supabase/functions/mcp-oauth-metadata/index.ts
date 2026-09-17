@@ -35,7 +35,7 @@ const INTERNAL_MCP_SCOPES = [
   'briefings:read',
   'files:read', 'files:write', 'files:sensitive:read', 'files:archive',
   'workspace:read',
-  'commercial:read',
+  'commercial:read', 'commercial:write',
   'contracts:read', 'contracts:write',
   'memory:read', 'memory:propose',
   'admin',

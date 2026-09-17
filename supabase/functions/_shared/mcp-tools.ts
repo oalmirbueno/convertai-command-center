@@ -55,6 +55,24 @@ import {
   vaultOverview,
 } from './aceleriq-operators-services.ts';
 import {
+  CLASSES_DO_LEAD,
+  ETAPAS_DO_FUNIL,
+  ORIGENS_DO_LEAD,
+  TIPOS_DE_ATIVIDADE,
+  addOpportunityNote,
+  archiveOpportunity,
+  completeCommercialActivity,
+  createCommercialActivity,
+  createOpportunity,
+  getOpportunity,
+  listCommercialActivities,
+  listCommercialOrganizations,
+  moveOpportunity,
+  updateOpportunity,
+  upsertCommercialContact,
+  upsertCommercialOrganization,
+} from './aceleriq-commercial-services.ts';
+import {
   getFinanceAdsInvestment,
   getFinanceCapital,
   getFinanceCashFlow,
@@ -158,6 +176,7 @@ export type ToolScope =
   | 'files:archive'
   | 'workspace:read'
   | 'commercial:read'
+  | 'commercial:write'
   | 'contracts:read'
   | 'contracts:write'
   | 'memory:read'
@@ -185,6 +204,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'files:archive',
   'workspace:read',
   'commercial:read',
+  'commercial:write',
   'contracts:read',
   'contracts:write',
   'memory:read',
@@ -214,6 +234,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'files:archive': { title: 'Arquivos — arquivar/restaurar', description: 'Arquivar e restaurar arquivos, mantendo o histórico.', sensitive: true },
   'workspace:read': { title: 'Workspace — leitura', description: 'Navegar pastas e nós do Workspace interno.' },
   'commercial:read': { title: 'Comercial — leitura', description: 'Ler o funil comercial interno: oportunidades, classe, qualificação, responsável e prazos. Área da casa, nunca visível a cliente.' },
+  'commercial:write': { title: 'Comercial — escrita', description: 'Criar e editar negócios do funil, mover de etapa, anotar conversas, agendar e concluir atividades, cadastrar empresas e contatos. Área da casa; chave restrita a cliente não alcança.', sensitive: true },
   'contracts:read': { title: 'Contratos — leitura', description: 'Listar e detalhar contratos e status de assinatura.' },
   'contracts:write': { title: 'Contratos — rascunhos', description: 'Criar, atualizar e cancelar somente rascunhos completamente não assinados e nunca enviados. Não permite assinar, aprovar, enviar ou publicar contratos.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro — leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
@@ -242,7 +263,7 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
   ],
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
-    'editorial:write', 'clients:write',
+    'editorial:write', 'clients:write', 'commercial:write',
   ],
 };
 
@@ -294,6 +315,18 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_file: 'files:read',
   aceleriq_list_workspace_nodes: 'workspace:read',
   aceleriq_list_opportunities: 'commercial:read',
+  aceleriq_get_opportunity: 'commercial:read',
+  aceleriq_list_commercial_activities: 'commercial:read',
+  aceleriq_list_commercial_organizations: 'commercial:read',
+  aceleriq_create_opportunity: 'commercial:write',
+  aceleriq_update_opportunity: 'commercial:write',
+  aceleriq_move_opportunity: 'commercial:write',
+  aceleriq_add_opportunity_note: 'commercial:write',
+  aceleriq_archive_opportunity: 'commercial:write',
+  aceleriq_create_commercial_activity: 'commercial:write',
+  aceleriq_complete_commercial_activity: 'commercial:write',
+  aceleriq_upsert_commercial_organization: 'commercial:write',
+  aceleriq_upsert_commercial_contact: 'commercial:write',
   aceleriq_get_workspace_node: 'workspace:read',
 };
 
@@ -2834,7 +2867,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
   { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes.', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas)' },
   { area: 'Financeiro', rota: '/financeiro', para: 'Caixa, mensalidades, custos, investimentos.', pelo_mcp: 'aceleriq_get_finance_dashboard e as demais aceleriq_*finance*' },
-  { area: 'Comercial', rota: '/comercial', para: 'Oportunidades, classes e qualificacao.', pelo_mcp: 'aceleriq_list_opportunities' },
+  { area: 'Comercial (CRM)', rota: '/comercial/crm', para: 'Funil de negocios, empresas, contatos e agenda comercial. Area da casa.', pelo_mcp: 'aceleriq_list_opportunities, aceleriq_get_opportunity, aceleriq_create_opportunity, aceleriq_update_opportunity, aceleriq_move_opportunity, aceleriq_add_opportunity_note, aceleriq_archive_opportunity, aceleriq_list_commercial_activities, aceleriq_create_commercial_activity, aceleriq_complete_commercial_activity, aceleriq_list_commercial_organizations, aceleriq_upsert_commercial_organization, aceleriq_upsert_commercial_contact' },
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
@@ -3171,6 +3204,200 @@ const centralReviewMarcarEnviadoTool: ToolDefinition = {
   },
 };
 
+/*
+ * CRM da casa com acesso completo (v1.44.0).
+ *
+ * O agente lia a lista de oportunidades e parava ali. Agora abre a ficha,
+ * cria e edita o negocio, move de etapa com as regras da tela, anota,
+ * agenda, conclui, cadastra empresa e contato. Tudo interno da casa: chave
+ * restrita a cliente recebe recusa explicita, nunca lista vazia enganosa.
+ */
+function ferramentaDoCrm(
+  name: string, title: string, description: string, escrita: boolean,
+  schema: z.ZodTypeAny, jsonSchema: Record<string, unknown>,
+  fn: (input: any, ctx: AuthContext) => Promise<unknown>,
+  destrutiva = false,
+): ToolDefinition {
+  return {
+    name, title, description,
+    scopes: escrita ? ['commercial:write'] : ['commercial:read'],
+    annotations: escrita
+      ? { readOnlyHint: false, idempotentHint: false, destructiveHint: destrutiva, openWorldHint: false }
+      : READ_ANNOTATIONS,
+    inputSchema: jsonSchema,
+    handler: async (input, ctx) => {
+      const parsed = schema.safeParse(input ?? {});
+      if (!parsed.success) {
+        throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+      }
+      return await fn(parsed.data, ctx);
+    },
+  };
+}
+
+const DATA_ISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const CAMPOS_DO_NEGOCIO = {
+  name: z.string().min(2).max(160).optional(),
+  company: z.string().max(200).optional(),
+  email: z.string().max(200).optional(),
+  whatsapp: z.string().max(40).optional(),
+  origin: z.enum(ORIGENS_DO_LEAD).optional(),
+  campaign_id: UUID.nullable().optional(),
+  monthly_value: z.number().min(0).optional(),
+  one_off_value: z.number().min(0).optional(),
+  next_action: z.string().max(300).nullable().optional(),
+  next_action_at: DATA_ISO.nullable().optional(),
+  expected_close_date: DATA_ISO.nullable().optional(),
+  owner_id: UUID.nullable().optional(),
+  organization_id: UUID.nullable().optional(),
+  contact_id: UUID.nullable().optional(),
+  notes: z.string().max(4000).nullable().optional(),
+  classe: z.enum(CLASSES_DO_LEAD).nullable().optional(),
+  qualificacao: z.record(z.string().max(600)).optional(),
+};
+const CAMPOS_DO_NEGOCIO_JSON = {
+  name: { type: 'string', description: 'Nome do negocio ou da pessoa.' },
+  company: { type: 'string', description: 'Empresa.' },
+  email: { type: 'string' },
+  whatsapp: { type: 'string' },
+  origin: { type: 'string', description: 'indicacao, instagram, quiz, prospeccao, evento, site ou manual.' },
+  campaign_id: { type: ['string', 'null'], description: 'UUID da campanha da casa que trouxe o lead.' },
+  monthly_value: { type: 'number', description: 'Mensalidade proposta em reais.' },
+  one_off_value: { type: 'number', description: 'Valor avulso proposto em reais.' },
+  next_action: { type: ['string', 'null'], description: 'Proxima acao em uma frase.' },
+  next_action_at: { type: ['string', 'null'], description: 'Data da proxima acao (YYYY-MM-DD).' },
+  expected_close_date: { type: ['string', 'null'], description: 'Previsao de fechamento (YYYY-MM-DD).' },
+  owner_id: { type: ['string', 'null'], description: 'UUID do responsavel da equipe.' },
+  organization_id: { type: ['string', 'null'], description: 'UUID da empresa no CRM.' },
+  contact_id: { type: ['string', 'null'], description: 'UUID do contato no CRM.' },
+  notes: { type: ['string', 'null'] },
+  classe: { type: ['string', 'null'], description: 'cliente_atual, upsell ou novo_prospect.' },
+  qualificacao: { type: 'object', description: 'Respostas de qualificacao (chave: texto).' },
+} as const;
+
+const getOpportunityTool = ferramentaDoCrm(
+  'aceleriq_get_opportunity', 'Abrir a ficha de um negocio',
+  'A ficha inteira de uma oportunidade do CRM: dados, valor em jogo, responsavel, empresa e contato ligados, todas as atividades (com a proxima aberta) e a historia (mudancas de etapa e notas). Use antes de editar ou mover.',
+  false, z.object({ opportunity_id: UUID }).strict(),
+  { type: 'object', properties: { opportunity_id: { type: 'string', description: 'UUID da oportunidade.' } }, required: ['opportunity_id'], additionalProperties: false },
+  getOpportunity,
+);
+
+const createOpportunityTool = ferramentaDoCrm(
+  'aceleriq_create_opportunity', 'Criar negocio no funil',
+  'Cria uma oportunidade no CRM da casa. So name e obrigatorio; a etapa inicial e "novo" (ou outra etapa aberta informada). Nunca cria como ganho ou perdido: fechamento e sempre um movimento registrado.',
+  true, z.object({ ...CAMPOS_DO_NEGOCIO, name: z.string().min(2).max(160), stage: z.enum(ETAPAS_DO_FUNIL).optional() }).strict(),
+  { type: 'object', properties: { ...CAMPOS_DO_NEGOCIO_JSON, stage: { type: 'string', description: 'Etapa inicial aberta: novo, contato, diagnostico, proposta ou negociacao.' } }, required: ['name'], additionalProperties: false },
+  createOpportunity,
+);
+
+const updateOpportunityTool = ferramentaDoCrm(
+  'aceleriq_update_opportunity', 'Editar negocio do funil',
+  'Atualiza uma oportunidade. Grava SOMENTE os campos enviados: o que nao vier fica como esta (mande null para limpar um campo). Nao muda etapa: para isso use aceleriq_move_opportunity.',
+  true, z.object({ ...CAMPOS_DO_NEGOCIO, opportunity_id: UUID }).strict(),
+  { type: 'object', properties: { opportunity_id: { type: 'string', description: 'UUID da oportunidade.' }, ...CAMPOS_DO_NEGOCIO_JSON }, required: ['opportunity_id'], additionalProperties: false },
+  updateOpportunity,
+);
+
+const moveOpportunityTool = ferramentaDoCrm(
+  'aceleriq_move_opportunity', 'Mover negocio de etapa',
+  'Move a oportunidade no funil e registra a passagem na historia. Perdido EXIGE reason (o motivo ensina o proximo). Ganho e perdido carimbam a data de fechamento; em ganho, won_client_id liga o negocio ao cadastro do cliente. Reabrir (voltar para etapa aberta) limpa o fechamento.',
+  true, z.object({ opportunity_id: UUID, stage: z.enum(ETAPAS_DO_FUNIL), reason: z.string().max(1000).optional(), won_client_id: UUID.nullable().optional() }).strict(),
+  { type: 'object', properties: {
+    opportunity_id: { type: 'string', description: 'UUID da oportunidade.' },
+    stage: { type: 'string', description: 'novo, contato, diagnostico, proposta, negociacao, ganho ou perdido.' },
+    reason: { type: 'string', description: 'Motivo. Obrigatorio em perdido.' },
+    won_client_id: { type: ['string', 'null'], description: 'Em ganho: UUID do cliente cadastrado.' },
+  }, required: ['opportunity_id', 'stage'], additionalProperties: false },
+  moveOpportunity,
+);
+
+const addOpportunityNoteTool = ferramentaDoCrm(
+  'aceleriq_add_opportunity_note', 'Anotar conversa no negocio',
+  'Registra uma nota na historia da oportunidade (o que foi conversado, combinado ou descoberto). Nao altera nenhum campo do negocio.',
+  true, z.object({ opportunity_id: UUID, note: z.string().min(2).max(2000) }).strict(),
+  { type: 'object', properties: { opportunity_id: { type: 'string' }, note: { type: 'string', description: 'O que aconteceu, em texto curto.' } }, required: ['opportunity_id', 'note'], additionalProperties: false },
+  addOpportunityNote,
+);
+
+const archiveOpportunityTool = ferramentaDoCrm(
+  'aceleriq_archive_opportunity', 'Arquivar negocio',
+  'Tira a oportunidade do quadro sem apagar nada: o historico continua. Use para duplicados e testes. Nao e o mesmo que perder: perdido e etapa e pede motivo.',
+  true, z.object({ opportunity_id: UUID }).strict(),
+  { type: 'object', properties: { opportunity_id: { type: 'string' } }, required: ['opportunity_id'], additionalProperties: false },
+  archiveOpportunity, true,
+);
+
+const listCommercialActivitiesTool = ferramentaDoCrm(
+  'aceleriq_list_commercial_activities', 'Agenda comercial',
+  'Atividades do comercial (ligacao, reuniao, WhatsApp, e-mail, proposta, tarefa) com o negocio a que pertencem e a marca de atrasada. Por padrao so as abertas; filtre por oportunidade para ver a agenda de um negocio.',
+  false, z.object({ opportunity_id: UUID.optional(), status: z.enum(['abertas', 'concluidas', 'todas']).optional(), limit: limite(200, 1).optional() }).strict(),
+  { type: 'object', properties: {
+    opportunity_id: { type: 'string', description: 'UUID da oportunidade (opcional).' },
+    status: { type: 'string', description: 'abertas (padrao), concluidas ou todas.' },
+    limit: { type: 'number', description: 'Maximo de itens (1 a 200). Padrao 50.' },
+  }, additionalProperties: false },
+  listCommercialActivities,
+);
+
+const createCommercialActivityTool = ferramentaDoCrm(
+  'aceleriq_create_commercial_activity', 'Agendar atividade comercial',
+  'Agenda o proximo passo de um negocio e atualiza a proxima acao do cartao no quadro. Negocio sem proximo passo agendado nao conta como qualificado.',
+  true, z.object({ opportunity_id: UUID, kind: z.enum(TIPOS_DE_ATIVIDADE).optional(), title: z.string().min(2).max(200), due_at: z.string().min(10).max(40), owner_id: UUID.nullable().optional(), notes: z.string().max(2000).optional() }).strict(),
+  { type: 'object', properties: {
+    opportunity_id: { type: 'string' },
+    kind: { type: 'string', description: 'ligacao, reuniao, whatsapp, email, proposta ou tarefa (padrao).' },
+    title: { type: 'string', description: 'O que sera feito.' },
+    due_at: { type: 'string', description: 'Quando (ISO 8601, ex.: 2026-09-18T14:00:00-03:00).' },
+    owner_id: { type: ['string', 'null'], description: 'Responsavel; padrao: o dono do negocio.' },
+    notes: { type: 'string' },
+  }, required: ['opportunity_id', 'title', 'due_at'], additionalProperties: false },
+  createCommercialActivity,
+);
+
+const completeCommercialActivityTool = ferramentaDoCrm(
+  'aceleriq_complete_commercial_activity', 'Concluir atividade comercial',
+  'Marca a atividade como feita (ou reabre com done=false) e grava o resultado na historia do negocio.',
+  true, z.object({ activity_id: UUID, done: z.boolean().optional(), outcome: z.string().max(1000).optional() }).strict(),
+  { type: 'object', properties: {
+    activity_id: { type: 'string' },
+    done: { type: 'boolean', description: 'Padrao true. false reabre.' },
+    outcome: { type: 'string', description: 'O que resultou, em uma linha.' },
+  }, required: ['activity_id'], additionalProperties: false },
+  completeCommercialActivity,
+);
+
+const listCommercialOrganizationsTool = ferramentaDoCrm(
+  'aceleriq_list_commercial_organizations', 'Empresas e contatos do CRM',
+  'Empresas cadastradas no CRM com os contatos ativos de cada uma. Busque por nome antes de criar, para nao duplicar.',
+  false, z.object({ search: z.string().max(80).optional(), limit: limite(200, 1).optional() }).strict(),
+  { type: 'object', properties: { search: { type: 'string', description: 'Trecho do nome.' }, limit: { type: 'number' } }, additionalProperties: false },
+  listCommercialOrganizations,
+);
+
+const upsertCommercialOrganizationTool = ferramentaDoCrm(
+  'aceleriq_upsert_commercial_organization', 'Criar ou editar empresa do CRM',
+  'Sem organization_id cria a empresa (name obrigatorio); com organization_id atualiza so os campos enviados.',
+  true, z.object({ organization_id: UUID.optional(), name: z.string().min(2).max(200).optional(), segment: z.string().max(200).optional(), site: z.string().max(200).optional(), city: z.string().max(200).optional(), notes: z.string().max(4000).optional(), client_id: UUID.nullable().optional(), owner_id: UUID.nullable().optional() }).strict(),
+  { type: 'object', properties: {
+    organization_id: { type: 'string' }, name: { type: 'string' }, segment: { type: 'string' }, site: { type: 'string' }, city: { type: 'string' }, notes: { type: 'string' },
+    client_id: { type: ['string', 'null'], description: 'UUID do cliente cadastrado, quando a empresa ja e cliente.' },
+    owner_id: { type: ['string', 'null'] },
+  }, additionalProperties: false },
+  upsertCommercialOrganization,
+);
+
+const upsertCommercialContactTool = ferramentaDoCrm(
+  'aceleriq_upsert_commercial_contact', 'Criar ou editar contato do CRM',
+  'Sem contact_id cria o contato (name obrigatorio); com contact_id atualiza so os campos enviados. organization_id liga a pessoa a empresa.',
+  true, z.object({ contact_id: UUID.optional(), organization_id: UUID.nullable().optional(), name: z.string().min(2).max(200).optional(), role: z.string().max(200).optional(), email: z.string().max(200).optional(), whatsapp: z.string().max(40).optional(), is_primary: z.boolean().optional(), notes: z.string().max(2000).optional() }).strict(),
+  { type: 'object', properties: {
+    contact_id: { type: 'string' }, organization_id: { type: ['string', 'null'] }, name: { type: 'string' }, role: { type: 'string', description: 'Cargo.' },
+    email: { type: 'string' }, whatsapp: { type: 'string' }, is_primary: { type: 'boolean' }, notes: { type: 'string' },
+  }, additionalProperties: false },
+  upsertCommercialContact,
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -3222,6 +3449,19 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   centralReviewPrepararTool,
   centralReviewDecidirTool,
   centralReviewMarcarEnviadoTool,
+  // CRM da casa com acesso completo (v1.44.0)
+  getOpportunityTool,
+  createOpportunityTool,
+  updateOpportunityTool,
+  moveOpportunityTool,
+  addOpportunityNoteTool,
+  archiveOpportunityTool,
+  listCommercialActivitiesTool,
+  createCommercialActivityTool,
+  completeCommercialActivityTool,
+  listCommercialOrganizationsTool,
+  upsertCommercialOrganizationTool,
+  upsertCommercialContactTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

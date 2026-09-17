@@ -232,6 +232,12 @@ export async function listarLeads(): Promise<Lead[]> {
   }));
 }
 
+/** A ultima recusa do banco, em texto: a tela mostra o motivo, nao so "nao deu". */
+let erroDoComercial = "";
+export function ultimoErroDoComercial(): string {
+  return erroDoComercial;
+}
+
 export async function salvarLead(
   lead: Partial<Lead> & { name: string },
 ): Promise<string | null> {
@@ -256,12 +262,22 @@ export async function salvarLead(
     classe: lead.classe || null,
     qualificacao: qualificacaoLimpa(lead.qualificacao),
   };
+  erroDoComercial = "";
   if (lead.id) {
-    const { error } = await supabase
+    // Edicao grava SO o que o chamador mandou. Antes o corpo inteiro ia junto
+    // e todo campo ausente virava null: salvar o nome apagava a proxima acao,
+    // a empresa e o contato ligados ao lead.
+    const mandados = new Set(Object.keys(lead));
+    const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
+    const { data: linhas, error } = await supabase
       .from("commercial_leads")
-      .update(corpo as never)
-      .eq("id", lead.id);
-    return error ? null : lead.id;
+      .update(parcial as never)
+      .eq("id", lead.id)
+      .select("id");
+    if (error) { erroDoComercial = error.message; return null; }
+    // Sem erro e sem linha = a politica de acesso recusou em silencio.
+    if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para editar este lead."; return null; }
+    return lead.id;
   }
   const { data, error } = await supabase
     .from("commercial_leads")
@@ -272,7 +288,7 @@ export async function salvarLead(
     } as never)
     .select("id")
     .single();
-  if (error || !data) return null;
+  if (error || !data) { erroDoComercial = error?.message || "O banco não confirmou a criação."; return null; }
   return String((data as Record<string, unknown>).id);
 }
 
