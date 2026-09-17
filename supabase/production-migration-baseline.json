@@ -817,6 +817,14 @@
       "remote_name": "acoes_feitas_entram_no_dossie",
       "remote_statements_sha256": "b62c53638114e29d1e4b8c1f7ce25f314bebacde83f3787397915eb355c2871e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260917200000",
+      "path": "supabase/migrations/20260917200000_crm_empresa_automatica_e_ficha_rica.sql",
+      "local_sha256": "f8715941382a95720891e5ade68705b964d0ed06702889d335d0a3442aa0492c",
+      "remote_name": "crm_empresa_automatica_e_ficha_rica",
+      "remote_statements_sha256": "efeefdc84e5f9565977289cf3bdbe92c65e45d1fc90319fbb8d24a0204b3e1f6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
