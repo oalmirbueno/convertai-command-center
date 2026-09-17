@@ -2,16 +2,19 @@ import { useMemo, useState } from "react";
 import { Building2, ChevronDown, ChevronRight, Plus, Search, Star, User } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   type Contato,
   type Empresa,
   type Lead,
+  CAMPOS_DA_EMPRESA,
   dinheiro,
   fichaDaEmpresa,
   rotuloDoEstagio,
   salvarContato,
   salvarEmpresa,
+  ultimoErroDoComercial,
 } from "@/lib/comercial";
 
 /**
@@ -60,16 +63,16 @@ export default function EmpresasCRM({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => setEditando("nova")}
-          className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground"
+          className="flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground"
         >
           <Plus className="h-4 w-4" />
           Nova empresa
         </button>
-        <div className="relative flex-1">
+        <div className="relative min-w-[150px] flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
@@ -146,6 +149,36 @@ export default function EmpresasCRM({
 
               {expandida && (
                 <div className="mt-3 space-y-3 border-t border-border pt-3">
+                  {/* A ficha em si: o que se sabe da empresa, em campos. */}
+                  {(() => {
+                    const dados = CAMPOS_DA_EMPRESA
+                      .map((campo) => ({ label: campo.label, valor: String((ficha.empresa as unknown as Record<string, unknown>)[campo.id] ?? "").trim() }))
+                      .filter((d) => d.valor);
+                    if (dados.length === 0 && !ficha.empresa.notes) {
+                      return (
+                        <p className="rounded-lg border border-dashed border-border px-2.5 py-2 text-[10.5px] text-muted-foreground">
+                          Ficha ainda sem dados. Toque em "Editar dados da empresa" para completar ramo, cidade, site, Instagram e porte.
+                        </p>
+                      );
+                    }
+                    return (
+                      <div>
+                        <dl className="grid gap-x-3 gap-y-1.5 sm:grid-cols-2">
+                          {dados.map((d) => (
+                            <div key={d.label} className="min-w-0">
+                              <dt className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{d.label}</dt>
+                              <dd className="break-words text-[12px] text-foreground">{d.valor}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {ficha.empresa.notes && (
+                          <p className="mt-2 whitespace-pre-line break-words rounded-lg bg-background px-2.5 py-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                            {ficha.empresa.notes}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
@@ -288,76 +321,78 @@ function EditorDeEmpresa({
   onFechar: () => void;
   onSalvo: () => Promise<void>;
 }) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<Record<string, string>>({
     name: empresa?.name || "",
-    segment: empresa?.segment || "",
-    city: empresa?.city || "",
-    site: empresa?.site || "",
     notes: empresa?.notes || "",
+    ...Object.fromEntries(
+      CAMPOS_DA_EMPRESA.map((campo) => [campo.id, String((empresa as unknown as Record<string, unknown> | null)?.[campo.id] ?? "")]),
+    ),
   });
   const [salvando, setSalvando] = useState(false);
 
+  const salvar = async () => {
+    if (form.name.trim().length < 2) {
+      toast.error("A empresa precisa de um nome.");
+      return;
+    }
+    setSalvando(true);
+    const id = await salvarEmpresa({ id: empresa?.id, ...form } as never);
+    setSalvando(false);
+    if (!id) {
+      toast.error(`Não foi possível salvar.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
+      return;
+    }
+    toast.success(empresa ? "Ficha atualizada." : "Empresa criada.");
+    await onSalvo();
+  };
+
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onFechar()}>
-      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-md">
+      <DialogContent className="max-h-[92dvh] w-[calc(100vw-1.5rem)] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{empresa ? empresa.name : "Nova empresa"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <Input
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Nome da empresa"
-            className="h-10"
-            autoFocus
-          />
-          <div className="grid grid-cols-2 gap-2">
+          <label className="block space-y-1">
+            <span className="text-[10.5px] font-semibold text-muted-foreground">Nome da empresa *</span>
             <Input
-              value={form.segment}
-              onChange={(e) => setForm({ ...form, segment: e.target.value })}
-              placeholder="Ramo"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="h-10"
+              autoFocus
             />
-            <Input
-              value={form.city}
-              onChange={(e) => setForm({ ...form, city: e.target.value })}
-              placeholder="Cidade"
-              className="h-10"
-            />
+          </label>
+          {/* Uma coluna no celular, duas a partir do sm: campo espremido em
+              meia tela e o que fazia o formulario "vazar". */}
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {CAMPOS_DA_EMPRESA.map((campo) => (
+              <label key={campo.id} className="block space-y-1">
+                <span className="text-[10.5px] font-semibold text-muted-foreground">{campo.label}</span>
+                <Input
+                  value={form[campo.id] || ""}
+                  onChange={(e) => setForm({ ...form, [campo.id]: e.target.value })}
+                  placeholder={campo.dica}
+                  className="h-10"
+                />
+              </label>
+            ))}
           </div>
-          <Input
-            value={form.site}
-            onChange={(e) => setForm({ ...form, site: e.target.value })}
-            placeholder="Site ou Instagram"
-            className="h-10"
-          />
-          <Input
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="O que é bom lembrar sobre ela"
-            className="h-10"
-          />
+          <label className="block space-y-1">
+            <span className="text-[10.5px] font-semibold text-muted-foreground">O que é bom lembrar sobre ela</span>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={4}
+              className="resize-y"
+            />
+          </label>
           <button
             type="button"
             disabled={salvando}
-            onClick={async () => {
-              if (form.name.trim().length < 2) {
-                toast.error("A empresa precisa de um nome.");
-                return;
-              }
-              setSalvando(true);
-              const id = await salvarEmpresa({ id: empresa?.id, ...form });
-              setSalvando(false);
-              if (!id) {
-                toast.error("Não foi possível salvar.");
-                return;
-              }
-              toast.success("Empresa salva.");
-              await onSalvo();
-            }}
-            className="h-11 w-full rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground disabled:opacity-50"
+            onClick={() => void salvar()}
+            className="sticky bottom-0 h-11 w-full rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground disabled:opacity-50"
           >
-            Salvar empresa
+            {salvando ? "Salvando…" : empresa ? "Salvar ficha" : "Criar empresa"}
           </button>
         </div>
       </DialogContent>
@@ -403,7 +438,7 @@ function EditorDeContato({
             placeholder="Cargo ou papel na decisão"
             className="h-10"
           />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <Input
               type="email"
               value={form.email}
@@ -443,7 +478,7 @@ function EditorDeContato({
               const id = await salvarContato({ organization_id: organizationId, ...form });
               setSalvando(false);
               if (!id) {
-                toast.error("Não foi possível salvar.");
+                toast.error(`Não foi possível salvar.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
                 return;
               }
               toast.success("Contato salvo.");

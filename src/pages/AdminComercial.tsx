@@ -29,9 +29,13 @@ import {
   ORIGENS,
   type Atividade,
   type Campanha,
+  type CampoDaEmpresa,
+  type Empresa,
   type EstagioId,
   type Lead,
+  CAMPOS_DA_EMPRESA,
   anotarNoLead,
+  apagarLead,
   arquivarCampanha,
   arquivarLead,
   dinheiro,
@@ -55,6 +59,7 @@ import {
   resumoDoFunil,
   rotuloDoEstagio,
   salvarCampanha,
+  salvarDadosDaEmpresaDoLead,
   salvarLead,
   salvarMeta,
   ultimoErroDoComercial,
@@ -482,6 +487,7 @@ export default function AdminComercial() {
           lead={leadAberto}
           campanhas={campanhas}
           equipe={equipe}
+          empresas={empresas}
           onFechar={() => {
             setLeadAberto(null);
             setNovoLead(false);
@@ -970,15 +976,18 @@ function EditorDeLead({
   lead,
   campanhas,
   equipe,
+  empresas,
   onFechar,
   onSalvo,
 }: {
   lead: Lead | null;
   campanhas: Campanha[];
   equipe: Array<{ id: string; nome: string }>;
+  empresas: Empresa[];
   onFechar: () => void;
   onSalvo: () => Promise<unknown>;
 }) {
+  const empresaDoLead = lead?.organization_id ? empresas.find((e) => e.id === lead.organization_id) ?? null : null;
   const [form, setForm] = useState({
     name: lead?.name || "",
     company: lead?.company || "",
@@ -993,7 +1002,11 @@ function EditorDeLead({
     notes: lead?.notes || "",
     classe: lead?.classe || "",
     qualificacao: { ...(lead?.qualificacao || {}) } as Record<string, string>,
+    org: Object.fromEntries(
+      CAMPOS_DA_EMPRESA.map((campo) => [campo.id, String((empresaDoLead as unknown as Record<string, unknown> | null)?.[campo.id] ?? "")]),
+    ) as Record<CampoDaEmpresa, string>,
   });
+  const [apagando, setApagando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [nota, setNota] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -1035,6 +1048,15 @@ function EditorDeLead({
     if (!id) {
       toast.error(`Não foi possível salvar o lead.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
       return false;
+    }
+    // A ficha da empresa ja existe a esta altura (o banco a cria ao gravar o
+    // lead). Vai para ela so o campo que mudou.
+    const inicialDaEmpresa = (JSON.parse(formInicial) as typeof form).org;
+    const mudouNaEmpresa = Object.fromEntries(
+      Object.entries(form.org).filter(([campo, valor]) => valor !== inicialDaEmpresa[campo as CampoDaEmpresa]),
+    ) as Partial<Record<CampoDaEmpresa, string>>;
+    if (Object.keys(mudouNaEmpresa).length > 0 && !(await salvarDadosDaEmpresaDoLead(id, mudouNaEmpresa))) {
+      toast.error(`O lead foi salvo, mas os dados da empresa não.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
     }
     await onSalvo();
     toast.success(lead ? "Alterações salvas." : "Lead criado.");
@@ -1105,6 +1127,29 @@ function EditorDeLead({
               />
             </Campo>
           </div>
+
+          {/* A ficha da empresa nasce sozinha quando "Empresa" esta preenchida;
+              aqui se completa o contexto dela sem sair do lead. Campo proprio
+              e o que deixa achar depois; "Notas" vira deposito. */}
+          {form.company.trim().length > 1 && (
+            <details className="rounded-xl border border-border bg-background p-3" open={Object.values(form.org).some(Boolean)}>
+              <summary className="cursor-pointer text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Dados da empresa · {empresaDoLead ? "ficha ligada" : "a ficha é criada ao salvar"}
+              </summary>
+              <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                {CAMPOS_DA_EMPRESA.map((campo) => (
+                  <Campo key={campo.id} rotulo={campo.label}>
+                    <Input
+                      value={form.org[campo.id] || ""}
+                      onChange={(e) => setForm({ ...form, org: { ...form.org, [campo.id]: e.target.value } })}
+                      placeholder={campo.dica}
+                      className="h-10"
+                    />
+                  </Campo>
+                ))}
+              </div>
+            </details>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Separados porque é assim que a casa vende: somar os dois faria
@@ -1238,7 +1283,8 @@ function EditorDeLead({
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {CAMPOS_DE_QUALIFICACAO.map((campo) => (
                 <Campo key={campo.id} rotulo={campo.label}>
-                  <Input
+                  {/* Area de texto: qualificacao boa e frase inteira, nao palavra. */}
+                  <Textarea
                     value={form.qualificacao[campo.id] || ""}
                     onChange={(e) =>
                       setForm({
@@ -1250,7 +1296,8 @@ function EditorDeLead({
                       })
                     }
                     placeholder={campo.dica}
-                    className="h-10"
+                    rows={2}
+                    className="min-h-[2.5rem] resize-y text-[12.5px]"
                   />
                 </Campo>
               ))}
@@ -1261,13 +1308,15 @@ function EditorDeLead({
             <Textarea
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              rows={2}
+              rows={5}
+              placeholder="O que não coube nos campos acima: histórico, observações, rascunho de abordagem"
+              className="resize-y"
             />
           </Campo>
 
           {/* Barra de salvar grudada no pe da janela: aparece em qualquer ponto
               da rolagem e diz quando ha edicao por salvar. */}
-          <div className="sticky bottom-0 z-10 -mx-1 flex gap-2 rounded-xl border border-border bg-background/95 p-1.5 backdrop-blur">
+          <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap gap-2 rounded-xl border border-border bg-background/95 p-1.5 backdrop-blur">
             <button
               type="button"
               onClick={() => void salvar()}
@@ -1289,6 +1338,32 @@ function EditorDeLead({
                 className="h-11 shrink-0 rounded-xl border border-border px-3 text-[11.5px] text-muted-foreground hover:text-foreground"
               >
                 Arquivar
+              </button>
+            )}
+            {lead && (
+              // Apagar pede dois toques: o primeiro arma, o segundo apaga. Some
+              // com o lead, a agenda e a historia dele; a ficha da empresa fica.
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!apagando) { setApagando(true); return; }
+                  if (await apagarLead(lead.id)) {
+                    await onSalvo();
+                    toast.success("Lead apagado.");
+                    onFechar();
+                  } else {
+                    setApagando(false);
+                    toast.error(`Não foi possível apagar.${ultimoErroDoComercial() ? ` ${ultimoErroDoComercial()}` : ""}`);
+                  }
+                }}
+                onBlur={() => setApagando(false)}
+                className={`h-11 shrink-0 rounded-xl border px-3 text-[11.5px] font-semibold transition-colors ${
+                  apagando
+                    ? "border-destructive bg-destructive text-destructive-foreground"
+                    : "border-destructive/30 text-destructive hover:bg-destructive/10"
+                }`}
+              >
+                {apagando ? "Confirmar apagar" : "Apagar"}
               </button>
             )}
           </div>

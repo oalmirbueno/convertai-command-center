@@ -64,6 +64,7 @@ import {
   completeCommercialActivity,
   createCommercialActivity,
   createOpportunity,
+  deleteOpportunity,
   getOpportunity,
   listCommercialActivities,
   listCommercialOrganizations,
@@ -323,6 +324,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_move_opportunity: 'commercial:write',
   aceleriq_add_opportunity_note: 'commercial:write',
   aceleriq_archive_opportunity: 'commercial:write',
+  aceleriq_delete_opportunity: 'commercial:write',
   aceleriq_create_commercial_activity: 'commercial:write',
   aceleriq_complete_commercial_activity: 'commercial:write',
   aceleriq_upsert_commercial_organization: 'commercial:write',
@@ -2867,7 +2869,7 @@ const MAPA_DO_PAINEL = [
   { area: 'Arquivos', rota: '/arquivos', para: 'Acervo de arquivos por cliente e projeto.', pelo_mcp: 'aceleriq_list_files, aceleriq_upload_file, aceleriq_update_file_metadata' },
   { area: 'Cofre', rota: '/cofre', para: 'Acessos e credenciais dos clientes.', pelo_mcp: 'aceleriq_vault_overview (leitura, SEM senhas)' },
   { area: 'Financeiro', rota: '/financeiro', para: 'Caixa, mensalidades, custos, investimentos.', pelo_mcp: 'aceleriq_get_finance_dashboard e as demais aceleriq_*finance*' },
-  { area: 'Comercial (CRM)', rota: '/comercial/crm', para: 'Funil de negocios, empresas, contatos e agenda comercial. Area da casa.', pelo_mcp: 'aceleriq_list_opportunities, aceleriq_get_opportunity, aceleriq_create_opportunity, aceleriq_update_opportunity, aceleriq_move_opportunity, aceleriq_add_opportunity_note, aceleriq_archive_opportunity, aceleriq_list_commercial_activities, aceleriq_create_commercial_activity, aceleriq_complete_commercial_activity, aceleriq_list_commercial_organizations, aceleriq_upsert_commercial_organization, aceleriq_upsert_commercial_contact' },
+  { area: 'Comercial (CRM)', rota: '/comercial/crm', para: 'Funil de negocios, empresas, contatos e agenda comercial. Area da casa.', pelo_mcp: 'aceleriq_list_opportunities, aceleriq_get_opportunity, aceleriq_create_opportunity, aceleriq_update_opportunity, aceleriq_move_opportunity, aceleriq_add_opportunity_note, aceleriq_archive_opportunity, aceleriq_delete_opportunity, aceleriq_list_commercial_activities, aceleriq_create_commercial_activity, aceleriq_complete_commercial_activity, aceleriq_list_commercial_organizations, aceleriq_upsert_commercial_organization, aceleriq_upsert_commercial_contact' },
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
@@ -3272,7 +3274,7 @@ const CAMPOS_DO_NEGOCIO_JSON = {
   contact_id: { type: ['string', 'null'], description: 'UUID do contato no CRM.' },
   notes: { type: ['string', 'null'] },
   classe: { type: ['string', 'null'], description: 'cliente_atual, upsell ou novo_prospect.' },
-  qualificacao: { type: 'object', description: 'Respostas de qualificacao (chave: texto).' },
+  qualificacao: { type: 'object', description: 'Respostas de qualificacao, chave: texto. Chaves da tela: aderencia_icp, problema, orcamento, autoridade, urgencia, recorrencia, aprovacao, presenca_digital, oferta, abordagem, concorrencia. Na edicao as respostas somam as que ja existem.' },
 } as const;
 
 const getOpportunityTool = ferramentaDoCrm(
@@ -3285,7 +3287,7 @@ const getOpportunityTool = ferramentaDoCrm(
 
 const createOpportunityTool = ferramentaDoCrm(
   'aceleriq_create_opportunity', 'Criar negocio no funil',
-  'Cria uma oportunidade no CRM da casa. So name e obrigatorio; a etapa inicial e "novo" (ou outra etapa aberta informada). Nunca cria como ganho ou perdido: fechamento e sempre um movimento registrado.',
+  'Cria uma oportunidade no CRM da casa. Preencher company cria (ou reaproveita) sozinho a ficha da empresa na aba Empresas e liga o negocio a ela; complete a ficha com aceleriq_upsert_commercial_organization. Contexto vai nos campos proprios (qualificacao, classe, valores), nao em notes. So name e obrigatorio; a etapa inicial e "novo" (ou outra etapa aberta informada). Nunca cria como ganho ou perdido: fechamento e sempre um movimento registrado.',
   true, z.object({ ...CAMPOS_DO_NEGOCIO, name: z.string().min(2).max(160), stage: z.enum(ETAPAS_DO_FUNIL).optional() }).strict(),
   { type: 'object', properties: { ...CAMPOS_DO_NEGOCIO_JSON, stage: { type: 'string', description: 'Etapa inicial aberta: novo, contato, diagnostico, proposta ou negociacao.' } }, required: ['name'], additionalProperties: false },
   createOpportunity,
@@ -3326,6 +3328,18 @@ const archiveOpportunityTool = ferramentaDoCrm(
   true, z.object({ opportunity_id: UUID }).strict(),
   { type: 'object', properties: { opportunity_id: { type: 'string' } }, required: ['opportunity_id'], additionalProperties: false },
   archiveOpportunity, true,
+);
+
+const deleteOpportunityTool = ferramentaDoCrm(
+  'aceleriq_delete_opportunity', 'Apagar negocio de vez',
+  'APAGA a oportunidade, a agenda e a historia dela. Nao tem volta. Exige confirm=true e reason. Use so para duplicado, teste ou cadastro errado; para tirar do quadro guardando a historia use aceleriq_archive_opportunity, e para negocio que nao fechou use aceleriq_move_opportunity com perdido. A ficha da empresa nao e apagada.',
+  true, z.object({ opportunity_id: UUID, confirm: z.literal(true), reason: z.string().min(5).max(500) }).strict(),
+  { type: 'object', properties: {
+    opportunity_id: { type: 'string' },
+    confirm: { type: 'boolean', description: 'Tem que ser true.' },
+    reason: { type: 'string', description: 'Por que esta apagando.' },
+  }, required: ['opportunity_id', 'confirm', 'reason'], additionalProperties: false },
+  deleteOpportunity, true,
 );
 
 const listCommercialActivitiesTool = ferramentaDoCrm(
@@ -3378,9 +3392,10 @@ const listCommercialOrganizationsTool = ferramentaDoCrm(
 const upsertCommercialOrganizationTool = ferramentaDoCrm(
   'aceleriq_upsert_commercial_organization', 'Criar ou editar empresa do CRM',
   'Sem organization_id cria a empresa (name obrigatorio); com organization_id atualiza so os campos enviados.',
-  true, z.object({ organization_id: UUID.optional(), name: z.string().min(2).max(200).optional(), segment: z.string().max(200).optional(), site: z.string().max(200).optional(), city: z.string().max(200).optional(), notes: z.string().max(4000).optional(), client_id: UUID.nullable().optional(), owner_id: UUID.nullable().optional() }).strict(),
+  true, z.object({ organization_id: UUID.optional(), name: z.string().min(2).max(200).optional(), segment: z.string().max(200).optional(), site: z.string().max(200).optional(), city: z.string().max(200).optional(), instagram: z.string().max(200).optional(), phone: z.string().max(60).optional(), address: z.string().max(300).optional(), cnpj: z.string().max(30).optional(), size: z.string().max(300).optional(), notes: z.string().max(4000).optional(), client_id: UUID.nullable().optional(), owner_id: UUID.nullable().optional() }).strict(),
   { type: 'object', properties: {
-    organization_id: { type: 'string' }, name: { type: 'string' }, segment: { type: 'string' }, site: { type: 'string' }, city: { type: 'string' }, notes: { type: 'string' },
+    organization_id: { type: 'string' }, name: { type: 'string' }, segment: { type: 'string', description: 'Ramo.' }, site: { type: 'string' }, city: { type: 'string' },
+    instagram: { type: 'string', description: '@perfil.' }, phone: { type: 'string' }, address: { type: 'string' }, cnpj: { type: 'string' }, size: { type: 'string', description: 'Porte: unidades, equipe, faturamento estimado.' }, notes: { type: 'string' },
     client_id: { type: ['string', 'null'], description: 'UUID do cliente cadastrado, quando a empresa ja e cliente.' },
     owner_id: { type: ['string', 'null'] },
   }, additionalProperties: false },
@@ -3456,6 +3471,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   moveOpportunityTool,
   addOpportunityNoteTool,
   archiveOpportunityTool,
+  deleteOpportunityTool,
   listCommercialActivitiesTool,
   createCommercialActivityTool,
   completeCommercialActivityTool,

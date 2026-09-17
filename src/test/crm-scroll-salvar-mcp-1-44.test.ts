@@ -28,7 +28,8 @@ const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
 
 describe("o funil rola por dentro da coluna", () => {
   it("a coluna tem altura máxima e a lista de cartões rola sozinha", () => {
-    expect(kanban).toContain("flex max-h-[calc(100dvh-15rem)] min-h-[12rem]");
+    expect(kanban).toContain("sm:max-h-[calc(100dvh-15rem)]");
+    expect(kanban).toContain("min-h-[12rem] w-full shrink-0 flex-col");
     expect(kanban).toContain("min-h-0 flex-1 space-y-1.5 overflow-y-auto overscroll-contain");
   });
 
@@ -93,7 +94,7 @@ describe("o MCP tem o CRM inteiro na 1.44.0", () => {
 
   it("toda função do serviço recusa credencial restrita a cliente", () => {
     const funcoes = servico.match(/export async function \w+\([^)]*ctx: AuthContext\) \{\n  soDaCasa\(ctx\);/g) ?? [];
-    expect(funcoes.length).toBe(12);
+    expect(funcoes.length).toBe(13);
     expect(servico).toContain("esta credencial e restrita a cliente e nao alcanca o CRM");
   });
 

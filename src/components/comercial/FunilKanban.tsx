@@ -101,6 +101,9 @@ export default function FunilKanban({
   // A visão separada por classe: cliente atual, upsell e novo prospect não
   // podem se misturar na leitura, mesmo dividindo os mesmos estágios.
   const [classe, setClasse] = useState<string>("todas");
+  // No celular o quadro mostra UMA etapa por vez, escolhida por chip: seis
+  // colunas estreitas rolando de lado nao se leem em 380px de tela.
+  const [etapaNoCelular, setEtapaNoCelular] = useState<EstagioId>(ESTAGIOS_ABERTOS[0]);
   const [fechamento, setFechamento] = useState<{
     lead: Lead;
     destino: "ganho" | "perdido";
@@ -311,10 +314,34 @@ export default function FunilKanban({
             </div>
           )}
 
-          <div className="-mx-1 flex snap-x gap-2.5 overflow-x-auto px-1 pb-3 [scrollbar-width:thin]">
+          {/* Celular: chips com a contagem de cada etapa. */}
+          <div className="-mx-1 mb-2 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:hidden [scrollbar-width:none]" role="tablist" aria-label="Etapas do funil">
+            {ESTAGIOS_ABERTOS.map((estagio) => {
+              const total = (porEstagio.get(estagio) || []).length;
+              const ativa = etapaNoCelular === estagio;
+              return (
+                <button
+                  key={estagio}
+                  type="button"
+                  role="tab"
+                  aria-selected={ativa}
+                  onClick={() => setEtapaNoCelular(estagio)}
+                  className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-semibold transition-colors ${
+                    ativa ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground"
+                  }`}
+                >
+                  {rotuloDoEstagio(estagio)}
+                  <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${ativa ? "bg-primary-foreground/20" : "bg-secondary"}`}>{total}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="-mx-1 flex snap-x gap-2.5 px-1 pb-3 sm:overflow-x-auto [scrollbar-width:thin]">
             {ESTAGIOS_ABERTOS.map((estagio) => (
               <Coluna
                 key={estagio}
+                visivelNoCelular={etapaNoCelular === estagio}
                 estagio={estagio}
                 leads={porEstagio.get(estagio) || []}
                 agendaDe={agendaDe}
@@ -369,12 +396,14 @@ export default function FunilKanban({
 /* ─────────────────────────────── Coluna ─────────────────────────────────── */
 
 function Coluna({
+  visivelNoCelular,
   estagio,
   leads,
   agendaDe,
   arrastandoAlgo,
   onAbrir,
 }: {
+  visivelNoCelular: boolean;
   estagio: EstagioId;
   leads: Lead[];
   agendaDe: (lead: Lead) => AgendaDoLead;
@@ -399,7 +428,7 @@ function Coluna({
       ref={setNodeRef}
       // A coluna tem altura maxima e a lista rola por dentro: com dez leads em
       // "Novo" a coluna empurrava a pagina inteira e as outras sumiam da tela.
-      className={`flex max-h-[calc(100dvh-15rem)] min-h-[12rem] w-[260px] shrink-0 flex-col rounded-2xl border p-2.5 transition-colors sm:w-[270px] ${
+      className={`${visivelNoCelular ? "flex" : "hidden"} max-h-[calc(100dvh-17rem)] min-h-[12rem] w-full shrink-0 flex-col rounded-2xl border p-2.5 transition-colors sm:flex sm:max-h-[calc(100dvh-15rem)] sm:w-[270px] ${
         isOver
           ? "border-primary bg-primary/[0.07]"
           : arrastandoAlgo

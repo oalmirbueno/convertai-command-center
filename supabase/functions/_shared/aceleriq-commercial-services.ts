@@ -66,7 +66,7 @@ export async function getOpportunity(input: { opportunity_id: string }, ctx: Aut
   const [atividades, eventos, empresa, contato, dono] = await Promise.all([
     comPrazo(db().from('commercial_activities').select('id, kind, title, due_at, done_at, owner_id, notes, created_at').eq('lead_id', lead.id).order('due_at', { ascending: true }).limit(100)),
     comPrazo(db().from('commercial_lead_events').select('id, kind, from_stage, to_stage, note, created_at').eq('lead_id', lead.id).order('created_at', { ascending: false }).limit(100)),
-    lead.organization_id ? comPrazo(db().from('commercial_organizations').select('id, name, segment, site, city, notes, client_id').eq('id', lead.organization_id).maybeSingle()) : Promise.resolve({ data: null }),
+    lead.organization_id ? comPrazo(db().from('commercial_organizations').select('id, name, segment, site, city, instagram, phone, address, cnpj, size, notes, client_id').eq('id', lead.organization_id).maybeSingle()) : Promise.resolve({ data: null }),
     lead.contact_id ? comPrazo(db().from('commercial_contacts').select('id, name, role, email, whatsapp, is_primary').eq('id', lead.contact_id).maybeSingle()) : Promise.resolve({ data: null }),
     lead.owner_id ? comPrazo(db().from('profiles').select('id, full_name').eq('id', lead.owner_id).maybeSingle()) : Promise.resolve({ data: null }),
   ]);
@@ -146,6 +146,10 @@ export async function updateOpportunity(input: OpportunityInput & { opportunity_
   const corpo = corpoDoLead(campos);
   if (Object.keys(corpo).length === 0) throw new Error('Nada para atualizar: mande ao menos um campo alem do id.');
   if ('name' in corpo && String(corpo.name).length < 2) throw new Error('name: o negocio precisa de um nome.');
+  // Qualificacao soma: mandar uma resposta nova nao apaga as que ja estavam.
+  if (corpo.qualificacao && antes.qualificacao && typeof antes.qualificacao === 'object') {
+    corpo.qualificacao = { ...(antes.qualificacao as Record<string, unknown>), ...(corpo.qualificacao as Record<string, unknown>) };
+  }
   const { data, error } = await comPrazo(db().from('commercial_leads').update(corpo).eq('id', antes.id).select('*').single());
   if (error) throw new Error(`commercial_leads: ${error.message}`);
   return { oportunidade: data, campos_alterados: Object.keys(corpo) };
@@ -193,6 +197,23 @@ export async function archiveOpportunity(input: { opportunity_id: string }, ctx:
   const { error } = await comPrazo(db().from('commercial_leads').update({ archived_at: new Date().toISOString() }).eq('id', lead.id));
   if (error) throw new Error(`commercial_leads: ${error.message}`);
   return { arquivado: true, opportunity_id: lead.id, observacao: 'Arquivar nao apaga: o negocio sai do quadro e o historico fica.' };
+}
+
+/**
+ * Apagar de verdade: some o negocio, a agenda e a historia dele (cascata do
+ * banco). A ficha da empresa fica. Exige confirmacao explicita e motivo,
+ * porque nao tem volta; para tirar do quadro guardando a historia, arquive.
+ */
+export async function deleteOpportunity(input: { opportunity_id: string; confirm: boolean; reason: string }, ctx: AuthContext) {
+  soDaCasa(ctx);
+  if (input.confirm !== true) throw new Error('confirm: mande true para apagar. Apagar nao tem volta; arquivar guarda a historia.');
+  const motivo = texto(input.reason, 500);
+  if (!motivo || motivo.length < 5) throw new Error('reason: diga por que esta apagando (duplicado, teste, cadastro errado).');
+  const lead = await exigirLead(input.opportunity_id);
+  const { data, error } = await comPrazo(db().from('commercial_leads').delete().eq('id', lead.id).select('id'));
+  if (error) throw new Error(`commercial_leads: ${error.message}`);
+  if (!data || data.length === 0) throw new Error('Nada foi apagado.');
+  return { apagado: true, opportunity_id: lead.id, nome: lead.name, empresa: lead.company ?? null, motivo, observacao: 'A ficha da empresa continua no CRM.' };
 }
 
 export async function listCommercialActivities(opts: { opportunity_id?: string; status?: 'abertas' | 'concluidas' | 'todas'; limit?: number }, ctx: AuthContext) {
@@ -256,7 +277,7 @@ export async function listCommercialOrganizations(opts: { search?: string; limit
   soDaCasa(ctx);
   const limit = Math.min(Math.max(Number(opts.limit) || 50, 1), 200);
   let qb = db().from('commercial_organizations')
-    .select('id, name, segment, site, city, notes, client_id, owner_id, created_at, contatos:commercial_contacts(id, name, role, email, whatsapp, is_primary, archived_at)')
+    .select('id, name, segment, site, city, instagram, phone, address, cnpj, size, notes, client_id, owner_id, created_at, contatos:commercial_contacts(id, name, role, email, whatsapp, is_primary, archived_at)')
     .is('archived_at', null).order('name', { ascending: true }).limit(limit);
   const busca = texto(opts.search, 80);
   if (busca) qb = qb.ilike('name', `%${busca.replace(/[%_]/g, '')}%`);
@@ -270,12 +291,12 @@ export async function listCommercialOrganizations(opts: { search?: string; limit
   };
 }
 
-export async function upsertCommercialOrganization(input: { organization_id?: string; name?: string; segment?: string; site?: string; city?: string; notes?: string; client_id?: string | null; owner_id?: string | null }, ctx: AuthContext) {
+export async function upsertCommercialOrganization(input: { organization_id?: string; name?: string; segment?: string; site?: string; city?: string; instagram?: string; phone?: string; address?: string; cnpj?: string; size?: string; notes?: string; client_id?: string | null; owner_id?: string | null }, ctx: AuthContext) {
   soDaCasa(ctx);
   await exigirPerfil(input.owner_id, 'owner_id');
   await exigirPerfil(input.client_id, 'client_id');
   const corpo: Record<string, unknown> = {};
-  for (const k of ['segment', 'site', 'city'] as const) if (input[k] !== undefined) corpo[k] = texto(input[k], 200);
+  for (const k of ['segment', 'site', 'city', 'instagram', 'phone', 'address', 'cnpj', 'size'] as const) if (input[k] !== undefined) corpo[k] = texto(input[k], 300);
   if (input.notes !== undefined) corpo.notes = texto(input.notes, 4000);
   if (input.client_id !== undefined) corpo.client_id = input.client_id || null;
   if (input.owner_id !== undefined) corpo.owner_id = input.owner_id || null;

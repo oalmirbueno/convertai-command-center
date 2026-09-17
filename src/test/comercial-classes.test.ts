@@ -89,6 +89,11 @@ describe("os campos de qualificação", () => {
       "urgencia",
       "recorrencia",
       "aprovacao",
+      // 2026-09-17: o contexto que ia parar em "Notas" ganhou campo proprio.
+      "presenca_digital",
+      "oferta",
+      "abordagem",
+      "concorrencia",
     ]);
   });
 

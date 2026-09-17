@@ -137,6 +137,27 @@ export const CAMPOS_DE_QUALIFICACAO = [
     label: "Aprovação necessária",
     dica: "O que precisa de aval do dono antes de seguir",
   },
+  // Contexto que antes ia parar em "Notas" e ninguem achava depois.
+  {
+    id: "presenca_digital",
+    label: "Presença digital hoje",
+    dica: "O que ele já faz: Instagram, site, anúncios, quem cuida",
+  },
+  {
+    id: "oferta",
+    label: "O que oferecer",
+    dica: "Serviço e plano que fazem sentido para este lead",
+  },
+  {
+    id: "abordagem",
+    label: "Como abordar",
+    dica: "Gancho da primeira conversa e por onde chegar",
+  },
+  {
+    id: "concorrencia",
+    label: "Concorrência e fornecedor atual",
+    dica: "Com quem ele trabalha hoje e o que pesa contra",
+  },
 ] as const;
 
 /** Só o que foi escrito de verdade entra no jsonb; vazio fica ausente. */
@@ -975,7 +996,26 @@ export interface Empresa {
   notes: string | null;
   client_id: string | null;
   owner_id: string | null;
+  /** Ficha rica: o contexto mora em campo proprio, nao em "Notas". */
+  instagram?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  cnpj?: string | null;
+  size?: string | null;
 }
+
+/** Os campos de texto da ficha, na ordem em que a tela os mostra. */
+export const CAMPOS_DA_EMPRESA = [
+  { id: "segment", label: "Ramo", dica: "Ex.: odontologia, energia solar, escola" },
+  { id: "city", label: "Cidade", dica: "Cidade e bairro" },
+  { id: "site", label: "Site", dica: "https://…" },
+  { id: "instagram", label: "Instagram", dica: "@perfil" },
+  { id: "phone", label: "Telefone", dica: "Fixo ou WhatsApp comercial" },
+  { id: "size", label: "Porte", dica: "Unidades, equipe, faturamento estimado" },
+  { id: "cnpj", label: "CNPJ", dica: "Opcional" },
+  { id: "address", label: "Endereço", dica: "Rua, número" },
+] as const;
+export type CampoDaEmpresa = (typeof CAMPOS_DA_EMPRESA)[number]["id"];
 
 export interface Contato {
   id: string;
@@ -991,7 +1031,7 @@ export interface Contato {
 export async function listarEmpresas(): Promise<Empresa[]> {
   const { data, error } = await supabase
     .from("commercial_organizations")
-    .select("id, name, segment, site, city, notes, client_id, owner_id")
+    .select("id, name, segment, site, city, notes, client_id, owner_id, instagram, phone, address, cnpj, size")
     .is("archived_at", null)
     .order("name");
   if (error || !data) return [];
@@ -1012,31 +1052,85 @@ export async function salvarEmpresa(
   empresa: Partial<Empresa> & { name: string },
 ): Promise<string | null> {
   const nome = empresa.name.trim();
-  if (nome.length < 2) return null;
+  erroDoComercial = "";
+  if (nome.length < 2) { erroDoComercial = "A empresa precisa de um nome."; return null; }
   const { data: sessao } = await supabase.auth.getUser();
+  const limpo = (v: string | null | undefined) => v?.trim() || null;
   const corpo = {
     name: nome.slice(0, 160),
-    segment: empresa.segment?.trim() || null,
-    site: empresa.site?.trim() || null,
-    city: empresa.city?.trim() || null,
-    notes: empresa.notes?.trim() || null,
+    segment: limpo(empresa.segment),
+    site: limpo(empresa.site),
+    city: limpo(empresa.city),
+    notes: limpo(empresa.notes),
     client_id: empresa.client_id || null,
     owner_id: empresa.owner_id || null,
+    instagram: limpo(empresa.instagram),
+    phone: limpo(empresa.phone),
+    address: limpo(empresa.address),
+    cnpj: limpo(empresa.cnpj),
+    size: limpo(empresa.size),
   };
   if (empresa.id) {
-    const { error } = await supabase
+    // So o que foi mandado: editar o ramo nao apaga o cliente ligado nem o dono.
+    const mandados = new Set(Object.keys(empresa));
+    const parcial = Object.fromEntries(Object.entries(corpo).filter(([campo]) => mandados.has(campo)));
+    const { data: linhas, error } = await supabase
       .from("commercial_organizations")
-      .update(corpo as never)
-      .eq("id", empresa.id);
-    return error ? null : empresa.id;
+      .update(parcial as never)
+      .eq("id", empresa.id)
+      .select("id");
+    if (error) { erroDoComercial = error.message; return null; }
+    if (!linhas || linhas.length === 0) { erroDoComercial = "Sua conta não tem permissão para editar esta empresa."; return null; }
+    return empresa.id;
+  }
+  // Mesmo nome = mesma ficha: criar de novo abriria duas historias para a mesma empresa.
+  const { data: existente } = await supabase
+    .from("commercial_organizations")
+    .select("id")
+    .ilike("name", nome.replace(/[%_]/g, ""))
+    .is("archived_at", null)
+    .limit(1);
+  if (existente && existente.length > 0) {
+    erroDoComercial = "Já existe uma ficha com este nome. Abra a ficha e edite.";
+    return null;
   }
   const { data, error } = await supabase
     .from("commercial_organizations")
     .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
     .select("id")
     .single();
-  if (error || !data) return null;
+  if (error || !data) { erroDoComercial = error?.message || "O banco não confirmou a criação."; return null; }
   return String((data as Record<string, unknown>).id);
+}
+
+/**
+ * Os dados da empresa editados de dentro do lead. A ficha nasce sozinha no
+ * banco quando o lead tem "Empresa" preenchida; aqui so se completa o resto.
+ */
+export async function salvarDadosDaEmpresaDoLead(
+  leadId: string,
+  campos: Partial<Record<CampoDaEmpresa, string>>,
+): Promise<boolean> {
+  const preenchidos = Object.entries(campos).filter(([, v]) => typeof v === "string");
+  if (preenchidos.length === 0) return true;
+  const { data } = await supabase.from("commercial_leads").select("organization_id, company").eq("id", leadId).maybeSingle();
+  const linha = data as { organization_id?: string | null; company?: string | null } | null;
+  if (!linha?.organization_id) return true;
+  const id = await salvarEmpresa({ id: linha.organization_id, name: linha.company || "Empresa", ...Object.fromEntries(preenchidos) } as never);
+  return Boolean(id);
+}
+
+/**
+ * Apagar de verdade. Arquivar tira do quadro e guarda a historia; apagar some
+ * com o lead, as atividades e a historia dele (cascata do banco). A ficha da
+ * empresa fica: outra conversa com ela pode existir.
+ */
+export async function apagarLead(id: string): Promise<boolean> {
+  erroDoComercial = "";
+  const { data, error } = await supabase.from("commercial_leads").delete().eq("id", id).select("id");
+  if (error) { erroDoComercial = error.message; return false; }
+  if (!data || data.length === 0) { erroDoComercial = "Sua conta não tem permissão para apagar este lead."; return false; }
+  return true;
 }
 
 export async function salvarContato(
