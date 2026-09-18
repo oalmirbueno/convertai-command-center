@@ -841,6 +841,14 @@
       "remote_name": "acesso_do_cliente_avisa_por_email",
       "remote_statements_sha256": "7c4d003d90e2a73d23528c49bc587f4d7da070127ca8841f19e3952e616ca286",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260918140000",
+      "path": "supabase/migrations/20260918140000_primeiro_acesso_sem_beco.sql",
+      "local_sha256": "2ccdf8655d7aa2b89ad2a4ba70fef2f23a91f19ecf3d092a64660eea09640422",
+      "remote_name": "primeiro_acesso_sem_beco",
+      "remote_statements_sha256": "c742600d032e455b0d380003dfbde2d62eb4c619a0adca11962becbeeb7eac25",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

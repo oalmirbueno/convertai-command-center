@@ -50,19 +50,19 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-    
-  
-  
-  
+
+
+
+
   <meta property="og:image" content="%VITE_APP_PUBLIC_URL%/icon-512.png">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
   <meta name="twitter:image" content="%VITE_APP_PUBLIC_URL%/icon-512.png">
   <meta name="twitter:card" content="summary_large_image">
-  
-  
-  
-  
+
+
+
+
   <meta property="og:title" content="Aceleriq OS | Área de Comando do Cliente">
   <meta name="twitter:title" content="Aceleriq OS | Área de Comando do Cliente">
   <meta property="og:description" content="Acompanhe a evolução do seu ecossistema de vendas. Acesso exclusivo aos dashboards de marketing, fluxos de automação e implantação de IA do seu negócio">
@@ -76,16 +76,47 @@
 
       O painel inteiro (inclusive a auto-recuperacao de versao) vive dentro de um
       arquivo JavaScript moderno. Se o navegador da pessoa for antigo demais para
-      ler esse arquivo, nada daquilo roda: a pagina fica preta e sem explicacao,
-      e atualizar mil vezes nao adianta. O bloco abaixo e escrito em JavaScript
-      antigo de proposito, para funcionar em QUALQUER navegador, e transformar a
-      tela preta numa mensagem que diz o que fazer.
+      ler esse arquivo, ou se o arquivo nao chegar (publicacao saindo neste
+      instante, cache velho, rede fraca), nada daquilo roda: a pagina fica preta
+      e sem explicacao, e atualizar mil vezes nao adianta. Tudo abaixo e escrito
+      em JavaScript antigo de proposito, para funcionar em QUALQUER navegador:
+
+      1. #app-boot: a tela nunca fica preta. Meio segundo depois de abrir, se o
+         painel ainda nao montou, aparece a marca com "Abrindo o painel".
+      2. Arquivo do painel que nao baixou: recarrega sozinho ate duas vezes
+         furando o cache; depois avisa com botao.
+      3. Erro de leitura (navegador antigo) ou erro ao iniciar: aviso na hora,
+         com o detalhe tecnico para mandar para a Aceleriq.
+      4. Link aberto dentro do WhatsApp, Instagram ou Gmail: dica para abrir
+         no navegador de verdade.
     -->
-    <div id="app-fallback" style="display:none;position:fixed;inset:0;z-index:2147483647;background:#0D0D0D;color:#F5F5F5;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;overflow:auto;-webkit-box-align:center;-webkit-box-pack:center;">
-      <div style="max-width:460px;margin:0 auto;padding-top:12vh;text-align:center;">
+    <style>
+      #app-boot{display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483646;background:#0D0D0D;color:#F5F5F5;font-family:'Outfit',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;text-align:center;-webkit-animation:app-boot-in .01s .5s both;animation:app-boot-in .01s .5s both}
+      @-webkit-keyframes app-boot-in{to{display:block}}
+      @keyframes app-boot-in{to{display:block}}
+      #app-boot .app-boot-inner{position:absolute;top:40%;left:0;right:0}
+      #app-boot .app-boot-mark{font-size:26px;font-weight:800;letter-spacing:-0.5px;margin:0 0 14px}
+      #app-boot .app-boot-mark span{color:#00FF66}
+      #app-boot .app-boot-bar{width:120px;height:3px;margin:0 auto;border-radius:3px;background:rgba(245,245,245,0.12);overflow:hidden}
+      #app-boot .app-boot-bar i{display:block;width:40%;height:100%;background:#00FF66;-webkit-animation:app-boot-slide 1.1s ease-in-out infinite;animation:app-boot-slide 1.1s ease-in-out infinite}
+      @-webkit-keyframes app-boot-slide{0%{-webkit-transform:translateX(-100%)}100%{-webkit-transform:translateX(260%)}}
+      @keyframes app-boot-slide{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+      #app-boot .app-boot-text{font-size:13px;color:rgba(245,245,245,0.6);margin:14px 0 0}
+    </style>
+    <div id="app-boot" aria-hidden="true">
+      <div class="app-boot-inner">
+        <p class="app-boot-mark">Aceler<span>iq</span></p>
+        <div class="app-boot-bar"><i></i></div>
+        <p class="app-boot-text">Abrindo o painel...</p>
+      </div>
+    </div>
+
+    <div id="app-fallback" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:2147483647;background:#0D0D0D;color:#F5F5F5;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;overflow:auto;-webkit-overflow-scrolling:touch;">
+      <div style="max-width:460px;margin:0 auto;padding-top:10vh;text-align:center;">
         <p id="app-fallback-title" style="font-size:20px;font-weight:700;margin:0 0 12px;">Não foi possível abrir o painel</p>
         <p id="app-fallback-text" style="font-size:14px;line-height:1.6;color:rgba(245,245,245,0.75);margin:0 0 20px;"></p>
         <button id="app-fallback-retry" type="button" style="min-height:48px;padding:14px 28px;border:0;border-radius:12px;background:#00FF66;color:#0D0D0D;font-size:15px;font-weight:700;cursor:pointer;">Tentar novamente</button>
+        <p id="app-fallback-hint" style="display:none;font-size:13px;line-height:1.6;color:rgba(245,245,245,0.75);margin:20px 0 0;padding:12px 14px;border:1px solid rgba(0,255,102,0.35);border-radius:12px;text-align:left;"></p>
         <p style="font-size:12px;line-height:1.6;color:rgba(245,245,245,0.45);margin:20px 0 0;">
           Se continuar assim, mande esta tela para a Aceleriq:
         </p>
@@ -94,7 +125,7 @@
     </div>
 
     <noscript>
-      <div style="position:fixed;inset:0;background:#0D0D0D;color:#F5F5F5;font-family:system-ui,sans-serif;padding:24px;text-align:center;">
+      <div style="position:fixed;top:0;right:0;bottom:0;left:0;background:#0D0D0D;color:#F5F5F5;font-family:system-ui,sans-serif;padding:24px;text-align:center;">
         <p style="font-size:16px;padding-top:12vh;">O painel precisa de JavaScript ativado no navegador para funcionar.</p>
       </div>
     </noscript>
@@ -102,18 +133,88 @@
     <script>
       (function () {
         var shown = false;
+        var RETRIES_KEY = "aceleriq-boot-retries";
 
-        function show(title, text) {
+        // O app so termina de montar quando ha conteudo dentro de #root.
+        function appMounted() {
+          var root = document.getElementById("root");
+          return !!(root && root.children && root.children.length > 0);
+        }
+
+        function hideBoot() {
+          var boot = document.getElementById("app-boot");
+          if (boot) boot.style.display = "none";
+        }
+
+        // Some assim que o painel aparece (rapido, sem piscar).
+        var bootWatch = window.setInterval(function () {
+          if (!appMounted()) return;
+          window.clearInterval(bootWatch);
+          hideBoot();
+        }, 150);
+
+        // Link aberto dentro de outro aplicativo (WhatsApp, Instagram, Facebook,
+        // Gmail): navegador embutido, muitas vezes velho ou sem armazenamento.
+        function insideApp() {
+          var ua = String(navigator.userAgent || "");
+          return /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|Twitter|Snapchat|GSA\/|; wv\)/i.test(ua);
+        }
+
+        function retryUrl() {
+          var url = window.location.href.split("#")[0];
+          url += (url.indexOf("?") < 0 ? "?" : "&") + "v=" + new Date().getTime();
+          return url;
+        }
+
+        // Recarrega furando o cache e sem service worker antigo no caminho.
+        function reload() {
+          var done = false;
+          var go = function () {
+            if (done) return;
+            done = true;
+            window.location.replace(retryUrl());
+          };
+          try {
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              navigator.serviceWorker.getRegistrations().then(function (list) {
+                for (var i = 0; i < list.length; i += 1) { try { list[i].unregister(); } catch (e) { /* segue */ } }
+                go();
+              }, go);
+              window.setTimeout(go, 1500);
+              return;
+            }
+          } catch (e) { /* sem service worker: segue */ }
+          go();
+        }
+
+        // Arquivo do painel nao chegou: tenta de novo sozinho, no maximo duas
+        // vezes por aba, para nunca entrar em loop.
+        function autoRetry() {
+          var count = 0;
+          try { count = parseInt(sessionStorage.getItem(RETRIES_KEY) || "0", 10) || 0; } catch (e) { count = 2; }
+          if (count >= 2) return false;
+          try { sessionStorage.setItem(RETRIES_KEY, String(count + 1)); } catch (e) { return false; }
+          reload();
+          return true;
+        }
+
+        function show(title, text, detail) {
           if (shown) return;
           shown = true;
+          hideBoot();
           var box = document.getElementById("app-fallback");
           if (!box) return;
           var titleEl = document.getElementById("app-fallback-title");
           var textEl = document.getElementById("app-fallback-text");
+          var hintEl = document.getElementById("app-fallback-hint");
           var infoEl = document.getElementById("app-fallback-info");
           if (titleEl) titleEl.innerHTML = title;
           if (textEl) textEl.innerHTML = text;
-          if (infoEl) infoEl.innerHTML = navigator.userAgent;
+          if (hintEl && insideApp()) {
+            hintEl.innerHTML = "Este link abriu dentro de outro aplicativo. Toque no menu do canto (três pontinhos ou o ícone de compartilhar) e escolha <b>Abrir no navegador</b> (Chrome ou Safari).";
+            hintEl.style.display = "block";
+          }
+          if (infoEl) infoEl.innerHTML = (detail ? detail + " | " : "") + navigator.userAgent;
           box.style.display = "block";
 
           // Internet lenta: se o painel terminar de carregar depois do aviso,
@@ -127,54 +228,85 @@
         }
 
         var retry = document.getElementById("app-fallback-retry");
-        if (retry) {
-          retry.onclick = function () {
-            var url = window.location.href.split("#")[0];
-            url += (url.indexOf("?") < 0 ? "?" : "&") + "v=" + new Date().getTime();
-            window.location.replace(url);
-          };
-        }
-
-        // O app so termina de montar quando ha conteudo dentro de #root.
-        function appMounted() {
-          var root = document.getElementById("root");
-          return !!(root && root.children && root.children.length > 0);
-        }
+        if (retry) retry.onclick = reload;
 
         var OLD_BROWSER_TEXT =
-          "O navegador deste computador está em uma versão antiga e não consegue carregar o painel. " +
-          "Atualize o Google Chrome (ou abra o painel pelo celular) e o acesso volta ao normal.";
+          "O navegador deste aparelho está em uma versão antiga e não consegue ler o painel. " +
+          "Atualize o Google Chrome (ou o sistema do celular) pela loja de aplicativos, ou tente abrir em outro aparelho.";
 
-        // Navegador sem suporte a modulos (Chrome anterior ao 61, por exemplo)
-        // nunca vai executar o app. Avisa na hora, sem esperar.
+        // Navegador sem suporte a modulos (Chrome anterior ao 61, Safari
+        // anterior ao 10.1) nunca vai executar o app. Avisa na hora.
         if (!("noModule" in document.createElement("script"))) {
           show("Navegador desatualizado", OLD_BROWSER_TEXT);
           return;
         }
 
-        // Erro de leitura do codigo tambem significa navegador antigo demais.
+        function textOf(value) {
+          if (!value) return "";
+          if (value.message) return String(value.message);
+          return String(value);
+        }
+
+        function isMissingFile(message) {
+          return /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Loading chunk|Load failed|Failed to fetch/i.test(message);
+        }
+
+        function failedToStart(message) {
+          // Espera um pouco: pode ser so um aviso que nao impede o painel.
+          window.setTimeout(function () {
+            if (appMounted()) return;
+            show(
+              "O painel não conseguiu abrir",
+              "Aconteceu um erro ao iniciar. Toque em Tentar novamente; se esta tela voltar, mande a foto dela para a Aceleriq.",
+              message
+            );
+          }, 3000);
+        }
+
         window.addEventListener("error", function (event) {
           if (appMounted()) return;
-          var message = String((event && event.message) || "");
-          if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(message)) {
-            show("Navegador desatualizado", OLD_BROWSER_TEXT);
+          var target = event && event.target;
+          var tag = target && target.tagName ? String(target.tagName).toUpperCase() : "";
+          if (tag === "SCRIPT" || tag === "LINK") {
+            // Um arquivo do painel nao baixou (publicacao saindo agora, cache
+            // velho ou rede instavel).
+            if (autoRetry()) return;
+            show(
+              "Não foi possível baixar o painel",
+              "Um arquivo do painel não chegou até aqui. Pode ser a internet oscilando ou uma atualização saindo neste instante. Toque em Tentar novamente.",
+              (target && target.src) || (target && target.href) || ""
+            );
+            return;
           }
+          var message = textOf(event && (event.error || event.message));
+          if (/SyntaxError|Unexpected token|Unexpected identifier|Invalid regular expression|Unexpected end of script/i.test(message)) {
+            show("Navegador desatualizado", OLD_BROWSER_TEXT, message);
+            return;
+          }
+          if (isMissingFile(message)) {
+            if (autoRetry()) return;
+          }
+          failedToStart(message);
         }, true);
 
+        // Safari e o Chrome do iPhone reportam arquivo que nao carregou como
+        // promessa rejeitada, nao como erro.
+        window.addEventListener("unhandledrejection", function (event) {
+          if (appMounted()) return;
+          var message = textOf(event && event.reason);
+          if (isMissingFile(message) && autoRetry()) return;
+          failedToStart(message);
+        });
+
         // Rede final: passou o tempo e nada apareceu na tela.
-        //
-        // O limite era de 12 segundos e um cliente viu esta tela com o painel
-        // ainda carregando: em internet lenta o app demora mais que isso, e o
-        // aviso chegava antes da hora. O texto também culpava o navegador sem
-        // ter como saber disso, o que assustava sem ajudar.
         window.setTimeout(function () {
           if (appMounted()) return;
           show(
             "O painel está demorando para abrir",
             "A conexão parece lenta neste momento. Ele continua carregando, e assim que terminar esta mensagem some sozinha. " +
-              "Se preferir, toque em Tentar novamente ou abra o painel pelo celular."
+              "Se preferir, toque em Tentar novamente."
           );
-        }, 30000);
+        }, 20000);
       })();
     </script>
 

@@ -60,6 +60,102 @@ async function pause(milliseconds: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+const RESEND_COOLDOWN_MINUTES = 10;
+const RESEND_MIN_REMAINING_HOURS = 24;
+
+function serviceClient() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+}
+
+/**
+ * Reenvio pedido pela propria pessoa, na tela "Link invalido ou expirado".
+ *
+ * Caso Rd Ar (2026-09-18): o link saiu por e-mail e pelo grupo e "nao abria".
+ * Ate aqui a unica saida era falar com a equipe. Agora a pessoa digita o
+ * e-mail e recebe de novo. Regras:
+ *  - resposta sempre igual (nao revela se o e-mail existe);
+ *  - no maximo um e-mail a cada 10 minutos por endereco;
+ *  - enquanto o link atual vale (e ainda tem 24h), vai o MESMO link: reenviar
+ *    nunca mata o que ja esta no WhatsApp da pessoa. So gera outro quando o
+ *    atual expirou ou sumiu;
+ *  - quem ja criou a senha recebe o e-mail de boas-vindas sem link, que
+ *    aponta para o login (a senha continua a que a pessoa escolheu).
+ */
+async function resendFirstAccess(rawEmail: unknown): Promise<Response> {
+  const ok = json({ ok: true });
+  const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return ok;
+
+  const admin = serviceClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id, full_name, company_name, email, first_access_token, first_access_used_at")
+    .eq("email", email)
+    .maybeSingle();
+  if (!profile?.id) return ok;
+
+  const { data: roles } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", profile.id)
+    .eq("role", "client")
+    .limit(1);
+  if (!Array.isArray(roles) || roles.length === 0) return ok;
+
+  const since = new Date(Date.now() - RESEND_COOLDOWN_MINUTES * 60_000).toISOString();
+  const { data: recent } = await admin
+    .from("email_send_log")
+    .select("id")
+    .eq("recipient_email", email)
+    .eq("template_name", "client-welcome")
+    .gte("created_at", since)
+    .limit(1);
+  if (Array.isArray(recent) && recent.length > 0) return ok;
+
+  let firstAccessUrl: string | undefined;
+  if (!profile.first_access_used_at) {
+    const { data: stateData } = await admin.rpc("first_access_state_service", {
+      p_profile_id: profile.id,
+    });
+    const state = rpcRecord(stateData);
+    const expiresAt = typeof state?.expires_at === "string" ? Date.parse(state.expires_at) : NaN;
+    const remainingHours = Number.isFinite(expiresAt) ? (expiresAt - Date.now()) / 3_600_000 : -1;
+    const currentToken = typeof profile.first_access_token === "string" ? profile.first_access_token : "";
+    const reusable = state?.status === "available"
+      && remainingHours >= RESEND_MIN_REMAINING_HOURS
+      && TOKEN_PATTERN.test(currentToken);
+
+    let token = reusable ? currentToken : "";
+    if (!token) {
+      const { data: issueData } = await admin.rpc("issue_first_access_token_service", {
+        p_profile_id: profile.id,
+      });
+      const issued = rpcRecord(issueData);
+      token = typeof issued?.token === "string" && TOKEN_PATTERN.test(issued.token) ? issued.token : "";
+    }
+    if (!token) return ok;
+    firstAccessUrl = `${APP_ORIGIN}/primeiro-acesso?token=${token}`;
+  }
+
+  await admin.functions.invoke("send-transactional-email", {
+    body: {
+      templateName: "client-welcome",
+      recipientEmail: email,
+      idempotencyKey: `client-welcome-self-${profile.id}-${Date.now()}`,
+      templateData: {
+        name: profile.full_name || "",
+        company: profile.company_name || "",
+        email,
+        ...(firstAccessUrl ? { firstAccessUrl } : {}),
+      },
+    },
+  });
+  return ok;
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("Origin");
   if (origin && origin !== APP_ORIGIN) return json({ error: "Forbidden" }, 403);
@@ -79,7 +175,16 @@ Deno.serve(async (req) => {
     }
     const body = JSON.parse(rawBody) as Record<string, unknown>;
     const action = typeof body.action === "string" ? body.action : "";
-    const token = typeof body.token === "string" ? body.token.trim() : "";
+    // Link colado no WhatsApp ou no e-mail chega com espaco, quebra de linha
+    // ou letra maiuscula: nada disso pode invalidar um acesso legitimo.
+    const token = typeof body.token === "string"
+      ? body.token.replace(/\s+/g, "").toLowerCase()
+      : "";
+
+    if (action === "resend") {
+      return await resendFirstAccess(body.email);
+    }
+
     if (
       !TOKEN_PATTERN.test(token) ||
       !["validate", "set_password"].includes(action)

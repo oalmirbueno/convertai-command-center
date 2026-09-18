@@ -45,7 +45,9 @@ export default function FirstAccess() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { loginWithCredentials } = useAuth();
-  const token = params.get("token") || "";
+  // Link copiado do WhatsApp ou do e-mail pode chegar com espaco, quebra de
+  // linha ou maiuscula no meio: limpa antes de validar.
+  const token = (params.get("token") || "").replace(/\s+/g, "").toLowerCase();
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [password, setPassword] = useState("");
@@ -55,6 +57,59 @@ export default function FirstAccess() {
   const [error, setError] = useState("");
   const [accountEmail, setAccountEmail] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
+  // Sem beco sem saida: quem cai em "link invalido", "ja usado" ou "demorou"
+  // pede o link de novo aqui mesmo, sem depender da equipe. O servidor
+  // responde sempre igual e reenvia o MESMO link enquanto ele vale.
+  const handleResend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = resendEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setResendState("error"); return; }
+    setResendState("sending");
+    try {
+      const { error } = await withTimeout(
+        supabase.functions.invoke("client-first-access", { body: { action: "resend", email } }),
+        VALIDATE_TIMEOUT_MS,
+      );
+      if (error) throw error;
+      setResendState("sent");
+    } catch {
+      setResendState("error");
+    }
+  };
+
+  const reenviar = (
+    <form onSubmit={handleResend} className="w-full mt-4 pt-4 border-t border-border space-y-2 text-left">
+      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Receber o link de novo</p>
+      {resendState === "sent" ? (
+        <p className="text-xs text-foreground leading-relaxed">
+          Se este e-mail estiver cadastrado, o link chega em instantes. Confira também a caixa de spam.
+        </p>
+      ) : (
+        <>
+          <input
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            value={resendEmail}
+            onChange={(e) => { setResendEmail(e.target.value); if (resendState === "error") setResendState("idle"); }}
+            placeholder="Seu e-mail cadastrado"
+            style={{ fontSize: "16px" }}
+            className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
+          />
+          {resendState === "error" && (
+            <p className="text-xs text-destructive">Confira o e-mail e tente de novo.</p>
+          )}
+          <button type="submit" disabled={resendState === "sending"}
+            className="w-full py-2.5 rounded-[10px] text-[13px] font-semibold bg-secondary text-foreground border border-border hover:border-primary/50 transition-colors cursor-pointer disabled:opacity-60">
+            {resendState === "sending" ? "Enviando..." : "Enviar o link para meu e-mail"}
+          </button>
+        </>
+      )}
+    </form>
+  );
 
   const strength = getPasswordStrength(password);
 
@@ -179,6 +234,7 @@ export default function FirstAccess() {
                 className="mt-2 text-[13px] font-medium text-primary hover:underline cursor-pointer bg-transparent border-none">
                 Ir para o login
               </button>
+              {reenviar}
             </div>
           )}
 
@@ -195,6 +251,7 @@ export default function FirstAccess() {
                 className="mt-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
                 Tentar novamente
               </button>
+              {reenviar}
             </div>
           )}
 
@@ -212,6 +269,7 @@ export default function FirstAccess() {
                 className="mt-2 px-5 py-2.5 rounded-[10px] text-[13px] font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
                 Fazer login
               </button>
+              {reenviar}
             </div>
           )}
 
