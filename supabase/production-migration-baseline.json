@@ -825,6 +825,14 @@
       "remote_name": "crm_empresa_automatica_e_ficha_rica",
       "remote_statements_sha256": "efeefdc84e5f9565977289cf3bdbe92c65e45d1fc90319fbb8d24a0204b3e1f6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260918120000",
+      "path": "supabase/migrations/20260918120000_avisos_chegam_de_verdade.sql",
+      "local_sha256": "de82939614f549dcf1a6704cb1401f7c73cab5b9ba9ffa38d4d6caeb3389f8f5",
+      "remote_name": "avisos_chegam_de_verdade",
+      "remote_statements_sha256": "42040a484489515d90a0f4cccf09b651e86101297bd47340c3067f417545eee1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
