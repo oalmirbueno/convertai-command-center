@@ -35,6 +35,7 @@ interface AvisoDoPainelProps {
 
 const ROTULO: Record<string, string> = {
   approval: 'Decisão de cliente',
+  acesso: 'Cliente entrou no portal',
   request: 'Pedido de cliente',
   aprovacao_necessaria: 'Aprovação necessária',
   central_review_pendente: 'Revisão do Ciclo esperando você',

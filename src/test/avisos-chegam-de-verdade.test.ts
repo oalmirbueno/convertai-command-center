@@ -67,6 +67,17 @@ describe("aviso importante vira e-mail", () => {
   });
 });
 
+describe("o acesso do cliente ao portal também sai por e-mail", () => {
+  it("a segunda migration liga o aviso 'Cliente acessou o portal' ao e-mail, com rótulo próprio", () => {
+    const acesso = ler("supabase/migrations/20260918130000_acesso_do_cliente_avisa_por_email.sql");
+    expect(acesso).toContain("NEW.notification_type = 'system' AND NEW.message LIKE 'Cliente acessou o portal:%'");
+    expect(acesso).toContain("CASE WHEN NEW.notification_type = 'system' THEN 'acesso' ELSE NEW.notification_type END");
+    expect(template).toContain("acesso: 'Cliente entrou no portal'");
+    // O aviso de acesso continua nascendo no AuthContext, com o texto fixo que o gatilho reconhece.
+    expect(ler("src/contexts/AuthContext.tsx")).toContain("acessou o portal: ${who}");
+  });
+});
+
 describe("aviso no navegador", () => {
   it("mostra só o que chegou depois da marca d'água e agrupa quando são vários", () => {
     const base = { read: false, link: "/calendario" };
