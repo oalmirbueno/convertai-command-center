@@ -857,6 +857,14 @@
       "remote_name": "reenvio_do_primeiro_acesso_por_rpc",
       "remote_statements_sha256": "7acc84f45c6ee1c1b91f629cc4fcfdb789e1cd0d7d165f33e8f31ec0ba13f739",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260918160000",
+      "path": "supabase/migrations/20260918160000_movimentos_do_cliente_no_dossie.sql",
+      "local_sha256": "74f1908fa4a3435187153b266fc403df6c3db51fac0e80ee42dad161f2477bc8",
+      "remote_name": "movimentos_do_cliente_no_dossie",
+      "remote_statements_sha256": "f69f6eafe37ce72dec16c5d5e1d2d1596a1919644a5f0280cac5eddacd959ad4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

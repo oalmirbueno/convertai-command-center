@@ -24,6 +24,7 @@ import CentralReviewQueue from "@/components/central/CentralReviewQueue";
 import { applyCentralAiDraft, assertCentralReviewSource, captureCentralGenerationContext, centralGenerationFacts, centralCachedPlanFacts, centralFactsProvenance, persistCentralReviewDraft, readCentralReportPage, type CentralGenerationContext, type CentralGenerationProject } from "@/lib/centralReviewSource";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
+import { lerMovimentos, movimentosComoFatos } from "@/lib/movimentos";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
@@ -1503,7 +1504,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     // CONTEXTO DO SEGUNDO CÉREBRO complementa a base persistida, sem redefinir seu escopo.
     const context = captured ?? await captureCentralGenerationContext(c.id);
     const clientName = context.client.company_name || context.client.full_name;
-    const [historia, cerebro, ultima] = await Promise.all([
+    const [historia, cerebro, ultima, movimentos] = await Promise.all([
       readMemory(c.id, { limit: 12, kinds: ["ritual", "decisao", "marco", "nota", "summary", "second_brain", "external"] as any }).then(memoryAsContext).catch(() => ""),
       supabase.functions.invoke("brain-client-context", { body: { client_id: c.id, client_name: clientName } }).then((r) => String(r.data?.context || "")).catch(() => ""),
       // A ultima mensagem que chegou ao cliente, inteira: e o que a de hoje
@@ -1514,8 +1515,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         const quando = new Date(r.created_at).toLocaleDateString("pt-BR");
         return `ÚLTIMA MENSAGEM ENVIADA AO CLIENTE (${quando}; retome o que ela prometeu e mostre o que virou realidade):\n${String(r.content || "").slice(0, 1600)}`;
       }).catch(() => ""),
+      // Todo movimento com data e hora reais (material novo e o que ele e,
+      // enviado para aprovacao, aprovado, agendado, publicado, pedido...). A
+      // mensagem de avanco fala do que aconteceu com o dia certo.
+      lerMovimentos(c.id, { dias: 14 }).then((lista) => movimentosComoFatos(lista, { max: 40, dias: 14 })).catch(() => ""),
     ]);
-    const painel = [collectFacts(c, context), ultima].filter(Boolean).join("\n\n");
+    const painel = [collectFacts(c, context), movimentos, ultima].filter(Boolean).join("\n\n");
     return { facts: centralGenerationFacts(context, painel, historia, cerebro), context };
   };
 

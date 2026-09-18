@@ -3,6 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
+import { explicacaoDoMovimento, iconeDoMovimento, lerMovimentos, type Movimento } from "@/lib/movimentos";
+import { kindLabel, resolveKind } from "@/lib/fileTaxonomy";
 import { toast } from "sonner";
 import {
   BookOpen, CheckCircle2, FileCheck2, Megaphone, PenLine, Send, Loader2,
@@ -17,6 +19,14 @@ import {
  * - Manual: equipe ou agente registra "o que foi feito, por que, e o próximo
  *   passo" - e o cliente vê na hora. Transparência total dos dois lados.
  */
+
+/** Mesma regra do banco (nome_do_material): sem extensao e sem o "(2/4)" das laminas. */
+function nomeDoMaterial(nome: string | null | undefined): string {
+  return String(nome || "material")
+    .replace(/\s*\(\d+\/\d+\)\s*$/, "")
+    .replace(/\.(png|jpe?g|webp|gif|pdf|mp4|mov|docx?|pptx?|xlsx?|svg)$/i, "")
+    .trim();
+}
 
 interface JournalEntry {
   at: string;
@@ -97,7 +107,7 @@ export default function ProjectJournal({
         .is("deleted_at", null);
       const projectIds = (projects.data || []).map((project) => project.id);
 
-      const [notes, files, publications, reports, doneTasks, doneMilestones] = await Promise.all([
+      const [notes, files, publications, reports, doneTasks, doneMilestones, movimentos] = await Promise.all([
         projectIds.length
           ? supabase
               .from("updates")
@@ -108,7 +118,7 @@ export default function ProjectJournal({
           : Promise.resolve({ data: [] as any[] }),
         supabase
           .from("files")
-          .select("id, file_name, file_url, mime_type, storage_bucket, storage_path, approval_status, approval_requested_at, client_decided_at, created_at")
+          .select("id, file_name, file_url, mime_type, storage_bucket, storage_path, approval_status, approval_requested_at, client_decided_at, created_at, file_type, folder, carousel_text, slide_count")
           .eq("client_id", clientId)
           .is("archived_at", null)
           .is("parent_file_id", null)
@@ -147,6 +157,10 @@ export default function ProjectJournal({
               .order("updated_at", { ascending: false })
               .limit(15)
           : Promise.resolve({ data: [] as any[] }),
+        // Movimentos que as consultas acima nao enxergam (agendado no
+        // calendario com data, reagendado, ajustes pedidos, compartilhado,
+        // mensagem enviada, pedido do cliente, acao feita), com hora real.
+        lerMovimentos(clientId, { dias: 120, somenteVisiveis: !canWrite }).catch(() => [] as Movimento[]),
       ]);
 
       return {
@@ -157,6 +171,7 @@ export default function ProjectJournal({
         reports: reports.data || [],
         doneTasks: (doneTasks.data as any[]) || [],
         doneMilestones: (doneMilestones.data as any[]) || [],
+        movimentos,
       };
     },
     enabled: !!clientId,
@@ -199,6 +214,9 @@ export default function ProjectJournal({
         (file.mime_type || "").startsWith("image/") ||
         /\.(png|jpe?g|webp|gif)$/i.test(file.file_name || "");
       const previewUrl = isImage ? "resolver" : null;
+      // O que e o material ("Carrossel", "Documento", "Arte"), nao so o nome do arquivo.
+      const laminas = Number(file.slide_count) > 1 ? ` (${file.slide_count} lâminas)` : "";
+      const rotulo = `${kindLabel(resolveKind(file))} "${nomeDoMaterial(file.file_name)}"${laminas}`;
       // Cada registro explica O MOMENTO: o que aquilo significa no fluxo do
       // trabalho e qual é o próximo passo. Linha de entrega seca não conta
       // história nenhuma.
@@ -207,7 +225,7 @@ export default function ProjectJournal({
           at: file.created_at,
           kind: "auto",
           icon: "file",
-          title: `Novo material no projeto: ${file.file_name}`,
+          title: `Novo material no projeto: ${rotulo}`,
           body: canWrite
             ? "Produzido e revisado internamente. Já está disponível na área de documentos do cliente."
             : "Produzido e revisado pela equipe. Já está disponível para você na área de Documentos.",
@@ -220,7 +238,7 @@ export default function ProjectJournal({
           at: file.approval_requested_at,
           kind: "auto",
           icon: "file",
-          title: canWrite ? `Material enviado para aprovação do cliente: ${file.file_name}` : `Material enviado para sua aprovação: ${file.file_name}`,
+          title: canWrite ? `Material enviado para aprovação do cliente: ${rotulo}` : `Material enviado para sua aprovação: ${rotulo}`,
           body: canWrite
             ? "Passou pela revisão interna e agora aguarda o aceite do cliente para liberar o agendamento."
             : "Passou pela nossa revisão de qualidade e agora é com você: sua aprovação libera o agendamento e a publicação na data planejada.",
@@ -233,7 +251,7 @@ export default function ProjectJournal({
           at: file.client_decided_at,
           kind: "auto",
           icon: "approved",
-          title: `Material aprovado: ${file.file_name}`,
+          title: `Material aprovado: ${rotulo}`,
           body: canWrite
             ? "Aprovação registrada. O material segue para agendamento e publicação."
             : "Aprovação registrada. A partir daqui o material segue para agendamento e vai ao ar na data combinada, sem você precisar fazer mais nada.",
@@ -294,10 +312,26 @@ export default function ProjectJournal({
       });
     }
 
+    // Movimentos que so o banco enxerga, complementando (nunca repetindo) o
+    // que ja esta acima: agendamento com data, reagendamento, ajustes,
+    // compartilhamento, mensagem enviada, pedido do cliente, acao feita.
+    const TIPOS_COMPLEMENTARES = new Set(["agendado", "reagendado", "ajustes_pedidos", "compartilhado", "mensagem", "pedido", "acao", "cancelado", "falha_publicacao"]);
+    for (const m of (data.movimentos || []) as Movimento[]) {
+      if (!TIPOS_COMPLEMENTARES.has(m.tipo)) continue;
+      if (!canWrite && !m.visivel_ao_cliente) continue;
+      list.push({
+        at: m.quando,
+        kind: "auto",
+        icon: iconeDoMovimento(m.tipo),
+        title: canWrite ? m.titulo : m.titulo_cliente,
+        body: explicacaoDoMovimento(m, canWrite),
+      });
+    }
+
     return list
       .filter((entry) => entry.at)
       .sort((a, b) => (a.at < b.at ? 1 : -1))
-      .slice(0, 60);
+      .slice(0, 80);
   }, [data, canWrite]);
 
   const registerNote = async () => {
