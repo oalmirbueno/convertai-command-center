@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import { toast } from "sonner";
+import { estadoDosAvisos, pedirPermissaoDeAvisos, type EstadoDoAviso } from "@/lib/avisosDoNavegador";
 
 function getNotifIcon(type: string) {
   switch (type) {
@@ -84,6 +85,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [tab, setTab] = useState<"all" | "unread">("all");
+  const [avisosDoNavegador, setAvisosDoNavegador] = useState<EstadoDoAviso>(() => estadoDosAvisos());
 
   const handleClick = async (n: any) => {
     if (!n.read) {
@@ -170,6 +172,26 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
               </button>
             )}
           </div>
+          {/* Aviso fora do painel: o sino nao alcanca quem esta em outra aba.
+              O e-mail ja sai sozinho para a equipe; aqui e o aviso na tela. */}
+          {avisosDoNavegador === "pedir" && (
+            <button
+              type="button"
+              onClick={async () => {
+                const estado = await pedirPermissaoDeAvisos();
+                setAvisosDoNavegador(estado);
+                if (estado === "ligado") toast.success("Avisos do navegador ligados. Você recebe o aviso mesmo em outra aba.");
+                else if (estado === "bloqueado") toast.error("O navegador bloqueou os avisos. Libere nas configurações do site.");
+              }}
+              className="w-full rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-left text-[11.5px] text-foreground"
+            >
+              <span className="font-medium text-primary">Ativar avisos no navegador</span>
+              <span className="block text-[10.5px] text-muted-foreground">Aprovações e pedidos de clientes aparecem na tela mesmo com o painel em outra aba. Por e-mail eles já chegam.</span>
+            </button>
+          )}
+          {avisosDoNavegador === "bloqueado" && (
+            <p className="text-[10.5px] text-muted-foreground">Avisos do navegador bloqueados neste site. Os avisos importantes continuam chegando por e-mail.</p>
+          )}
         </div>
 
         {/* Notifications list */}

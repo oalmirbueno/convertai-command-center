@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import NotificationsPanel from "@/components/NotificationsPanel";
+import { avisoParaMostrar, mostrarAvisoNoNavegador } from "@/lib/avisosDoNavegador";
+import { safeInternalPath } from "@/lib/internalNavigation";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
@@ -163,6 +165,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     : clientMoreNav;
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
+
+  // Aviso do navegador para a equipe: o sino so e visto por quem olha para
+  // ele. A marca d'agua comeca no aviso mais novo ja carregado, para nao
+  // disparar tudo o que estava pendente ao abrir o painel.
+  const marcaDeAvisos = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isAdminOrTeam || !notifData) return;
+    const lista = notifData as Array<{ id: string; message: string; link?: string | null; created_at: string; read?: boolean }>;
+    if (marcaDeAvisos.current === null) {
+      marcaDeAvisos.current = lista.reduce((m, n) => (n.created_at > m ? n.created_at : m), "");
+      return;
+    }
+    const aviso = avisoParaMostrar(lista, marcaDeAvisos.current);
+    if (!aviso) return;
+    marcaDeAvisos.current = aviso.marca;
+    mostrarAvisoNoNavegador(aviso, (link) => { const destino = safeInternalPath(link); if (destino) navigate(destino); });
+  }, [notifData, isAdminOrTeam, navigate]);
 
   const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
 
