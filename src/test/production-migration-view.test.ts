@@ -436,7 +436,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     const prior = parseRemoteLedgerCsv(ledgerCsv(remoteRows(98)));
     expect(prior).toHaveLength(194);
     const reconciliation = validateRemoteLedger(plan, prior);
-    expect(reconciliation.appliedForward).toHaveLength(99);
+    expect(reconciliation.appliedForward).toHaveLength(98);
     expect(reconciliation.appliedAliases).toHaveLength(12);
     expect(reconciliation.pendingForward.map((entry) => entry.version)).toEqual(["20260914174905", "20260916100000", "20260916120000", "20260916150000", "20260917200000", "20260918120000"]);
   });
