@@ -849,6 +849,14 @@
       "remote_name": "primeiro_acesso_sem_beco",
       "remote_statements_sha256": "c742600d032e455b0d380003dfbde2d62eb4c619a0adca11962becbeeb7eac25",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260918150000",
+      "path": "supabase/migrations/20260918150000_reenvio_do_primeiro_acesso_por_rpc.sql",
+      "local_sha256": "ed88ba1dceccd136b0f8a43e6bcba16b4991f36851b760c73d3c7bb457c3c488",
+      "remote_name": "reenvio_do_primeiro_acesso_por_rpc",
+      "remote_statements_sha256": "7acc84f45c6ee1c1b91f629cc4fcfdb789e1cd0d7d165f33e8f31ec0ba13f739",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

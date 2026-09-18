@@ -77,7 +77,8 @@ function serviceClient() {
  * Ate aqui a unica saida era falar com a equipe. Agora a pessoa digita o
  * e-mail e recebe de novo. Regras:
  *  - resposta sempre igual (nao revela se o e-mail existe);
- *  - no maximo um e-mail a cada 10 minutos por endereco;
+ *  - no maximo um e-mail a cada 10 minutos por endereco (RESEND_COOLDOWN_MINUTES,
+ *    aplicado dentro da RPC first_access_resend_lookup_service);
  *  - enquanto o link atual vale (e ainda tem 24h), vai o MESMO link: reenviar
  *    nunca mata o que ja esta no WhatsApp da pessoa. So gera outro quando o
  *    atual expirou ou sumiu;
@@ -89,49 +90,30 @@ async function resendFirstAccess(rawEmail: unknown): Promise<Response> {
   const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) return ok;
 
+  // Uma leitura so, por RPC privada: perfil, papel de cliente, link vigente e
+  // freio de 10 minutos. A funcao publica nunca le public.profiles direto.
   const admin = serviceClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id, full_name, company_name, email, first_access_token, first_access_used_at")
-    .eq("email", email)
-    .maybeSingle();
-  if (!profile?.id) return ok;
-
-  const { data: roles } = await admin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", profile.id)
-    .eq("role", "client")
-    .limit(1);
-  if (!Array.isArray(roles) || roles.length === 0) return ok;
-
-  const since = new Date(Date.now() - RESEND_COOLDOWN_MINUTES * 60_000).toISOString();
-  const { data: recent } = await admin
-    .from("email_send_log")
-    .select("id")
-    .eq("recipient_email", email)
-    .eq("template_name", "client-welcome")
-    .gte("created_at", since)
-    .limit(1);
-  if (Array.isArray(recent) && recent.length > 0) return ok;
+  const { data: lookupData } = await admin.rpc("first_access_resend_lookup_service", {
+    p_email: email,
+  });
+  const lookup = rpcRecord(lookupData);
+  const profileId = typeof lookup?.profile_id === "string" ? lookup.profile_id : "";
+  if (!profileId) return ok;
+  if (lookup?.recently_sent === true) return ok;
 
   let firstAccessUrl: string | undefined;
-  if (!profile.first_access_used_at) {
-    const { data: stateData } = await admin.rpc("first_access_state_service", {
-      p_profile_id: profile.id,
-    });
-    const state = rpcRecord(stateData);
-    const expiresAt = typeof state?.expires_at === "string" ? Date.parse(state.expires_at) : NaN;
+  if (!lookup?.used_at) {
+    const expiresAt = typeof lookup?.expires_at === "string" ? Date.parse(lookup.expires_at) : NaN;
     const remainingHours = Number.isFinite(expiresAt) ? (expiresAt - Date.now()) / 3_600_000 : -1;
-    const currentToken = typeof profile.first_access_token === "string" ? profile.first_access_token : "";
-    const reusable = state?.status === "available"
+    const currentToken = typeof lookup?.token === "string" ? lookup.token : "";
+    const reusable = lookup?.token_status === "available"
       && remainingHours >= RESEND_MIN_REMAINING_HOURS
       && TOKEN_PATTERN.test(currentToken);
 
     let token = reusable ? currentToken : "";
     if (!token) {
       const { data: issueData } = await admin.rpc("issue_first_access_token_service", {
-        p_profile_id: profile.id,
+        p_profile_id: profileId,
       });
       const issued = rpcRecord(issueData);
       token = typeof issued?.token === "string" && TOKEN_PATTERN.test(issued.token) ? issued.token : "";
@@ -144,10 +126,10 @@ async function resendFirstAccess(rawEmail: unknown): Promise<Response> {
     body: {
       templateName: "client-welcome",
       recipientEmail: email,
-      idempotencyKey: `client-welcome-self-${profile.id}-${Date.now()}`,
+      idempotencyKey: `client-welcome-self-${profileId}-${Date.now()}`,
       templateData: {
-        name: profile.full_name || "",
-        company: profile.company_name || "",
+        name: typeof lookup?.full_name === "string" ? lookup.full_name : "",
+        company: typeof lookup?.company_name === "string" ? lookup.company_name : "",
         email,
         ...(firstAccessUrl ? { firstAccessUrl } : {}),
       },

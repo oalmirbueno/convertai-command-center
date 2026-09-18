@@ -80,11 +80,19 @@ describe("primeiro acesso sem beco sem saída", () => {
     expect(funcao).toContain('if (action === "resend") {');
     expect(funcao).toContain("const RESEND_COOLDOWN_MINUTES = 10;");
     expect(funcao).toContain("const RESEND_MIN_REMAINING_HOURS = 24;");
-    expect(funcao).toContain('.eq("template_name", "client-welcome")');
-    expect(funcao).toContain('const reusable = state?.status === "available"');
-    expect(funcao).toContain('.eq("role", "client")');
+    expect(funcao).toContain('admin.rpc("first_access_resend_lookup_service"');
+    expect(funcao).toContain("if (lookup?.recently_sent === true) return ok;");
+    expect(funcao).toContain('const reusable = lookup?.token_status === "available"');
     // Quem já criou a senha recebe o e-mail sem link (aponta para o login).
-    expect(funcao).toContain("if (!profile.first_access_used_at) {");
+    expect(funcao).toContain("if (!lookup?.used_at) {");
+    // A função pública nunca lê tabelas direto: só RPC privada.
+    expect(funcao).not.toContain('.from("profiles")');
+    expect(funcao).not.toMatch(/admin\s*\.from\(/);
+    const rpc = ler("supabase/migrations/20260918150000_reenvio_do_primeiro_acesso_por_rpc.sql");
+    expect(rpc).toContain("r.role = 'client'::public.app_role");
+    expect(rpc).toContain("l.template_name = 'client-welcome'");
+    expect(rpc).toContain("interval '10 minutes'");
+    expect(rpc).toContain("GRANT EXECUTE ON FUNCTION public.first_access_resend_lookup_service(text) TO service_role;");
   });
 
   it("abrir o link deixa rastro no banco, sem gastar tentativa", () => {
