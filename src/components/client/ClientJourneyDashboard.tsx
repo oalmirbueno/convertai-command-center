@@ -25,6 +25,7 @@ import CircularProgress from "./CircularProgress";
 import { FadeUp, StaggerContainer } from "./motion";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { estruturaDoRitual, resumoDoRitual } from "@/lib/ritualTexto";
+import { primeiraFrase } from "@/lib/frases";
 import {
   daysUntil,
   formatDateShort,
@@ -577,7 +578,7 @@ export default function ClientJourneyDashboard({
             {latestReport.next_steps && (
               <div className="mt-3">
                 <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{String(latestReport.next_steps).replace(/\*/g, "").split(/(?<=[.!?])\s+/)[0]}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{primeiraFrase(String(latestReport.next_steps).replace(/\*/g, ""))}</p>
               </div>
             )}
             <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">

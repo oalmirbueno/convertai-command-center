@@ -104,3 +104,86 @@ if (g.crypto && typeof g.crypto.randomUUID !== "function") {
 }
 
 export {};
+
+// Promise.any  (Safari 14+, Chrome 85+)
+define(Promise, "any", function (promises: Iterable<unknown>) {
+  const lista = Array.from(promises);
+  if (lista.length === 0) return Promise.reject(new Error("All promises were rejected"));
+  return new Promise((resolve, reject) => {
+    const erros: unknown[] = [];
+    let pendentes = lista.length;
+    lista.forEach((p, i) => {
+      Promise.resolve(p).then(resolve, (erro) => {
+        erros[i] = erro;
+        pendentes -= 1;
+        if (pendentes === 0) reject(Object.assign(new Error("All promises were rejected"), { errors: erros }));
+      });
+    });
+  });
+});
+
+// navigator.clipboard  (Safari 13.1+). Sem ele, cada "Copiar" do painel
+// quebrava com TypeError num iPhone antigo. O fallback usa o comando de
+// copiar do proprio navegador a partir de um campo invisivel.
+if (typeof navigator !== "undefined" && !(navigator as any).clipboard) {
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: {
+      writeText(texto: string) {
+        return new Promise<void>((resolve, reject) => {
+          try {
+            const area = document.createElement("textarea");
+            area.value = String(texto);
+            area.setAttribute("readonly", "");
+            area.style.position = "fixed";
+            area.style.top = "0";
+            area.style.left = "0";
+            area.style.opacity = "0";
+            document.body.appendChild(area);
+            area.focus();
+            area.select();
+            area.setSelectionRange(0, area.value.length);
+            const ok = document.execCommand("copy");
+            document.body.removeChild(area);
+            if (ok) resolve(); else reject(new Error("copy failed"));
+          } catch (erro) {
+            reject(erro);
+          }
+        });
+      },
+      readText() {
+        return Promise.reject(new Error("clipboard read unavailable"));
+      },
+    },
+  });
+}
+
+// ResizeObserver  (Safari 13.4+). Graficos e cabecalhos medem o proprio
+// tamanho com ele; sem esta versao minima o arquivo da tela nem carregava.
+// Aqui a medida e refeita a cada mudanca de tamanho da janela.
+if (typeof g.ResizeObserver === "undefined") {
+  class ResizeObserverMinimo {
+    private alvos = new Set<Element>();
+    private readonly ouvir = () => this.medir();
+    constructor(private readonly callback: (entries: Array<{ target: Element; contentRect: DOMRectReadOnly }>, observer: ResizeObserverMinimo) => void) {}
+    private medir() {
+      if (this.alvos.size === 0) return;
+      const entries = Array.from(this.alvos).map((target) => ({ target, contentRect: target.getBoundingClientRect() }));
+      this.callback(entries, this);
+    }
+    observe(el: Element) {
+      if (this.alvos.size === 0) window.addEventListener("resize", this.ouvir);
+      this.alvos.add(el);
+      window.setTimeout(() => this.medir(), 0);
+    }
+    unobserve(el: Element) {
+      this.alvos.delete(el);
+      if (this.alvos.size === 0) window.removeEventListener("resize", this.ouvir);
+    }
+    disconnect() {
+      this.alvos.clear();
+      window.removeEventListener("resize", this.ouvir);
+    }
+  }
+  g.ResizeObserver = ResizeObserverMinimo;
+}

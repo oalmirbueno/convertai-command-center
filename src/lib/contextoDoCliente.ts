@@ -1,3 +1,4 @@
+import { separarFrases } from "@/lib/frases";
 /**
  * Como a Central lê o contexto que foi escrito sobre um cliente.
  *
@@ -115,8 +116,7 @@ const FRASE_INTERNA =
 
 /** Divide em frases sem perder as datas ("23/07/2026" tem pontos? não — barras). */
 function emFrases(texto: string): string[] {
-  return texto
-    .split(/(?<=[.;!?])\s+/)
+  return separarFrases(texto, { pontuacao: ".;!?" })
     .map((f) => f.trim())
     .filter(Boolean);
 }

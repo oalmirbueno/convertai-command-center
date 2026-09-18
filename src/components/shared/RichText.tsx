@@ -1,4 +1,5 @@
 import { Fragment, useMemo } from "react";
+import { separarFrases } from "@/lib/frases";
 
 /**
  * Texto de relatório com respiro e hierarquia, sem depender de markdown do
@@ -68,7 +69,7 @@ export default function RichText({ text, className }: { text: string; className?
         continue;
       }
       // Parágrafos longos sem quebra: divide em blocos de ~2 frases para respirar
-      const sentences = line.split(/(?<=[.!?])\s+(?=[A-ZÀ-Ú])/);
+      const sentences = separarFrases(line, { exigirMaiuscula: true });
       if (sentences.length > 3) {
         for (let index = 0; index < sentences.length; index += 2) {
           result.push({ kind: "paragraph", text: sentences.slice(index, index + 2).join(" ") });
