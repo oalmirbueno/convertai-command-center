@@ -115,7 +115,7 @@ SECURITY DEFINER
 SET search_path TO 'public'
 AS $$
 DECLARE
-  _email text; _nome text; _segredo text; _base text; _req bigint; _link text; _na_hora integer;
+  _email text; _nome text; _segredo text; _portao text; _base text; _req bigint; _link text; _na_hora integer;
 BEGIN
   IF NOT public.notificacao_merece_email(NEW.notification_type) THEN RETURN NEW; END IF;
   SELECT p.email, COALESCE(NULLIF(p.full_name, ''), 'equipe') INTO _email, _nome
@@ -132,7 +132,10 @@ BEGIN
   IF _na_hora >= 20 THEN RETURN NEW; END IF;
 
   SELECT decrypted_secret INTO _segredo FROM vault.decrypted_secrets WHERE name = 'cron_secret' LIMIT 1;
-  IF _segredo IS NULL THEN RETURN NEW; END IF;
+  -- O portao da funcao exige JWT (verify_jwt = true); a chave de servico do
+  -- cofre passa o portao e o x-cron-secret e o que a funcao confere de fato.
+  SELECT decrypted_secret INTO _portao FROM vault.decrypted_secrets WHERE name = 'email_queue_service_role_key' LIMIT 1;
+  IF _segredo IS NULL OR _portao IS NULL THEN RETURN NEW; END IF;
   _base := 'https://jjjtkowvxemvituvywvf.supabase.co';
   _link := CASE WHEN NEW.link IS NULL OR NEW.link = '' THEN 'https://aceleriq.online'
                 WHEN NEW.link LIKE 'http%' THEN NEW.link
@@ -141,7 +144,7 @@ BEGIN
   BEGIN
     SELECT net.http_post(
       url := _base || '/functions/v1/send-transactional-email',
-      headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', _segredo),
+      headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || _portao, 'x-cron-secret', _segredo),
       body := jsonb_build_object(
         'templateName', 'aviso-do-painel',
         'recipientEmail', _email,
