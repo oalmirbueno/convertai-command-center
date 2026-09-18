@@ -829,9 +829,9 @@
     {
       "version": "20260918120000",
       "path": "supabase/migrations/20260918120000_avisos_chegam_de_verdade.sql",
-      "local_sha256": "de82939614f549dcf1a6704cb1401f7c73cab5b9ba9ffa38d4d6caeb3389f8f5",
+      "local_sha256": "1bcd3acc71d8b473cdef214a085bdd9b0be94ff448f90925afe2c2fb7d247a5f",
       "remote_name": "avisos_chegam_de_verdade",
-      "remote_statements_sha256": "42040a484489515d90a0f4cccf09b651e86101297bd47340c3067f417545eee1",
+      "remote_statements_sha256": "e636eb569a38521cf735b05ec06a2234d8953f867a348ebc8f5fabc82ba93f63",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],
