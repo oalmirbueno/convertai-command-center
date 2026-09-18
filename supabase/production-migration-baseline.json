@@ -833,6 +833,14 @@
       "remote_name": "avisos_chegam_de_verdade",
       "remote_statements_sha256": "e636eb569a38521cf735b05ec06a2234d8953f867a348ebc8f5fabc82ba93f63",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260918130000",
+      "path": "supabase/migrations/20260918130000_acesso_do_cliente_avisa_por_email.sql",
+      "local_sha256": "92a3b6e9dcdc6614448dc6866f513b3ffee55b0745fc24865fb9920a1b98a27b",
+      "remote_name": "acesso_do_cliente_avisa_por_email",
+      "remote_statements_sha256": "7c4d003d90e2a73d23528c49bc587f4d7da070127ca8841f19e3952e616ca286",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
