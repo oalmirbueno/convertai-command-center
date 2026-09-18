@@ -654,7 +654,7 @@ export default function EditorialCalendar() {
       search
         .trim()
         .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[̀-ͯ]/g, "")
         .toLocaleLowerCase("pt-BR"),
     [search],
   );
@@ -693,7 +693,7 @@ export default function EditorialCalendar() {
         .filter(Boolean)
         .join(" ")
         .normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[̀-ͯ]/g, "")
         .toLocaleLowerCase("pt-BR");
       return searchable.includes(normalizedTaskSearch);
     },

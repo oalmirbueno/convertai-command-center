@@ -199,7 +199,7 @@ export function buildApprovedMediaAssets(
 function normalizeSearch(value?: string | null) {
   return (value || "")
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLocaleLowerCase("pt-BR")
     .replace(/\s+/g, " ")
     .trim();

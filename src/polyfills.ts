@@ -187,3 +187,124 @@ if (typeof g.ResizeObserver === "undefined") {
   }
   g.ResizeObserver = ResizeObserverMinimo;
 }
+
+// ---------------------------------------------------------------------------
+// 2026-09-18: iPhone X/11 no Chrome (mesmo motor do Safari), iPhone 6/7/8 e
+// Android com Chrome de 2018. O piso do build passou a Safari 11 / Chrome 64;
+// o que esses navegadores nao tem de API vem daqui.
+// ---------------------------------------------------------------------------
+
+// Object.fromEntries  (Safari 12.1+, Chrome 73+)
+define(Object, "fromEntries", function (entries: Iterable<[PropertyKey, unknown]>) {
+  const out: Record<PropertyKey, unknown> = {};
+  for (const [k, v] of Array.from(entries)) out[k as string] = v;
+  return out;
+});
+
+// Array.prototype.flat / flatMap  (Safari 12+, Chrome 69+)
+define(Array.prototype, "flat", function (this: unknown[], depth = 1) {
+  const d = Number(depth) || 0;
+  const out: unknown[] = [];
+  for (const item of this) {
+    if (Array.isArray(item) && d > 0) out.push(...(item as any).flat(d - 1));
+    else out.push(item);
+  }
+  return out;
+});
+define(Array.prototype, "flatMap", function (this: unknown[], fn: (v: unknown, i: number, a: unknown[]) => unknown, thisArg?: unknown) {
+  return (this.map(fn, thisArg) as any).flat(1);
+});
+
+// String.prototype.trimStart / trimEnd  (Safari 12+, Chrome 66+)
+define(String.prototype, "trimStart", function (this: string) { return this.replace(/^\s+/, ""); });
+define(String.prototype, "trimEnd", function (this: string) { return this.replace(/\s+$/, ""); });
+
+// Promise.prototype.finally  (Safari 11.1+, Chrome 63+)
+define(Promise.prototype, "finally", function (this: Promise<unknown>, onFinally?: () => unknown) {
+  const run = () => Promise.resolve(typeof onFinally === "function" ? onFinally() : undefined);
+  return this.then(
+    (value) => run().then(() => value),
+    (reason) => run().then(() => { throw reason; }),
+  );
+});
+
+// queueMicrotask  (Safari 12.2+, Chrome 71+)
+if (typeof g.queueMicrotask !== "function") {
+  g.queueMicrotask = (fn: () => void) => { Promise.resolve().then(fn); };
+}
+
+// Symbol.asyncIterator  (Safari 12+, Chrome 63+): o build converte "for await"
+// em codigo que procura este simbolo.
+if (typeof Symbol !== "undefined" && !(Symbol as any).asyncIterator) {
+  (Symbol as any).asyncIterator = Symbol("Symbol.asyncIterator");
+}
+
+// Array.prototype.findLast / findLastIndex  (Safari 15.4+, Chrome 97+)
+define(Array.prototype, "findLast", function (this: unknown[], fn: (v: unknown, i: number, a: unknown[]) => boolean, thisArg?: unknown) {
+  for (let i = this.length - 1; i >= 0; i -= 1) if (fn.call(thisArg, this[i], i, this)) return this[i];
+  return undefined;
+});
+define(Array.prototype, "findLastIndex", function (this: unknown[], fn: (v: unknown, i: number, a: unknown[]) => boolean, thisArg?: unknown) {
+  for (let i = this.length - 1; i >= 0; i -= 1) if (fn.call(thisArg, this[i], i, this)) return i;
+  return -1;
+});
+
+// structuredClone  (Safari 15.4+, Chrome 98+): copia por JSON serve para os
+// objetos simples que o painel copia (datas viram texto, como no JSON).
+if (typeof g.structuredClone !== "function") {
+  g.structuredClone = (value: unknown) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+}
+
+// AbortController  (Safari 11.1+, Chrome 66+). Bibliotecas de dados criam um
+// por consulta; sem ele o painel nem chegava a pedir o login.
+if (typeof g.AbortController === "undefined") {
+  class AbortSignalMinimo {
+    aborted = false;
+    reason: unknown = undefined;
+    onabort: ((ev: unknown) => void) | null = null;
+    private ouvintes: Array<() => void> = [];
+    addEventListener(tipo: string, fn: () => void) { if (tipo === "abort") this.ouvintes.push(fn); }
+    removeEventListener(tipo: string, fn: () => void) { if (tipo === "abort") this.ouvintes = this.ouvintes.filter((f) => f !== fn); }
+    dispatchEvent() { return true; }
+    throwIfAborted() { if (this.aborted) throw this.reason; }
+    _abortar(reason: unknown) {
+      if (this.aborted) return;
+      this.aborted = true;
+      this.reason = reason;
+      if (typeof this.onabort === "function") this.onabort({ type: "abort", target: this });
+      for (const fn of this.ouvintes) { try { fn(); } catch { /* ouvinte quebrado nao para os outros */ } }
+    }
+  }
+  class AbortControllerMinimo {
+    readonly signal = new AbortSignalMinimo();
+    abort(reason?: unknown) {
+      const erro = reason ?? Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
+      this.signal._abortar(erro);
+    }
+  }
+  g.AbortSignal = AbortSignalMinimo;
+  g.AbortController = AbortControllerMinimo;
+}
+
+// IntersectionObserver  (Safari 12.2+, Chrome 51+). Animacoes de "aparece ao
+// rolar" perguntam por ele; sem, tudo e considerado visivel de imediato, e o
+// conteudo aparece em vez de ficar escondido para sempre.
+if (typeof g.IntersectionObserver === "undefined") {
+  class IntersectionObserverMinimo {
+    readonly root = null;
+    readonly rootMargin = "0px";
+    readonly thresholds: number[] = [0];
+    constructor(private readonly callback: (entries: unknown[], observer: IntersectionObserverMinimo) => void) {}
+    observe(target: Element) {
+      const rect = target.getBoundingClientRect();
+      window.setTimeout(() => this.callback([{
+        target, isIntersecting: true, intersectionRatio: 1, time: Date.now(),
+        boundingClientRect: rect, intersectionRect: rect, rootBounds: null,
+      }], this), 0);
+    }
+    unobserve() { /* nada a desligar */ }
+    disconnect() { /* nada a desligar */ }
+    takeRecords() { return []; }
+  }
+  g.IntersectionObserver = IntersectionObserverMinimo;
+}

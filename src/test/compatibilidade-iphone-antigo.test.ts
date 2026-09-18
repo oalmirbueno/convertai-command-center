@@ -30,6 +30,12 @@ describe("nenhuma regex com lookbehind no código do painel", () => {
     expect(culpados).toEqual([]);
   });
 
+  it("src/ também não usa \p{...} nem grupo nomeado (?<nome>): Safari 11.0 e Chrome antigo explodem", () => {
+    const culpados = arquivosDeCodigo(resolve(raiz, "src"))
+      .filter((f) => /\p\{|\(\?<[A-Za-z]/.test(readFileSync(f, "utf8")));
+    expect(culpados).toEqual([]);
+  });
+
   it("o cortador de frases faz o mesmo trabalho sem lookbehind", () => {
     expect(separarFrases("Uma frase. Outra frase! Terceira? fim", { exigirMaiuscula: true }))
       .toEqual(["Uma frase.", "Outra frase!", "Terceira? fim"]);
@@ -54,7 +60,14 @@ describe("as lacunas de API do iPhone antigo estão preenchidas", () => {
     }
   });
 
-  it("o build continua mirando Safari 12", () => {
-    expect(readFileSync(resolve(raiz, "vite.config.ts"), "utf8")).toContain('"safari12"');
+  it("o build mira Safari 11 e Chrome 64 (iPhone de 2017 e Android de 2018)", () => {
+    const config = readFileSync(resolve(raiz, "vite.config.ts"), "utf8");
+    expect(config).toContain('target: ["es2017", "safari11", "chrome64", "firefox60", "edge79"]');
+  });
+
+  it("cobre o que Chrome antigo e Safari 11/12 não têm: fromEntries, flat, finally, AbortController, IntersectionObserver", () => {
+    for (const nome of ['define(Object, "fromEntries"', 'define(Array.prototype, "flat"', 'define(Array.prototype, "flatMap"', 'define(Promise.prototype, "finally"', 'define(String.prototype, "trimStart"', "g.AbortController = AbortControllerMinimo", "g.IntersectionObserver = IntersectionObserverMinimo", 'define(Array.prototype, "findLast"', "g.structuredClone"]) {
+      expect(polyfills).toContain(nome);
+    }
   });
 });

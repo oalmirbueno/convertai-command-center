@@ -15,7 +15,7 @@ const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi;
 const TRAILING_URL_PUNCTUATION = /[.,!?;:)\]}]+$/;
 
 function isMentionBoundary(value: string | undefined) {
-  return value === undefined || !/[\p{L}\p{N}_]/u.test(value);
+  return value === undefined || !/[A-Za-z0-9_À-ɏḀ-ỿ]/.test(value);
 }
 
 function findNextUrl(text: string, fromIndex: number): TextMatch | null {

@@ -118,7 +118,12 @@ export default defineConfig(({ command, mode }) => {
     // ficava preta, sem erro visível. Baixando o alvo, o próprio build converte
     // a sintaxe moderna e o painel volta a abrir em máquinas mais antigas.
     build: {
-      target: ["es2019", "chrome66", "firefox60", "safari12", "edge79"],
+      // 2026-09-18: clientes com iPhone 6/7/8/X e Android antigo. Safari 11
+      // (iOS 11, 2017) e Chrome 64 (Android 2018) como piso: async/await,
+      // espalhamento de objeto e o resto viram codigo que eles leem. Regex
+      // moderna NAO e convertida (ver src/lib/frases.ts) e API que falta vem
+      // de src/polyfills.ts.
+      target: ["es2017", "safari11", "chrome64", "firefox60", "edge79"],
 
       // Como o código é fatiado em arquivos, e por quê, está em
       // config/chunk-strategy.ts — separado para poder ser testado, já que a

@@ -60,7 +60,7 @@ function paragrafos(texto: string | null | undefined): string[] {
     .filter((l) => l.length >= 12);
 }
 
-const normal = (l: string) => l.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").trim();
+const normal = (l: string) => l.toLowerCase().replace(/[^A-Za-z0-9 À-ɏḀ-ỿ]/g, "").trim();
 
 /**
  * O que mudou do dossie anterior para o atual, em linhas curtas: so o que
