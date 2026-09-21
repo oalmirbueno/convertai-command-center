@@ -72,3 +72,14 @@ describe("TypeSafe (Jev) decide o que é o material e o resultado vira dado", ()
     expect(ler("src/lib/movimentos.ts")).not.toContain("typesafe");
   });
 });
+
+describe("o cliente nunca escolhe ver o histórico interno (auditoria 2026-09-21)", () => {
+  const guarda = ler("supabase/migrations/20260921130000_movimentos_do_cliente_sem_vazar_interno.sql");
+  it("a leitura completa mora em app_private e a porta pública força só visível para o próprio cliente", () => {
+    expect(guarda).toContain("SET SCHEMA app_private;");
+    expect(guarda).toContain("ELSIF NOT coalesce(public.is_staff(auth.uid()), false) THEN");
+    expect(guarda).toContain("_so_visiveis := true;");
+    expect(guarda).toContain("RETURN QUERY SELECT * FROM app_private.movimentos_do_cliente_bruto(_client_id, _desde, _ate, _so_visiveis);");
+    expect(guarda).toContain("REVOKE EXECUTE ON FUNCTION public.dossie_avancos_texto(uuid, integer) FROM PUBLIC, anon, authenticated;");
+  });
+});

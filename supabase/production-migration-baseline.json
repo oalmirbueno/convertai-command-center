@@ -873,6 +873,14 @@
       "remote_name": "dossie_em_fila_sem_travar",
       "remote_statements_sha256": "432dea47f5fafbdc7e91f1841d3d9b7b6875014c3839ee45a80741ecba70ad85",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260921130000",
+      "path": "supabase/migrations/20260921130000_movimentos_do_cliente_sem_vazar_interno.sql",
+      "local_sha256": "debbcbcac1ba7f4fa263715a03245811b5849e25222eb4227b203e931cfaa382",
+      "remote_name": "movimentos_do_cliente_sem_vazar_interno",
+      "remote_statements_sha256": "57b94b251351bf9252f4286e35acbeb0699c36f7fcf07983c8116b4e8532c48e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
