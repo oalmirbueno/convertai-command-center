@@ -865,6 +865,14 @@
       "remote_name": "movimentos_do_cliente_no_dossie",
       "remote_statements_sha256": "f69f6eafe37ce72dec16c5d5e1d2d1596a1919644a5f0280cac5eddacd959ad4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260921120000",
+      "path": "supabase/migrations/20260921120000_dossie_em_fila_sem_travar.sql",
+      "local_sha256": "1110b2e7755eaf62ab5e9abb86a605d1814cc8ca7e1bafb93188789340030f09",
+      "remote_name": "dossie_em_fila_sem_travar",
+      "remote_statements_sha256": "432dea47f5fafbdc7e91f1841d3d9b7b6875014c3839ee45a80741ecba70ad85",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
