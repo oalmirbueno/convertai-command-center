@@ -13,10 +13,20 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-const g = globalThis as any;
+// `globalThis` so existe em Chrome 71+ e Safari 12.1+. Ler o identificador
+// direto em Chrome 64-70 ou Safari 11-12.0 lanca ReferenceError antes de
+// qualquer polyfill rodar (auditoria 2026-09-21). Por isso a raiz e
+// descoberta pelo caminho antigo e so entao o nome novo e definido.
+const g: any = typeof globalThis !== "undefined"
+  ? globalThis
+  : typeof self !== "undefined"
+    ? self
+    : typeof window !== "undefined"
+      ? window
+      : Function("return this")();
 
 if (typeof g.globalThis === "undefined") {
-  (window as any).globalThis = window;
+  g.globalThis = g;
 }
 
 function define(target: any, name: string, value: unknown) {

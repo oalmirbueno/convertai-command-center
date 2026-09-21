@@ -60,6 +60,12 @@ describe("as lacunas de API do iPhone antigo estão preenchidas", () => {
     }
   });
 
+  it("o polyfill nunca lê `globalThis` direto (Chrome 64-70 e Safari 11-12.0 não o têm)", () => {
+    expect(polyfills).toContain('const g: any = typeof globalThis !== "undefined"');
+    expect(polyfills).not.toContain("const g = globalThis as any;");
+    expect(polyfills).toContain("g.globalThis = g;");
+  });
+
   it("o build mira Safari 11 e Chrome 64 (iPhone de 2017 e Android de 2018)", () => {
     const config = readFileSync(resolve(raiz, "vite.config.ts"), "utf8");
     expect(config).toContain('target: ["es2017", "safari11", "chrome64", "firefox60", "edge79"]');
