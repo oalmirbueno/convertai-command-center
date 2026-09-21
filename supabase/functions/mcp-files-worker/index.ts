@@ -106,14 +106,17 @@ async function claimNext() {
   // Os servicos criam o job com status 'pending'; sem esse valor aqui a fila nunca anda.
   const { data: candidates } = await db.from('file_processing_jobs')
     .select('*')
-    .in('status', ['pending', 'queued', 'failed'])
+    // A tabela so aceita pending/processing/completed/failed/skipped (CHECK
+    // file_processing_jobs_status_check): 'running' e 'queued' eram recusados
+    // em silencio e a fila nunca andou.
+    .in('status', ['pending', 'failed'])
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
     .limit(1);
   const c = candidates?.[0];
   if (!c) return null;
   const { data: updated } = await db.from('file_processing_jobs')
-    .update({ status: 'running', started_at: new Date().toISOString(), attempts: (c.attempts ?? 0) + 1 })
+    .update({ status: 'processing', started_at: new Date().toISOString(), attempts: (c.attempts ?? 0) + 1 })
     .eq('id', c.id).eq('status', c.status)
     .select('*').maybeSingle();
   return updated;
@@ -129,7 +132,7 @@ async function markFailure(job: any, err: string) {
   const attempts = (job.attempts ?? 0);
   const terminal = attempts >= MAX_ATTEMPTS;
   await db.from('file_processing_jobs').update({
-    status: terminal ? 'failed' : 'queued', // requeue for retry
+    status: terminal ? 'failed' : 'pending', // volta para a fila
     last_error: err.slice(0, 4000),
     finished_at: terminal ? new Date().toISOString() : null,
   }).eq('id', job.id);
@@ -147,10 +150,10 @@ async function updateProgress(jobId: string, pct: number) {
 // ─── Job runner ────────────────────────────────────────────────
 async function runJob(job: any) {
   try {
-    if (job.status !== 'running') {
+    if (job.status !== 'processing') {
       // Re-claim in case invoked directly with a queued job_id
       await db.from('file_processing_jobs').update({
-        status: 'running', started_at: new Date().toISOString(),
+        status: 'processing', started_at: new Date().toISOString(),
         attempts: (job.attempts ?? 0) + 1,
       }).eq('id', job.id);
       job.attempts = (job.attempts ?? 0) + 1;
