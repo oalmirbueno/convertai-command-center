@@ -171,7 +171,7 @@ describe("identity boundary required by the internal agent Kanban", () => {
   });
 
   it("keeps every password editor aligned with the twelve-character server rule", () => {
-    expect(editClientDrawer).toContain("clientPassword.length < 8");
+    expect(editClientDrawer).toContain("clientPassword.length >= 12");
     expect(editClientDrawer).toContain("Senha deve ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo");
     expect(editClientDrawer).not.toContain("clientPassword.length < 6");
   });
