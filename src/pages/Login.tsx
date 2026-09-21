@@ -94,7 +94,10 @@ export default function Login() {
     }
   }, [loading, user, profile, navigate, safeNext]);
 
-  if (loading || (user && profile)) {
+  // Usuário já autenticado mas perfil ainda a caminho conta como carregando:
+  // mostrar o formulário nesse instante convidava a um segundo "Entrar" em
+  // cima de um login que já tinha dado certo.
+  if (loading || user) {
     return (
       <div className="dark min-h-screen flex flex-col items-center justify-center bg-background gap-3">
         {/* Espaço reservado para o logo: sem altura e largura fixas, a marca
@@ -110,7 +113,7 @@ export default function Login() {
             className="h-36 w-auto max-w-full object-contain opacity-90 transition-opacity duration-700"
           />
         </div>
-        <p className="text-xs text-muted-foreground">{loading ? "Carregando..." : "Redirecionando..."}</p>
+        <p className="text-xs text-muted-foreground">{loading || !profile ? "Carregando..." : "Redirecionando..."}</p>
       </div>
     );
   }
@@ -119,6 +122,23 @@ export default function Login() {
     setError(msg);
     setShake(true);
     setTimeout(() => setShake(false), 500);
+  };
+
+  // Um só caminho para "esqueci a senha": o link ao lado de "Lembrar de mim"
+  // e o botão abaixo do Entrar chamam a mesma função. O primeiro era um
+  // botão morto, sem onClick.
+  const handleForgotPassword = async () => {
+    const target = email.trim().toLowerCase();
+    if (!target) { setError("Digite seu e-mail acima para receber o link de recuperação."); return; }
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(target, {
+      redirectTo: `${window.location.origin}/redefinir-senha`,
+    });
+    if (resetError) {
+      setError("Não foi possível enviar o link agora. Tente novamente em instantes.");
+      return;
+    }
+    setError("");
+    toast.success("Se este e-mail estiver cadastrado, você receberá um link para definir a senha. Confira a caixa de entrada e o spam.", { duration: 8000 });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -391,7 +411,7 @@ export default function Login() {
                     </button>
                     <span className="text-[13px] text-muted-foreground">Lembrar de mim</span>
                   </label>
-                  <button type="button" className="text-[13px] text-primary hover:underline bg-transparent border-none cursor-pointer">Esqueceu a senha?</button>
+                  <button type="button" onClick={() => { void handleForgotPassword(); }} className="text-[13px] text-primary hover:underline bg-transparent border-none cursor-pointer">Esqueceu a senha?</button>
                 </div>
               )}
 
@@ -422,16 +442,7 @@ export default function Login() {
               {mode === "login" && (
                 <button
                   type="button"
-                  onClick={async () => {
-                    const target = email.trim().toLowerCase();
-                    if (!target) { setError("Digite seu e-mail acima para receber o link de recuperação."); return; }
-                    const { error: resetError } = await supabase.auth.resetPasswordForEmail(target, {
-                      redirectTo: `${window.location.origin}/redefinir-senha`,
-                    });
-                    if (resetError) setError("Não foi possível enviar o link agora. Tente novamente em instantes.");
-                    else setError("");
-                    if (!resetError) toast.success("Se este e-mail estiver cadastrado, você receberá um link para definir a senha. Confira a caixa de entrada e o spam.", { duration: 8000 });
-                  }}
+                  onClick={() => { void handleForgotPassword(); }}
                   className="w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-none pt-1"
                 >
                   Esqueci minha senha / não recebi o convite

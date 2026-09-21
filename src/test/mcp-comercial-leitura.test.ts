@@ -65,8 +65,16 @@ describe("o funil comercial entra no MCP somente como leitura", () => {
     expect(auth).toContain("'commercial:read'");
     const seguranca = ler("supabase/functions/_shared/mcp-security.ts");
     expect(seguranca).toContain("'commercial:read',");
+    // O metadata OAuth e o mcp-server nao guardam mais copia propria da
+    // lista: os dois derivam de ALL_SCOPES, que ja contem commercial:read.
+    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',[\s\S]*?\] as const;/);
     const metadata = ler("supabase/functions/mcp-oauth-metadata/index.ts");
-    expect(metadata).toContain("'commercial:read',");
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    expect(metadata).toContain("const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;");
+    expect(metadata).not.toContain("'commercial:read'");
+    const servidor = ler("supabase/functions/mcp-server/index.ts");
+    expect(servidor).toContain("const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;");
+    expect(servidor).not.toContain('"aceleriq:read",');
   });
 
   it("a versao subiu junto nos dois lugares", () => {

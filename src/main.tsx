@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import AppErrorBoundary from "./components/AppErrorBoundary.tsx";
 import {
-  clearFatalCrashes,
   installChunkErrorRecovery,
   startVersionWatch,
   stripRefreshParam,
@@ -17,9 +16,11 @@ installChunkErrorRecovery();
 startVersionWatch();
 stripRefreshParam();
 
-// 20 segundos rodando sem quebrar = sessão saudável: zera a memória de
-// quedas para a próxima recuperação automática começar do zero.
-window.setTimeout(clearFatalCrashes, 20_000);
+// A memória de quedas fatais NÃO é zerada aqui. Zerar aos 20 segundos fazia
+// um erro que só aparece depois de um tempo de uso (abrir uma tela pesada,
+// por exemplo) recomeçar a contagem a cada recarga automática, e o painel
+// entrava em loop de recarga sem nunca chegar à tela manual. A janela agora
+// mora no próprio contador (10 minutos por assinatura, em appRefresh.ts).
 
 createRoot(document.getElementById("root")!).render(
   <AppErrorBoundary>

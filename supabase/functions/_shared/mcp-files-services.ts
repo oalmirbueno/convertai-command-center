@@ -107,9 +107,46 @@ function kickWorker(jobId: string): void {
 
 
 // ─── Idempotency (via files.idempotency_key unique index) ─────
-async function findByIdempotency(key: string) {
-  const { data } = await db().from('files').select('*').eq('idempotency_key', key).maybeSingle();
+// A chave persistida leva o principal na frente: duas credenciais com a
+// mesma idempotency_key nao podem cair no arquivo uma da outra (antes uma
+// chave adivinhada devolvia o registro de outro cliente como "reused").
+// prepare, inline, version e finalize usam a mesma composicao.
+function scopedIdempotencyKey(ctx: FileCtx, key: string): string {
+  return `${ctx.keyId}:${key}`;
+}
+
+async function findByIdempotency(ctx: FileCtx, key: string) {
+  const { data } = await db().from('files').select('*')
+    .eq('idempotency_key', scopedIdempotencyKey(ctx, key)).maybeSingle();
   return data;
+}
+
+// Quarentena de um upload que falhou na validacao (tamanho ou checksum).
+// Nunca deixa o arquivo virar 'ready' com conteudo diferente do declarado.
+async function quarantineUpload(fileId: string, reason: string): Promise<void> {
+  const { data: quarantined, error: quarantineError } = await db().from('files')
+    .update({ status: 'quarantined', extraction_status: 'failed', extraction_error: reason.slice(0, 1000) })
+    .eq('id', fileId)
+    .eq('status', 'uploading')
+    .select('id')
+    .maybeSingle();
+  if (quarantineError || !quarantined) {
+    throw new FileError(
+      'validation:invalid_request',
+      `failed to quarantine upload (${reason}): ${quarantineError?.message ?? 'upload state changed'}`,
+    );
+  }
+}
+
+// Falha ao enfileirar a extracao de um arquivo que ja esta no storage: o
+// arquivo fica, mas marcado como extracao 'failed' e a resposta avisa.
+// Antes o job sumia em silencio e a resposta dizia 'pending' para sempre.
+async function markExtractionEnqueueFailed(fileId: string, message: string): Promise<string> {
+  const aviso = `extraction_enqueue_failed: ${message}`;
+  await db().from('files')
+    .update({ extraction_status: 'failed', extraction_error: aviso.slice(0, 1000) })
+    .eq('id', fileId);
+  return aviso;
 }
 
 // ─── Validation helpers ───────────────────────────────────────
@@ -273,7 +310,7 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
   const cap = isMedia(input.mime_type) ? LIMITS.mediaMaxBytes : LIMITS.signedMaxBytes;
   if (input.size_bytes > cap) throw new FileError('file:too_large', `Max ${cap} bytes for this type`);
 
-  const existing = await findByIdempotency(input.idempotency_key);
+  const existing = await findByIdempotency(ctx, input.idempotency_key);
   if (existing) {
     const sameRequest =
       existing.client_id === input.client_id
@@ -302,7 +339,7 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
       );
     }
     return {
-      file_id: existing.id, upload_id: existing.idempotency_key,
+      file_id: existing.id, upload_id: input.idempotency_key,
       upload_url: signed.signedUrl, storage_path: existing.storage_path,
       required_headers: { 'content-type': existing.mime_type },
       expires_at: new Date(Date.now() + LIMITS.signedUploadTtlSec * 1000).toISOString(),
@@ -342,7 +379,7 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
     status: 'uploading',
     extraction_status: 'pending',
     source: ctx.origin ?? 'mcp',
-    idempotency_key: input.idempotency_key,
+    idempotency_key: scopedIdempotencyKey(ctx, input.idempotency_key),
   });
   if (insErr) throw new FileError('validation:invalid_request', insErr.message);
 
@@ -370,7 +407,7 @@ export async function finalizeFileUpload(input: z.infer<typeof finalizeUploadSch
     .select('*').eq('id', input.file_id).maybeSingle();
   if (fileError) throw new FileError('validation:invalid_request', `file lookup: ${fileError.message}`);
   if (!f) throw new FileError('resource:not_found', 'file not found');
-  if (f.idempotency_key !== input.idempotency_key) {
+  if (f.idempotency_key !== scopedIdempotencyKey(ctx, input.idempotency_key)) {
     throw new FileError('conflict:idempotency', 'idempotency_key mismatch');
   }
   if (
@@ -390,20 +427,27 @@ export async function finalizeFileUpload(input: z.infer<typeof finalizeUploadSch
   const res = await fetch(obj.signedUrl);
   if (!res.ok) throw new FileError('resource:not_found', 'storage fetch failed');
   const bytes = new Uint8Array(await res.arrayBuffer());
+
+  // Tamanho: o que chegou tem de ser exatamente o declarado no prepare e
+  // caber no teto do tipo. Antes so o checksum opcional era conferido, e
+  // um objeto de outro tamanho virava 'ready' com size_bytes reescrito.
+  const cap = isMedia(String(f.mime_type ?? '')) ? LIMITS.mediaMaxBytes : LIMITS.signedMaxBytes;
+  const declaredSize = Number(f.size_bytes);
+  if (bytes.byteLength > cap) {
+    await quarantineUpload(f.id, `uploaded ${bytes.byteLength} bytes exceeds cap ${cap}`);
+    throw new FileError('file:too_large', `uploaded content (${bytes.byteLength} bytes) exceeds max ${cap} bytes for this type`);
+  }
+  if (Number.isFinite(declaredSize) && declaredSize > 0 && bytes.byteLength !== declaredSize) {
+    await quarantineUpload(f.id, `uploaded ${bytes.byteLength} bytes, declared ${declaredSize}`);
+    throw new FileError('validation:invalid_request', `uploaded content is ${bytes.byteLength} bytes but ${declaredSize} were declared at prepare`, 'size_bytes');
+  }
+
+  // Checksum: compara com o sha informado agora ou, na falta dele, com o
+  // declarado no prepare. Antes o sha do prepare era ignorado no finalize.
   const actualSha = await sha256Hex(bytes);
-  if (input.sha256 && input.sha256.toLowerCase() !== actualSha) {
-    const { data: quarantined, error: quarantineError } = await db().from('files')
-      .update({ status: 'quarantined' })
-      .eq('id', f.id)
-      .eq('status', 'uploading')
-      .select('id')
-      .maybeSingle();
-    if (quarantineError || !quarantined) {
-      throw new FileError(
-        'validation:invalid_request',
-        `failed to quarantine checksum mismatch: ${quarantineError?.message ?? 'upload state changed'}`,
-      );
-    }
+  const expectedSha = String(input.sha256 ?? f.sha256 ?? '').toLowerCase() || null;
+  if (expectedSha && expectedSha !== actualSha) {
+    await quarantineUpload(f.id, 'sha256 mismatch');
     throw new FileError('file:checksum_mismatch', 'sha256 does not match uploaded content');
   }
 
@@ -483,7 +527,7 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
     throw new FileError('file:too_large', `inline upload capped at ${LIMITS.inlineMaxBytes} bytes; use aceleriq_prepare_file_upload`);
   }
   const sha = await sha256Hex(bin);
-  const existing = await findByIdempotency(input.idempotency_key);
+  const existing = await findByIdempotency(ctx, input.idempotency_key);
   if (existing) {
     const sameClientAndPayload =
       existing.client_id === input.client_id
@@ -527,7 +571,7 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
     tags: input.tags ?? [], visibility: defs.visibility, sensitivity: defs.sensitivity,
     requires_approval: false,
     status: 'ready', extraction_status: 'pending',
-    source: ctx.origin ?? 'mcp', idempotency_key: input.idempotency_key,
+    source: ctx.origin ?? 'mcp', idempotency_key: scopedIdempotencyKey(ctx, input.idempotency_key),
   }).select('*').single();
   if (insErr) {
     const cleanupError = await cleanupUploadedObject(path);
@@ -539,15 +583,20 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
     );
   }
 
-  const { data: jobRow } = await db().from('file_processing_jobs').insert({
+  const warnings: string[] = [];
+  const { data: jobRow, error: jobError } = await db().from('file_processing_jobs').insert({
     file_id: fileId, job_type: 'extract', payload: { mime_type: input.mime_type },
   }).select('id').single();
-  if (jobRow?.id) kickWorker(jobRow.id);
+  if (jobError || !jobRow?.id) {
+    warnings.push(await markExtractionEnqueueFailed(fileId, jobError?.message ?? 'job unavailable'));
+    inserted.extraction_status = 'failed';
+  } else {
+    kickWorker(jobRow.id);
+  }
 
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = fileId;
 
   // Dedupe warning
-  const warnings: string[] = [];
   const { data: dupes } = await db().from('files')
     .select('id').eq('client_id', input.client_id).eq('sha256', sha).neq('id', fileId).limit(1);
   if (dupes && dupes.length) warnings.push(`duplicate:${dupes[0].id}`);
@@ -618,10 +667,17 @@ export async function getFileContent(input: z.infer<typeof getContentSchema>, ct
 export async function searchFileContent(input: z.infer<typeof searchContentSchema>, ctx: FileCtx) {
   const canSensitive = ctx.scopes.includes('files:sensitive:read') || ctx.scopes.includes('admin');
 
+  // Os filtros de quarentena e sensibilidade entram na consulta (join
+  // !inner), nao em memoria: assim total e has_more contam so o que o
+  // chamador pode ver, e uma pagina nao volta vazia com has_more=true.
   let q = db().from('file_content_chunks')
     .select('id,file_id,client_id,project_id,page_number,sheet_name,slide_number,text,files!inner(id,file_name,folder,sensitivity,visibility,status)', { count: 'exact' })
     .textSearch('search_vector', input.query, { config: 'portuguese', type: 'websearch' })
+    .neq('files.status', 'quarantined')
     .range(input.offset, input.offset + input.limit - 1);
+  if (!canSensitive) {
+    q = q.or('sensitivity.is.null,sensitivity.eq.normal', { referencedTable: 'files' });
+  }
 
   if (input.client_id) q = q.eq('client_id', input.client_id);
   if (input.project_id) q = q.eq('project_id', input.project_id);
@@ -632,12 +688,6 @@ export async function searchFileContent(input: z.infer<typeof searchContentSchem
   if (error) throw new FileError('validation:invalid_request', error.message);
 
   const results = (data ?? [])
-    .filter((r: any) => {
-      if (r.files?.status === 'quarantined') return false;
-      const sens = r.files?.sensitivity;
-      if ((sens === 'confidential' || sens === 'restricted') && !canSensitive) return false;
-      return true;
-    })
     .map((r: any) => ({
       file_id: r.file_id, file_name: r.files?.file_name,
       snippet: input.include_snippets ? r.text.slice(0, 320) : undefined,
@@ -685,8 +735,15 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
   }
   if (!isAllowedMime(input.mime_type)) throw new FileError('file:unsupported_media_type', `MIME not allowed: ${input.mime_type}`);
 
-  const existing = await findByIdempotency(input.idempotency_key);
-  if (existing) return _summarize(existing, { reused: true, revision_of_file_id: parent.id });
+  const existing = await findByIdempotency(ctx, input.idempotency_key);
+  if (existing) {
+    // A mesma chave so vale para a mesma versao do mesmo pai. Antes o replay
+    // devolvia qualquer arquivo da chave e dizia que era versao deste pai.
+    if (existing.revision_of_file_id !== parent.id) {
+      throw new FileError('conflict:idempotency', 'idempotency_key belongs to a version of a different file');
+    }
+    return _summarize(existing, { reused: true, revision_of_file_id: parent.id });
+  }
 
   const bin = Uint8Array.from(atob(input.content_base64), c => c.charCodeAt(0));
   if (bin.byteLength > LIMITS.inlineMaxBytes) throw new FileError('file:too_large', `version upload capped at ${LIMITS.inlineMaxBytes} bytes inline`);
@@ -717,7 +774,7 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
     tags: parent.tags, visibility: 'internal', sensitivity: parent.sensitivity,
     requires_approval: false,
     status: 'ready', extraction_status: 'pending',
-    source: ctx.origin ?? 'mcp', idempotency_key: input.idempotency_key,
+    source: ctx.origin ?? 'mcp', idempotency_key: scopedIdempotencyKey(ctx, input.idempotency_key),
   }).select('*').single();
   if (insErr) {
     const cleanupError = await cleanupUploadedObject(path);
@@ -729,10 +786,18 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
     );
   }
 
-  const { data: vJob } = await db().from('file_processing_jobs').insert({ file_id: newId, job_type: 'extract', payload: { mime_type: input.mime_type } }).select('id').single();
-  if (vJob?.id) kickWorker(vJob.id);
+  const warnings: string[] = [];
+  const { data: vJob, error: vJobError } = await db().from('file_processing_jobs')
+    .insert({ file_id: newId, job_type: 'extract', payload: { mime_type: input.mime_type } })
+    .select('id').single();
+  if (vJobError || !vJob?.id) {
+    warnings.push(await markExtractionEnqueueFailed(newId, vJobError?.message ?? 'job unavailable'));
+    inserted.extraction_status = 'failed';
+  } else {
+    kickWorker(vJob.id);
+  }
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = newId;
-  return _summarize(inserted, { revision_of_file_id: parent.id });
+  return _summarize(inserted, { revision_of_file_id: parent.id, ...(warnings.length > 0 ? { warnings } : {}) });
 }
 
 // ─── Write: archive/restore ───────────────────────────────────
@@ -755,10 +820,19 @@ export async function restoreFile(input: z.infer<typeof restoreSchema>, ctx: Fil
   ensureWriteAllowed(ctx);
   const { data: f } = await db().from('files').select('*').eq('id', input.file_id).maybeSingle();
   if (!f) throw new FileError('resource:not_found', 'file not found');
+  // Restaurar so desfaz um arquivamento. Antes qualquer status virava
+  // 'ready', inclusive 'quarantined' (checksum errado) e 'uploading'
+  // (objeto nunca validado), o que reabria arquivo que nunca foi aceito.
+  if (f.status !== 'archived') {
+    throw new FileError('write:forbidden', `only archived files can be restored (status: ${f.status})`);
+  }
   const { data, error } = await db().from('files')
     .update({ status: 'ready', archived_at: null })
-    .eq('id', f.id).select('*').single();
+    .eq('id', f.id)
+    .eq('status', 'archived')
+    .select('*').maybeSingle();
   if (error) throw new FileError('validation:invalid_request', error.message);
+  if (!data) throw new FileError('write:forbidden', 'file is no longer archived');
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = f.id;
   return _summarize(data);
 }

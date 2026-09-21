@@ -89,7 +89,12 @@ describe("o MCP tem o CRM inteiro na 1.44.0", () => {
     expect(tools).toContain("'editorial:write', 'clients:write', 'commercial:write',");
     expect(auth).toContain("'editorial:write','commercial:write']");
     expect(seguranca).toContain("'commercial:write',");
-    expect(metadata).toContain("'commercial:read', 'commercial:write',");
+    // O metadata OAuth deriva de ALL_SCOPES (mcp-tools.ts) em vez de manter
+    // copia propria; a garantia agora e que ALL_SCOPES tem o par e que o
+    // metadata importa dela.
+    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'commercial:read',\s*'commercial:write',[\s\S]*?\] as const;/);
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    expect(metadata).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
   });
 
   it("toda função do serviço recusa credencial restrita a cliente", () => {

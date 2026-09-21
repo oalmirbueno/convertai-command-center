@@ -164,15 +164,15 @@ describe("identity boundary required by the internal agent Kanban", () => {
 
   it("keeps role writes and explicit passwords behind the server boundary", () => {
     expect(teamPage).toContain("Senha Inicial *");
-    expect(teamPage).toContain("Mínimo 8 caracteres");
+    expect(teamPage).toContain("Mínimo 12 caracteres, com maiúscula, número e símbolo");
     expect(teamPage).not.toContain("Temp@2026!");
     expect(teamPage).toContain('action: "update_role"');
     expect(teamPage).not.toMatch(/from\(["']user_roles["']\)[\s\S]{0,80}\.update/);
   });
 
-  it("keeps every password editor aligned with the eight-character server rule", () => {
+  it("keeps every password editor aligned with the twelve-character server rule", () => {
     expect(editClientDrawer).toContain("clientPassword.length < 8");
-    expect(editClientDrawer).toContain("Senha deve ter no mínimo 8 caracteres");
+    expect(editClientDrawer).toContain("Senha deve ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo");
     expect(editClientDrawer).not.toContain("clientPassword.length < 6");
   });
 });

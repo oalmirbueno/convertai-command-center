@@ -391,8 +391,8 @@ export default function EditClientDrawer({
       toast.error("Preencha nome e empresa");
       return;
     }
-    if (clientPassword && clientPassword.length < 8) {
-      toast.error("Senha deve ter no mínimo 8 caracteres");
+    if (clientPassword && !(clientPassword.length >= 12 && /[a-z]/.test(clientPassword) && /[A-Z]/.test(clientPassword) && /[0-9]/.test(clientPassword) && /[^A-Za-z0-9]/.test(clientPassword))) {
+      toast.error("Senha deve ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo");
       return;
     }
     setSaving(true);

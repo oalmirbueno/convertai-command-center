@@ -164,22 +164,51 @@ export function updateReload(): boolean {
  * Memória de quedas fatais de render, por versão e mensagem. Permite a tela
  * de erro se recuperar sozinha uma ou duas vezes (soluço passageiro) e parar
  * de insistir quando o erro é determinístico, sem nunca entrar em loop.
+ *
+ * A janela é de 10 minutos contados da PRIMEIRA queda com aquela assinatura:
+ * dentro dela, no máximo duas recargas automáticas; depois, tela manual.
+ * Passados os 10 minutos a contagem recomeça, então um soluço de ontem não
+ * condena a sessão de hoje. Ninguém zera esta memória por tempo de uso: era
+ * isso (zerar aos 20 s de boot) que deixava o painel em loop de recarga.
  */
 const FATAL_KEY = "aceleriq-fatal-crashes";
+const FATAL_WINDOW_MS = 10 * 60_000;
+
+interface FatalCrashMemory {
+  sig: string;
+  /** Primeira queda desta assinatura dentro da janela atual. */
+  since: number;
+  /** Última queda registrada (diagnóstico). */
+  at: number;
+  count: number;
+}
 
 export function recordFatalCrash(signature: string): number {
   const now = Date.now();
   try {
     const raw = localStorage.getItem(FATAL_KEY);
-    const data = raw ? (JSON.parse(raw) as { sig: string; at: number; count: number }) : null;
-    const count = data && data.sig === signature && now - data.at < 10 * 60_000 ? data.count + 1 : 1;
-    localStorage.setItem(FATAL_KEY, JSON.stringify({ sig: signature, at: now, count }));
+    const data = raw ? (JSON.parse(raw) as Partial<FatalCrashMemory>) : null;
+    const since = typeof data?.since === "number" ? data.since : data?.at;
+    const mesmaJanela =
+      !!data && data.sig === signature && typeof since === "number" && now - since < FATAL_WINDOW_MS;
+    const count = mesmaJanela && typeof data.count === "number" ? data.count + 1 : 1;
+    const memory: FatalCrashMemory = {
+      sig: signature,
+      since: mesmaJanela && typeof since === "number" ? since : now,
+      at: now,
+      count,
+    };
+    localStorage.setItem(FATAL_KEY, JSON.stringify(memory));
     return count;
   } catch {
     return 99; // sem armazenamento não dá para limitar: não tenta sozinho
   }
 }
 
+/**
+ * Apaga a memória de quedas. Uso manual (quem chama decide que a sessão está
+ * saudável); o boot NÃO chama mais isto por tempo.
+ */
 export function clearFatalCrashes() {
   try { localStorage.removeItem(FATAL_KEY); } catch { /* cosmético */ }
 }

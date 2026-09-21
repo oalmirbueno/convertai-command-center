@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 
 const statusBadge: Record<string, { cls: string; label: string }> = {
   new: { cls: "bg-info/10 text-info", label: "Aberto" },
@@ -67,16 +68,14 @@ export default function ClientRequests() {
       });
       if (error) throw error;
 
-      // Notify admin
-      const { data: adminId } = await supabase.rpc("get_admin_user_id");
-      if (adminId) {
-        await supabase.from("notifications").insert({
-          user_id: adminId,
-          message: `Novo pedido de ${profile?.company_name || profile?.full_name}: ${title.trim()}`,
-          notification_type: "request",
-          link: "/pedidos",
-        });
-      }
+      // Aviso para a equipe pela função de servidor (chave de serviço): o
+      // cliente não tem permissão de RLS para inserir em notifications, e o
+      // insert direto falhava em silêncio. Mesmo caminho do RequestButton.
+      await notifyAdmin(
+        `Novo pedido de ${profile?.company_name || profile?.full_name}: ${title.trim()}`,
+        "request",
+        "/pedidos",
+      );
 
       toast.success("Pedido enviado!");
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });

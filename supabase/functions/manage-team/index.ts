@@ -9,6 +9,37 @@ const MANAGED_ROLES = new Set(["admin", "client", "design", "traffic", "manager"
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// Mesma regua do client-first-access: 12 a 128 caracteres com minuscula,
+// maiuscula, digito e simbolo. Senha definida por admin nao pode ser mais
+// fraca do que a que o proprio cliente e obrigado a criar.
+function validPassword(password: unknown): password is string {
+  return typeof password === "string" &&
+    password.length >= 12 &&
+    password.length <= 128 &&
+    /[a-z]/.test(password) &&
+    /[A-Z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password);
+}
+const WEAK_PASSWORD_MESSAGE =
+  "A senha precisa ter ao menos 12 caracteres, com letra minúscula, maiúscula, número e símbolo";
+
+// Erro com status HTTP proprio: 401 para quem nao esta logado, 403 para quem
+// esta logado mas nao e admin. O resto continua 400.
+class HttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+function requireUuid(value: unknown, field: string): string {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new HttpError(`Invalid ${field}`, 400);
+  }
+  return value;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -21,20 +52,22 @@ Deno.serve(async (req) => {
 
     // Verify caller is admin
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Not authenticated");
+    if (!authHeader) throw new HttpError("Not authenticated", 401);
 
-    const token = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!token) throw new HttpError("Not authenticated", 401);
     const { data: { user: caller } } = await adminClient.auth.getUser(token);
-    if (!caller) throw new Error("Invalid token");
+    if (!caller) throw new HttpError("Invalid token", 401);
 
-    const { data: callerRole } = await adminClient
+    const { data: callerRole, error: callerRoleError } = await adminClient
       .from("user_roles")
       .select("role")
       .eq("user_id", caller.id)
       .eq("role", "admin")
       .maybeSingle();
 
-    if (!callerRole) throw new Error("Unauthorized: admin only");
+    if (callerRoleError) throw new HttpError("Failed to verify caller role", 500);
+    if (!callerRole) throw new HttpError("Unauthorized: admin only", 403);
 
     const { action, ...payload } = await req.json();
 
@@ -54,8 +87,8 @@ Deno.serve(async (req) => {
       const { email, full_name, role, password, company_name } = payload;
       if (!email || !full_name || !role || !password) throw new Error("Missing fields");
       if (!MANAGED_ROLES.has(role)) throw new Error("Invalid role");
-      if (typeof password !== "string" || password.length < 8) {
-        throw new Error("Password must be at least 8 characters");
+      if (!validPassword(password)) {
+        throw new Error(WEAK_PASSWORD_MESSAGE);
       }
 
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
@@ -115,6 +148,7 @@ Deno.serve(async (req) => {
     if (action === "update_role") {
       const { user_id, role } = payload;
       if (!user_id || !role) throw new Error("Missing user_id or role");
+      requireUuid(user_id, "user_id");
       if (!MANAGED_ROLES.has(role)) throw new Error("Invalid role");
       if (user_id === caller.id && role !== "admin") {
         throw new Error("You cannot demote your own administrator account");
@@ -130,7 +164,7 @@ Deno.serve(async (req) => {
     if (action === "delete") {
       const { user_id } = payload;
       if (!user_id) throw new Error("Missing user_id");
-      if (!UUID_PATTERN.test(user_id)) throw new Error("Invalid user_id");
+      requireUuid(user_id, "user_id");
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
       // Administrator accounts must be demoted through the locked role RPC
@@ -241,7 +275,7 @@ Deno.serve(async (req) => {
       const { user_id } = payload;
       const desativando = action === "deactivate";
       if (!user_id) throw new Error("Missing user_id");
-      if (!UUID_PATTERN.test(user_id)) throw new Error("Invalid user_id");
+      requireUuid(user_id, "user_id");
       if (desativando && user_id === caller.id) {
         throw new Error("Você não pode desativar a própria conta");
       }
@@ -285,8 +319,9 @@ Deno.serve(async (req) => {
     if (action === "update_password") {
       const { user_id, password } = payload;
       if (!user_id || !password) throw new Error("Missing user_id or password");
-      if (typeof password !== "string" || password.length < 8) {
-        throw new Error("Password must be at least 8 characters");
+      requireUuid(user_id, "user_id");
+      if (!validPassword(password)) {
+        throw new Error(WEAK_PASSWORD_MESSAGE);
       }
 
       const { error: updateError } = await adminClient.auth.admin.updateUserById(user_id, { password });
@@ -312,8 +347,9 @@ Deno.serve(async (req) => {
     throw new Error("Invalid action");
   } catch (err: any) {
     console.error("manage-team error:", err);
+    const status = err instanceof HttpError ? err.status : 400;
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 400,
+      status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

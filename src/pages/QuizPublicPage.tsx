@@ -135,11 +135,58 @@ type Lead = {
 
 type Answers = Record<string, string>;
 
-type Phase = "loading" | "lead" | "quiz" | "submitting" | "done";
+/**
+ * "invalid" é nova: antes, um convite inexistente (404), já usado (409) ou
+ * bloqueado por limite (429) caía no formulário de lead, a pessoa respondia
+ * tudo e o envio final falhava. Agora o problema aparece na abertura, com
+ * contato para resolver.
+ */
+type Phase = "loading" | "invalid" | "lead" | "quiz" | "submitting" | "done";
+
+type InvalidReason = "not_found" | "used" | "rate_limited" | "network" | "unknown";
+
+/**
+ * Classifica a falha do carregamento pelo que a função devolve. O SDK
+ * embrulha respostas 4xx em FunctionsHttpError com `context` (a Response).
+ */
+function classifyLoadFailure(error: unknown): InvalidReason {
+  const status = (error as { context?: { status?: number } } | null)?.context?.status;
+  if (status === 404) return "not_found";
+  if (status === 409) return "used";
+  if (status === 429) return "rate_limited";
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (/fetch|network|load failed|timeout/i.test(message)) return "network";
+  return "unknown";
+}
+
+const INVALID_COPY: Record<InvalidReason, { title: string; text: string }> = {
+  not_found: {
+    title: "Link inválido ou expirado",
+    text: "Este link de diagnóstico não é mais válido. Peça um novo para a equipe Aceleriq.",
+  },
+  used: {
+    title: "Diagnóstico já enviado",
+    text: "As respostas deste link já foram recebidas. Se precisar refazer, fale com a equipe Aceleriq.",
+  },
+  rate_limited: {
+    title: "Muitas tentativas",
+    text: "Este link foi aberto vezes demais em pouco tempo. Aguarde alguns minutos e tente de novo.",
+  },
+  network: {
+    title: "A conexão falhou",
+    text: "Não conseguimos carregar o seu diagnóstico agora. Confira a internet e tente de novo: o link continua valendo.",
+  },
+  unknown: {
+    title: "Não foi possível abrir o diagnóstico",
+    text: "Algo deu errado ao carregar este link. Tente de novo em instantes ou fale com a equipe Aceleriq.",
+  },
+};
 
 export default function QuizPublicPage() {
   const { token } = useParams<{ token: string }>();
   const [phase, setPhase] = useState<Phase>("loading");
+  const [invalidReason, setInvalidReason] = useState<InvalidReason>("unknown");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
   const [lead, setLead] = useState<Lead>({ lead_name: "", lead_email: "", lead_whatsapp: "", lead_company: "" });
   const [answers, setAnswers] = useState<Answers>({});
@@ -150,15 +197,23 @@ export default function QuizPublicPage() {
   // ---- Load progress ----
   useEffect(() => {
     if (!token) {
-      setPhase("lead");
+      setInvalidReason("not_found");
+      setPhase("invalid");
       return;
     }
+    let alive = true;
+    setPhase("loading");
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke("submit-quiz", {
           body: { token, action: "load" },
         });
+        if (!alive) return;
         if (error) throw error;
+        if ((data as any)?.error) {
+          // Resposta 200 com corpo de erro: trata como convite inválido.
+          throw new Error(String((data as any).error));
+        }
         const row = (data as any)?.data;
         if (row) {
           setLead({
@@ -184,11 +239,17 @@ export default function QuizPublicPage() {
         }
         setPhase("lead");
       } catch (e: any) {
-        console.error(e);
-        setPhase("lead");
+        if (!alive) return;
+        // Qualquer falha ao carregar fecha a porta com explicação. Abrir o
+        // formulário mesmo assim era mandar a pessoa responder 10 perguntas
+        // para um convite que o servidor já disse que não existe.
+        console.error("[quiz] falha ao carregar:", e);
+        setInvalidReason(classifyLoadFailure(e));
+        setPhase("invalid");
       }
     })();
-  }, [token]);
+    return () => { alive = false; };
+  }, [token, loadAttempt]);
 
   // ---- Save progress (debounced) ----
   const persist = useCallback((nextLead: Lead, nextAnswers: Answers) => {
@@ -299,7 +360,7 @@ export default function QuizPublicPage() {
       </div>
 
       {/* Header (compact during quiz) */}
-      {phase !== "lead" && phase !== "done" && (
+      {phase !== "lead" && phase !== "done" && phase !== "invalid" && (
         <header className="px-5 md:px-8 py-5 flex items-center justify-between max-w-2xl mx-auto">
           <img src={aceleriqLogo} alt="Aceleriq" className="h-[60px] md:h-20 w-auto" />
           {phase === "quiz" && (
@@ -339,6 +400,14 @@ export default function QuizPublicPage() {
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <p className="text-sm text-muted-foreground">Carregando seu diagnóstico…</p>
             </motion.div>
+          )}
+
+          {phase === "invalid" && (
+            <InvalidScreen
+              key="invalid"
+              reason={invalidReason}
+              onRetry={() => setLoadAttempt((n) => n + 1)}
+            />
           )}
 
           {phase === "lead" && (
@@ -387,6 +456,57 @@ export default function QuizPublicPage() {
 }
 
 // ============== Sub-components ==============
+
+/**
+ * Tela de convite inválido, espelho da do primeiro acesso (FirstAccess):
+ * o que aconteceu, o que fazer e um contato. Falha de rede ou limite de
+ * tentativas ganha botão de tentar de novo; convite inexistente ou já
+ * usado, não (tentar de novo não muda o fato).
+ */
+function InvalidScreen({ reason, onRetry }: { reason: InvalidReason; onRetry: () => void }) {
+  const copy = INVALID_COPY[reason];
+  const canRetry = reason === "network" || reason === "rate_limited" || reason === "unknown";
+  const waUrl = supportWhatsAppUrl("Olá! Tentei abrir o link do diagnóstico e ele não funcionou. Podem me ajudar?");
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ type: "spring", stiffness: 120, damping: 20 }}
+      className="pt-6 md:pt-12"
+    >
+      <div className="text-center mb-8">
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-20 md:h-[100px] w-auto mx-auto mb-8" />
+      </div>
+      <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-xl shadow-2xl shadow-primary/5 p-6 md:p-8 flex flex-col items-center gap-3 text-center">
+        <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+          <span aria-hidden="true" className="text-destructive text-xl font-bold">!</span>
+        </div>
+        <h1 className="text-lg font-semibold text-foreground">{copy.title}</h1>
+        <p className="text-sm text-muted-foreground leading-relaxed max-w-md">{copy.text}</p>
+        <div className="mt-2 flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+          {canRetry && (
+            <Button type="button" onClick={onRetry} className="w-full sm:w-auto">
+              Tentar de novo
+            </Button>
+          )}
+          {waUrl ? (
+            <a
+              href={waUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:border-primary/50 transition-colors"
+            >
+              <MessageCircle className="h-4 w-4" /> Falar com a Aceleriq
+            </a>
+          ) : (
+            <p className="text-xs text-muted-foreground">Fale com a equipe Aceleriq pelo canal em que recebeu este link.</p>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 function LeadForm({
   lead, onChange, onSubmit, valid,

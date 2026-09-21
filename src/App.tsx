@@ -9,6 +9,7 @@ import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import AppLayout from "@/components/AppLayout";
+import RouteErrorBoundary from "@/components/RouteErrorBoundary";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 const Login = lazy(() => import("@/pages/Login"));
@@ -152,12 +153,50 @@ function ComercialRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Perfil do usuário logado não veio do servidor depois das tentativas. Abrir
+ * o painel assim mostraria a tela de cliente para o dono (papel nulo cai no
+ * padrão); melhor uma tela honesta com o botão de tentar de novo.
+ */
+function ProfileErrorScreen() {
+  const { retryProfile, logout } = useAuth();
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6 text-center bg-background">
+      <img src={aceleriqLogo} alt="Aceleriq" className="brand-logo h-20 w-auto opacity-90" />
+      <p className="text-lg font-semibold text-foreground">Não conseguimos carregar o seu perfil</p>
+      <p className="max-w-[420px] text-sm leading-relaxed text-muted-foreground">
+        O servidor não respondeu a tempo. Confira a internet e tente de novo; a sua sessão continua válida.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => { void retryProfile(); }}
+          className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+        >
+          Tentar de novo
+        </button>
+        <button
+          type="button"
+          onClick={() => { void logout(); }}
+          className="rounded-xl border border-border px-5 py-2.5 text-sm font-medium text-foreground hover:border-primary/50 transition-colors cursor-pointer bg-transparent"
+        >
+          Sair
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AppRoutes() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, profileError } = useAuth();
   if (loading) return <LoadingScreen />;
+  if (user && !profile && profileError) return <ProfileErrorScreen />;
 
   return (
     <Suspense fallback={<LoadingScreen />}>
+      {/* Erro de render numa tela fica contido nela (RouteErrorBoundary);
+          o AppErrorBoundary do main.tsx continua sendo a rede do boot. */}
+      <RouteErrorBoundary>
       <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
@@ -225,6 +264,7 @@ export function AppRoutes() {
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
+      </RouteErrorBoundary>
     </Suspense>
   );
 }

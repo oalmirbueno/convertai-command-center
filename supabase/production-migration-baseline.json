@@ -881,6 +881,14 @@
       "remote_name": "movimentos_do_cliente_sem_vazar_interno",
       "remote_statements_sha256": "57b94b251351bf9252f4286e35acbeb0699c36f7fcf07983c8116b4e8532c48e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260921140000",
+      "path": "supabase/migrations/20260921140000_auditoria_banco_correcoes.sql",
+      "local_sha256": "60953adb37a656c2b2a3e1646a592f1f830a5ef0f5d9ad8d70a659f05ded48d7",
+      "remote_name": "auditoria_banco_correcoes",
+      "remote_statements_sha256": "9c83f1a668c39483a39db4763afeed5ead8ee217f40226543f3b04e5cc3c174e",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

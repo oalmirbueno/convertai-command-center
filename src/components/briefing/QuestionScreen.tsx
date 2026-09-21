@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QUESTIONS, type Question } from "./questions";
+import { safeStorage } from "@/lib/safeStorage";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 interface Props {
@@ -14,8 +15,11 @@ interface Props {
 export default function QuestionScreen({ answers, onUpdate, onComplete, storageKey }: Props) {
   const [idx, setIdx] = useState(() => {
     if (!storageKey) return 0;
-    const saved = localStorage.getItem(`briefing_idx_${storageKey}`);
-    return saved ? Math.min(parseInt(saved, 10), QUESTIONS.length - 1) : 0;
+    // safeStorage: o localStorage pode lançar (Safari privado, link aberto
+    // dentro do WhatsApp) e um throw aqui era tela branca no primeiro render.
+    const saved = safeStorage.get(`briefing_idx_${storageKey}`);
+    const parsed = saved ? parseInt(saved, 10) : NaN;
+    return Number.isFinite(parsed) ? Math.max(0, Math.min(parsed, QUESTIONS.length - 1)) : 0;
   });
   const [dir, setDir] = useState<"next" | "prev">("next");
   const [shake, setShake] = useState(false);
@@ -28,15 +32,15 @@ export default function QuestionScreen({ answers, onUpdate, onComplete, storageK
   // Auto-save answers and index to localStorage
   useEffect(() => {
     if (!storageKey) return;
-    localStorage.setItem(`briefing_answers_${storageKey}`, JSON.stringify(answers));
-    localStorage.setItem(`briefing_idx_${storageKey}`, String(idx));
+    safeStorage.set(`briefing_answers_${storageKey}`, JSON.stringify(answers));
+    safeStorage.set(`briefing_idx_${storageKey}`, String(idx));
   }, [answers, idx, storageKey]);
 
   // Show saved indicator briefly on manual save
   const handleManualSave = useCallback(() => {
     if (!storageKey) return;
-    localStorage.setItem(`briefing_answers_${storageKey}`, JSON.stringify(answers));
-    localStorage.setItem(`briefing_idx_${storageKey}`, String(idx));
+    safeStorage.set(`briefing_answers_${storageKey}`, JSON.stringify(answers));
+    safeStorage.set(`briefing_idx_${storageKey}`, String(idx));
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
   }, [storageKey, answers, idx]);
@@ -73,13 +77,12 @@ export default function QuestionScreen({ answers, onUpdate, onComplete, storageK
       setDir("next");
       setIdx(i => i + 1);
     } else {
-      if (storageKey) {
-        localStorage.removeItem(`briefing_answers_${storageKey}`);
-        localStorage.removeItem(`briefing_idx_${storageKey}`);
-      }
+      // O progresso salvo NÃO é apagado aqui. Quem apaga é a página, e só
+      // depois que o servidor confirmou o envio: se a rede cair no meio, as
+      // respostas continuam guardadas para a pessoa tentar de novo.
       onComplete();
     }
-  }, [canAdvance, idx, total, onComplete, storageKey]);
+  }, [canAdvance, idx, total, onComplete]);
 
   const goPrev = useCallback(() => {
     if (idx > 0) { setDir("prev"); setIdx(i => i - 1); }

@@ -486,6 +486,9 @@ export default function EditorialCalendar() {
     setBatchScheduling(true);
     let scheduled = 0;
     let failed = 0;
+    // O primeiro erro e o que explica a falha; sem ele o aviso final mandava
+    // "tente novamente" sem dizer o motivo.
+    let firstError: string | null = null;
     for (const item of approvedReadyToSchedule) {
       const planned = new Date(item.scheduledAt);
       const target = planned.getTime() > Date.now()
@@ -501,17 +504,25 @@ export default function EditorialCalendar() {
           deferRefresh: true,
         });
         scheduled += 1;
-      } catch {
+      } catch (error) {
         failed += 1;
+        if (!firstError) {
+          firstError = error instanceof Error && error.message
+            ? error.message
+            : String((error as { message?: string } | null)?.message || error || "");
+        }
       }
     }
     await queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
     if (scheduled > 0) {
       toast.success(
         `${scheduled} publicação(ões) aprovadas foram agendadas${failed > 0 ? ` · ${failed} falharam, tente novamente` : ""}.`,
+        failed > 0 && firstError ? { description: firstError } : undefined,
       );
     } else if (failed > 0) {
-      toast.error("Não foi possível agendar. Atualize o calendário e tente novamente.");
+      toast.error("Não foi possível agendar. Atualize o calendário e tente novamente.", {
+        description: firstError || undefined,
+      });
     }
     setBatchScheduling(false);
   }, [approvedReadyToSchedule, batchScheduling, queryClient, transitionPublication]);

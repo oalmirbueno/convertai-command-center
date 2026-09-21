@@ -134,8 +134,11 @@ export async function createOpportunity(input: OpportunityInput & { name: string
     .insert({ origin: 'manual', monthly_value: 0, one_off_value: 0, qualificacao: {}, ...corpo, stage: etapa })
     .select('id, name, company, stage, classe, origin, monthly_value, one_off_value, owner_id, created_at').single());
   if (error) throw new Error(`commercial_leads: ${error.message}`);
-  await db().from('commercial_lead_events').insert({ lead_id: data.id, kind: 'nota', note: `Criado pelo MCP (${ctx.keyName}).` });
-  return { oportunidade: data, criado: true };
+  // O lead ja existe; falha no evento nao desfaz a criacao, mas fica dita na resposta.
+  const avisos: string[] = [];
+  const { error: eventoErro } = await db().from('commercial_lead_events').insert({ lead_id: data.id, kind: 'nota', note: `Criado pelo MCP (${ctx.keyName}).` });
+  if (eventoErro) avisos.push(`commercial_lead_events: ${eventoErro.message}`);
+  return { oportunidade: data, criado: true, ...(avisos.length > 0 ? { warnings: avisos } : {}) };
 }
 
 export async function updateOpportunity(input: OpportunityInput & { opportunity_id: string }, ctx: AuthContext) {
@@ -174,10 +177,13 @@ export async function moveOpportunity(input: { opportunity_id: string; stage: st
     won_client_id: para === 'ganho' ? input.won_client_id || null : null,
   }).eq('id', lead.id).select('*').single());
   if (error) throw new Error(`commercial_leads: ${error.message}`);
-  await db().from('commercial_lead_events').insert({
+  // A etapa ja mudou; se o evento da historia falhar, a resposta avisa.
+  const avisos: string[] = [];
+  const { error: eventoErro } = await db().from('commercial_lead_events').insert({
     lead_id: lead.id, kind: 'stage', from_stage: lead.stage, to_stage: para, note: motivo,
   });
-  return { oportunidade: data, movido: true, de: lead.stage, para };
+  if (eventoErro) avisos.push(`commercial_lead_events: ${eventoErro.message}`);
+  return { oportunidade: data, movido: true, de: lead.stage, para, ...(avisos.length > 0 ? { warnings: avisos } : {}) };
 }
 
 export async function addOpportunityNote(input: { opportunity_id: string; note: string }, ctx: AuthContext) {
@@ -251,8 +257,11 @@ export async function createCommercialActivity(input: { opportunity_id: string; 
   }).select('id, lead_id, kind, title, due_at, owner_id').single());
   if (error) throw new Error(`commercial_activities: ${error.message}`);
   // O cartao do quadro le a proxima acao do proprio lead: manter em dia.
-  await db().from('commercial_leads').update({ next_action: titulo, next_action_at: quando.toISOString().slice(0, 10) }).eq('id', lead.id);
-  return { atividade: data, criada: true };
+  // A atividade ja existe; se o cartao nao atualizar, a resposta avisa.
+  const avisos: string[] = [];
+  const { error: cartaoErro } = await db().from('commercial_leads').update({ next_action: titulo, next_action_at: quando.toISOString().slice(0, 10) }).eq('id', lead.id);
+  if (cartaoErro) avisos.push(`commercial_leads.next_action: ${cartaoErro.message}`);
+  return { atividade: data, criada: true, ...(avisos.length > 0 ? { warnings: avisos } : {}) };
 }
 
 export async function completeCommercialActivity(input: { activity_id: string; done?: boolean; outcome?: string }, ctx: AuthContext) {
@@ -264,13 +273,15 @@ export async function completeCommercialActivity(input: { activity_id: string; d
   const concluir = input.done !== false;
   const { error } = await comPrazo(db().from('commercial_activities').update({ done_at: concluir ? new Date().toISOString() : null }).eq('id', atividade.id));
   if (error) throw new Error(`commercial_activities: ${error.message}`);
+  const avisos: string[] = [];
   if (concluir) {
     const resultado = texto(input.outcome, 1000);
-    await db().from('commercial_lead_events').insert({
+    const { error: eventoErro } = await db().from('commercial_lead_events').insert({
       lead_id: atividade.lead_id, kind: 'atividade', note: `Feito: ${atividade.title}${resultado ? ` · ${resultado}` : ''}`,
     });
+    if (eventoErro) avisos.push(`commercial_lead_events: ${eventoErro.message}`);
   }
-  return { activity_id: atividade.id, concluida: concluir };
+  return { activity_id: atividade.id, concluida: concluir, ...(avisos.length > 0 ? { warnings: avisos } : {}) };
 }
 
 export async function listCommercialOrganizations(opts: { search?: string; limit?: number }, ctx: AuthContext) {

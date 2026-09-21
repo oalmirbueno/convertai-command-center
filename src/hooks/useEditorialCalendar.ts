@@ -240,13 +240,11 @@ export function useEditorialClientScope(enabled: boolean) {
     queryKey: ["editorial-client-scope", user?.id, profile?.role],
     queryFn: async (): Promise<string[] | null> => {
       if (isAdmin) return null;
-      const rows = await readAllPages<{ client_id: string }>((from, to) =>
+      const rows = await readAllPages<{ id: string; client_id: string }>(() =>
         editorialDb
           .from("team_client_assignments")
-          .select("client_id")
-          .eq("user_id", user!.id)
-          .order("client_id", { ascending: true })
-          .range(from, to),
+          .select("id, client_id")
+          .eq("user_id", user!.id),
       );
       return unique(rows.map((row) => row.client_id));
     },
@@ -297,13 +295,14 @@ export function useEditorialLinkedTaskIds(
   const query = useQuery({
     queryKey: ["editorial-linked-task-ids", user?.id, profile?.role],
     queryFn: async (): Promise<EditorialTaskLinkIndex> => {
-      const links = await readAllPages<EditorialTaskLinkRow>((from, to) =>
-        editorialDb
-          .from("editorial_post_internal")
-          .select("post_id, task_id, revision_of_post_id")
-          .not("task_id", "is", null)
-          .order("task_id", { ascending: true })
-          .range(from, to),
+      // post_id e a chave primaria de editorial_post_internal: serve de cursor.
+      const links = await readAllPages<EditorialTaskLinkRow>(
+        () =>
+          editorialDb
+            .from("editorial_post_internal")
+            .select("post_id, task_id, revision_of_post_id")
+            .not("task_id", "is", null),
+        "post_id",
       );
       const postIds = unique(links.map((row) => row.post_id));
       if (postIds.length === 0) {
@@ -312,15 +311,13 @@ export function useEditorialLinkedTaskIds(
 
       const activePosts = await readInChunks<{ id: string }>(
         postIds,
-        (chunk, from, to) =>
+        (chunk) =>
           editorialDb
             .from("editorial_posts")
             .select("id")
             .in("id", chunk)
             .in("production_status", ["draft", "production", "ready"])
-            .is("archived_at", null)
-            .order("id", { ascending: true })
-            .range(from, to),
+            .is("archived_at", null),
       );
       const activePostIds = new Set(activePosts.map((post) => post.id));
       return buildEditorialTaskLinkIndex(links, activePostIds);
@@ -394,52 +391,102 @@ interface EditorialPage<T> {
   error: unknown;
 }
 
+/**
+ * Consulta que o leitor paginado completa com ordem, limite e cursor. O
+ * chamador entrega o filtro; a ordenacao final de exibicao, quando importa,
+ * e feita em memoria depois da leitura (ver sortRows abaixo).
+ */
+interface CursorQuery<T> extends PromiseLike<EditorialPage<T>> {
+  order: (column: string, options: { ascending: boolean }) => CursorQuery<T>;
+  limit: (count: number) => CursorQuery<T>;
+  gt: (column: string, value: string) => CursorQuery<T>;
+}
+
+/**
+ * Paginacao por cursor estavel (mesma regra de useTasks em useSupabaseData):
+ * ordena pela coluna unica informada e pede "maior que o ultimo lido". O
+ * range numerico sobre colunas que mudam durante a leitura (updated_at,
+ * scheduled_at) deslocava as paginas e a mesma linha voltava duplicada, ou
+ * uma linha sumia. Com cursor, cada linha aparece uma vez so.
+ */
 async function readAllPages<T>(
-  fetchPage: (from: number, to: number) => PromiseLike<EditorialPage<T>>,
+  buildQuery: () => CursorQuery<T>,
+  cursor = "id",
 ) {
-  // Deduplicado por id: a paginação ordena por colunas que mudam durante a
-  // leitura (updated_at, scheduled_at), então a mesma linha podia voltar em
-  // duas páginas e virar card repetido na tela.
-  const byId = new Map<string, T>();
+  const seen = new Set<string>();
   const rows: T[] = [];
-  let from = 0;
+  let after: string | null = null;
 
   while (true) {
-    const { data, error } = await fetchPage(
-      from,
-      from + EDITORIAL_PAGE_SIZE - 1,
-    );
+    let query = buildQuery()
+      .order(cursor, { ascending: true })
+      .limit(EDITORIAL_PAGE_SIZE);
+    if (after) query = query.gt(cursor, after);
+    const { data, error } = await query;
     if (error) throw error;
     const page = data || [];
     for (const row of page) {
-      const id = (row as { id?: string } | null)?.id;
-      if (id) {
-        if (byId.has(id)) continue;
-        byId.set(id, row);
+      const key = (row as Record<string, unknown> | null)?.[cursor];
+      if (typeof key === "string") {
+        if (seen.has(key)) continue;
+        seen.add(key);
       }
       rows.push(row);
     }
     if (page.length < EDITORIAL_PAGE_SIZE) return rows;
-    from += EDITORIAL_PAGE_SIZE;
+    const last = (page[page.length - 1] as Record<string, unknown> | null)?.[cursor];
+    if (typeof last !== "string" || last === after) return rows;
+    after = last;
   }
 }
 
 async function readInChunks<T>(
   ids: string[],
-  fetchChunk: (
-    chunk: string[],
-    from: number,
-    to: number,
-  ) => PromiseLike<EditorialPage<T>>,
+  fetchChunk: (chunk: string[]) => CursorQuery<T>,
+  cursor = "id",
 ) {
   const rows: T[] = [];
   for (let index = 0; index < ids.length; index += EDITORIAL_ID_CHUNK_SIZE) {
     const chunk = ids.slice(index, index + EDITORIAL_ID_CHUNK_SIZE);
-    rows.push(
-      ...(await readAllPages((from, to) => fetchChunk(chunk, from, to))),
-    );
+    rows.push(...(await readAllPages(() => fetchChunk(chunk), cursor)));
   }
   return rows;
+}
+
+type SortDirection = "asc" | "desc";
+
+/**
+ * Ordenacao de exibicao em memoria, ja que a leitura agora sai ordenada pelo
+ * cursor. Nulos vao para o fim em qualquer direcao (como nullsFirst: false).
+ */
+function sortRows<T>(
+  rows: T[],
+  keys: Array<[keyof T & string, SortDirection]>,
+) {
+  return [...rows].sort((left, right) => {
+    for (const [key, direction] of keys) {
+      const a = left[key] as unknown as string | number | null | undefined;
+      const b = right[key] as unknown as string | number | null | undefined;
+      const aNull = a === null || a === undefined;
+      const bNull = b === null || b === undefined;
+      if (aNull && bNull) continue;
+      if (aNull) return 1;
+      if (bNull) return -1;
+      if (a === b) continue;
+      const order = a < b ? -1 : 1;
+      return direction === "asc" ? order : -order;
+    }
+    return 0;
+  });
+}
+
+const EDITORIAL_RANGE_PADDING_DAYS = 45;
+
+function shiftIsoDays(iso: string, days: number) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString();
 }
 
 async function readEditorialCalendar(
@@ -450,36 +497,35 @@ async function readEditorialCalendar(
   fileChildrenMode: "none" | "scheduled" | "all" = "none",
 ): Promise<EditorialQueryResult> {
   const loadInternal = exposeInternal || (actualStaff && forceClientView);
-  const posts = await readAllPages<EditorialPostRow>((from, to) => {
-    let query = editorialDb
-      .from("editorial_posts")
-      .select("*")
-      .is("archived_at", null);
+  const posts = sortRows(
+    await readAllPages<EditorialPostRow>(() => {
+      let query = editorialDb
+        .from("editorial_posts")
+        .select("*")
+        .is("archived_at", null);
 
-    if (filters.clientId) {
-      query = query.eq("client_id", filters.clientId);
-    }
-    if (filters.projectId) {
-      query = query.eq("project_id", filters.projectId);
-    }
-    if (filters.postId) {
-      query = query.eq("id", filters.postId);
-    }
-    if (filters.productionStatus) {
-      query = query.eq("production_status", filters.productionStatus);
-    }
-
-    return query
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: true })
-      .range(from, to);
-  });
+      if (filters.clientId) {
+        query = query.eq("client_id", filters.clientId);
+      }
+      if (filters.projectId) {
+        query = query.eq("project_id", filters.projectId);
+      }
+      if (filters.postId) {
+        query = query.eq("id", filters.postId);
+      }
+      if (filters.productionStatus) {
+        query = query.eq("production_status", filters.productionStatus);
+      }
+      return query;
+    }),
+    [["updated_at", "desc"], ["id", "asc"]],
+  );
   const postIds = posts.map((post) => post.id);
   if (postIds.length === 0) return { posts: [], accounts: [] };
   const postIdSet = new Set(postIds);
 
-  const publicationRows = await readAllPages<EditorialPublicationRow>(
-    (from, to) => {
+  const publicationRows = sortRows(
+    await readAllPages<EditorialPublicationRow>(() => {
       let query = editorialDb.from("editorial_publications").select("*");
 
       if (filters.clientId) {
@@ -498,19 +544,23 @@ async function readEditorialCalendar(
         query = query.in("status", ["scheduled", "published"]);
       }
       if (filters.rangeStart && filters.rangeEnd) {
-        query = query.or(
-          `scheduled_at.is.null,and(scheduled_at.gte.${filters.rangeStart},scheduled_at.lt.${filters.rangeEnd})`,
-        );
+        if (filters.clientId) {
+          query = query.or(
+            `scheduled_at.is.null,and(scheduled_at.gte.${filters.rangeStart},scheduled_at.lt.${filters.rangeEnd})`,
+          );
+        } else {
+          // Sem cliente ("Todos"): janela do periodo visivel com folga de 45
+          // dias para cada lado, e sem as linhas sem data. Trazer o backlog
+          // sem data de TODOS os clientes era ler a tabela inteira a cada
+          // troca de mes; o sem-data so entra com um cliente escolhido.
+          query = query
+            .gte("scheduled_at", shiftIsoDays(filters.rangeStart, -EDITORIAL_RANGE_PADDING_DAYS))
+            .lt("scheduled_at", shiftIsoDays(filters.rangeEnd, EDITORIAL_RANGE_PADDING_DAYS));
+        }
       }
-
-      return query
-        .order("scheduled_at", {
-          ascending: true,
-          nullsFirst: false,
-        })
-        .order("id", { ascending: true })
-        .range(from, to);
-    },
+      return query;
+    }),
+    [["scheduled_at", "asc"], ["id", "asc"]],
   );
   const publications = publicationRows.filter((publication) =>
     postIdSet.has(publication.post_id),
@@ -522,15 +572,19 @@ async function readEditorialCalendar(
   const postIdsPublicadosGlobal = new Set<string>();
 
   if (hasPeriodFilter) {
-    const presenceRows = await readAllPages<{
+    // Presenca so dos conteudos carregados, em lotes de 100 ids: sem o
+    // .in("post_id") esta leitura varria editorial_publications inteira, de
+    // todos os clientes, a cada troca de mes.
+    const presenceRows = await readInChunks<{
       id: string;
       post_id: string;
       status: string;
       scheduled_at: string | null;
-    }>((from, to) => {
+    }>(postIds, (chunk) => {
       let query = editorialDb
         .from("editorial_publications")
-        .select("id, post_id, status, scheduled_at");
+        .select("id, post_id, status, scheduled_at")
+        .in("post_id", chunk);
 
       if (filters.clientId) {
         query = query.eq("client_id", filters.clientId);
@@ -547,11 +601,7 @@ async function readEditorialCalendar(
       if (forceClientView) {
         query = query.in("status", ["scheduled", "published"]);
       }
-
-      return query
-        .order("post_id", { ascending: true })
-        .order("id", { ascending: true })
-        .range(from, to);
+      return query;
     });
     postIdsWithAnyRelevantPublications = new Set(
       presenceRows
@@ -602,39 +652,37 @@ async function readEditorialCalendar(
   const [postInternalRows, publicationInternalRows, accountRows, fileRows] =
     await Promise.all([
       loadInternal
-        ? readInChunks<EditorialPostInternalRow>(postIds, (chunk, from, to) =>
-            editorialDb
-              .from("editorial_post_internal")
-              .select("*")
-              .in("post_id", chunk)
-              .order("post_id", { ascending: true })
-              .range(from, to),
+        ? readInChunks<EditorialPostInternalRow>(
+            postIds,
+            (chunk) =>
+              editorialDb
+                .from("editorial_post_internal")
+                .select("*")
+                .in("post_id", chunk),
+            "post_id",
           )
         : Promise.resolve([]),
       loadInternal && publications.length > 0
         ? readInChunks<EditorialPublicationInternalRow>(
             publications.map((publication) => publication.id),
-            (chunk, from, to) =>
+            (chunk) =>
               editorialDb
                 .from("editorial_publication_internal")
                 .select("*")
-                .in("publication_id", chunk)
-                .order("publication_id", { ascending: true })
-                .range(from, to),
+                .in("publication_id", chunk),
+            "publication_id",
           )
         : Promise.resolve([]),
       accountIds.length > 0
-        ? readInChunks<EditorialAccountRow>(accountIds, (chunk, from, to) =>
+        ? readInChunks<EditorialAccountRow>(accountIds, (chunk) =>
             editorialDb
               .from("external_accounts")
               .select("id, client_id, platform, display_name, handle, status")
-              .in("id", chunk)
-              .order("id", { ascending: true })
-              .range(from, to),
+              .in("id", chunk),
           )
         : Promise.resolve([]),
       fileIds.length > 0
-        ? readInChunks<EditorialFileRow>(fileIds, (chunk, from, to) =>
+        ? readInChunks<EditorialFileRow>(fileIds, (chunk) =>
             editorialDb
               .from(actualStaff ? "staff_files_secure" : "files")
               .select(
@@ -642,28 +690,26 @@ async function readEditorialCalendar(
                   ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
                   : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
               )
-              .in("id", chunk)
-              .order("id", { ascending: true })
-              .range(from, to),
+              .in("id", chunk),
           )
         : Promise.resolve([]),
     ]);
 
   const childFileRows =
     childRootIds.length > 0
-      ? await readInChunks<EditorialFileRow>(childRootIds, (chunk, from, to) =>
-          editorialDb
-            .from(actualStaff ? "staff_files_secure" : "files")
-            .select(
-              actualStaff
-                ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
-                : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
-            )
-            .in("parent_file_id", chunk)
-            .is("archived_at", null)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to),
+      ? sortRows(
+          await readInChunks<EditorialFileRow>(childRootIds, (chunk) =>
+            editorialDb
+              .from(actualStaff ? "staff_files_secure" : "files")
+              .select(
+                actualStaff
+                  ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
+                  : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
+              )
+              .in("parent_file_id", chunk)
+              .is("archived_at", null),
+          ),
+          [["created_at", "asc"], ["id", "asc"]],
         )
       : [];
 
@@ -978,27 +1024,25 @@ export function useEditorialPostEvents(
   const query = useQuery({
     queryKey: ["editorial-events", user?.id, profile?.role, postId],
     queryFn: async () => {
-      const eventRows = await readAllPages<EditorialEventRow>((from, to) =>
-        editorialDb
-          .from("editorial_events")
-          .select("*")
-          .eq("post_id", postId)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false })
-          .range(from, to),
+      const eventRows = sortRows(
+        await readAllPages<EditorialEventRow>(() =>
+          editorialDb
+            .from("editorial_events")
+            .select("*")
+            .eq("post_id", postId),
+        ),
+        [["created_at", "desc"], ["id", "desc"]],
       );
       const actorIds = unique(eventRows.map((event) => event.actor_id));
       const actorRows =
         actorIds.length > 0
           ? await readInChunks<{ id: string; full_name: string | null }>(
               actorIds,
-              (chunk, from, to) =>
+              (chunk) =>
                 editorialDb
                   .from("profiles")
                   .select("id, full_name")
-                  .in("id", chunk)
-                  .order("id", { ascending: true })
-                  .range(from, to),
+                  .in("id", chunk),
             )
           : [];
       const actorById = new Map(
@@ -1086,35 +1130,35 @@ export function useEditorialEditorOptions(
         usedPrimaryFiles,
         usedPublicationFiles,
       ] = await Promise.all([
-        readAllPages<{ external_account_id: string }>((from, to) =>
+        readAllPages<{ id: string; external_account_id: string }>(() =>
           editorialDb
             .from("project_external_accounts")
-            .select("external_account_id")
+            .select("id, external_account_id")
             .eq("client_id", clientId)
-            .eq("project_id", projectId)
-            .order("external_account_id", { ascending: true })
-            .range(from, to),
+            .eq("project_id", projectId),
         ),
-        readAllPages<EditorialAccountRow>((from, to) =>
-          editorialDb
-            .from("external_accounts")
-            .select("id, client_id, platform, display_name, handle, status")
-            .eq("client_id", clientId)
-            .in("platform", [...EDITORIAL_PLATFORMS])
-            .eq("status", "active")
-            .order("display_name", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to),
-        ),
-        readAllPages<EditorialAccountConnectionRow>((from, to) =>
-          editorialDb
-            .from("external_account_connections")
-            .select(
-              "external_account_id, connection_status, automation_enabled",
-            )
-            .eq("client_id", clientId)
-            .order("external_account_id", { ascending: true })
-            .range(from, to),
+        (async () =>
+          sortRows(
+            await readAllPages<EditorialAccountRow>(() =>
+              editorialDb
+                .from("external_accounts")
+                .select("id, client_id, platform, display_name, handle, status")
+                .eq("client_id", clientId)
+                .in("platform", [...EDITORIAL_PLATFORMS])
+                .eq("status", "active"),
+            ),
+            [["display_name", "asc"], ["id", "asc"]],
+          ))(),
+        // external_account_id e a chave primaria da tabela de conexoes.
+        readAllPages<EditorialAccountConnectionRow>(
+          () =>
+            editorialDb
+              .from("external_account_connections")
+              .select(
+                "external_account_id, connection_status, automation_enabled",
+              )
+              .eq("client_id", clientId),
+          "external_account_id",
         ),
         (async () => {
           const { data, error } = await editorialDb.rpc(
@@ -1126,57 +1170,58 @@ export function useEditorialEditorOptions(
             unavailable: Boolean(error),
           };
         })(),
-        readAllPages<EditorialFileRow>((from, to) =>
-          editorialDb
-            .from("staff_files_secure")
-            .select(
-              "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
-            )
-            .eq("client_id", clientId)
-            // Arquivo do cliente SEM projeto também entra: o upload em
-            // Arquivos permite subir sem escolher projeto, e o material
-            // recém-subido ficava invisível aqui — nenhum botão de atualizar
-            // o traria. Ao ser escolhido como arte, ele é adotado no projeto.
-            .or(`project_id.eq.${projectId},project_id.is.null`)
-            .is("archived_at", null)
-            .order("created_at", { ascending: true })
-            .order("id", { ascending: true })
-            .range(from, to),
-        ),
-        mode === "full" ? readAllPages<{
-          id: string;
-          project_id: string;
-          title: string;
-          assigned_to: string | null;
-          status: string;
-          due_date: string | null;
-          workstream: string | null;
-          delivery_type: string | null;
-          source: string | null;
-        }>((from, to) =>
-          editorialDb
-            .from("tasks")
-            .select(
-              "id, project_id, title, assigned_to, status, due_date, workstream, delivery_type, source",
-            )
-            .eq("project_id", projectId)
-            .is("deleted_at", null)
-            .order("updated_at", { ascending: false })
-            .order("id", { ascending: true })
-            .range(from, to),
-        ) : Promise.resolve([]),
-        mode === "full" ? readAllPages<{ user_id: string }>((from, to) =>
+        (async () =>
+          sortRows(
+            await readAllPages<EditorialFileRow>(() =>
+              editorialDb
+                .from("staff_files_secure")
+                .select(
+                  "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
+                )
+                .eq("client_id", clientId)
+                // Arquivo do cliente SEM projeto também entra: o upload em
+                // Arquivos permite subir sem escolher projeto, e o material
+                // recém-subido ficava invisível aqui — nenhum botão de atualizar
+                // o traria. Ao ser escolhido como arte, ele é adotado no projeto.
+                .or(`project_id.eq.${projectId},project_id.is.null`)
+                .is("archived_at", null),
+            ),
+            [["created_at", "asc"], ["id", "asc"]],
+          ))(),
+        mode === "full" ? (async () =>
+          sortRows(
+            await readAllPages<{
+              id: string;
+              project_id: string;
+              title: string;
+              assigned_to: string | null;
+              status: string;
+              due_date: string | null;
+              workstream: string | null;
+              delivery_type: string | null;
+              source: string | null;
+              updated_at: string;
+            }>(() =>
+              editorialDb
+                .from("tasks")
+                .select(
+                  "id, project_id, title, assigned_to, status, due_date, workstream, delivery_type, source, updated_at",
+                )
+                .eq("project_id", projectId)
+                .is("deleted_at", null),
+            ),
+            [["updated_at", "desc"], ["id", "asc"]],
+          ))() : Promise.resolve([]),
+        mode === "full" ? readAllPages<{ id: string; user_id: string }>(() =>
           editorialDb
             .from("team_client_assignments")
-            .select("user_id")
-            .eq("client_id", clientId)
-            .order("user_id", { ascending: true })
-            .range(from, to),
+            .select("id, user_id")
+            .eq("client_id", clientId),
         ) : Promise.resolve([]),
         readAllPages<{
           id: string;
           primary_file_id: string | null;
-        }>((from, to) =>
+        }>(() =>
           editorialDb
             .from("editorial_posts")
             .select("id, primary_file_id")
@@ -1185,23 +1230,19 @@ export function useEditorialEditorOptions(
             // Conteúdo apagado libera a arte (mesma regra do banco): sem este
             // filtro a arte sumia do seletor para sempre depois de um Apagar.
             .is("archived_at", null)
-            .not("primary_file_id", "is", null)
-            .order("id", { ascending: true })
-            .range(from, to),
+            .not("primary_file_id", "is", null),
         ),
         readAllPages<{
           id: string;
           file_id: string | null;
-        }>((from, to) =>
+        }>(() =>
           editorialDb
             .from("editorial_publications")
             .select("id, file_id")
             .eq("client_id", clientId)
             .eq("project_id", projectId)
             .neq("status", "cancelled")
-            .not("file_id", "is", null)
-            .order("id", { ascending: true })
-            .range(from, to),
+            .not("file_id", "is", null),
         ),
       ]);
 

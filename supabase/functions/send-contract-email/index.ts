@@ -21,6 +21,23 @@ const json = (data: unknown, status = 200) =>
 const PORTAL_URL = EMAIL_APP_URL;
 const PORTAL_HOST = new URL(PORTAL_URL).hostname;
 
+// Nome do cliente, nome de quem assinou e titulo do contrato sao texto
+// digitado por pessoas e entram dentro de HTML: sem escapar, um "<" no
+// titulo quebra o e-mail ou injeta marcacao.
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// O assunto nao e HTML, mas quebra de linha ali vira cabecalho extra.
+function cleanSubjectPart(value: unknown): string {
+  return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -89,6 +106,9 @@ Deno.serve(async (req) => {
     }
 
     const year = new Date().getFullYear();
+    const safeFullName = escapeHtml(client?.full_name || "cliente");
+    const safeSignerName = escapeHtml(contract.admin_signature_name || "");
+    const safeTitle = escapeHtml(contract.title || "");
 
     const html = `<!DOCTYPE html>
 <html lang="pt-BR" dir="ltr">
@@ -105,14 +125,14 @@ Deno.serve(async (req) => {
     </div>
     <div style="background-color:#ffffff;border-radius:0 0 16px 16px;padding:40px 36px;border:1px solid #ECECEC;border-top:none;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
       <h1 style="font-size:26px;font-weight:700;color:#0D0D0D;margin:0 0 18px;line-height:1.25;letter-spacing:-0.01em;">
-        Olá, ${client.full_name || "cliente"} 👋
+        Olá, ${safeFullName} 👋
       </h1>
       <p style="font-size:15px;color:#3a3a3a;line-height:1.65;margin:0 0 22px;">
-        Você recebeu um contrato para assinatura digital${contract.admin_signature_name ? ` — já assinado por <strong style="color:#0D0D0D;">${contract.admin_signature_name}</strong>` : ""}.
+        Você recebeu um contrato para assinatura digital${safeSignerName ? `, já assinado por <strong style="color:#0D0D0D;">${safeSignerName}</strong>` : ""}.
       </p>
       <div style="margin:0 0 28px;padding:18px 20px;background-color:#F7F7F7;border-left:3px solid #00FF66;border-radius:8px;">
         <div style="font-size:11px;color:#8a8a8a;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600;">Contrato</div>
-        <div style="font-size:16px;color:#0D0D0D;font-weight:600;">${contract.title}</div>
+        <div style="font-size:16px;color:#0D0D0D;font-weight:600;">${safeTitle}</div>
       </div>
       <p style="font-size:15px;color:#3a3a3a;line-height:1.65;margin:0 0 28px;">
         Para assinar, basta clicar no botão abaixo. Você será direcionado ao portal AcelerIQ, onde poderá ler o documento na íntegra e assiná-lo de forma segura.
@@ -152,16 +172,22 @@ Deno.serve(async (req) => {
       await sendResendEmail({
         from: `Aceleriq <contratos@${EMAIL_FROM_DOMAIN}>`,
         to: [recipient],
-        subject: `📄 Contrato para assinatura: ${contract.title}`,
+        subject: `📄 Contrato para assinatura: ${cleanSubjectPart(contract.title)}`,
         html,
       });
     } catch (error) {
+      // O detalhe do provedor (codigo, corpo da resposta) fica no log do
+      // servidor. Para quem chamou, so a mensagem generica: o corpo de erro
+      // do Resend pode ecoar dados da requisicao.
       if (error instanceof ResendApiError) {
-        const responseBody: Record<string, unknown> = {
-          error: error.message || "email send failed",
-        };
-        if (error.details !== null) responseBody.details = error.details;
-        return json(responseBody, 500);
+        console.error("send-contract-email provider error", {
+          contract_id,
+          status: error.status,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        return json({ error: "Não foi possível enviar o e-mail do contrato." }, 500);
       }
       throw error;
     }
@@ -176,6 +202,9 @@ Deno.serve(async (req) => {
 
     return json({ ok: true, signUrl });
   } catch (e: unknown) {
-    return json({ error: e instanceof Error ? e.message : "internal error" }, 500);
+    console.error("send-contract-email failed", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return json({ error: "internal error" }, 500);
   }
 });

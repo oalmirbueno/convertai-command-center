@@ -102,10 +102,11 @@ function json(b: unknown, status = 200) {
 
 // ─── Queue ─────────────────────────────────────────────────────
 async function claimNext() {
-  // Atomic claim: mark oldest queued/failed(<max) as running.
+  // Claim atomico: marca o job mais antigo pending/queued/failed(<max) como running.
+  // Os servicos criam o job com status 'pending'; sem esse valor aqui a fila nunca anda.
   const { data: candidates } = await db.from('file_processing_jobs')
     .select('*')
-    .in('status', ['queued', 'failed'])
+    .in('status', ['pending', 'queued', 'failed'])
     .lt('attempts', MAX_ATTEMPTS)
     .order('created_at', { ascending: true })
     .limit(1);

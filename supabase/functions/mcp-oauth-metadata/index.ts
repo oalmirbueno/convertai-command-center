@@ -6,6 +6,7 @@
 import { getMcpRuntimeConfig } from '../_shared/mcp-runtime.ts';
 import { MCP_VERSION } from '../_shared/mcp-release.ts';
 import { MCP_RELEASE_SOURCE } from '../_shared/mcp-release-source.ts';
+import { ALL_SCOPES } from '../_shared/mcp-tools.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -24,22 +25,9 @@ const {
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];
-const INTERNAL_MCP_SCOPES = [
-  'aceleriq:read', 'aceleriq:write', 'aceleriq:finance',
-  // Granular
-  'clients:read', 'clients:write',
-  'projects:read', 'projects:write',
-  'tasks:read', 'tasks:write',
-  'editorial:read', 'editorial:write',
-  'reports:read', 'reports:write',
-  'briefings:read',
-  'files:read', 'files:write', 'files:sensitive:read', 'files:archive',
-  'workspace:read',
-  'commercial:read', 'commercial:write',
-  'contracts:read', 'contracts:write',
-  'memory:read', 'memory:propose',
-  'admin',
-];
+// Uma unica fonte: a lista de escopos vive em mcp-tools.ts (ALL_SCOPES).
+// A copia local divergia da do mcp-server e da do catalogo.
+const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;
 
 async function proxyAuthorizationServerMetadata() {
   const upstream = await fetch(AUTH_SERVER_METADATA, {

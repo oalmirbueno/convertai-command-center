@@ -78,14 +78,28 @@ function publicSignUrl(sign_token: string): string {
   return `${getMcpRuntimeConfig().appPublicUrl}/contrato/${sign_token}`;
 }
 
-function enrichContract<T extends Record<string, any>>(row: T) {
+// Campos que so quem pode escrever rascunho enxerga. O sign_token e a URL
+// publica de assinatura sao o segredo do fluxo: quem tem o token assina.
+// Os IPs de assinatura sao dado pessoal e nao entram na leitura comum.
+const SENSITIVE_CONTRACT_FIELDS = ['sign_token', 'sign_url', 'admin_signature_ip', 'client_signature_ip'] as const;
+
+export interface ContractReadOptions {
+  // true somente quando o principal tem contracts:write (ou admin).
+  revealSensitive?: boolean;
+}
+
+function enrichContract<T extends Record<string, any>>(row: T, opts: ContractReadOptions = {}) {
   const signed = isSigned(row);
-  return {
+  const enriched: Record<string, unknown> = {
     ...row,
     is_signed: signed,
     is_locked: !isUnsignedUnsentDraft(row),
     sign_url: row?.sign_token ? publicSignUrl(row.sign_token) : null,
   };
+  if (!opts.revealSensitive) {
+    for (const k of SENSITIVE_CONTRACT_FIELDS) delete enriched[k];
+  }
+  return enriched;
 }
 
 // ─── Idempotency (reuses mcp_audit_log) ───────────────────────
@@ -120,8 +134,12 @@ async function replayContract(
   const prior = await findIdempotentResult(toolName, keyId, idempotencyKey);
   if (!prior?.resultRef) return null;
   const { data } = await db().from('contracts').select(CONTRACT_SELECT).eq('id', prior.resultRef).maybeSingle();
-  return { replayed: true, correlation_id: prior.correlationId, record: data ? enrichContract(data as any) : null };
+  // Replay so acontece em tool de escrita (contracts:write), entao pode revelar.
+  return { replayed: true, correlation_id: prior.correlationId, record: data ? enrichContract(data as any, WRITE_VIEW) : null };
 }
+
+// As tools de escrita exigem contracts:write; a resposta delas mantem os campos sensiveis.
+const WRITE_VIEW: ContractReadOptions = { revealSensitive: true };
 
 // ─── READ ─────────────────────────────────────────────────────
 export const listContractsSchema = z.object({
@@ -133,7 +151,7 @@ export const listContractsSchema = z.object({
   offset: z.number().int().min(0).optional(),
 }).strict();
 
-export async function listContracts(input: z.infer<typeof listContractsSchema>) {
+export async function listContracts(input: z.infer<typeof listContractsSchema>, opts: ContractReadOptions = {}) {
   const limit = Math.min(500, Math.max(1, input.limit ?? 25));
   const offset = Math.max(0, input.offset ?? 0);
   let qb = db().from('contracts').select(CONTRACT_SELECT, { count: 'exact' });
@@ -145,19 +163,19 @@ export async function listContracts(input: z.infer<typeof listContractsSchema>) 
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(`contracts: ${error.message}`);
-  const items = ((data as any[]) ?? []).map(enrichContract);
+  const items = ((data as any[]) ?? []).map(row => enrichContract(row, opts));
   const total = count ?? 0;
   const has_more = offset + items.length < total;
   return { items, total, limit, offset, has_more, next_offset: has_more ? offset + limit : null };
 }
 
 export const getContractSchema = z.object({ contract_id: UUID }).strict();
-export async function getContract(input: z.infer<typeof getContractSchema>) {
+export async function getContract(input: z.infer<typeof getContractSchema>, opts: ContractReadOptions = {}) {
   const { data, error } = await db().from('contracts').select(CONTRACT_SELECT)
     .eq('id', input.contract_id).maybeSingle();
   if (error) throw new Error(`contracts: ${error.message}`);
   if (!data) throw new WriteError('not_found', 'contract_id not found');
-  return { contract: enrichContract(data as any) };
+  return { contract: enrichContract(data as any, opts) };
 }
 
 // ─── CREATE (draft) ───────────────────────────────────────────
@@ -204,7 +222,7 @@ export async function createContract(input: z.infer<typeof createContractSchema>
   const { data, error } = await db().from('contracts').insert(row).select(CONTRACT_SELECT).single();
   if (error) throw new WriteError('validation', error.message);
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
-  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
+  return { record: enrichContract(data as any, WRITE_VIEW), replayed: false, correlation_id: ctx.correlationId };
 }
 
 // ─── UPDATE (only completely unsigned, unsent drafts) ─────────
@@ -266,7 +284,7 @@ export async function updateContract(input: z.infer<typeof updateContractSchema>
     throw new WriteError('conflict', 'contract changed or is no longer an unsigned, unsent draft');
   }
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
-  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
+  return { record: enrichContract(data as any, WRITE_VIEW), replayed: false, correlation_id: ctx.correlationId };
 }
 
 // ─── CANCEL (only completely unsigned, unsent drafts) ─────────
@@ -313,5 +331,5 @@ export async function cancelContract(input: z.infer<typeof cancelContractSchema>
     throw new WriteError('conflict', 'contract changed or is no longer an unsigned, unsent draft');
   }
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
-  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
+  return { record: enrichContract(data as any, WRITE_VIEW), replayed: false, correlation_id: ctx.correlationId };
 }

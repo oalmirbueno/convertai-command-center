@@ -36,6 +36,7 @@ import {
 } from "@/lib/rotinaDoCliente";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
+import { addDays, localIso, mondayOf } from "@/lib/cycleWeek";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
 import { goalForCampaign, resultFromActions, statusLabel as adsStatusLabel } from "@/lib/adsLanguage";
 import { memoryAsContext, readMemory, recordMemory } from "@/lib/clientMemory";
@@ -180,6 +181,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
   const [aprimorando, setAprimorando] = useState<string | null>(null);
+  /** Rascunho sendo publicado ou descartado agora: dois toques no mesmo botao
+      publicavam (e gravavam no diario e no Ciclo) duas vezes. */
+  const [rascunhoEmVoo, setRascunhoEmVoo] = useState<string | null>(null);
 
   // Tudo com atualização automática: a Central reflete a movimentação em tempo real.
   // A Central e a tela que o dono deixa aberta o dia todo: alem do intervalo
@@ -274,21 +278,17 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Estrelas do Ciclo da Semana (checklist de bolso do dono): a Prova de
   // sexta conta quantas etapas do ciclo interno fecharam para cada cliente.
-  const cycleWeekKey = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    return d.toISOString().slice(0, 10);
-  }, []);
+  // A chave da semana e montada com a data LOCAL: toISOString() converte para
+  // UTC e, as 22h de segunda no Brasil, ja dizia "terca" e pulava a semana.
+  const cycleWeekKey = useMemo(() => localIso(mondayOf(new Date())), []);
   // Três semanas, não só a corrente: na segunda de manhã a semana atual está
   // vazia por definição, e tudo que dependia dela ("tráfego em operação",
   // rotina feita) dizia "sem registro" para um cliente que rodou a semana
   // inteira anterior.
-  const cycleSince = useMemo(() => {
-    const d = new Date(`${cycleWeekKey}T00:00:00`);
-    d.setDate(d.getDate() - 14);
-    return d.toISOString().slice(0, 10);
-  }, [cycleWeekKey]);
+  const cycleSince = useMemo(
+    () => localIso(addDays(new Date(`${cycleWeekKey}T00:00:00`), -14)),
+    [cycleWeekKey],
+  );
   const { data: cycleRowsAll } = useQuery({
     queryKey: ["weekly-cycle-ritual", cycleWeekKey],
     queryFn: async () => {
@@ -296,7 +296,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         .from("weekly_cycle_progress")
         .select("client_id, area, step, week_start")
         .gte("week_start", cycleSince);
-      if (error) return [];
+      // Erro sobe: o React Query mantem o dado anterior e expoe isError, em
+      // vez de a tela mostrar "sem registro" como se fosse verdade.
+      if (error) throw error;
       return (data || []) as Array<{ client_id: string; area: string; step: number; week_start: string }>;
     },
     staleTime: 30_000,
@@ -336,9 +338,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // progressao. lerDossiesDaCarteira faz isso em duas consultas.
   const { data: expDossieMap } = useQuery({
     queryKey: ["exp-dossies"],
-    queryFn: async () => {
-      try { return await lerDossiesDaCarteira(); } catch { return new Map<string, DossieGeralDoCliente>(); }
-    },
+    // Sem try/catch: falha na leitura sobe para o React Query, que preserva o
+    // mapa anterior em vez de trocar todos os dossies por "sem dossie".
+    queryFn: () => lerDossiesDaCarteira(),
     ...AO_VIVO,
   });
   const dossieDe = (clientId: string): DossieGeralDoCliente | null => expDossieMap?.get(clientId) ?? null;
@@ -372,7 +374,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         .eq("kind", "esteira_plano")
         .contains("metadata", { week_start: cycleWeekKey })
         .order("created_at", { ascending: false });
-      if (error) return [];
+      if (error) throw error;
       return (data || []) as any[];
     },
     ...AO_VIVO,
@@ -394,7 +396,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         .from("ads_sales")
         .select("client_id, sold_at, campaign_name, channel, quantity, value")
         .gte("sold_at", desde);
-      if (error) return [];
+      if (error) throw error;
       return (data || []) as any[];
     },
     ...AO_VIVO,
@@ -448,19 +450,30 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // grupo mudar sozinha quando o dossiê é atualizado pelo agente, um avulso é
   // marcado no Ciclo ou uma decisão entra no Studio. Sem esta consulta, a
   // mensagem lia só arquivos e publicações — e saía igual a semana inteira.
+  // Recorte: so os clientes carregados e os ultimos 60 dias. Antes a consulta
+  // paginava a tabela inteira (todos os clientes, desde sempre) a cada 20 s.
+  const idsDosClientes = useMemo(
+    () => ((clients ?? []) as any[]).map((c) => String(c.id)).sort(),
+    [clients],
+  );
   const { data: expMemory = [] } = useQuery({
     queryKey: ["exp-memory"],
     queryFn: async () => {
+      const desde = new Date(Date.now() - 60 * 86_400_000).toISOString();
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         (supabase as any)
           .from("project_memory")
           .select("client_id, kind, title, content, metadata, created_at")
+          .gte("created_at", desde)
+          .in("client_id", idsDosClientes)
           .order("created_at", { ascending: false })
           .range(de, ate),
       );
       cortes.current.memoria = truncado;
       return linhas;
     },
+    // Sem clientes carregados nao ha o que recortar: espera a lista chegar.
+    enabled: idsDosClientes.length > 0,
     ...AO_VIVO,
   });
 
@@ -508,7 +521,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Ponte com o Ciclo: rituais marcados na esteira nesta semana (por
   // cliente), para a Central mostrar "feito no Ciclo" mesmo sem relatorio.
-  const semanaDoCiclo = (() => { const x = new Date(); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x.toISOString().slice(0, 10); })();
+  // Mesma chave local da semana: 22h de segunda no Brasil continua sendo
+  // esta segunda, nao a terca em UTC.
+  const semanaDoCiclo = cycleWeekKey;
   const { data: rituaisDoCiclo = [] } = useQuery({
     queryKey: ["cycle-rituals-central", semanaDoCiclo],
     queryFn: async () => {
@@ -1615,8 +1630,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     setGenerating(true);
     setGenPreviews(null);
     const errors: string[] = [];
-    const results = await Promise.all(
-      alvos.map(async (c: any) => {
+    // Um cliente por vez pesa pouco, mas a carteira inteira de uma vez abria
+    // dezenas de chamadas simultaneas (contexto, fatos, IA) e derrubava o
+    // gerador. Lotes de 3: paralelo dentro do lote, lotes em sequencia.
+    const gerarPrevia = async (c: any): Promise<DraftPreview | null> => {
         const clientName = c.company_name || c.full_name;
         try {
           const captured = await captureCentralGenerationContext(c.id);
@@ -1648,8 +1665,12 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           errors.push(`${clientName}: ${error instanceof Error ? error.message : "Não foi possível conferir o contexto."}`);
           return null;
         }
-      }),
-    );
+    };
+    const LOTE = 3;
+    const results: Array<DraftPreview | null> = [];
+    for (let i = 0; i < alvos.length; i += LOTE) {
+      results.push(...(await Promise.all(alvos.slice(i, i + LOTE).map(gerarPrevia))));
+    }
     const previews = results.filter((preview): preview is DraftPreview => preview !== null);
     generatingDrafts.current = false;
     setGenerating(false);
@@ -1718,6 +1739,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // pessoa ja mandou no WhatsApp; aqui so registra (historico, dossie, Ciclo)
   // e tira da fila. Nos dois casos o proximo passo nunca fica vazio.
   const publishDraft = async (report: any, canal: "portal" | "grupo" = "portal") => {
+    if (rascunhoEmVoo) return;
+    setRascunhoEmVoo(String(report.id));
     try {
       const edits = draftEdits[report.id];
       const textoFinal = edits?.summary || report.summary || "";
@@ -1769,10 +1792,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       queryClient.invalidateQueries({ queryKey: ["exp-memory"] });
     } catch (err: any) {
       toast.error(err.message || "Erro ao publicar");
+    } finally {
+      setRascunhoEmVoo(null);
     }
   };
 
   const deleteDraft = async (report: any) => {
+    if (rascunhoEmVoo) return;
+    setRascunhoEmVoo(String(report.id));
     try {
       // A fila mostra tudo que não foi publicado; o descarte precisa cobrir o
       // mesmo conjunto, e dizer a verdade quando nada foi apagado.
@@ -1787,6 +1814,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover");
+    } finally {
+      setRascunhoEmVoo(null);
     }
   };
 
@@ -2892,7 +2921,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {isAdmin && (
                             <button
                               onClick={() => publishDraft(r, "grupo")}
-                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                              disabled={rascunhoEmVoo !== null}
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none disabled:opacity-50"
                               title="Registra que a mensagem foi enviada no grupo: entra no histórico, no dossiê e marca o ritual no Ciclo"
                             >
                               <CheckCircle2 className="w-3 h-3 shrink-0" /> Enviei no grupo
@@ -2901,7 +2931,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {isAdmin && (
                             <button
                               onClick={() => publishDraft(r)}
-                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                              disabled={rascunhoEmVoo !== null}
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none disabled:opacity-50"
                             >
                               <Send className="w-3 h-3 shrink-0" /> Publicar no portal
                             </button>
@@ -2921,7 +2952,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                           {isAdmin && (
                             <button
                               onClick={() => deleteDraft(r)}
-                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none sm:ml-auto"
+                              disabled={rascunhoEmVoo !== null}
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none sm:ml-auto disabled:opacity-50"
                             >
                               <Trash2 className="w-3 h-3 shrink-0" /> Descartar
                             </button>

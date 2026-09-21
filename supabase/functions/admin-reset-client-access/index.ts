@@ -80,15 +80,38 @@ Deno.serve(async (req) => {
       return json({ error: "Dados inválidos" }, 400);
     }
 
-    const { error: authError } = await admin.auth.admin.updateUserById(
-      profileId,
-      {
-        email: newEmail,
-        email_confirm: true,
-      },
-    );
-    if (authError) throw new Error("auth_update_failed");
+    // Antes de qualquer escrita: so conta de CLIENTE pode ser redefinida.
+    // Sem isso um admin poderia trocar o e-mail de outro admin ou de um
+    // membro da equipe por esta porta, que foi feita para o portal.
+    const { data: clientRole, error: clientRoleError } = await admin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", profileId)
+      .eq("role", "client")
+      .maybeSingle();
+    if (clientRoleError) throw new Error("role_check_failed");
+    if (!clientRole) {
+      return json(
+        { error: "Somente contas de cliente podem ser redefinidas" },
+        403,
+      );
+    }
 
+    // Guarda o estado anterior para desfazer se o Auth recusar mais adiante.
+    const { data: previousProfile, error: previousError } = await admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", profileId)
+      .single();
+    if (previousError || !previousProfile) {
+      throw new Error("profile_lookup_failed");
+    }
+
+    // Ordem: perfil -> token -> Auth. O perfil e limpo ANTES do token porque
+    // a RPC grava first_access_expires_at/used_at no proprio perfil, e a
+    // limpeza depois apagaria o que ela acabou de escrever. O Auth vem por
+    // ultimo porque e a etapa externa: se falhar, o perfil volta ao e-mail
+    // anterior em vez de ficar apontando para um endereco que o Auth nao tem.
     const profileUpdate: Record<string, unknown> = {
       email: newEmail,
       // Explicitly scrub legacy public credential columns. The new bearer is
@@ -110,6 +133,23 @@ Deno.serve(async (req) => {
       .single();
     if (profileError) throw new Error("profile_update_failed");
 
+    const revertProfile = async (step: string) => {
+      const { error: revertError } = await admin
+        .from("profiles")
+        .update({
+          email: previousProfile.email,
+          full_name: previousProfile.full_name,
+        })
+        .eq("id", profileId);
+      if (revertError) {
+        console.error("admin-reset-client-access revert failed", {
+          step,
+          profile_id: profileId,
+          error: revertError.message,
+        });
+      }
+    };
+
     const { data: issueData, error: issueError } = await admin.rpc(
       "issue_first_access_token_service",
       { p_profile_id: profileId },
@@ -119,7 +159,33 @@ Deno.serve(async (req) => {
       ? issue.token
       : "";
     if (issueError || !/^[a-f0-9]{64}$/.test(firstAccessToken)) {
+      await revertProfile("token_issue");
       throw new Error("token_issue_failed");
+    }
+
+    const { error: authError } = await admin.auth.admin.updateUserById(
+      profileId,
+      {
+        email: newEmail,
+        email_confirm: true,
+      },
+    );
+    if (authError) {
+      // O token ja foi emitido e continua valido para o perfil; o que nao
+      // pode ficar e o e-mail do perfil diferente do e-mail do Auth.
+      await revertProfile("auth_update");
+      console.error("admin-reset-client-access auth update failed", {
+        step: "auth_update",
+        profile_id: profileId,
+        error: authError.message,
+      });
+      return json(
+        {
+          error: "Não foi possível redefinir o acesso do cliente.",
+          failed_step: "auth_update",
+        },
+        500,
+      );
     }
 
     const firstAccessUrl =
@@ -204,11 +270,13 @@ Deno.serve(async (req) => {
 
     return json({ success: true, firstAccessUrl, contractResult, delivery });
   } catch (error) {
-    console.error("admin-reset-client-access failed", {
-      error: error instanceof Error ? error.message : "unknown_error",
-    });
+    const failedStep = error instanceof Error ? error.message : "unknown_error";
+    console.error("admin-reset-client-access failed", { error: failedStep });
     return json(
-      { error: "Não foi possível redefinir o acesso do cliente." },
+      {
+        error: "Não foi possível redefinir o acesso do cliente.",
+        failed_step: failedStep.replace(/_failed$/, ""),
+      },
       500,
     );
   }

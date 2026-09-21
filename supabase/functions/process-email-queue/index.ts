@@ -153,22 +153,25 @@ Deno.serve(async (req) => {
     // Retry budget is based on real send failures, not pgmq read_ct.
     // read_ct increments for every message in a claimed batch, including
     // messages not attempted when a 429 stops processing early.
-    const messageIds = Array.from(
-      new Set(
-        messages
-          .map((msg) =>
-            msg?.message?.message_id && typeof msg.message.message_id === 'string'
-              ? msg.message.message_id
-              : null
-          )
-          .filter((id): id is string => Boolean(id))
-      )
-    )
+    //
+    // O message_id vem da idempotencyKey do chamador (send-transactional-email),
+    // entao um reenvio legitimo depois de failed/dlq reaproveita o MESMO id.
+    // Por isso so contam as falhas registradas depois do queued_at desta
+    // mensagem: as da tentativa anterior nao gastam o orcamento da nova.
+    const queuedAtByMessageId = new Map<string, number>()
+    for (const msg of messages) {
+      const id = msg?.message?.message_id
+      if (typeof id !== 'string' || !id) continue
+      const queuedAt = msg.message.queued_at ?? msg.enqueued_at
+      const queuedAtMs = queuedAt ? new Date(queuedAt).getTime() : NaN
+      queuedAtByMessageId.set(id, Number.isFinite(queuedAtMs) ? queuedAtMs : 0)
+    }
+    const messageIds = Array.from(queuedAtByMessageId.keys())
     const failedAttemptsByMessageId = new Map<string, number>()
     if (messageIds.length > 0) {
       const { data: failedRows, error: failedRowsError } = await supabase
         .from('email_send_log')
-        .select('message_id')
+        .select('message_id, created_at')
         .in('message_id', messageIds)
         .eq('status', 'failed')
 
@@ -181,6 +184,10 @@ Deno.serve(async (req) => {
         for (const row of failedRows ?? []) {
           const messageId = row?.message_id
           if (typeof messageId !== 'string' || !messageId) continue
+          const failedAtMs = row?.created_at ? new Date(row.created_at).getTime() : NaN
+          const queuedAtMs = queuedAtByMessageId.get(messageId) ?? 0
+          // Falha antiga (antes desta fila) pertence a outra tentativa.
+          if (Number.isFinite(failedAtMs) && failedAtMs < queuedAtMs) continue
           failedAttemptsByMessageId.set(
             messageId,
             (failedAttemptsByMessageId.get(messageId) ?? 0) + 1
@@ -249,6 +256,8 @@ Deno.serve(async (req) => {
       }
 
       try {
+        // O message_id ja e estavel por idempotencyKey (sha-256 hex) ou UUID,
+        // entao serve de Idempotency-Key no provedor sem outra derivacao.
         const providerIdempotencyKey =
           typeof payload.message_id === 'string'
           && /^[A-Za-z0-9._:-]{1,128}$/.test(payload.message_id.trim())

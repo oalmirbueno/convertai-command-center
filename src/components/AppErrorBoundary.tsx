@@ -38,8 +38,10 @@ export default class AppErrorBoundary extends Component<{ children: ReactNode },
     }
 
     // Soluço passageiro (dados no meio de uma publicação, estado velho): a
-    // tela se recupera SOZINHA até duas vezes. Só o erro que insiste na mesma
-    // versão vira tela manual, com o detalhe técnico à vista — e nunca em loop.
+    // tela se recupera SOZINHA até duas vezes numa janela de 10 minutos por
+    // assinatura (versão + mensagem). Só o erro que insiste vira tela manual,
+    // com o detalhe técnico à vista, e nunca em loop: a contagem fica no
+    // localStorage e não é zerada por tempo de uso.
     const signature = `${BUILD_ID}:${error?.message || ""}`.slice(0, 200);
     if (recordFatalCrash(signature) <= 2) {
       this.setState({ autoRecovering: true });

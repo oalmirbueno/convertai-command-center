@@ -55,19 +55,24 @@ export function useProjects() {
     queryFn: async () => {
       if (isTeam) {
         // Team members: projects from assigned tasks OR from assigned clients
-        const [{ data: myTasks }, { data: assigns }] = await Promise.all([
+        // Erro engolido aqui virava lista vazia silenciosa: a pessoa via
+        // "nenhum projeto" quando na verdade a leitura tinha falhado.
+        const [{ data: myTasks, error: tasksError }, { data: assigns, error: assignmentsError }] = await Promise.all([
           supabase.from("tasks").select("project_id").eq("assigned_to", user!.id).is("deleted_at", null),
           supabase.from("team_client_assignments").select("client_id").eq("user_id", user!.id),
         ]);
+        if (tasksError) throw tasksError;
+        if (assignmentsError) throw assignmentsError;
         const projectIds = new Set<string>((myTasks || []).map((t: any) => t.project_id).filter(Boolean));
         const assignedClientIds = (assigns || []).map((a: any) => a.client_id);
 
         if (assignedClientIds.length > 0) {
-          const { data: cliProjects } = await supabase
+          const { data: cliProjects, error: cliProjectsError } = await supabase
             .from("projects")
             .select("id")
             .in("client_id", assignedClientIds)
             .is("deleted_at", null);
+          if (cliProjectsError) throw cliProjectsError;
           (cliProjects || []).forEach((p: any) => projectIds.add(p.id));
         }
         if (projectIds.size === 0) return [];
@@ -174,7 +179,8 @@ export function useUpdates() {
       return data;
     },
     enabled: !!user,
-    refetchInterval: 15000,
+    // Feed de leitura: um minuto basta e corta 3/4 das consultas repetidas.
+    refetchInterval: 60000,
   });
 }
 
@@ -307,15 +313,45 @@ export function useFiles(projectId?: string, clientId?: string) {
   });
 }
 
-export function useAllFiles() {
+export interface AllFilesFilters {
+  /**
+   * Recorte de status feito no banco. Os filhos de carrossel entram junto
+   * (parent_file_id preenchido) porque a tela monta o slider a partir deles.
+   */
+  statusIn?: {
+    column: "agency_approval_status" | "approval_status";
+    values: string[];
+  };
+}
+
+const ALL_FILES_UNSCOPED_LIMIT = 500;
+
+/**
+ * Arquivos da equipe. Com cliente escolhido, o recorte e feito no banco em
+ * vez de trazer a tabela inteira e filtrar em JS; sem cliente ("Todos"), a
+ * lista e limitada aos 500 mais recentes para a tela nao crescer sem fim.
+ */
+export function useAllFiles(clientId?: string, filters: AllFilesFilters = {}) {
   const { user } = useAuth();
+  const statusColumn = filters.statusIn?.column;
+  const statusValues = filters.statusIn?.values.join(",") || "";
   return useQuery({
-    queryKey: ["all-files", user?.id],
+    queryKey: ["all-files", user?.id, clientId || null, statusColumn || null, statusValues],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let query = (supabase as any)
         .from("staff_files_secure")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("*");
+      if (clientId) {
+        query = query.eq("client_id", clientId);
+      } else {
+        query = query.limit(ALL_FILES_UNSCOPED_LIMIT);
+      }
+      if (statusColumn && statusValues) {
+        query = query.or(
+          `${statusColumn}.in.(${statusValues}),parent_file_id.not.is.null`,
+        );
+      }
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },

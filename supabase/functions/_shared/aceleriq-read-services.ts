@@ -274,8 +274,44 @@ export async function listClients(
   if (clientIds.length === 0) {
     return { items: [], ...pageMeta(0, limit, offset) };
   }
+
+  const filtroDeBusca = q
+    ? `full_name.ilike.%${q}%,company_name.ilike.%${q}%,email.ilike.%${q}%`
+    : null;
+
+  // Acima do teto seguro do filtro .in() do PostgREST (a URL estoura e a
+  // chamada falha), a lista e montada em lotes: cada lote traz os perfis
+  // que cabem, tudo e ordenado aqui e a pagina e recortada em memoria.
+  // Antes isto lancava erro e o principal sem restricao ficava sem lista
+  // assim que a casa passou de 100 clientes.
   if (clientIds.length > MAX_CLIENT_IDS_PER_POSTGREST_FILTER) {
-    throw new Error('list_clients: client role set exceeds the safe PostgREST filter size');
+    const perfis: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < clientIds.length; i += MAX_CLIENT_IDS_PER_POSTGREST_FILTER) {
+      const lote = clientIds.slice(i, i + MAX_CLIENT_IDS_PER_POSTGREST_FILTER);
+      let loteQb = db()
+        .from('profiles')
+        .select(F.client)
+        .in('id', lote)
+        .is('deleted_at', null);
+      if (filtroDeBusca) loteQb = loteQb.or(filtroDeBusca);
+      const { data: parte, error: parteErro } = await withTimeout(loteQb);
+      if (parteErro) throw new Error(`profiles: ${parteErro.message}`);
+      for (const p of parte ?? []) perfis.push(p as Record<string, unknown>);
+    }
+    const nomeDaEmpresa = (p: Record<string, unknown>) => {
+      const v = p.company_name;
+      return typeof v === 'string' && v.trim() ? v : null;
+    };
+    perfis.sort((a, b) => {
+      const ea = nomeDaEmpresa(a);
+      const eb = nomeDaEmpresa(b);
+      if (ea === null && eb === null) return 0;
+      if (ea === null) return 1;
+      if (eb === null) return -1;
+      return ea.localeCompare(eb, 'pt-BR', { sensitivity: 'base' });
+    });
+    const pagina = perfis.slice(offset, offset + limit);
+    return { items: pagina, ...pageMeta(perfis.length, limit, offset) };
   }
 
   let qb = db()
@@ -284,11 +320,7 @@ export async function listClients(
     .in('id', clientIds)
     .is('deleted_at', null);
 
-  if (q) {
-    qb = qb.or(
-      `full_name.ilike.%${q}%,company_name.ilike.%${q}%,email.ilike.%${q}%`,
-    );
-  }
+  if (filtroDeBusca) qb = qb.or(filtroDeBusca);
 
   const { data, error, count } = await withTimeout(
     qb.order('company_name', { ascending: true, nullsFirst: false })

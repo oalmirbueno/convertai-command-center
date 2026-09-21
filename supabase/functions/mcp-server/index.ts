@@ -9,6 +9,7 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import { MCP_RELEASE_SOURCE } from "../_shared/mcp-release-source.ts";
 import { shouldUseOAuthToolChallenge } from "../_shared/mcp-security.ts";
 import {
+  ALL_SCOPES,
   canInvoke,
   canUseToolWithDataScope,
   describeTool,
@@ -55,31 +56,9 @@ const WWW_AUTH_TOOL_HEADER = `${WWW_AUTH_HEADER}, error="invalid_token", error_d
 // permissions are derived server-side after the user and tenant scope are
 // verified, so they must not be advertised as OAuth scopes to ChatGPT.
 const OAUTH_SCOPES = ["openid", "email", "profile"];
-const INTERNAL_MCP_SCOPES = [
-  "aceleriq:read",
-  "aceleriq:write",
-  "aceleriq:finance",
-  "clients:read",
-  "projects:read",
-  "projects:write",
-  "tasks:read",
-  "tasks:write",
-  "editorial:read",
-  "editorial:write",
-  "reports:read",
-  "reports:write",
-  "briefings:read",
-  "files:read",
-  "files:write",
-  "files:sensitive:read",
-  "files:archive",
-  "workspace:read",
-  "contracts:read",
-  "contracts:write",
-  "memory:read",
-  "memory:propose",
-  "admin",
-];
+// Uma unica fonte: a lista de escopos vive em mcp-tools.ts (ALL_SCOPES).
+// Copia local aqui ja ficou para tras duas vezes (clients:write, commercial:*).
+const INTERNAL_MCP_SCOPES: readonly string[] = ALL_SCOPES;
 
 function protectedResourceMetadata() {
   return {

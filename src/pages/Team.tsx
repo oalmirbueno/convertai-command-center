@@ -7,6 +7,9 @@ import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle, Check, Search } fro
 import { toast } from "sonner";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 
+// Mesma regra do servidor (manage-team): 12+ com maiúscula, minúscula, número e símbolo.
+const senhaForte = (senha: string) => senha.length >= 12 && /[a-z]/.test(senha) && /[A-Z]/.test(senha) && /[0-9]/.test(senha) && /[^A-Za-z0-9]/.test(senha);
+
 const roleBadge: Record<string, { cls: string; label: string }> = {
   admin: { cls: "bg-primary/10 text-primary", label: "Admin" },
   design: { cls: "bg-info/10 text-info", label: "Design" },
@@ -86,7 +89,7 @@ export default function Team() {
 
   const handleCreate = async () => {
     if (!name.trim() || !email.trim()) { toast.error("Preencha nome e email"); return; }
-    if (!password || password.length < 8) { toast.error("Defina uma senha inicial com no mínimo 8 caracteres"); return; }
+    if (!password || !senhaForte(password)) { toast.error("Defina uma senha inicial com no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo"); return; }
     setSaving(true);
     try {
       const res = await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password });
@@ -109,7 +112,7 @@ export default function Team() {
 
   const handleEdit = async () => {
     if (!editMember || !name.trim()) { toast.error("Preencha o nome"); return; }
-    if (password && password.length < 8) { toast.error("Senha deve ter no mínimo 8 caracteres"); return; }
+    if (password && !senhaForte(password)) { toast.error("Senha deve ter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo"); return; }
     setSaving(true);
     try {
       const { error: profileError } = await supabase
@@ -359,7 +362,7 @@ export default function Team() {
                   {editMember ? "Nova Senha" : "Senha Inicial *"}
                 </label>
                 <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-                  placeholder={editMember ? "Deixe vazio para manter atual" : "Mínimo 8 caracteres"}
+                  placeholder={editMember ? "Deixe vazio para manter atual" : "Mínimo 12 caracteres, com maiúscula, número e símbolo"}
                   className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
               </div>
             </div>

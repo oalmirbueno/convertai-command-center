@@ -846,18 +846,45 @@ async function handleAdsComplete(
   body: JsonRecord,
   config: RuntimeConfig,
   admin: SupabaseClient,
+  userId: string,
 ): Promise<JsonRecord> {
   const code = requiredText(body.code, "Código de autorização ausente.", 4_096);
   const state = requiredText(body.state, "Estado de autorização ausente.", 1_024);
 
+  // Mesma regra do ads_start: la e o banco quem exige admin dentro de
+  // ads_oauth_create_session. Aqui a sessao e consumida com a chave de
+  // servico, entao a exigencia precisa vir ANTES, ou qualquer usuario logado
+  // que visse a URL de retorno gravaria um token de anuncios no cofre.
+  const { data: isAdmin, error: roleError } = await admin.rpc("has_role", {
+    _user_id: userId,
+    _role: "admin",
+  });
+  if (roleError || isAdmin !== true) {
+    throw new ApiError(
+      "Somente administradores podem conectar anúncios.",
+      403,
+      "FORBIDDEN",
+    );
+  }
+
   // Uso unico: consumir aqui e o que impede o mesmo retorno de ser
   // reapresentado por alguem que tenha visto a URL.
-  await rpcOrThrow(
+  const consumedData = await rpcOrThrow(
     admin,
     "ads_oauth_consume_session",
     { _state: state },
     "A conexão de anúncios expirou. Comece de novo.",
   );
+  // A sessao carrega quem a abriu (actor_id). Quem fecha tem de ser a mesma
+  // pessoa: um state vazado nao serve para outro admin terminar o login.
+  const consumed = rpcRecord(consumedData);
+  if (cleanText(consumed?.actor_id, 64) !== userId) {
+    throw new ApiError(
+      "Esta conexão de anúncios foi iniciada por outro usuário. Comece de novo.",
+      403,
+      "ADS_SESSION_ACTOR_MISMATCH",
+    );
+  }
 
   const shortLived = await exchangeToken(config, {
     redirect_uri: config.metaRedirectUri,
@@ -942,7 +969,7 @@ Deno.serve(async (req) => {
       result = await handleAdsStart(config, caller, admin);
     } else if (action === "ads_complete") {
       const config = loadMetaConfig(supabaseConfig);
-      result = await handleAdsComplete(body, config, admin);
+      result = await handleAdsComplete(body, config, admin, userId);
     } else if (action === "start") {
       const config = loadMetaConfig(supabaseConfig);
       result = await handleStart(body, config, caller, admin);

@@ -770,6 +770,19 @@ export async function restoreProject(input: RestoreProjectInput, ctx: WriteCtx) 
   if (fetchErr) throw new WriteError('validation', fetchErr.message);
   if (!existing) throw new WriteError('not_found', 'project_id not found');
   assertWriteClientScope(ctx, String((existing as { client_id: string }).client_id));
+
+  // Replay ANTES da checagem de estado: na segunda chamada com a mesma chave
+  // o projeto ja esta restaurado, e a resposta certa e "ja feito", nao conflito.
+  const replay = await replayIdempotent(
+    'aceleriq_restore_project', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle()).data,
+    priorInput => requirePriorResource(priorInput, 'project_id', input.project_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as { id: string }).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
   if (!(existing as { deleted_at: string | null }).deleted_at) {
     throw new WriteError('conflict', 'project is not archived');
   }
@@ -805,6 +818,19 @@ export async function reopenTask(input: ReopenTaskInput, ctx: WriteCtx) {
     throw new WriteError('not_found', 'task_id not found');
   }
   await getWritableProject(String((existing as { project_id: string }).project_id), ctx);
+
+  // Replay ANTES da checagem de estado: repetir a chave depois de reaberta
+  // devolve a tarefa como esta, em vez de "nao esta concluida".
+  const replay = await replayIdempotent(
+    'aceleriq_reopen_task', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('tasks').select(TASK_SELECT_REOPEN).eq('id', id).maybeSingle()).data,
+    priorInput => requirePriorResource(priorInput, 'task_id', input.task_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as { id: string }).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id, reason: input.reason };
+  }
+
   if ((existing as { status: string }).status !== 'done') {
     throw new WriteError('conflict', 'task is not done; nothing to reopen');
   }

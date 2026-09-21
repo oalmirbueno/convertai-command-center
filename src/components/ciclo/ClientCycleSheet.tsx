@@ -185,7 +185,10 @@ export default function ClientCycleSheet({
           .limit(1).maybeSingle();
         if (existente) {
           toast.info(`Ja existe a tarefa "${existente.title}" para este alerta.`);
-          await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao", "ciclo-tarefas"] });
+          // Uma chave por chamada: ["ciclo-situacao", "ciclo-tarefas"] e UMA
+          // chave composta que nao casa com nenhuma consulta, e nada recarregava.
+          await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+          await queryClient.invalidateQueries({ queryKey: ["ciclo-tarefas"] });
           return;
         }
       }

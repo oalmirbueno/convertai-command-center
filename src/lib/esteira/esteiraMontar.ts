@@ -11,6 +11,7 @@
  *  - cada cliente e individual: o onboarding nasce do que falta a ele.
  */
 
+import { localIso, mondayOf } from "@/lib/cycleWeek";
 import type {
   EsteiraDoCliente,
   EsteiraItem,
@@ -343,12 +344,9 @@ export function tarefaConcluida(status: string | null): boolean {
   return CONCLUIDA.has((status ?? "").toLowerCase());
 }
 
-/** Segunda-feira (ISO) da semana que contem a data. */
+/** Segunda-feira (ISO) da semana que contem a data, no fuso local. */
 export function segundaDe(d: Date): string {
-  const x = new Date(d);
-  const dow = (x.getDay() + 6) % 7;
-  x.setDate(x.getDate() - dow);
-  return x.toISOString().slice(0, 10);
+  return localIso(mondayOf(d));
 }
 
 function somaDias(iso: string, n: number): string {
@@ -363,7 +361,9 @@ function somaDias(iso: string, n: number): string {
  * nao tem prazo e tem dono fica no Kanban; aqui e o que pede a semana.
  */
 export function itensDeTarefas(f: FatosDoCliente, hoje: Date, weekStart: string): EsteiraItem[] {
-  const hojeStr = hoje.toISOString().slice(0, 10);
+  // Data local, nunca UTC: as 22h de terca no Brasil ja e quarta em UTC, e a
+  // tarefa que vence na quarta aparecia "atrasada" antes da hora.
+  const hojeStr = localIso(hoje);
   const fimSemana = somaDias(weekStart, 6);
   const fimProxima = somaDias(weekStart, 13);
   const abertas = f.tarefas.filter((t) => !tarefaConcluida(t.status) && !["cancelled", "archived"].includes((t.status ?? "").toLowerCase()));
@@ -398,7 +398,9 @@ export function itensDeTarefas(f: FatosDoCliente, hoje: Date, weekStart: string)
  * desfazem com o dedo.
  */
 export function feitosAutomaticos(f: FatosDoCliente, weekStart: string): EsteiraItem[] {
-  const ini = new Date(`${weekStart}T00:00:00Z`).getTime();
+  // A janela da semana comeca na meia-noite de Brasilia, nao em UTC: com o Z,
+  // o que foi publicado entre 21h e 0h de domingo caia na semana errada.
+  const ini = new Date(`${weekStart}T00:00:00-03:00`).getTime();
   const fim = ini + 7 * DIA;
   const dentro = (iso: string | null) => { if (!iso) return false; const t = new Date(iso).getTime(); return t >= ini && t < fim; };
   const out: EsteiraItem[] = [];

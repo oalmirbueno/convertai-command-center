@@ -34,17 +34,22 @@ export function useRecentActivity(limit = 14) {
   return useQuery({
     queryKey: ["recent-activity", user?.id, limit],
     queryFn: async (): Promise<ActivityEntry[]> => {
+      // Janela de 30 dias: o feed e "recente" por definicao, e o recorte por
+      // created_at deixa o banco usar o indice em vez de ordenar a tabela toda.
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       // As duas fontes em paralelo; se uma falhar, a outra ainda alimenta o
       // feed — atividade parcial é melhor que feed vazio.
       const [updatesRes, memoryRes] = await Promise.all([
         supabase
           .from("updates")
           .select("id, message, project_id, update_type, created_at")
+          .gte("created_at", since)
           .order("created_at", { ascending: false })
           .limit(limit),
         (supabase as any)
           .from("project_memory")
           .select("id, client_id, project_id, kind, title, created_at")
+          .gte("created_at", since)
           .order("created_at", { ascending: false })
           .limit(limit),
       ]);

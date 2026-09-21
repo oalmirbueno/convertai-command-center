@@ -18,6 +18,19 @@ interface OpsEvent {
   data: Record<string, any>;
 }
 
+// Todo id que entra num filtro `.or(...)` do PostgREST passa por aqui antes.
+// O filtro e montado por concatenacao de texto, entao um valor livre viraria
+// operador (virgula, parentese, `.eq.`) e mudaria o alcance da consulta.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isUuid = (value: unknown): value is string =>
+  typeof value === "string" && UUID_PATTERN.test(value);
+const badRequest = (message: string) =>
+  new Response(JSON.stringify({ error: message }), {
+    status: 400,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
 // Ops status -> kanban column id used in the portal
 // Kanban columns currently: backlog, doing, review, done. We add "blocked" as a new status value.
 const OPS_TO_KANBAN_STATUS: Record<string, string> = {
@@ -200,6 +213,12 @@ Deno.serve(async (req) => {
         }
 
         // Find existing row by portal_task_id OR ops_node_id (scoped to project)
+        if (!isUuid(opsNodeId)) {
+          return badRequest("Invalid ops_node_id/node_id: expected UUID");
+        }
+        if (data.portal_task_id != null && !isUuid(data.portal_task_id)) {
+          return badRequest("Invalid portal_task_id: expected UUID");
+        }
         const orFilter = data.portal_task_id
           ? `id.eq.${data.portal_task_id},ops_node_id.eq.${opsNodeId}`
           : `ops_node_id.eq.${opsNodeId}`;
@@ -272,17 +291,33 @@ Deno.serve(async (req) => {
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
+        // Sem project_id o filtro alcancaria tarefas de qualquer projeto.
+        if (!isUuid(data.project_id)) {
+          return badRequest("Missing or invalid project_id: expected UUID");
+        }
+        if (opsNodeId != null && !isUuid(opsNodeId)) {
+          return badRequest("Invalid ops_node_id/node_id: expected UUID");
+        }
+        if (data.portal_task_id != null && !isUuid(data.portal_task_id)) {
+          return badRequest("Invalid portal_task_id: expected UUID");
+        }
 
         const orFilter = data.portal_task_id
           ? `id.eq.${data.portal_task_id},ops_node_id.eq.${opsNodeId ?? "00000000-0000-0000-0000-000000000000"}`
           : `ops_node_id.eq.${opsNodeId}`;
 
-        let q = supabase.from("tasks").delete();
-        if (data.project_id) q = q.eq("project_id", data.project_id);
-        const { error: delErr } = await q.or(orFilter);
+        // Exclusao logica: a tarefa some das listas (deleted_at) mas o
+        // historico e as referencias continuam de pe. Apagar de verdade era
+        // irreversivel a partir de um webhook.
+        const { error: delErr } = await supabase
+          .from("tasks")
+          .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq("project_id", data.project_id)
+          .is("deleted_at", null)
+          .or(orFilter);
         if (delErr) throw delErr;
 
-        if (data.project_id && data.author_id) {
+        if (data.author_id) {
           await supabase.from("updates").insert({
             project_id: data.project_id,
             author_id: data.author_id,

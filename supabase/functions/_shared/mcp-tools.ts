@@ -95,6 +95,7 @@ import {
 } from './aceleriq-finance-services.ts';
 import {
   bridgeStatus,
+  bridgeStatusPublic,
   CONTEXT_ORDER,
   getContextBundle,
   getFile,
@@ -530,6 +531,12 @@ const capabilitiesTool: ToolDefinition = {
       ? 'Se alguma tool listada em `tools` aqui NAO aparecer na sua lista de funcoes, o seu adaptador esta com o catalogo antigo em cache: peca tools/list de novo, ou reconecte o conector do Aceleriq OS. O servidor nao empurra aviso de mudanca (listChanged=false), entao a lista so atualiza quando o cliente pergunta.'
       : 'Nenhuma tool visivel para esta credencial: confira os escopos concedidos.';
 
+    // Sem credencial (contexto publico ou sem escopo) o status do Segundo
+    // Cerebro sai so como "configurado ou nao"; dono/repo/branch ficam para
+    // quem autenticou.
+    const semCredencial = ctx.dataScope?.source === 'public' || ctx.scopes.length === 0;
+    const secondBrain = semCredencial ? bridgeStatusPublic() : bridgeStatus();
+
     return Promise.resolve({
       server: SERVER_INFO,
       protocolVersion: '2025-06-18',
@@ -543,7 +550,7 @@ const capabilitiesTool: ToolDefinition = {
       grantedScopes: ctx.scopes,
       supportedScopes: ALL_SCOPES,
       counts,
-      secondBrain: bridgeStatus(),
+      secondBrain,
       tools: visible,
     });
   },
@@ -1477,10 +1484,18 @@ const linkProjectToClientTool: ToolDefinition = {
 const CONTRACTS_READ: readonly ToolScope[] = ['contracts:read', 'aceleriq:read'];
 const CONTRACTS_WRITE: readonly ToolScope[] = ['contracts:write'];
 
+// sign_token, sign_url e os IPs de assinatura so saem para quem pode escrever
+// rascunho (contracts:write ou admin). Leitura comum recebe o contrato sem
+// o segredo que permite assinar.
+function contractReadView(ctx: AuthContext) {
+  const expanded = expandScopes(ctx.scopes);
+  return { revealSensitive: expanded.has('contracts:write') || expanded.has('admin') };
+}
+
 const listContractsTool: ToolDefinition = {
   name: 'aceleriq_list_contracts',
   title: 'Listar contratos',
-  description: 'Lista contratos com filtros opcionais (client_id, project_id, status, query em title) e paginação padrão has_more/next_offset. Cada item inclui is_signed, is_locked e sign_url.',
+  description: 'Lista contratos com filtros opcionais (client_id, project_id, status, query em title) e paginação padrão has_more/next_offset. Cada item inclui is_signed e is_locked; sign_url e sign_token só aparecem para credencial com contracts:write.',
   scopes: CONTRACTS_READ,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -1495,17 +1510,17 @@ const listContractsTool: ToolDefinition = {
     },
     additionalProperties: false,
   },
-  handler: async (input) => {
+  handler: async (input, ctx) => {
     const parsed = listContractsSchema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
-    return await listContracts(parsed.data);
+    return await listContracts(parsed.data, contractReadView(ctx));
   },
 };
 
 const getContractTool: ToolDefinition = {
   name: 'aceleriq_get_contract',
   title: 'Detalhar contrato',
-  description: 'Retorna um contrato pelo id, incluindo is_signed, is_locked e sign_url pública quando aplicável.',
+  description: 'Retorna um contrato pelo id, incluindo is_signed e is_locked. sign_url e sign_token só aparecem para credencial com contracts:write.',
   scopes: CONTRACTS_READ,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -1514,10 +1529,10 @@ const getContractTool: ToolDefinition = {
     required: ['contract_id'],
     additionalProperties: false,
   },
-  handler: async (input) => {
+  handler: async (input, ctx) => {
     const parsed = getContractSchema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
-    return await getContract(parsed.data);
+    return await getContract(parsed.data, contractReadView(ctx));
   },
 };
 

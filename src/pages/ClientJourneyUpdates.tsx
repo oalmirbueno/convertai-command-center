@@ -354,9 +354,11 @@ export default function ClientJourneyUpdates() {
   const isStaff =
     profile?.role === "admin" ||
     ["design", "traffic", "manager"].includes(profile?.role || "");
-  if (isStaff && !isImpersonating) {
-    return <Navigate to="/central" replace />;
-  }
+  // O redirecionamento em si acontece DEPOIS de todos os hooks (lá embaixo):
+  // um return antes do useQuery/useMemo mudava a ordem dos hooks entre um
+  // render e outro (perfil chega, papel muda) e o React derrubava a tela.
+  // Aqui só se decide; a consulta fica desligada enquanto for para sair.
+  const deveRedirecionar = isStaff && !isImpersonating;
 
   // Um único retrato do momento, atualizado sozinho a cada 30 segundos.
   const { data: snapshot, isLoading, isError } = useQuery({
@@ -424,7 +426,7 @@ export default function ClientJourneyUpdates() {
         reports: reports.data || [],
       };
     },
-    enabled: !!clientId,
+    enabled: !!clientId && !deveRedirecionar,
     refetchInterval: 30_000,
   });
 
@@ -457,6 +459,11 @@ export default function ClientJourneyUpdates() {
     () => (snapshot?.projects || []).filter((p: any) => (p.status || "active") !== "done"),
     [snapshot],
   );
+
+  // Todos os hooks já rodaram: agora sim o staff sem "Ver como Cliente" sai.
+  if (deveRedirecionar) {
+    return <Navigate to="/central" replace />;
+  }
 
   if (isLoading) {
     return (

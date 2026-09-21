@@ -19,6 +19,20 @@ function generateToken(): string {
     .join('')
 }
 
+// Um message_id previsivel a partir da idempotencyKey: a mesma chave gera o
+// mesmo id, e e o id (nao a chave crua) que entra no log e vai ao provedor.
+// email_send_log.message_id e TEXT, entao o hex de 64 chars cabe inteiro.
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input))
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+async function messageIdFromIdempotencyKey(key: string): Promise<string> {
+  return await sha256Hex(`idempotency:${key}`)
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -103,13 +117,23 @@ Deno.serve(async (req) => {
   let recipientEmail: string
   let idempotencyKey: string
   let messageId: string
+  // So ha deduplicacao quando o chamador mandou a chave: sem ela o id e
+  // aleatorio e cada chamada e um envio novo, como sempre foi.
+  let callerProvidedKey = false
   let templateData: Record<string, any> = {}
   try {
     const body = await req.json()
     templateName = body.templateName || body.template_name
     recipientEmail = body.recipientEmail || body.recipient_email
-    messageId = crypto.randomUUID()
-    idempotencyKey = body.idempotencyKey || body.idempotency_key || messageId
+    const rawKey = body.idempotencyKey ?? body.idempotency_key
+    if (typeof rawKey === 'string' && rawKey.trim().length > 0 && rawKey.length <= 512) {
+      idempotencyKey = rawKey.trim()
+      messageId = await messageIdFromIdempotencyKey(idempotencyKey)
+      callerProvidedKey = true
+    } else {
+      messageId = crypto.randomUUID()
+      idempotencyKey = messageId
+    }
     if (body.templateData && typeof body.templateData === 'object') {
       templateData = body.templateData
     }
@@ -164,6 +188,45 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
+  }
+
+  // 1b. Deduplicacao pela idempotencyKey: se este message_id ja esta na fila
+  // (pending) ou ja saiu (sent), devolve o id existente e nao enfileira de
+  // novo. Falha ao consultar nao bloqueia o envio: registra e segue.
+  if (callerProvidedKey) {
+    const { data: existingSend, error: dedupError } = await supabase
+      .from('email_send_log')
+      .select('status')
+      .eq('message_id', messageId)
+      .in('status', ['pending', 'sent'])
+      .limit(1)
+      .maybeSingle()
+
+    if (dedupError) {
+      console.error('Idempotency lookup failed; proceeding without dedup', {
+        code: dedupError.code,
+        messageId,
+      })
+    } else if (existingSend) {
+      console.log('Transactional email deduplicated', {
+        messageId,
+        templateName,
+        status: existingSend.status,
+      })
+      return new Response(
+        JSON.stringify({
+          success: true,
+          queued: false,
+          deduplicated: true,
+          message_id: messageId,
+          status: existingSend.status,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
   }
 
   // 2. Check suppression list (fail-closed: if we can't verify, don't send)
@@ -393,25 +456,38 @@ Deno.serve(async (req) => {
   // Nudge the dispatcher immediately with the service role so delivery never
   // depends on the pg_cron job being alive. If the nudge fails, the message
   // stays queued and the cron (when healthy) still picks it up: no loss.
-  try {
-    const nudge = await fetch(
-      `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-email-queue`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          'Content-Type': 'application/json',
+  //
+  // O chamador NAO espera o despachante: a chamada sai em segundo plano com
+  // limite de 3 s. Quem processa a fila inteira e o process-email-queue; o
+  // que importa aqui e so acordar ele. EdgeRuntime.waitUntil, quando existe,
+  // mantem a promessa viva depois da resposta.
+  const nudgeDispatcher = async () => {
+    try {
+      const nudge = await fetch(
+        `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-email-queue`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ trigger: 'post-enqueue', queue: 'transactional_emails' }),
+          signal: AbortSignal.timeout(3_000),
         },
-        body: JSON.stringify({ trigger: 'post-enqueue', queue: 'transactional_emails' }),
-      },
-    )
-    console.log('Dispatcher nudge status', { status: nudge.status, messageId })
-  } catch (nudgeError) {
-    console.error('Dispatcher nudge failed; queue retains the message', {
-      messageId,
-      error: nudgeError instanceof Error ? nudgeError.message : 'unknown',
-    })
+      )
+      console.log('Dispatcher nudge status', { status: nudge.status, messageId })
+    } catch (nudgeError) {
+      console.error('Dispatcher nudge failed or timed out; queue retains the message', {
+        messageId,
+        error: nudgeError instanceof Error ? nudgeError.message : 'unknown',
+      })
+    }
   }
+  const nudgePromise = nudgeDispatcher()
+  const edgeRuntime = (globalThis as {
+    EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void }
+  }).EdgeRuntime
+  edgeRuntime?.waitUntil?.(nudgePromise)
 
   return new Response(
     JSON.stringify({ success: true, queued: true, message_id: messageId }),

@@ -130,13 +130,23 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 export default function AdminApprovals() {
   const { profile, user } = useAuth();
   const confirmDialog = useConfirm();
-  const { data: allFiles, isLoading } = useAllFiles();
-  const { data: clients } = useClients();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClient = searchParams.get("client") || "all";
   const [queue, setQueue] = useState<"agency" | "client">("agency");
+  // Cliente e fila recortados no banco: a tela recebia a tabela inteira e
+  // descartava quase tudo em JS. A aba (pendente/aprovado/ajustes) segue em
+  // JS porque a contagem de pendentes precisa da fila completa.
+  const { data: allFiles, isLoading } = useAllFiles(
+    selectedClient === "all" ? undefined : selectedClient,
+    {
+      statusIn: queue === "agency"
+        ? { column: "agency_approval_status", values: ["pending", "approved", "rejected"] }
+        : { column: "approval_status", values: ["pending", "approved", "rejected"] },
+    },
+  );
+  const { data: clients } = useClients();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -159,6 +169,8 @@ export default function AdminApprovals() {
     }
   });
 
+  // O banco ja recortou cliente e fila; os testes abaixo so seguram o cache
+  // anterior enquanto a nova consulta chega.
   const approvalFiles = allFilesList.filter((f: any) => {
     if (f.parent_file_id) return false;
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
@@ -314,21 +326,33 @@ export default function AdminApprovals() {
     try {
       await recordOfflineClientApproval(file.id, Number(file.version ?? 1), "grupo");
       // O cliente enxerga o registro no Diário do Trabalho, sem sombra.
+      let diarioFalhou = false;
       if (file.project_id && user?.id) {
-        await supabase.from("updates").insert({
+        const { error: erroDiario } = await supabase.from("updates").insert({
           project_id: file.project_id,
           author_id: user.id,
           message: `Aprovação registrada pela equipe: você aprovou "${file.file_name}" pelo grupo. Seguimos para a publicação.`,
           update_type: "progress",
           client_visible: true,
         });
+        // A aprovacao ja esta gravada; o que falhou foi o aviso no diario.
+        // Avisar em vez de esconder: a tela dizia "registrado" sem o diario ter recebido nada.
+        diarioFalhou = Boolean(erroDiario);
       }
       await refreshApprovalQueues();
       setPreviewFile(null);
-      toast({
-        title: "Aprovação registrada",
-        description: "O material foi destravado e segue para a publicação.",
-      });
+      if (diarioFalhou) {
+        toast({
+          title: "Aprovação registrada, mas o diário não recebeu o aviso",
+          description: "O material foi destravado. O registro no Diário do Trabalho falhou; anote manualmente se o cliente precisar ver.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Aprovação registrada",
+          description: "O material foi destravado e segue para a publicação.",
+        });
+      }
     } catch (error: any) {
       toast({
         title: "Não foi possível registrar",

@@ -109,7 +109,10 @@ export async function lerDossiesDaCarteira(clientIds?: readonly string[]): Promi
   ));
   const anteriores = new Map<string, DossieLinha>();
   if (idsAnteriores.length > 0) {
-    const { data: prev } = await (supabase as any).from("client_dossiers").select(CAMPOS).in("id", idsAnteriores);
+    const { data: prev, error: erroAnteriores } = await (supabase as any).from("client_dossiers").select(CAMPOS).in("id", idsAnteriores);
+    // Sem isto a falha virava "zero mudancas desde a versao anterior", que e
+    // uma afirmacao, nao um erro.
+    if (erroAnteriores) throw erroAnteriores;
     for (const d of (prev ?? []) as DossieLinha[]) anteriores.set(d.id, d);
   }
 

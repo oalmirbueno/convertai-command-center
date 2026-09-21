@@ -136,7 +136,11 @@ describe("as ferramentas do MCP rico", () => {
 
   it("o escopo novo é anunciado onde o OAuth o descobre", () => {
     expect(tools).toContain("'clients:write'");
-    expect(metadata).toContain("'clients:write'");
+    // O metadata OAuth nao guarda mais copia propria da lista: deriva de
+    // ALL_SCOPES (mcp-tools.ts), que precisa conter o escopo novo.
+    expect(tools).toMatch(/export const ALL_SCOPES[\s\S]*?'clients:write',[\s\S]*?\] as const;/);
+    expect(metadata).toContain("import { ALL_SCOPES } from '../_shared/mcp-tools.ts'");
+    expect(metadata).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
     // E entra na expansão do agregado, para as credenciais existentes.
     const expansao = tools.slice(tools.indexOf("'aceleriq:write': ["), tools.indexOf("];", tools.indexOf("'aceleriq:write': [")));
     expect(expansao).toContain("'clients:write'");

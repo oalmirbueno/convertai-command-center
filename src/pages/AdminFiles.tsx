@@ -252,6 +252,8 @@ export default function AdminFiles() {
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects, isLoading: loadingProjects } = useProjects();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedClientId = searchParams.get("client");
   const {
     data: allFiles,
     isLoading: loadingFiles,
@@ -259,11 +261,10 @@ export default function AdminFiles() {
     error: filesReadError,
     refetch: refetchFiles,
     isFetching: refreshingFiles,
-  } = useAllFiles();
+    // Cliente escolhido vai para o banco; "Todos" traz so os mais recentes.
+  } = useAllFiles(requestedClientId || undefined);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedClientId = searchParams.get("client");
   const requestedFolderId = searchParams.get("folder");
   const requestedRevisionId = searchParams.get("revisionOf");
   const requestedModeParam = searchParams.get("mode");
@@ -308,6 +309,10 @@ export default function AdminFiles() {
   const [uploadDescription, setUploadDescription] = useState("");
   const [uploadVideoUrl, setUploadVideoUrl] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  // Uma acao por vez no rodape do preview: com os botoes livres durante a
+  // chamada, o segundo clique disparava revisao e liberacao em cima da mesma
+  // peca e o banco recusava a segunda com estado confuso na tela.
+  const [acting, setActing] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
   const revisionSource = requestedRevisionId
@@ -320,6 +325,18 @@ export default function AdminFiles() {
     queryClient.invalidateQueries({ queryKey: ["files"] }),
     queryClient.invalidateQueries({ queryKey: ["workspace-client-files"] }),
   ]);
+
+  // Envolve os botoes de acao do preview: trava enquanto a chamada roda e
+  // solta no fim, com ou sem erro (cada handler ja trata o proprio toast).
+  const runActing = async (action: () => Promise<void>) => {
+    if (acting) return;
+    setActing(true);
+    try {
+      await action();
+    } finally {
+      setActing(false);
+    }
+  };
 
   useEffect(() => {
     if (!isStaff || !clients) return;
@@ -362,10 +379,6 @@ export default function AdminFiles() {
       }
     }
 
-    if (requestedFolderId && FOLDER_IDS.has(requestedFolderId)) {
-      setUploadFolder(requestedFolderId);
-    }
-
     if (
       shouldOpenNewContent
       && !requestedRevisionId
@@ -376,7 +389,14 @@ export default function AdminFiles() {
     }
 
     if (shouldOpenNewContent && requestedClientId) {
-      setUploadFolder(activeFolder);
+      // A pasta da URL so entra no formulario na ABERTURA. Antes era aplicada
+      // fora deste bloco, em todo refetch de arquivos, e desfazia a pasta que
+      // a pessoa tinha acabado de escolher no formulario aberto.
+      if (requestedFolderId && FOLDER_IDS.has(requestedFolderId)) {
+        setUploadFolder(requestedFolderId);
+      } else {
+        setUploadFolder(activeFolder);
+      }
       if (revisionSource && initializedRevisionRef.current !== revisionSource.id) {
         const sourceChildren = (allFiles || []).filter((file: any) => file.parent_file_id === revisionSource.id);
         setUploadMode(isCarouselAssetGroup(revisionSource, sourceChildren) ? "carousel" : "single");
@@ -496,8 +516,12 @@ export default function AdminFiles() {
       setPreviewFile({ ...previewFile, file_name: editNameValue.trim() });
       setEditingName(false);
       toast({ title: "Nome atualizado" });
-    } catch {
-      toast({ title: "Erro ao renomear", variant: "destructive" });
+    } catch (e: any) {
+      toast({
+        title: "Erro ao renomear",
+        description: e?.message || "Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -519,8 +543,12 @@ export default function AdminFiles() {
       }
       const folderLabel = FOLDERS.find(f => f.id === newFolder)?.label || newFolder;
       toast({ title: `Movido para ${folderLabel}` });
-    } catch {
-      toast({ title: "Erro ao mover arquivo", variant: "destructive" });
+    } catch (e: any) {
+      toast({
+        title: "Erro ao mover arquivo",
+        description: e?.message || "Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -544,6 +572,8 @@ export default function AdminFiles() {
 
   // Tudo do cliente selecionado, antes de escolher a pasta: é sobre esta base
   // que as contagens das abas são feitas, para o número bater com a tela.
+  // O recorte por cliente ja veio do banco (useAllFiles); a checagem abaixo
+  // so protege a troca de cliente enquanto o cache anterior ainda esta na tela.
   const scopedFiles = (allFiles || []).filter((f: any) => {
     if (f.parent_file_id) return false; // filho de carrossel aparece junto do pai
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
@@ -718,8 +748,13 @@ export default function AdminFiles() {
 
   const applyPostSaveAction = async (fileId: string): Promise<UploadPostSaveAction> => {
     if (uploadPostSaveAction === "draft") return "draft";
+    // Quando a revisao interna ja foi registrada e so a liberacao falhou, o
+    // estado real e "em revisao interna", nao rascunho: o aviso tem de bater
+    // com o banco, senao a pessoa procura o conteudo na fila errada.
+    let reviewRequested = false;
     try {
       await requestFileAgencyReview(fileId);
+      reviewRequested = true;
       if (uploadPostSaveAction === "internal_review") return "internal_review";
       if (!canReviewAndRelease) {
         throw new Error("Somente admin ou manager pode liberar conteúdo ao cliente.");
@@ -732,11 +767,13 @@ export default function AdminFiles() {
       return uploadPostSaveAction;
     } catch (error: any) {
       toast({
-        title: "Conteúdo salvo, mas a etapa final falhou",
+        title: reviewRequested
+          ? "Conteúdo em revisão interna, mas a liberação falhou"
+          : "Conteúdo salvo, mas a etapa final falhou",
         description: error?.message || "Abra o conteúdo e conclua a liberação manualmente.",
         variant: "destructive",
       });
-      return "draft";
+      return reviewRequested ? "internal_review" : "draft";
     }
   };
 
@@ -836,6 +873,11 @@ export default function AdminFiles() {
     setUploading(true);
     setUploadProgress(5);
 
+    // Fora do try para o catch saber se ficou um carrossel pela metade: raiz
+    // criada e lote nao concluido e o que precisa ser desfeito.
+    let rootFileId: string | null = null;
+    let batchComplete = false;
+
     try {
       // Garante que a sessão está fresca antes de inserir — evita RLS por JWT expirado.
       const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -847,7 +889,6 @@ export default function AdminFiles() {
         uploadMode === "video_link" ? 1 : uploadFiles.length,
       );
 
-      let rootFileId: string | null = null;
       const revisionOfFileId = revisionSource?.client_id === selectedClient ? revisionSource.id : null;
       const nextVersion = revisionOfFileId ? revisionVersion : 1;
 
@@ -894,6 +935,7 @@ export default function AdminFiles() {
           inserted = recovered;
         }
         rootFileId = inserted?.id || fileId;
+        batchComplete = true;
         await invalidateFileViews();
         const completedAction = await applyPostSaveAction(rootFileId);
         setUploadProgress(100);
@@ -984,6 +1026,7 @@ export default function AdminFiles() {
 
         setUploadProgress(Math.round(((i + 1) / totalFiles) * 85) + 10);
       }
+      batchComplete = true;
 
       if (!rootFileId) throw new Error("Não foi possível identificar a entrega criada.");
       await invalidateFileViews();
@@ -1028,6 +1071,22 @@ export default function AdminFiles() {
       next.delete("revisionOf");
       setSearchParams(next, { replace: true });
     } catch (err: any) {
+      // Carrossel pela metade nao pode ficar no banco: a raiz existe mas os
+      // slides seguintes falharam. A funcao apaga raiz, filhos e objetos do
+      // storage de uma vez; a tentativa seguinte comeca limpa.
+      if (rootFileId && !batchComplete) {
+        try {
+          const { error: cleanupError } = await supabase.functions.invoke("delete-file-assets", {
+            body: { target: "files", fileIds: [rootFileId] },
+          });
+          if (cleanupError) {
+            console.warn("Nao foi possivel desfazer o carrossel parcial", cleanupError);
+          }
+        } catch (cleanupError) {
+          console.warn("Nao foi possivel desfazer o carrossel parcial", cleanupError);
+        }
+        void invalidateFileViews();
+      }
       const raw = err?.message || "";
       const friendly = /row-level security|permission denied/i.test(raw)
         ? "O registro do arquivo foi bloqueado pela permissão do banco. Tente novamente; se persistir, chame o suporte técnico."
@@ -1595,7 +1654,8 @@ export default function AdminFiles() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => handleRequestAgencyReview(previewFile)}
+                  disabled={acting}
+                  onClick={() => runActing(() => handleRequestAgencyReview(previewFile))}
                 >
                   Solicitar revisão interna
                 </Button>
@@ -1605,14 +1665,16 @@ export default function AdminFiles() {
                         basta. Aprovação do cliente é a exceção explícita. */}
                     <Button
                       size="sm"
-                      onClick={() => handleDirectReleaseToClient(previewFile, "client_shared")}
+                      disabled={acting}
+                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "client_shared"))}
                     >
                       Disponibilizar ao cliente
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleDirectReleaseToClient(previewFile, "approval")}
+                      disabled={acting}
+                      onClick={() => runActing(() => handleDirectReleaseToClient(previewFile, "approval"))}
                     >
                       Pedir aprovação do cliente
                     </Button>
@@ -1623,7 +1685,8 @@ export default function AdminFiles() {
             {previewFile?.agency_approval_status === "pending" && canReviewAndRelease && (
               <Button
                 size="sm"
-                onClick={() => handleAgencyApproval(previewFile)}
+                disabled={acting}
+                onClick={() => runActing(() => handleAgencyApproval(previewFile))}
               >
                 Aprovar internamente
               </Button>
@@ -1634,14 +1697,16 @@ export default function AdminFiles() {
                 <>
                   <Button
                     size="sm"
-                    onClick={() => handleReleaseToClient(previewFile, "client_shared")}
+                    disabled={acting}
+                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "client_shared"))}
                   >
                     Disponibilizar ao cliente
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleReleaseToClient(previewFile, "approval")}
+                    disabled={acting}
+                    onClick={() => runActing(() => handleReleaseToClient(previewFile, "approval"))}
                   >
                     Pedir aprovação do cliente
                   </Button>

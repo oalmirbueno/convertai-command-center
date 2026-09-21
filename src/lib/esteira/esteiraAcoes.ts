@@ -38,7 +38,9 @@ export async function marcarItem(input: {
       .eq("week_start", weekStart)
       .eq("item_key", item.key);
     if (error) return false;
-    await recordMemory({
+    // O diario faz parte da acao: sem o registro, a historia e o dossie nao
+    // veem o que aconteceu. Se falhou, a acao nao foi completa.
+    return recordMemory({
       clientId: item.clientId,
       kind: "ciclo",
       title: `Desfeito · ${item.titulo}`,
@@ -46,7 +48,6 @@ export async function marcarItem(input: {
       source: "esteira",
       metadata: { item_key: item.key, week_start: weekStart, acao: "undo" },
     });
-    return true;
   }
   const uid = await quemSou();
   const { error } = await db.from("cycle_item_state").upsert(
@@ -55,8 +56,9 @@ export async function marcarItem(input: {
   );
   if (error) return false;
 
-  // O diario recebe o fato com o nome do item; o dossie le o diario.
-  await recordMemory({
+  // O diario recebe o fato com o nome do item; o dossie le o diario. Se o
+  // registro falhar, a resposta e falso: antes dizia "feito" com o diario vazio.
+  const registrou = await recordMemory({
     clientId: item.clientId,
     kind: status === "done" ? (item.fonte === "onboarding" ? "marco" : "ciclo") : "ciclo",
     title: `${ROTULO_ESTADO[status]} · ${item.titulo}`,
@@ -64,6 +66,7 @@ export async function marcarItem(input: {
     source: "esteira",
     metadata: { item_key: item.key, week_start: weekStart, fonte: item.fonte, acao: status },
   });
+  if (!registrou) return false;
 
   // Passo de onboarding feito e para sempre: guarda em "ja tem".
   if (status === "done" && item.fonte === "onboarding") {
@@ -108,7 +111,7 @@ export async function marcarJaTem(clientId: string, passo: string, tem: boolean)
   if (error) return false;
   if (antes !== tem) {
     const rotulo = ONBOARDING.find((p) => p.key === passo)?.rotulo ?? passo;
-    await recordMemory({
+    const registrou = await recordMemory({
       clientId,
       kind: "marco",
       title: tem ? `Já tem · ${rotulo}` : `Ainda não tem · ${rotulo}`,
@@ -116,6 +119,7 @@ export async function marcarJaTem(clientId: string, passo: string, tem: boolean)
       source: "esteira",
       metadata: { onboarding: passo, tem },
     });
+    if (!registrou) return false;
     await atualizarAvancosDoDossie(clientId);
   }
   return true;
@@ -184,7 +188,9 @@ export async function marcarRitual(input: { clientId: string; weekStart: string;
   if (error) return false;
   // A Central ja grava o ritual no diario com o texto enviado; nao duplicar.
   if (input.semDiario) return true;
-  await recordMemory({
+  // O chamador (folha da esteira) mostra "Nao foi possivel gravar" quando
+  // isto devolve falso; antes o diario falhava em silencio e a tela dizia ok.
+  return recordMemory({
     clientId: input.clientId,
     kind: "ritual",
     title: `Ritual · ${rotulo}`,
@@ -192,7 +198,6 @@ export async function marcarRitual(input: { clientId: string; weekStart: string;
     source: "esteira",
     metadata: { ritual: input.ritual, week_start: input.weekStart },
   });
-  return true;
 }
 
 /** Nota livre no diario do cliente a partir de um item. */

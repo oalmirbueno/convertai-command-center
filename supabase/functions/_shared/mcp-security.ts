@@ -209,7 +209,9 @@ export function oauthScopesForStaff(
   if (!isStaff) return null;
   const claimed = new Set(flattenClaimedScopes(claimedScopes));
   const hasApplicationScope = [...claimed].some(scope =>
-    /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|contracts|memory):/.test(scope)
+    // 'commercial' precisa estar aqui: um token so com commercial:* era lido
+    // como "sem escopo de aplicacao" e caia para a linha de base clients:read.
+    /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|commercial|contracts|memory):/.test(scope)
     || scope === 'admin'
   );
   if (!hasApplicationScope) return [...OAUTH_OIDC_BASELINE_SCOPES];

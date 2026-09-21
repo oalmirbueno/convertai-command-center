@@ -1,5 +1,6 @@
 const DEFAULT_RESEND_API_URL = 'https://api.resend.com'
 const MAX_ERROR_BODY_LENGTH = 16_000
+const REQUEST_TIMEOUT_MS = 10_000
 
 type DenoEnvironment = {
   Deno?: {
@@ -56,6 +57,13 @@ export class ResendApiError extends Error {
     this.code = options.code ?? null
     this.details = options.details ?? null
   }
+}
+
+// Deno e navegadores modernos tem AbortSignal.timeout; o jsdom dos testes
+// nao. Sem a funcao, segue sem limite em vez de derrubar o envio.
+function requestTimeoutSignal(ms: number): AbortSignal | undefined {
+  const factory = (AbortSignal as { timeout?: (ms: number) => AbortSignal }).timeout
+  return typeof factory === 'function' ? factory.call(AbortSignal, ms) : undefined
 }
 
 function runtimeEnv(name: string): string | undefined {
@@ -133,6 +141,9 @@ export async function sendResendEmail(
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
+      // Sem limite, um provedor pendurado segurava o despachante inteiro ate
+      // o teto do isolate. 10 s e folga de sobra para um POST de e-mail.
+      signal: requestTimeoutSignal(REQUEST_TIMEOUT_MS),
     })
   } catch {
     throw new ResendApiError('Email provider is unavailable', {
