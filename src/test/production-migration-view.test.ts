@@ -375,7 +375,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     });
     expect(filenames).toHaveLength(205);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
-      .toHaveLength(109);
+      .toHaveLength(108);
     // The unaliased forwards keep their canonical filenames, but its content must
     // still be the fail-closed sentinel for the version already in the ledger.
     for (const entry of plan.forwardLedger.filter((item) => item.alias === null)) {

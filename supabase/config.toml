@@ -77,6 +77,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.mcp-files-worker]
     verify_jwt = true
+  [functions.materiais-classificar]
+    verify_jwt = true
   [functions.notify-admin]
     verify_jwt = true
   [functions.ops-quiz-list]
