@@ -365,3 +365,74 @@ export function extensao(nome: string): string {
   const i = nome.lastIndexOf(".");
   return i >= 0 ? nome.slice(i + 1).toLowerCase() : "";
 }
+
+// ------------------------------------------------------------------ entrega
+
+/** Data e hora curtas no fuso do navegador (ex.: "sex., 25/09 às 09:00"). */
+export const dataEHora = (iso?: string | null) => {
+  if (!iso) return "sem data";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dia = d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return `${dia} às ${hora}`;
+};
+
+export interface ResultadoDoEnvio {
+  trabalho_id: string;
+  ok: boolean;
+  estado?: string;
+  erro?: string;
+}
+
+/**
+ * Envia as artes entregues para aprovação pelo caminho da tela de Arquivos:
+ * admin e gestor liberam direto ao cliente; design pede a revisão da agência.
+ */
+export async function enviarParaAprovacao(trabalhoIds: string[]): Promise<ResultadoDoEnvio[]> {
+  const { data, error } = await (supabase as any).rpc("mesa_enviar_para_aprovacao", { _trabalho_ids: trabalhoIds });
+  if (error) throw error;
+  return ((data || {}).resultados || []) as ResultadoDoEnvio[];
+}
+
+export interface PrevisaoDoPlano {
+  posts_por_mes: number | null;
+  laminas_por_post: number | null;
+  hora_publicacao: string;
+  fuso: string;
+  agendar_ao_aprovar: boolean;
+  custo_por_post_usd: number;
+  fonte: "historico" | "tabela";
+  amostra: number;
+  previsao_mes_usd: number | null;
+  saldo_usd: number;
+  posts_que_o_saldo_cobre: number | null;
+  recarga_sugerida_usd: number | null;
+  artes_entregues_no_mes: number;
+  gasto_mes_usd: number;
+}
+
+export async function lerPrevisao(clientId: string): Promise<PrevisaoDoPlano> {
+  const { data, error } = await (supabase as any).rpc("mesa_previsao_cliente", { _client_id: clientId });
+  if (error) throw error;
+  return data as PrevisaoDoPlano;
+}
+
+export async function salvarAjustesDaEntrega(a: {
+  clientId: string;
+  horaPublicacao: string;
+  fuso: string;
+  agendarAoAprovar: boolean;
+  postsPorMes: number | null;
+  laminasPorPost: number | null;
+}): Promise<void> {
+  const { error } = await (supabase as any).rpc("mesa_config_salvar", {
+    _client_id: a.clientId,
+    _hora_publicacao: a.horaPublicacao,
+    _fuso: a.fuso,
+    _agendar_ao_aprovar: a.agendarAoAprovar,
+    _posts_por_mes: a.postsPorMes,
+    _laminas_por_post: a.laminasPorPost,
+  });
+  if (error) throw error;
+}

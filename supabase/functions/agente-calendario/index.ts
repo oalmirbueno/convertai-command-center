@@ -28,7 +28,7 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { carregarModelo, chamarTexto, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
+import { carregarModelo, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import {
   createEditorialItem,
@@ -738,6 +738,7 @@ const notaDe0a10 = (n: number | null, niveis: number) => (n == null ? null : Mat
 async function pontuarTemasComJev(
   temas: Tema[],
   base: { cliente: string; objetivo: unknown; oferta: unknown; regiao: unknown; diagnostico: string | null },
+  cobranca: { clientId: string; propostaId: string; criadoPor: string },
 ): Promise<{ temas: Tema[]; jev_erro: string | null }> {
   if (temas.length === 0) return { temas, jev_erro: null };
   const state = {
@@ -763,6 +764,12 @@ async function pontuarTemasComJev(
   });
   try {
     const r = await jevPerguntar({ state, questions });
+    await cobrarJev(r, {
+      clientId: cobranca.clientId,
+      tarefa: "calendario",
+      referencia: { tipo: REF_TIPO, id: cobranca.propostaId },
+      criadoPor: cobranca.criadoPor,
+    });
     return {
       temas: temas.map((t, i) => ({
         ...t,
@@ -882,7 +889,7 @@ Devolva:
     oferta: parametros.oferta,
     regiao: parametros.regiao,
     diagnostico,
-  });
+  }, { clientId, propostaId, criadoPor: chamador.userId });
   temas = jev.temas;
   if (jev.jev_erro) parametros.jev_erro = jev.jev_erro;
   if (temas.length < 8) parametros.aviso = `O modelo devolveu ${temas.length} temas (o pedido era de 8 a 15).`;
@@ -1150,7 +1157,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
         oferta: p.parametros.oferta,
         regiao: p.parametros.regiao,
         diagnostico: (campos.diagnostico as string) ?? p.diagnostico,
-      });
+      }, { clientId: p.client_id, propostaId: p.id, criadoPor: chamador.userId });
       const notas = new Map(j.temas.map((t) => [t.id, t.jev]));
       temas = temas.map((t) => (notas.has(t.id) ? { ...t, jev: notas.get(t.id) ?? null } : t));
     }

@@ -37,6 +37,7 @@ import {
   chamarImagem,
   chamarTexto,
   carregarModelo,
+  cobrarJev,
   IaMotorErro,
   modeloPadrao,
   type ImagemEntrada,
@@ -294,6 +295,8 @@ type Trabalho = {
   legenda: string | null;
   file_ids: string[];
   custo_usd: number;
+  /** Sobe a cada reprovação do cliente: a nova entrega vira arquivo novo. */
+  entrega_rodada?: number | null;
   atualizado_em: string;
 };
 
@@ -773,7 +776,12 @@ const NOTA_MINIMA_REFERENCIA = 1.5;
  * Ate 4 referencias mais proximas da lamina. Um Score por referencia, todas na
  * mesma chamada ao Jev (rodam em paralelo); o codigo ordena e corta.
  */
-async function escolherReferencias(t: Trabalho, card: CardDirecao, kit: Kit): Promise<{ refs: Referencia[]; jev: string }> {
+async function escolherReferencias(
+  t: Trabalho,
+  card: CardDirecao,
+  kit: Kit,
+  criadoPor: string,
+): Promise<{ refs: Referencia[]; jev: string }> {
   const { data } = await servico()
     .from("cliente_referencias")
     .select("id, client_id, origem, workspace_node_id, url_origem, storage_path, leitura, tags")
@@ -805,6 +813,12 @@ async function escolherReferencias(t: Trabalho, card: CardDirecao, kit: Kit): Pr
   };
   try {
     const res = await jevPerguntar({ state, questions });
+    await cobrarJev(res, {
+      clientId: t.client_id,
+      tarefa: "estudio",
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor,
+    });
     const notas = candidatas
       .map((r, i) => ({ r, nota: notaScore(res.answers[`r${i}`]) }))
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
@@ -914,6 +928,13 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         },
       },
     });
+    const cobrado = await cobrarJev(res, {
+      clientId: t.client_id,
+      tarefa: "verificacao",
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor: ch.userId,
+    });
+    if (cobrado) usos.push(cobrado);
     const resposta = res.answers.identidade;
     const nota = notaScore(resposta);
     v.identidade = {
@@ -1063,7 +1084,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       legendas.push(`imagem ${anexos.length}: capa, o final se conecta visualmente com ela`);
     }
   }
-  const escolha = await escolherReferencias(t, card, kit);
+  const escolha = await escolherReferencias(t, card, kit, ch.userId);
   const idsReferencias: string[] = [];
   for (const ref of escolha.refs) {
     try {
@@ -1364,6 +1385,11 @@ async function laminaFinal(caminho: string): Promise<{ bytes: Uint8Array; largur
   return { bytes: original, largura: d?.largura ?? null, altura: d?.altura ?? null, redimensionada: false };
 }
 
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const resumo = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
+  return Array.from(resumo, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   if (t.status === "entregue" && t.file_ids.length) {
@@ -1393,7 +1419,10 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   for (let i = 0; i < total; i++) {
     const { card, versao } = ultimas[i];
     // Idempotente: uma nova tentativa reaproveita o que ja foi registrado.
-    const chave = `estudio-arte:${t.id}:${i}`;
+    // Depois de uma reprovacao a rodada sobe e a entrega vira arquivo novo
+    // (a rodada 1 mantem a chave antiga, das entregas ja feitas).
+    const rodada = Math.max(1, Number(t.entrega_rodada) || 1);
+    const chave = rodada > 1 ? `estudio-arte:${t.id}:r${rodada}:${i}` : `estudio-arte:${t.id}:${i}`;
     const { data: existente } = await servico().from("files").select("id, client_id").eq("idempotency_key", chave).maybeSingle();
     const ja = existente as { id: string; client_id: string } | null;
     if (ja) {
@@ -1435,6 +1464,8 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
         storage_bucket: "files",
         storage_path: caminho,
         size_bytes: lamina.bytes.byteLength,
+        // A publicacao automatica na Meta exige o sha256 de cada lamina.
+        sha256: await sha256Hex(lamina.bytes),
         folder: "materiais",
         project_id: projetoId,
         status: "ready",

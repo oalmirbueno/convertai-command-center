@@ -13,7 +13,7 @@ import AbaMes from "@/components/mesa/AbaMes";
 import AbaEstudio from "@/components/mesa/AbaEstudio";
 import AbaEntrega from "@/components/mesa/AbaEntrega";
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
-import { inicioDoMes } from "@/lib/mesa/api";
+import { inicioDoMes, lerPrevisao } from "@/lib/mesa/api";
 
 /**
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
@@ -96,11 +96,19 @@ export default function MesaDoCliente() {
     },
   });
 
+  // Mesma chave que a aba Entrega usa: salvar o plano lá atualiza a barra.
+  const previsao = useQuery({
+    queryKey: ["mesa", "previsao", clientId],
+    enabled: !!cliente,
+    queryFn: () => lerPrevisao(clientId),
+  });
+
   const saldoUsd = saldo.data ?? (consumo.data?.saldo_usd !== undefined ? Number(consumo.data.saldo_usd) : null);
 
   const atualizarCusto = () => {
     void queryClient.invalidateQueries({ queryKey: ["mesa", "saldo", clientId] });
     void queryClient.invalidateQueries({ queryKey: ["mesa", "consumo", clientId] });
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
   };
 
   const valor: MesaValor | null = cliente
@@ -143,6 +151,7 @@ export default function MesaDoCliente() {
           <BarraDeCusto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
+            previsao={previsao.data || null}
             carregando={saldo.isLoading || consumo.isLoading}
             podeRecarregar={podeRecarregar}
             isAdmin={isAdmin}
@@ -203,6 +212,7 @@ export default function MesaDoCliente() {
               clientId={valor.clientId}
               clientName={valor.clientName}
               onRecarregado={atualizarCusto}
+              sugestaoUsd={previsao.data?.recarga_sugerida_usd ?? null}
             />
           )}
           {isAdmin && (

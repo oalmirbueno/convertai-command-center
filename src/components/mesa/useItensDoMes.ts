@@ -47,6 +47,32 @@ export interface Trabalho {
   custo_usd: number;
   conversa_id: string | null;
   atualizado_em: string;
+  /** Entrega (etapa 3): o banco acompanha a aprovação e o agendamento. */
+  entrega_status?: EntregaStatus | null;
+  entrega_aviso?: string | null;
+  entrega_rodada?: number | null;
+  enviado_em?: string | null;
+  aprovado_em?: string | null;
+  post_id?: string | null;
+  agendado_para?: string | null;
+}
+
+export type EntregaStatus =
+  | "aguardando_agencia"
+  | "aguardando_cliente"
+  | "reprovado"
+  | "aprovado"
+  | "agendado"
+  | "precisa_de_atencao";
+
+/** Publicação do post criado na Agenda a partir da arte aprovada. */
+export interface PublicacaoDoPost {
+  post_id: string;
+  status: string;
+  scheduled_at: string | null;
+  delivery_mode: string | null;
+  published_at: string | null;
+  permalink: string | null;
 }
 
 export const ROTULO_DO_TRABALHO: Record<string, string> = {
@@ -68,7 +94,7 @@ export const FORMATOS_DE_ARTE = ["carousel", "static"];
 export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: string | null) {
   return useQuery({
     queryKey: ["mesa", "itens-do-mes", clientId, mes, tarefaExtra || ""],
-    queryFn: async (): Promise<{ itens: ItemDoMes[]; trabalhos: Map<string, Trabalho> }> => {
+    queryFn: async (): Promise<{ itens: ItemDoMes[]; trabalhos: Map<string, Trabalho>; publicacoes: Map<string, PublicacaoDoPost> }> => {
       const { data: projetos, error: erroProjetos } = await (supabase as any)
         .from("projects")
         .select("id")
@@ -112,7 +138,22 @@ export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: strin
           if (t.task_id && !trabalhos.has(t.task_id)) trabalhos.set(t.task_id, t);
         }
       }
-      return { itens, trabalhos };
+      // Estado da publicação na Agenda (agendado, publicado, falhou) dos
+      // posts que nasceram das artes aprovadas.
+      const publicacoes = new Map<string, PublicacaoDoPost>();
+      const postIds = Array.from(trabalhos.values()).map((t) => t.post_id).filter((id): id is string => !!id);
+      if (postIds.length) {
+        const { data } = await (supabase as any)
+          .from("editorial_publications")
+          .select("post_id, status, scheduled_at, delivery_mode, published_at, permalink")
+          .in("post_id", postIds)
+          .neq("status", "cancelled")
+          .order("scheduled_at", { ascending: true });
+        for (const p of (data || []) as PublicacaoDoPost[]) {
+          if (!publicacoes.has(p.post_id)) publicacoes.set(p.post_id, p);
+        }
+      }
+      return { itens, trabalhos, publicacoes };
     },
   });
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -284,6 +284,7 @@ function CalendarMetrics({
 
 export default function EditorialCalendar() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const { isImpersonating, impersonatedId } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -849,6 +850,32 @@ export default function EditorialCalendar() {
     () => editorialDeadlineTasks.filter((task) => !linkedPostIdByTaskId[task.id]),
     [editorialDeadlineTasks, linkedPostIdByTaskId],
   );
+
+  // Mesa do cliente: itens da agenda cuja arte está sendo feita no Estúdio.
+  // Quando o cliente aprova, o post entra sozinho; criar o post à mão aqui
+  // duplicaria. Só a equipe que usa a Mesa consulta.
+  const usaMesa = ["admin", "manager", "design"].includes(profile?.role || "") && !isImpersonating;
+  const idsSemPost = useMemo(
+    () => deadlineTasksForGrid.map((task) => task.id).slice(0, 300),
+    [deadlineTasksForGrid],
+  );
+  const mesaPorTarefa = useQuery({
+    queryKey: ["mesa", "trabalhos-por-tarefa", idsSemPost],
+    enabled: usaMesa && idsSemPost.length > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("estudio_trabalhos")
+        .select("task_id, client_id, entrega_status")
+        .in("task_id", idsSemPost);
+      if (error) throw error;
+      const mapa = new Map<string, { clientId: string; entregaStatus: string | null }>();
+      for (const linha of (data || []) as { task_id: string; client_id: string; entrega_status: string | null }[]) {
+        mapa.set(linha.task_id, { clientId: linha.client_id, entregaStatus: linha.entrega_status });
+      }
+      return mapa;
+    },
+  });
   const ancoradosPorDia = useMemo(
     () =>
       ancorasPorDia({
@@ -1034,6 +1061,16 @@ export default function EditorialCalendar() {
     if (linkedPostId) {
       openDetailById(linkedPostId);
       return;
+    }
+    const naMesa = mesaPorTarefa.data?.get(task.id);
+    if (naMesa && !targetStage) {
+      toast.info("A arte deste item está na Mesa do cliente", {
+        description: "Quando o cliente aprovar, o post entra sozinho na Agenda. Criar o post aqui é só para quem vai agendar à mão.",
+        action: {
+          label: "Abrir na Mesa",
+          onClick: () => navigate(`/mesa?client=${naMesa.clientId}&aba=estudio&task=${task.id}`),
+        },
+      });
     }
     openCreateFromTask(task, targetDateKey, targetStage);
   };

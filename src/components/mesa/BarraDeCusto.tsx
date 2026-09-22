@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { textoDoErro, usd } from "@/lib/mesa/api";
+import { textoDoErro, usd, type PrevisaoDoPlano } from "@/lib/mesa/api";
 
 export interface ConsumoDoMes {
   saldo_usd?: number;
@@ -33,6 +33,11 @@ const TAREFAS: Record<string, string> = {
   verificacao: "Conferência",
 };
 
+/** Modelos que não moram no catálogo de IA (o Jev é cobrado à parte, por token de entrada). */
+const ROTULOS_FORA_DO_CATALOGO: Record<string, string> = {
+  "typesafe:jev-latest": "Jev (notas e conferências)",
+};
+
 /**
  * Barra de custo fixa da Mesa: saldo da carteira do cliente, gasto do mês
  * (por modelo e por tarefa ao tocar), recarga (admin e gestor) e os atalhos
@@ -41,6 +46,7 @@ const TAREFAS: Record<string, string> = {
 export default function BarraDeCusto({
   saldoUsd,
   consumo,
+  previsao,
   carregando,
   podeRecarregar,
   isAdmin,
@@ -50,6 +56,7 @@ export default function BarraDeCusto({
 }: {
   saldoUsd: number | null;
   consumo: ConsumoDoMes | null;
+  previsao?: PrevisaoDoPlano | null;
   carregando: boolean;
   podeRecarregar: boolean;
   isAdmin: boolean;
@@ -80,7 +87,7 @@ export default function BarraDeCusto({
             {(consumo?.por_modelo || []).length === 0 && <li className="text-[12px] text-muted-foreground">Nada gasto neste mês.</li>}
             {(consumo?.por_modelo || []).map((m) => (
               <li key={m.modelo_id} className="flex items-baseline justify-between gap-3 text-[12px]">
-                <span className="min-w-0 truncate">{m.rotulo || m.modelo_id} <span className="text-muted-foreground">· {m.usos}x</span></span>
+                <span className="min-w-0 truncate">{m.rotulo || ROTULOS_FORA_DO_CATALOGO[m.modelo_id] || m.modelo_id} <span className="text-muted-foreground">· {m.usos}x</span></span>
                 <span className="shrink-0 font-medium">{usd(m.custo_usd)}</span>
               </li>
             ))}
@@ -99,6 +106,17 @@ export default function BarraDeCusto({
           )}
         </PopoverContent>
       </Popover>
+      {previsao && (
+        <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground" title="Previsão pelo plano do cliente">
+          {previsao.posts_por_mes ? `Plano ${previsao.posts_por_mes} posts` : "Por post"}
+          <strong className="text-[13px] font-semibold text-foreground">
+            {previsao.previsao_mes_usd != null ? `≈ ${usd(previsao.previsao_mes_usd)}` : `≈ ${usd(previsao.custo_por_post_usd)}`}
+          </strong>
+          {previsao.posts_que_o_saldo_cobre != null && (
+            <span className="hidden sm:inline">· saldo cobre {previsao.posts_que_o_saldo_cobre}</span>
+          )}
+        </span>
+      )}
       <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
         {podeRecarregar && (
           <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={onRecarregar}>
@@ -127,12 +145,15 @@ export function DialogoDeRecarga({
   clientId,
   clientName,
   onRecarregado,
+  sugestaoUsd,
 }: {
   aberto: boolean;
   onOpenChange: (v: boolean) => void;
   clientId: string;
   clientName: string;
   onRecarregado: () => void;
+  /** Quanto falta para cobrir o plano do mês (previsão menos saldo). */
+  sugestaoUsd?: number | null;
 }) {
   const [valor, setValor] = useState("");
   const [nota, setNota] = useState("");
@@ -175,6 +196,15 @@ export function DialogoDeRecarga({
           <div className="space-y-1.5">
             <Label htmlFor="mesa-recarga-valor">Valor (US$)</Label>
             <Input id="mesa-recarga-valor" inputMode="decimal" placeholder="20,00" value={valor} onChange={(e) => setValor(e.target.value)} />
+            {!!sugestaoUsd && sugestaoUsd > 0 && (
+              <button
+                type="button"
+                className="text-[11.5px] text-primary underline-offset-2 hover:underline"
+                onClick={() => setValor(sugestaoUsd.toFixed(2).replace(".", ","))}
+              >
+                Sugestão para cobrir o plano do mês: {usd(sugestaoUsd)}
+              </button>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="mesa-recarga-nota">Observação</Label>

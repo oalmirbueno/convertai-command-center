@@ -22,7 +22,7 @@ Mesa do cliente (rota `/mesa`, equipe) com quatro abas em sequência e uma barra
 3. **Estúdio**: abre um item da agenda; o diretor de arte escreve a direção de cada card; o gerador de imagem faz a lâmina inteira, texto incluído (NUNCA texto em camada por cima); ajustes são edição dentro do gerador; conferência de ortografia (leitura do texto da imagem) e de identidade (Jev); "Entregar" salva os cards em Arquivos já ligados ao item.
 4. **Entrega**: lista do mês com as artes; "Enviar tudo para aprovação" usa o caminho de aprovação que já existe; quando o cliente aprova, o post entra agendado sozinho (segunda a sexta), pelo caminho de agendamento que já existe.
 
-Barra de custo: saldo da carteira do cliente, gasto do mês por modelo e tarefa, preço estimado antes de cada geração. Recarga só por admin e manager. (Posts por plano e reserva entram depois.)
+Barra de custo: saldo da carteira do cliente, gasto do mês por modelo e tarefa, previsão do mês pelo plano (posts por mês e lâminas por post) e preço estimado antes de cada geração. Recarga só por admin e manager, com sugestão do valor que cobre o plano.
 
 ## 2. Banco (migration `20260922120000_mesa_do_cliente_base.sql`)
 
@@ -99,10 +99,22 @@ Ações (equipe). Uma lâmina por chamada, para não estourar o tempo da funçã
 - `entregar { trabalho_id }`: cria os arquivos em Arquivos (pasta `materiais`, tipo `carrossel` ou `post`, carrossel com pai e filhos na ordem, legenda no arquivo), ligados ao cliente e ao projeto do item, pelo mesmo caminho de criação de arquivo que a tela de Arquivos usa; status `entregue`.
 - `referencias` sub-ações: `importar_pinterest { client_id, url }` (baixa a imagem do pin pela meta og:image, salva e cria a referência), `sincronizar_workspace { client_id }` (liga as imagens das pastas de referências do workspace do cliente), `ler { referencia_id }` (modelo de visão descreve a técnica; custo na carteira do cliente).
 
-## 6. Entrega (etapa 3 da construção)
+## 6. Entrega (migration `20260922130000_mesa_entrega.sql`, construída em 2026-09-22)
 
-- Envio em lote para aprovação usando as mesmas funções da tela de Arquivos (`request_file_agency_review`, `admin_release_file_now`).
-- Agendamento automático na aprovação do cliente: depois de estudar o fluxo atual de mídia aprovada e publicação (`transition_editorial_publication`, evento `approved_media_adopted`), ligar o arquivo aprovado ao post do item e agendar na data do item (segunda a sexta, hora padrão do cliente, ajustável). Nada muda para itens que não vieram do estúdio.
+Caminho de cada arte: pronta no Estúdio, entregue em Arquivos, enviada para aprovação, aprovada, agendada sozinha na Agenda, publicada. Nada do que existe muda: a Mesa chama os mesmos caminhos das telas de Arquivos e da Agenda.
+
+- `mesa_cliente_config` (por cliente): `hora_publicacao` (padrão 09:00), `fuso` (America/Sao_Paulo), `agendar_ao_aprovar` (padrão ligado), `posts_por_mes` e `laminas_por_post` (plano). Leitura da equipe; escrita só pela RPC `mesa_config_salvar` (admin e gestor).
+- `estudio_trabalhos` ganha `entrega_status` (`aguardando_agencia`, `aguardando_cliente`, `reprovado`, `aprovado`, `agendado`, `precisa_de_atencao`), `entrega_aviso`, `entrega_rodada`, `enviado_em`, `enviado_por`, `aprovado_em`, `post_id`, `agendado_para`.
+- Envio em lote: RPC `mesa_enviar_para_aprovacao(_trabalho_ids)`. Admin e gestor chamam `admin_release_file_now(raiz, 'approval')`; design chama `request_file_agency_review` (passa pela revisão da agência). Resultado por item, uma falha não derruba as outras.
+- Acompanhamento: gatilho `mesa_entrega_acompanha_aprovacao_trg` em `file_approval_events` só anota o estado e enfileira; qualquer erro vira WARNING, nunca derruba a decisão do cliente. Reprovação (da agência ou do cliente) reabre o trabalho (`status = pronto`), sobe `entrega_rodada` e grava o pedido na memória do diretor de arte (`evitar`, origem `aprovacao`). Aprovação (`client_approved` ou `client_approved_offline`) entra em `mesa_agendamento_fila`.
+- Agendamento: `mesa_agendar_aprovados()` no cron `mesa-agendar-aprovados` (todo minuto). Monta o mesmo payload da Agenda (`buildEditorialSchedulePayload`) e chama `save_editorial_post` pelo caminho aprovado, ligado ao item (`task_id`), na conta de Instagram ligada ao projeto, no próximo horário útil (`mesa_proximo_horario_util`: dia do item ou seguinte, segunda a sexta, margem de 15 minutos). Automático só com conexão oficial ligada, até 10 lâminas e sha256 de todas; senão manual. Idempotência com `mesa_uuid_estavel` (UUID versão 4 a partir de md5; a captura da Agenda exige essa forma). Avisa a equipe no agendamento e quando precisa de atenção (sem conta, item já com post, 5 tentativas).
+- Por que o post só nasce depois da aprovação: `editorial_record_file_decision` recusa a decisão do cliente quando há post ligado ao arquivo sem selo válido. Criar antes arriscaria travar o "Aprovar" do cliente.
+- O Estúdio entrega com sha256 de cada lâmina e, depois de uma reprovação, a nova entrega usa a chave `estudio-arte:<trabalho>:r<rodada>:<i>` (arquivo novo).
+- Previsão: RPC `mesa_previsao_cliente` devolve custo por post (média real de 90 dias ou tabela), previsão do mês pelo plano, quantos posts o saldo cobre e a recarga sugerida. Aparece na barra de custo e na recarga.
+- Jev: cada pergunta é cobrada da carteira do cliente (`cobrarJev` no motor, US$ 0,042 por milhão de tokens de entrada, modelo `typesafe:jev-latest`).
+- Agenda: clicar num item sem post cuja arte está na Mesa avisa e oferece "Abrir na Mesa" (o clique continua abrindo a criação manual).
+
+Validado ponta a ponta no banco em transação desfeita: envio de 2 artes, aprovação do carrossel (post pronto, ligado ao item, publicação `scheduled` na sexta 09:00), reprovação do estático (rodada 2 e memória), segunda rodada do cron sem duplicar.
 
 ## 7. Interface (`/mesa`)
 

@@ -654,6 +654,61 @@ export async function registrarUso(r: RegistroUso): Promise<{ usoId: string; sal
   });
 }
 
+// ----------------------------------------------------------------------- jev
+
+/** Jev 1.13: US$ 0,042 por milhao de tokens de entrada; saida gratis (docs.typesafe.ai/models). */
+export const JEV_MODELO_ID = "typesafe:jev-latest";
+export const JEV_PRECO_ENTRADA_1M = 0.042;
+
+export function custoJev(tokensEntrada: number): number {
+  return Math.max(0, Number(tokensEntrada) || 0) * JEV_PRECO_ENTRADA_1M / 1e6;
+}
+
+/**
+ * Registra na carteira do cliente o que o Jev gastou numa resposta. A chave
+ * do Jev e sempre a da agencia. Nao derruba quem chamou: o julgamento ja foi
+ * feito e o valor e de fracao de centavo; se o registro falhar, fica no log.
+ */
+export async function cobrarJev(
+  resultado: { usage: { input_tokens?: number; output_tokens?: number } | null; modelo?: string },
+  c: { clientId: string; tarefa: Tarefa; referencia?: ReferenciaUso; criadoPor?: string | null },
+): Promise<{ usoId: string; custoUsd: number } | null> {
+  const entrada = Math.round(Number(resultado.usage?.input_tokens) || 0);
+  const saida = Math.round(Number(resultado.usage?.output_tokens) || 0);
+  const custo = arred(custoJev(entrada));
+  const params = {
+    _client_id: c.clientId,
+    _tarefa: c.tarefa,
+    _agente: "jev",
+    _modelo_id: JEV_MODELO_ID,
+    _provedor: "typesafe",
+    _tokens_entrada: entrada,
+    _tokens_saida: saida,
+    _tokens_cache: 0,
+    _imagens: 0,
+    _qualidade: null,
+    _custo_usd: custo,
+    _custo_fonte: "tabela",
+    _referencia_tipo: c.referencia?.tipo ?? null,
+    _referencia_id: c.referencia?.id ?? null,
+    _criado_por: c.criadoPor ?? null,
+    _chave_origem: "agencia",
+    _chave_id: null,
+  };
+  try {
+    const { data, error } = await clienteServico().rpc("ia_registrar_uso", params);
+    if (error) throw new Error(error.message);
+    const linha = (Array.isArray(data) ? data[0] : data) as { uso_id?: string } | null;
+    return { usoId: String(linha?.uso_id ?? ""), custoUsd: custo };
+  } catch (err) {
+    console.error("ia-motor: uso do jev nao registrado", {
+      client_id: c.clientId,
+      erro: err instanceof Error ? err.message : "desconhecido",
+    });
+    return null;
+  }
+}
+
 // --------------------------------------------------------------------- texto
 
 type RespostaProvedorTexto = {

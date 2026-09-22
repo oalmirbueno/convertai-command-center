@@ -12,6 +12,7 @@ import {
   chamarFuncao,
   custoDaResposta,
   dataCurta,
+  dataEHora,
   ErroDaMesa,
   padraoPara,
   rotuloDoMes,
@@ -357,10 +358,20 @@ function DetalheDoItem({ item, trabalho, onVoltar }: { item: ItemDoMes; trabalho
             </div>
           </section>
 
+          {trabalho.entrega_status === "reprovado" && trabalho.status !== "entregue" && (
+            <section className="rounded-xl border border-warning/40 bg-warning/10 p-3.5 text-[12.5px]">
+              <p className="font-medium">Pediram ajuste nesta arte</p>
+              {trabalho.entrega_aviso && <p className="mt-1 [overflow-wrap:anywhere]">“{trabalho.entrega_aviso}”</p>}
+              <p className="mt-1 text-muted-foreground">
+                Ajuste os cards aqui e entregue de novo. A nova entrega vira um arquivo novo em Arquivos e volta para a aprovação pela aba Entrega.
+              </p>
+            </section>
+          )}
+
           <section className="flex flex-col gap-2 rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-center">
             <p className="min-w-0 flex-1 text-[12.5px] text-muted-foreground">
               {trabalho.status === "entregue"
-                ? "Entregue em Arquivos. Uma nova entrega cria outra versão lá."
+                ? `Entregue em Arquivos. ${textoDaEntrega(trabalho)}`
                 : todosComImagem
                   ? "Tudo pronto para ir para Arquivos, ligado a este item da agenda."
                   : "Gere todos os cards para entregar."}
@@ -371,7 +382,7 @@ function DetalheDoItem({ item, trabalho, onVoltar }: { item: ItemDoMes; trabalho
                 </>
               )}
             </p>
-            <Button type="button" onClick={() => void entregar()} disabled={!todosComImagem || ocupado}>
+            <Button type="button" onClick={() => void entregar()} disabled={!todosComImagem || ocupado || trabalho.status === "entregue"}>
               {entregando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FolderCheck className="mr-1.5 h-4 w-4" />}
               Entregar para Arquivos
             </Button>
@@ -380,6 +391,24 @@ function DetalheDoItem({ item, trabalho, onVoltar }: { item: ItemDoMes; trabalho
       )}
     </div>
   );
+}
+
+/** Uma frase sobre onde a arte entregue está no caminho até a Agenda. */
+function textoDaEntrega(t: Trabalho): string {
+  switch (t.entrega_status) {
+    case "aguardando_agencia":
+      return "Aguardando a revisão da agência.";
+    case "aguardando_cliente":
+      return "Aguardando a aprovação do cliente.";
+    case "aprovado":
+      return "Aprovado pelo cliente. Entra na Agenda em até um minuto.";
+    case "agendado":
+      return t.agendado_para ? `Na Agenda para ${dataEHora(t.agendado_para)}.` : "Na Agenda.";
+    case "precisa_de_atencao":
+      return t.entrega_aviso || "Aprovado, mas não entrou sozinho na Agenda.";
+    default:
+      return "Envie para aprovação pela aba Entrega.";
+  }
 }
 
 export default function AbaEstudio({
