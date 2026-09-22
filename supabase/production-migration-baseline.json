@@ -905,6 +905,22 @@
       "remote_name": "ia_chaves_por_cliente",
       "remote_statements_sha256": "579441096e05e056256e8bdc6c418799ec5d55631aec2b4e11b4e43f779c932c",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260922123000",
+      "path": "supabase/migrations/20260922123000_ia_modelos_sincronizacao.sql",
+      "local_sha256": "a9ff5c1435ca163be64cba9b216b5c5900bdc68d7b8bd30bc65b16768afb6442",
+      "remote_name": "ia_modelos_sincronizacao",
+      "remote_statements_sha256": "acdfd676778353054e56f07ddbe5fc7072076182b023abf14b98d5d9447f5008",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260922124000",
+      "path": "supabase/migrations/20260922124000_ia_modelos_catalogo_inicial.sql",
+      "local_sha256": "6a34e749d9dab3d6aedc0a04e55c7fa265048fbab00793714db9e2b9848ac3ca",
+      "remote_name": "ia_modelos_catalogo_inicial",
+      "remote_statements_sha256": "92833c950ce59d3c8cd94680071b2e0c7f443729e7ca4c20665292462ebecfe8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

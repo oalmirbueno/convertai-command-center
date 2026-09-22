@@ -100,6 +100,8 @@ interface EditorialDetailSheetProps {
   onEdit: (post: EditorialPostBundle) => void;
   onCreateRevision: (post: EditorialPostBundle) => void;
   onArchived: () => void;
+  /** Endereço da Mesa (estúdio deste item); só vem para admin, gestor e design. */
+  mesaHref?: string | null;
 }
 
 const eventLabels: Record<string, string> = {
@@ -329,6 +331,7 @@ export default function EditorialDetailSheet({
   onEdit,
   onCreateRevision,
   onArchived,
+  mesaHref = null,
 }: EditorialDetailSheetProps) {
   const { transitionPublication, archivePost, savePost } = useEditorialMutations();
   // Agendamento inline: conta + data no proprio popup, sem abrir o editor.
@@ -1059,6 +1062,16 @@ export default function EditorialDetailSheet({
                       Abrir no Kanban
                     </Link>
                   </Button>
+                  {mesaHref && !isImpersonating && (
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="ml-3 mt-1 h-auto p-0 text-sm"
+                      asChild
+                    >
+                      <Link to={mesaHref}>Mesa</Link>
+                    </Button>
+                  )}
                 </div>
               )}
               <div>

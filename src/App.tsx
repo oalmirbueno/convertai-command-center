@@ -63,6 +63,7 @@ const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
 const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
+const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -256,6 +257,9 @@ export function AppRoutes() {
       <Route path="/admin/backfill" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBackfillPage /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
       <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
+      {/* Mesa do cliente: calendário e estúdio de arte com IA. Só admin,
+          gestor e design; tráfego e cliente voltam para o painel. */}
+      <Route path="/mesa" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <MesaDoCliente /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
       <Route path="/novidades" element={<ProtectedRoute><AppLayout><Novidades /></AppLayout></ProtectedRoute>} />

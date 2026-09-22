@@ -1,0 +1,545 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, Plus, Send, X } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useConfirm } from "@/components/shared/confirmDialog";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  chamarFuncao,
+  dataCurta,
+  limitesDoMes,
+  padraoPara,
+  saidaPorRaciocinio,
+  somarMeses,
+  inicioDoMes,
+  TAMANHOS,
+  textoDoErro,
+  type ParteDaEstimativa,
+} from "@/lib/mesa/api";
+import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
+import { useMesa } from "./MesaContexto";
+import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
+
+/**
+ * Aba Mês: o estrategista propõe os temas do período, o humano escolhe, o
+ * estrategista detalha cada item e a proposta é gravada na agenda pelo mesmo
+ * serviço do MCP (função agente-calendario, SPEC seção 4).
+ */
+
+interface Tema {
+  id: string;
+  tema: string;
+  pilar?: string;
+  fase?: string | number;
+  objetivo?: string;
+  por_que?: string;
+  jev?: { aderencia?: number; potencial?: number } | null;
+  escolhido?: boolean;
+}
+
+interface CardDoRoteiro {
+  ordem: number;
+  funcao?: string;
+  texto?: string;
+  ilustracao?: string;
+  estilo?: string;
+}
+
+interface Item {
+  id?: string;
+  data?: string;
+  formato?: string;
+  tema?: string;
+  pilar?: string;
+  fase?: string | number;
+  gancho?: string;
+  copy?: string;
+  legenda?: string;
+  resumo?: string;
+  cta?: string;
+  objetivo?: string;
+  carrossel_infinito?: boolean;
+  cards?: CardDoRoteiro[];
+}
+
+interface Proposta {
+  id: string;
+  project_id: string | null;
+  periodo_inicio: string;
+  periodo_fim: string;
+  parametros: Record<string, any>;
+  status: "temas" | "detalhando" | "pronta" | "gravada" | "descartada";
+  diagnostico: string | null;
+  temas: Tema[];
+  itens: Item[];
+  conversa_id: string | null;
+  task_ids: string[];
+  gravada_em: string | null;
+  criado_em: string;
+}
+
+interface Mensagem {
+  id: string;
+  papel: "usuario" | "agente" | "sistema";
+  conteudo: string;
+  criado_em: string;
+}
+
+const idDaProposta = (d: any): string | null => d?.proposta?.id || d?.proposta_id || d?.id || null;
+
+/** Nota do Jev em porcentagem, aceite ela venha de 0 a 1 ou de 0 a 100. */
+// O agente do calendario grava as notas do Jev de 0 a 10.
+const pct = (v?: number | null) => {
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return null;
+  return Math.round(Math.max(0, Math.min(10, Number(v))) * 10);
+};
+
+function semanas(inicio: string, fim: string) {
+  const a = new Date(`${inicio}T12:00:00`).getTime();
+  const b = new Date(`${fim}T12:00:00`).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return 1;
+  return Math.max(1, Math.round((b - a) / (7 * 86400000)));
+}
+
+function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolean; onToggle: () => void }) {
+  const aderencia = pct(tema.jev?.aderencia);
+  const potencial = pct(tema.jev?.potencial);
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={marcado}
+      className={`relative flex min-w-0 flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors ${
+        marcado ? "border-primary/60 bg-primary/[0.06]" : "border-border bg-card hover:border-primary/30"
+      }`}
+    >
+      <span className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
+        {marcado && <Check className="h-3 w-3" />}
+      </span>
+      <p className="pr-7 text-[13.5px] font-medium leading-snug [overflow-wrap:anywhere]">{tema.tema}</p>
+      <p className="text-[11px] text-muted-foreground">
+        {[tema.pilar, tema.fase ? `fase ${tema.fase}` : null, tema.objetivo].filter(Boolean).join(" · ")}
+      </p>
+      {tema.por_que && <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{tema.por_que}</p>}
+      {(aderencia !== null || potencial !== null) && (
+        <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
+          {aderencia !== null && <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px]">Aderência {aderencia}%</span>}
+          {potencial !== null && <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px]">Salvar e compartilhar {potencial}%</span>}
+        </div>
+      )}
+    </button>
+  );
+}
+
+function LinhaDoItem({ item }: { item: Item }) {
+  const texto = item.copy || item.legenda || item.resumo;
+  return (
+    <Collapsible className="rounded-xl border border-border bg-card">
+      <CollapsibleTrigger className="flex w-full items-start gap-3 px-3.5 py-3 text-left">
+        <div className="w-16 shrink-0 text-[11.5px] text-muted-foreground">
+          <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
+          <p>{item.formato || "formato?"}</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
+          {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
+        </div>
+        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
+        {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
+        <p className="text-[11.5px] text-muted-foreground">
+          {[item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}
+        </p>
+        {(item.cards || []).length > 0 && (
+          <ol className="space-y-2">
+            {(item.cards || []).slice().sort((a, b) => a.ordem - b.ordem).map((c) => (
+              <li key={c.ordem} className="rounded-lg bg-secondary/40 p-2.5">
+                <p className="text-[11px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
+                {c.texto && <p className="mt-0.5 text-[12.5px] [overflow-wrap:anywhere]">{c.texto}</p>}
+                {(c.ilustracao || c.estilo) && (
+                  <p className="mt-1 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{[c.ilustracao, c.estilo].filter(Boolean).join(" · ")}</p>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta; modeloId: string; onAtualizou: () => void }) {
+  const mesa = useMesa();
+  const queryClient = useQueryClient();
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<unknown>(null);
+  const [locais, setLocais] = useState<Mensagem[]>([]);
+
+  const mensagens = useQuery({
+    queryKey: ["mesa", "mensagens", proposta.conversa_id],
+    enabled: !!proposta.conversa_id,
+    queryFn: async (): Promise<Mensagem[]> => {
+      const { data, error } = await (supabase as any)
+        .from("agente_mensagens")
+        .select("id, papel, conteudo, criado_em")
+        .eq("conversa_id", proposta.conversa_id)
+        .order("criado_em", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const partes: ParteDaEstimativa[] = [
+    { modeloId, tipo: "texto", tokensEntrada: TAMANHOS.conversarMes.entrada, tokensSaida: TAMANHOS.conversarMes.saida },
+  ];
+
+  const enviar = async () => {
+    const msg = texto.trim();
+    if (!msg) return;
+    setEnviando(true);
+    setErro(null);
+    try {
+      const data = await chamarFuncao<any>("agente-calendario", { acao: "conversar", proposta_id: proposta.id, mensagem: msg, modelo_id: modeloId || undefined });
+      setTexto("");
+      if (!proposta.conversa_id) {
+        const agora = new Date().toISOString();
+        setLocais((l) => l.concat([
+          { id: `u-${agora}`, papel: "usuario", conteudo: msg, criado_em: agora },
+          { id: `a-${agora}`, papel: "agente", conteudo: String(data?.resposta || "Proposta ajustada."), criado_em: agora },
+        ]));
+      }
+      avisarCustoReal("Estrategista respondeu", data, mesa.atualizarCusto);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "mensagens"] });
+      onAtualizou();
+    } catch (e) {
+      setErro(e);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const lista = (mensagens.data && mensagens.data.length ? mensagens.data : locais).filter((m) => m.papel !== "sistema");
+
+  return (
+    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-3">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Conversa com o estrategista</p>
+      <div className="space-y-2 sm:max-h-[420px] sm:overflow-y-auto">
+        {lista.length === 0 && <p className="text-[12px] text-muted-foreground">Peça ajustes em português: "troque o tema 3 por algo sobre entrega", "menos carrossel na primeira semana".</p>}
+        {lista.map((m) => (
+          <div key={m.id} className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}>
+            <p className="whitespace-pre-wrap">{m.conteudo}</p>
+          </div>
+        ))}
+      </div>
+      {erro && <AvisoDeErro erro={erro} />}
+      <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder="O que você quer mudar?" />
+      <div className="flex items-center justify-between gap-2">
+        <EstimativaInline partes={partes} />
+        <Button type="button" size="sm" onClick={() => void enviar()} disabled={enviando || !texto.trim()}>
+          {enviando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+          Enviar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default function AbaMes() {
+  const mesa = useMesa();
+  const { clientId, catalogo } = mesa;
+  const queryClient = useQueryClient();
+  const confirmar = useConfirm();
+
+  const proximo = limitesDoMes(somarMeses(inicioDoMes(), 1));
+  const [propostaId, setPropostaId] = useState<string | null>(null);
+  const [nova, setNova] = useState(false);
+  const [inicio, setInicio] = useState(proximo.inicio);
+  const [fim, setFim] = useState(proximo.fim);
+  const [frequencia, setFrequencia] = useState("3");
+  const [objetivo, setObjetivo] = useState("");
+  const [oferta, setOferta] = useState("");
+  const [modeloId, setModeloId] = useState("");
+  const [raciocinio, setRaciocinio] = useState("");
+  const [escolhidos, setEscolhidos] = useState<Set<string>>(new Set());
+  const [projetoId, setProjetoId] = useState("");
+  const [gravando, setGravando] = useState(false);
+  const [conversaAberta, setConversaAberta] = useState(false);
+
+  const propostas = useQuery({
+    queryKey: ["mesa", "propostas", clientId],
+    queryFn: async (): Promise<Proposta[]> => {
+      const { data, error } = await (supabase as any)
+        .from("calendario_propostas")
+        .select("*")
+        .eq("client_id", clientId)
+        .neq("status", "descartada")
+        .order("criado_em", { ascending: false })
+        .limit(12);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const proposta: Proposta | null = nova
+    ? null
+    : (propostas.data || []).find((p) => p.id === propostaId) || (propostas.data || [])[0] || null;
+
+  const projetos = useQuery({
+    queryKey: ["mesa", "projetos", clientId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("projects")
+        .select("id, name, status")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as { id: string; name: string; status: string }[];
+    },
+  });
+
+  const modelo = catalogo.find((m) => m.id === modeloId) || null;
+
+  // Parâmetros: da proposta aberta, ou o padrão do catálogo para uma nova.
+  useEffect(() => {
+    const p = proposta?.parametros || {};
+    const padrao = padraoPara(catalogo, "estrategista");
+    const id = String(p.modelo_id || p.modelo || padrao?.id || "");
+    setModeloId(id);
+    const m = catalogo.find((x) => x.id === id);
+    const niveis = m?.raciocinio || [];
+    setRaciocinio(String(p.raciocinio || niveis[niveis.length - 1] || ""));
+    if (proposta) {
+      setInicio(proposta.periodo_inicio);
+      setFim(proposta.periodo_fim);
+      setFrequencia(String(p.frequencia ?? "3"));
+      setObjetivo(String(p.objetivo || ""));
+      setOferta(String(p.oferta || ""));
+      setEscolhidos(new Set((proposta.temas || []).filter((t) => t.escolhido).map((t) => t.id)));
+      setProjetoId(proposta.project_id || "");
+    }
+  }, [proposta?.id, catalogo.length]);
+
+  useEffect(() => {
+    if (!projetoId && projetos.data && projetos.data.length === 1) setProjetoId(projetos.data[0].id);
+  }, [projetos.data, projetoId]);
+
+  const atualizar = () => void queryClient.invalidateQueries({ queryKey: ["mesa", "propostas", clientId] });
+
+  const trocarModelo = (id: string) => {
+    setModeloId(id);
+    const niveis = catalogo.find((m) => m.id === id)?.raciocinio || [];
+    setRaciocinio(niveis.length ? niveis[niveis.length - 1] : "");
+  };
+
+  const itensPrevistos = useMemo(() => Math.max(1, Number(frequencia) || 3) * semanas(inicio, fim), [frequencia, inicio, fim]);
+
+  const podeProporTemas = !!inicio && !!fim && fim >= inicio && !!modeloId;
+
+  const alternarTema = (id: string) =>
+    setEscolhidos((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  const gravar = async () => {
+    if (!proposta || !projetoId) return;
+    const ok = await confirmar({
+      title: "Gravar na agenda?",
+      description: `Cria ${proposta.itens.length} item(ns) no calendário do projeto escolhido. O que já existe na agenda fica como está.`,
+      confirmLabel: "Gravar",
+    });
+    if (!ok) return;
+    setGravando(true);
+    try {
+      const data = await chamarFuncao<any>("agente-calendario", { acao: "gravar", proposta_id: proposta.id, project_id: projetoId });
+      const n = Array.isArray(data?.task_ids) ? data.task_ids.length : null;
+      toast.success("Gravado na agenda", { description: n !== null ? `${n} item(ns) no calendário.` : undefined });
+      atualizar();
+    } catch (e) {
+      toast.error("Não foi possível gravar", { description: textoDoErro(e) });
+    } finally {
+      setGravando(false);
+    }
+  };
+
+  const parametros = { frequencia: Number(frequencia) || frequencia, objetivo: objetivo.trim() || undefined, oferta: oferta.trim() || undefined, modelo_id: modeloId, raciocinio: raciocinio || undefined };
+
+  // ------------------------------------------------------------ formulário
+  const formulario = (
+    <section className="space-y-4 rounded-xl border border-border bg-card p-4">
+      <TituloDeSecao>Período e objetivo</TituloDeSecao>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Campo rotulo="Início"><Input type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} className="h-9" /></Campo>
+        <Campo rotulo="Fim"><Input type="date" value={fim} min={inicio} onChange={(e) => setFim(e.target.value)} className="h-9" /></Campo>
+        <Campo rotulo="Publicações por semana"><Input type="number" min={1} max={14} value={frequencia} onChange={(e) => setFrequencia(e.target.value)} className="h-9" /></Campo>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Campo rotulo="Objetivo principal"><Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: pedidos pelo WhatsApp" className="h-9" /></Campo>
+        <Campo rotulo="Oferta principal"><Input value={oferta} onChange={(e) => setOferta(e.target.value)} placeholder="Ex.: kit de mudas de outono" className="h-9" /></Campo>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
+        <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {nova && (propostas.data || []).length > 0 && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setNova(false)}>Voltar à proposta</Button>
+        )}
+        <BotaoComCusto
+          rotulo="Propor temas"
+          titulo="Propor temas do período"
+          descricao="O estrategista lê o dossiê, os movimentos, as métricas, o kit e a memória do cliente, pesquisa na web e traz de 8 a 15 temas com nota do Jev."
+          disabled={!podeProporTemas}
+          partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio(raciocinio), buscasWeb: TAMANHOS.proporTemas.buscasWeb }]}
+          executar={() =>
+            chamarFuncao("agente-calendario", {
+              acao: "propor_temas",
+              client_id: clientId,
+              periodo_inicio: inicio,
+              periodo_fim: fim,
+              frequencia: parametros.frequencia,
+              objetivo: parametros.objetivo,
+              oferta: parametros.oferta,
+              modelo_id: modeloId,
+              raciocinio: parametros.raciocinio,
+            })
+          }
+          aoConcluir={(data) => {
+            setNova(false);
+            setPropostaId(idDaProposta(data));
+            atualizar();
+          }}
+        />
+      </div>
+    </section>
+  );
+
+  if (propostas.isLoading) return <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo propostas…</p>;
+  if (propostas.isError) return <AvisoDeErro erro={propostas.error} />;
+  if (!proposta) return formulario;
+
+  const temas = proposta.temas || [];
+  const itens = (proposta.itens || []).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
+  const podeDetalhar = escolhidos.size > 0 && (proposta.status === "temas" || proposta.status === "pronta");
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[12px]">
+        <span className="min-w-0 flex-1 text-muted-foreground">
+          <strong className="font-medium text-foreground">{dataCurta(proposta.periodo_inicio)} a {dataCurta(proposta.periodo_fim)}</strong>
+          {" · "}
+          {({ temas: "escolha os temas", detalhando: "detalhando", pronta: "pronta para gravar", gravada: "gravada na agenda" } as Record<string, string>)[proposta.status] || proposta.status}
+        </span>
+        {(propostas.data || []).length > 1 && (
+          <Select value={proposta.id} onValueChange={(v) => { setPropostaId(v); setNova(false); }}>
+            <SelectTrigger className="h-8 w-auto min-w-[150px] text-[12px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {(propostas.data || []).map((p) => (
+                <SelectItem key={p.id} value={p.id}>{dataCurta(p.periodo_inicio)} a {dataCurta(p.periodo_fim)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setConversaAberta((v) => !v)}>
+          {conversaAberta ? <X className="mr-1 h-3.5 w-3.5" /> : <MessageSquare className="mr-1 h-3.5 w-3.5" />}
+          Conversa
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setNova(true)}>
+          <Plus className="mr-1 h-3.5 w-3.5" /> Nova proposta
+        </Button>
+      </div>
+
+      <div className={`grid grid-cols-1 gap-5 ${conversaAberta ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""}`}>
+        <div className="min-w-0 space-y-5">
+          {proposta.diagnostico && (
+            <section className="space-y-2">
+              <TituloDeSecao>Diagnóstico</TituloDeSecao>
+              <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{proposta.diagnostico}</p>
+            </section>
+          )}
+
+          {temas.length > 0 && (proposta.status === "temas" || itens.length === 0) && (
+            <section className="space-y-3">
+              <TituloDeSecao acao={<span className="text-[11.5px] text-muted-foreground">{escolhidos.size} de {temas.length} escolhidos</span>}>
+                Temas propostos
+              </TituloDeSecao>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {temas.map((t) => <CartaoDeTema key={t.id} tema={t} marcado={escolhidos.has(t.id)} onToggle={() => alternarTema(t.id)} />)}
+              </div>
+            </section>
+          )}
+
+          {podeDetalhar && (proposta.status === "temas" || itens.length === 0) && (
+            <div className="flex justify-end">
+              <BotaoComCusto
+                rotulo={`Detalhar escolhidos (${escolhidos.size})`}
+                titulo="Detalhar os temas escolhidos"
+                descricao="O estrategista escreve cada publicação: data, formato, gancho, copy e o roteiro de cada card."
+                partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.detalhar.entrada, tokensSaida: itensPrevistos * TAMANHOS.detalhar.saidaPorItem + saidaPorRaciocinio(raciocinio) }]}
+                executar={async () => {
+                  await chamarFuncao("agente-calendario", { acao: "escolher_temas", proposta_id: proposta.id, temas: Array.from(escolhidos) });
+                  return chamarFuncao("agente-calendario", { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined });
+                }}
+                aoConcluir={() => atualizar()}
+              />
+            </div>
+          )}
+
+          {proposta.status === "detalhando" && itens.length === 0 && (
+            <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />O estrategista está detalhando. Atualize em instantes.</p>
+          )}
+
+          {itens.length > 0 && (
+            <section className="space-y-3">
+              <TituloDeSecao>Publicações ({itens.length})</TituloDeSecao>
+              <div className="space-y-2">
+                {itens.map((it, i) => <LinhaDoItem key={it.id || i} item={it} />)}
+              </div>
+            </section>
+          )}
+
+          {itens.length > 0 && proposta.status !== "gravada" && (
+            <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-end">
+              <Campo rotulo="Projeto do cliente" className="flex-1">
+                <Select value={projetoId} onValueChange={setProjetoId}>
+                  <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder={projetos.data?.length ? "Escolha o projeto" : "Cliente sem projeto ativo"} /></SelectTrigger>
+                  <SelectContent>
+                    {(projetos.data || []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Campo>
+              <Button type="button" onClick={() => void gravar()} disabled={!projetoId || gravando}>
+                {gravando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <CalendarCheck2 className="mr-1.5 h-4 w-4" />}
+                Gravar na agenda
+              </Button>
+            </section>
+          )}
+
+          {proposta.status === "gravada" && (
+            <p className="rounded-xl bg-success/10 px-3.5 py-3 text-[12.5px] text-foreground">
+              Gravada na agenda{proposta.gravada_em ? ` em ${new Date(proposta.gravada_em).toLocaleDateString("pt-BR")}` : ""} com {proposta.task_ids?.length || 0} item(ns).{" "}
+              <Link to={`/calendario?client=${clientId}`} className="text-primary underline-offset-2 hover:underline">Abrir o calendário</Link>
+            </p>
+          )}
+        </div>
+
+        {conversaAberta && (
+          <aside className="min-w-0">
+            <ConversaDoMes proposta={proposta} modeloId={modeloId} onAtualizou={atualizar} />
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}

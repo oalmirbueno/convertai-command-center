@@ -2378,9 +2378,18 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                   {selected.pulse && (
                     <span className="text-[11px] px-2.5 py-1 rounded-full bg-info/10 text-info">Pulso {selected.pulse.score}/5</span>
                   )}
+                  {/* Mesa do cliente: calendário e arte com IA (admin, gestor e design). */}
+                  {["admin", "manager", "design"].includes(profile?.role || "") && (
+                    <button
+                      onClick={() => navigate(`/mesa?client=${client.id}&aba=estudio`)}
+                      className="sm:ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border-none cursor-pointer"
+                    >
+                      Mesa
+                    </button>
+                  )}
                   <button
                     onClick={() => openClientProfile(client.id)}
-                    className="sm:ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+                    className={`${["admin", "manager", "design"].includes(profile?.role || "") ? "" : "sm:ml-auto "}text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer`}
                   >
                     Abrir cadastro
                   </button>

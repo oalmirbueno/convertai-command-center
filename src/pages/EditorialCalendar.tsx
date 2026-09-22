@@ -2031,6 +2031,12 @@ export default function EditorialCalendar() {
           onEdit={openEdit}
           onCreateRevision={openRevision}
           onArchived={() => setParam("content", "")}
+          mesaHref={
+            selectedPost?.internal?.task_id &&
+            ["admin", "manager", "design"].includes(effectiveRole || "")
+              ? `/mesa?client=${selectedPost.post.client_id}&aba=estudio&task=${selectedPost.internal.task_id}`
+              : null
+          }
         />
       </div>
 

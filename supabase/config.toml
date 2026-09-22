@@ -79,6 +79,12 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.materiais-classificar]
     verify_jwt = true
+  [functions.ia-gateway]
+    verify_jwt = true
+  [functions.estudio-arte]
+    verify_jwt = true
+  [functions.agente-calendario]
+    verify_jwt = true
   [functions.notify-admin]
     verify_jwt = true
   [functions.ops-quiz-list]
