@@ -889,6 +889,22 @@
       "remote_name": "auditoria_banco_correcoes",
       "remote_statements_sha256": "9c83f1a668c39483a39db4763afeed5ead8ee217f40226543f3b04e5cc3c174e",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260922120000",
+      "path": "supabase/migrations/20260922120000_mesa_do_cliente_base.sql",
+      "local_sha256": "8292a49b6d63e5d9403bc9856458eb6209330f1488c3510282b699ff592c50b8",
+      "remote_name": "mesa_do_cliente_base",
+      "remote_statements_sha256": "27b125f9128a36de45756cb707d07c47aede628b1f1f18584ab8110207dc7996",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260922122000",
+      "path": "supabase/migrations/20260922122000_ia_chaves_por_cliente.sql",
+      "local_sha256": "a1e4320538c37c5332f80d3a1292889d82814d0c009ec902c69b02e2ba91a63d",
+      "remote_name": "ia_chaves_por_cliente",
+      "remote_statements_sha256": "579441096e05e056256e8bdc6c418799ec5d55631aec2b4e11b4e43f779c932c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
