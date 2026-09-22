@@ -921,6 +921,14 @@
       "remote_name": "ia_modelos_catalogo_inicial",
       "remote_statements_sha256": "92833c950ce59d3c8cd94680071b2e0c7f443729e7ca4c20665292462ebecfe8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260922130000",
+      "path": "supabase/migrations/20260922130000_mesa_entrega.sql",
+      "local_sha256": "d4607d70ea8634b4a746ed83aa53f334cb4375b1bb028178d943912f045e48d1",
+      "remote_name": "mesa_entrega",
+      "remote_statements_sha256": "e8805a4847ad73dc25009ea71740501357506973c7131df684859b67622e15a2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

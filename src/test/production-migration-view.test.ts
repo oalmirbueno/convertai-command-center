@@ -127,20 +127,20 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 legacy + 2 attestations + 115 forward + 12 alias contract", () => {
+  it("validates the explicit 96 legacy + 2 attestations + 116 forward + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(115);
-    expect(plan.forwardMigrations).toHaveLength(115);
+    expect(plan.manifest.forward_migrations).toHaveLength(116);
+    expect(plan.forwardMigrations).toHaveLength(116);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(115);
-    expect(versions).toHaveLength(211);
+    expect(plan.forwardLedger).toHaveLength(116);
+    expect(versions).toHaveLength(212);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
@@ -174,7 +174,7 @@ describe("production migration view", { timeout: 30000 }, () => {
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(211);
+    expect(sqlValues.split("\n")).toHaveLength(212);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -307,10 +307,10 @@ describe("production migration view", { timeout: 30000 }, () => {
     })).toThrow(/forward statement SHA-256 mismatch/);
   });
 
-  it("accepts the complete declared 211-row raw ledger and rejects normalized rows", () => {
+  it("accepts the complete declared 212-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(115);
-    expect(rows).toHaveLength(211);
+    const rows = remoteRows(116);
+    expect(rows).toHaveLength(212);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
     expect(reconciliation.appliedForward).toHaveLength(115);
