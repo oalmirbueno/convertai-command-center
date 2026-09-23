@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Loader2, Palette, Sparkles, X } from "lucide-react";
+import { CalendarDays, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, Clock, List, Loader2, Palette, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TASK_DELIVERY_TYPE_LABELS, type TaskDeliveryType } from "@/lib/taskDeliveryTypes";
+import type { ArteDoEstudioNaAgenda } from "@/hooks/useEditorialCalendar";
 import {
   chamarFuncao,
   dataCurta,
@@ -16,6 +16,17 @@ import {
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { TituloDeSecao } from "./Seletores";
+import { useArtesDoMes, SEM_ARTES } from "./MesArtes";
+import {
+  CartaoDoItem,
+  CartaoDoPost,
+  formatoDoItem,
+  horaCurta,
+  LEGENDA_DAS_CORES,
+  SeloDaArte,
+  SeloDiscreto,
+  type TamanhoDoCartao,
+} from "./MesCartoes";
 import {
   doItem,
   ehFormatoDeArte,
@@ -26,33 +37,45 @@ import {
   type PostDaAgenda,
   type RoteiroDoItem,
   type Selo,
-  type TomDoSelo,
   type TrabalhoDaAgenda,
 } from "./useAgendaDoMes";
 
 /**
- * Agenda do mês (topo da aba Mês): o mesmo calendário da Agenda do painel
- * para o cliente aberto. A equipe seleciona os itens, vê o que já existe
- * (descrição, roteiro, estado no estúdio), pede ao agente para completar e
- * melhorar o roteiro e a direção, e abre o item no Estúdio já pronto.
+ * Agenda do mês (aba Mês): o mesmo calendário da Agenda do painel para o
+ * cliente aberto, com as mesmas cores, miniaturas e selos. Três vistas:
+ * Mês (grade com dias de largura confortável, rolando de lado se a tela for
+ * estreita, nunca espremida), Semana (sete colunas com cartões grandes) e
+ * Lista (dia a dia, cartões grandes). O título aparece inteiro até 3 linhas
+ * e completo no tooltip.
+ *
+ * A equipe seleciona os itens, vê o que já existe (descrição, roteiro,
+ * estado no estúdio), pede ao agente para completar e melhorar o roteiro e a
+ * direção e abre o item no Estúdio já pronto. O painel da seleção fica abaixo
+ * do calendário, para não roubar largura dos dias.
  *
  * O mês mora no endereço (?mes=AAAA-MM-01), igual às outras abas, e a
- * seleção fica guardada por cliente e mês na sessão do navegador: quem sai
- * para recarregar a carteira e volta encontra os mesmos itens marcados.
+ * seleção fica guardada por cliente e mês na sessão do navegador.
  */
 
 const MAX_COMPLETAR = 12;
-/** Quantas entradas cada dia mostra antes do "+N". */
+/** Quantas entradas cada dia mostra na grade do mês antes do "+N". */
 const POR_DIA = 3;
 const DIAS_DA_SEMANA = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 const MES_VALIDO = /^\d{4}-\d{2}-01$/;
+/** Largura mínima da grade: 7 dias de 150 px. Abaixo disso a grade rola de lado. */
+export const LARGURA_MINIMA_DA_GRADE = "min-w-[1050px]";
 
-const formatoDoItem = (tipo: string) => TASK_DELIVERY_TYPE_LABELS[tipo as TaskDeliveryType] || tipo;
+type Vista = "mes" | "semana" | "lista";
+const CHAVE_DA_VISTA = "mesa:agenda:vista";
 
-const horaCurta = (iso: string) => {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-};
+function lerVista(): Vista {
+  try {
+    const v = window.localStorage.getItem(CHAVE_DA_VISTA);
+    return v === "semana" || v === "lista" ? v : "mes";
+  } catch {
+    return "mes";
+  }
+}
 
 const resumir = (t: string | undefined, max: number) => {
   if (!t) return "";
@@ -63,15 +86,9 @@ const resumir = (t: string | undefined, max: number) => {
 const mesDoItem = (item: ItemDaAgenda, padrao: string) =>
   item.due_date && item.due_date.length >= 7 ? `${item.due_date.slice(0, 7)}-01` : padrao;
 
-/** Cor sólida do ponto de cada selo (discreto: ponto e texto pequeno). */
-const PONTO_DO_TOM: Record<TomDoSelo, string> = {
-  neutro: "bg-muted-foreground/60",
-  roteiro: "bg-sky-500",
-  direcao: "bg-violet-500",
-  producao: "bg-amber-500",
-  pronto: "bg-emerald-500",
-  entregue: "bg-success",
-  alerta: "bg-destructive",
+const diaPorExtenso = (dia: string) => {
+  const d = new Date(`${dia}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? dia : d.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 };
 
 // ------------------------------------------------------------------ seleção guardada
@@ -115,7 +132,7 @@ function useSelecaoGuardada(clientId: string, mes: string) {
 // ------------------------------------------------------------------ calendário
 
 /** Semanas do mês, de segunda a domingo; dia fora do mês vem como null. */
-function semanasDoMes(mes: string): (string | null)[][] {
+export function semanasDoMes(mes: string): (string | null)[][] {
   const partes = mes.split("-").map(Number);
   const ano = partes[0];
   const m = partes[1] || 1;
@@ -133,79 +150,6 @@ function semanasDoMes(mes: string): (string | null)[][] {
 function hojeLocal(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function SeloDiscreto({ selo, className = "" }: { selo: Selo; className?: string }) {
-  return (
-    <span className={`flex min-w-0 items-center text-[11px] leading-4 text-muted-foreground ${className}`}>
-      <span className={`mr-1.5 h-2 w-2 shrink-0 rounded-full ${PONTO_DO_TOM[selo.tom]}`} />
-      <span className="truncate">{selo.rotulo}</span>
-    </span>
-  );
-}
-
-function PilulaDoItem({
-  item,
-  selo,
-  marcado,
-  horario,
-  onToggle,
-}: {
-  item: ItemDaAgenda;
-  selo: Selo;
-  marcado: boolean;
-  horario: string | null;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-pressed={marcado}
-      title={`${item.title} · ${formatoDoItem(item.delivery_type)} · ${selo.rotulo}`}
-      className={`flex w-full min-w-0 flex-col rounded-lg border px-2 py-1.5 text-left shadow-sm transition-colors ${
-        marcado ? "border-primary bg-card ring-1 ring-primary" : "border-border bg-card hover:border-primary/60"
-      }`}
-    >
-      <span className="flex min-w-0 items-start">
-        <span
-          className={`mr-1.5 mt-[2px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-            marcado ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-card"
-          }`}
-        >
-          {marcado && <Check className="h-2.5 w-2.5" />}
-        </span>
-        <span className="line-clamp-2 min-w-0 flex-1 text-[12px] font-medium leading-[1.3] text-foreground [overflow-wrap:anywhere]">{item.title}</span>
-      </span>
-      <span className="mt-1 flex min-w-0 items-center">
-        <SeloDiscreto selo={selo} className="flex-1" />
-        {horario && (
-          <span className="ml-1 flex shrink-0 items-center text-[10.5px] tabular-nums text-muted-foreground">
-            <Clock className="mr-0.5 h-3 w-3" />
-            {horario}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
-
-function PilulaDoPost({ post }: { post: PostDaAgenda }) {
-  const publicado = post.status === "published" || post.status === "partially_published";
-  const falhou = post.status === "failed";
-  return (
-    <div
-      title={`${post.titulo} · ${rotuloDaPublicacao(post.status)} às ${horaCurta(post.scheduled_at)}`}
-      className={`flex w-full min-w-0 items-start rounded-lg border px-2 py-1.5 text-[11.5px] leading-[1.3] ${
-        falhou ? "border-destructive/50 bg-card text-destructive" : "border-border bg-muted text-muted-foreground"
-      }`}
-    >
-      <Clock className={`mr-1 mt-[1px] h-3 w-3 shrink-0 ${publicado ? "text-success" : ""}`} />
-      <span className="line-clamp-2 min-w-0 flex-1 [overflow-wrap:anywhere]">
-        <span className="tabular-nums">{horaCurta(post.scheduled_at)}</span> {post.titulo}
-      </span>
-    </div>
-  );
 }
 
 function RoteiroResumido({ roteiro }: { roteiro: RoteiroDoItem }) {
@@ -236,6 +180,7 @@ function RoteiroResumido({ roteiro }: { roteiro: RoteiroDoItem }) {
 function ItemSelecionado({
   item,
   selo,
+  arte,
   roteiro,
   posts,
   abertoDeInicio,
@@ -244,6 +189,7 @@ function ItemSelecionado({
 }: {
   item: ItemDaAgenda;
   selo: Selo;
+  arte: ArteDoEstudioNaAgenda | null;
   roteiro: RoteiroDoItem | undefined;
   posts: PostDaAgenda[];
   abertoDeInicio: boolean;
@@ -251,18 +197,18 @@ function ItemSelecionado({
   onAbrir: (() => void) | null;
 }) {
   const [aberto, setAberto] = useState(abertoDeInicio);
-  const arte = ehFormatoDeArte(item.delivery_type);
+  const deArte = ehFormatoDeArte(item.delivery_type);
   return (
-    <li className="min-w-0 bg-card">
+    <li className="min-w-0 rounded-xl border border-border bg-card">
       <div className="flex min-w-0 items-start px-3 py-2.5">
         <button type="button" onClick={() => setAberto((v) => !v)} className="flex min-w-0 flex-1 items-start text-left" aria-expanded={aberto}>
           <ChevronDown className={`mr-1.5 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "" : "-rotate-90"}`} />
           <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.title}</span>
+            <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.title}</span>
             <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
               {dataCurta(item.due_date)} · {formatoDoItem(item.delivery_type)}
             </span>
-            <SeloDiscreto selo={selo} className="mt-1" />
+            {arte ? <SeloDaArte arte={arte} className="mt-1" /> : <SeloDiscreto selo={selo} className="mt-1" />}
           </span>
         </button>
         <Button type="button" variant="ghost" size="icon" className="ml-1 h-7 w-7 shrink-0" onClick={onTirar} aria-label="Tirar da seleção">
@@ -284,7 +230,7 @@ function ItemSelecionado({
               {posts.map((p) => `${rotuloDaPublicacao(p.status)} em ${dataCurta(p.dia)} às ${horaCurta(p.scheduled_at)}`).join(" · ")}
             </p>
           )}
-          {arte ? (
+          {deArte ? (
             onAbrir && (
               <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={onAbrir}>
                 <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
@@ -298,6 +244,12 @@ function ItemSelecionado({
     </li>
   );
 }
+
+const VISTAS: { valor: Vista; rotulo: string; Icone: typeof CalendarDays }[] = [
+  { valor: "mes", rotulo: "Mês", Icone: CalendarDays },
+  { valor: "semana", rotulo: "Semana", Icone: CalendarRange },
+  { valor: "lista", rotulo: "Lista", Icone: List },
+];
 
 export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskId: string, mes: string) => void }) {
   const mesa = useMesa();
@@ -313,11 +265,33 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
     setParams(next, { replace: true });
   };
 
+  const [vista, setVista] = useState<Vista>(lerVista);
+  const trocarVista = (v: Vista) => {
+    setVista(v);
+    try {
+      window.localStorage.setItem(CHAVE_DA_VISTA, v);
+    } catch {
+      /* sem armazenamento: vale só nesta visita */
+    }
+  };
+
   const [selecionados, mudarSelecao] = useSelecaoGuardada(clientId, mes);
   const [diasAbertos, setDiasAbertos] = useState<Record<string, boolean>>({});
+  // Semana escolhida dentro do mês (-1 = a última, ao voltar do mês seguinte).
+  const [semanaEscolhida, setSemanaEscolhida] = useState<{ mes: string; indice: number } | null>(null);
 
   const agenda = useAgendaDoMes(clientId, mes);
   const dados = agenda.data;
+
+  const artes = useArtesDoMes(
+    clientId,
+    mes,
+    dados ? dados.itens.map((i) => i.id) : [],
+    dados ? dados.posts.map((p) => ({ post_id: p.post_id, arquivo_id: p.arquivo_id || null })) : [],
+  );
+  const mapaDeArtes = artes.data || SEM_ARTES;
+  const arteDoItem = (id: string): ArteDoEstudioNaAgenda | null => doItem(mapaDeArtes.porItem, id) || null;
+  const arteDoPost = (id: string): ArteDoEstudioNaAgenda | null => doItem(mapaDeArtes.porPost, id) || null;
 
   const itensPorId = useMemo(() => {
     const m = new Map<string, ItemDaAgenda>();
@@ -348,8 +322,8 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
     return m;
   }, [dados]);
 
-  // Post ligado a um item da agenda aparece como o horário na pílula do item;
-  // só os posts soltos ganham pílula própria (menos coisa empilhada no dia).
+  // Post ligado a um item da agenda aparece dentro do cartão do item (cor da
+  // etapa e horário); só os posts soltos ganham cartão próprio.
   const postsSoltosPorDia = useMemo(() => {
     const m = new Map<string, PostDaAgenda[]>();
     for (const p of dados ? dados.posts : []) {
@@ -363,13 +337,23 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   const semanas = useMemo(() => semanasDoMes(mes), [mes]);
   const hoje = hojeLocal();
+  const mesAtual = inicioDoMes();
+
+  const indiceDaSemana = (() => {
+    if (semanaEscolhida && semanaEscolhida.mes === mes) {
+      return semanaEscolhida.indice < 0 ? semanas.length - 1 : Math.min(semanaEscolhida.indice, semanas.length - 1);
+    }
+    for (let i = 0; i < semanas.length; i++) if (semanas[i].indexOf(hoje) >= 0) return i;
+    return 0;
+  })();
 
   const seloDe = (item: ItemDaAgenda): Selo =>
     seloDoItem(item, dados ? doItem(dados.roteiros, item.id) : undefined, dados ? (doItem(dados.trabalhos, item.id) as TrabalhoDaAgenda | undefined) : undefined);
 
-  const horarioDe = (item: ItemDaAgenda): string | null => {
-    const posts = postsPorItem.get(item.id) || [];
-    return posts.length ? horaCurta(posts[0].scheduled_at) : null;
+  const resumoDe = (item: ItemDaAgenda): string | null => {
+    const r = dados ? doItem(dados.roteiros, item.id) : undefined;
+    const texto = (r && (r.gancho || r.tema)) || (item.description || "").trim();
+    return texto ? resumir(texto, 220) : null;
   };
 
   const alternar = (id: string) => mudarSelecao((s) => (s.indexOf(id) >= 0 ? s.filter((x) => x !== id) : s.concat([id])));
@@ -397,12 +381,23 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   const atualizarAgenda = () => {
     void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
     void queryClient.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
+  };
+
+  const irParaSelecao = () => {
+    try {
+      const el = document.getElementById("selecao-do-mes");
+      if (el) el.scrollIntoView({ block: "start" });
+    } catch {
+      /* navegador sem rolagem suave: nada a fazer */
+    }
   };
 
   const unicoDeArte = deArte.length === 1 ? deArte[0] : null;
 
-  const entradasDoDia = (dia: string, limitar: boolean) => {
+  /** Cartões de um dia: itens primeiro, depois os posts soltos. */
+  const entradasDoDia = (dia: string, tamanho: TamanhoDoCartao, limitar: boolean) => {
     const itens = itensPorDia.get(dia) || [];
     const posts = postsSoltosPorDia.get(dia) || [];
     const total = itens.length + posts.length;
@@ -411,37 +406,188 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
     const maxPosts = aberto ? posts.length : Math.max(0, Math.min(posts.length, POR_DIA - maxItens));
     const escondidos = total - maxItens - maxPosts;
     return (
-      <div className="min-w-0 space-y-1">
-        {itens.slice(0, maxItens).map((i) => (
-          <PilulaDoItem
-            key={i.id}
-            item={i}
-            selo={seloDe(i)}
-            marcado={selecionados.indexOf(i.id) >= 0}
-            horario={horarioDe(i)}
-            onToggle={() => alternar(i.id)}
-          />
-        ))}
-        {posts.slice(0, maxPosts).map((p) => <PilulaDoPost key={p.post_id} post={p} />)}
+      <div className={`min-w-0 ${tamanho === "grande" ? "space-y-2" : "space-y-1.5"}`}>
+        {itens.slice(0, maxItens).map((i) => {
+          const doItemPosts = postsPorItem.get(i.id) || [];
+          const post = doItemPosts.length ? doItemPosts[0] : null;
+          return (
+            <CartaoDoItem
+              key={i.id}
+              item={i}
+              selo={seloDe(i)}
+              arte={arteDoItem(i.id) || (post ? arteDoPost(post.post_id) : null)}
+              post={post}
+              marcado={selecionados.indexOf(i.id) >= 0}
+              onToggle={() => alternar(i.id)}
+              tamanho={tamanho}
+              resumo={tamanho === "grande" ? resumoDe(i) : null}
+            />
+          );
+        })}
+        {posts.slice(0, maxPosts).map((p) => <CartaoDoPost key={p.post_id} post={p} arte={arteDoPost(p.post_id)} tamanho={tamanho} />)}
         {limitar && (escondidos > 0 || (aberto && total > POR_DIA)) && (
           <button
             type="button"
             onClick={() => setDiasAbertos((d) => ({ ...d, [dia]: !aberto }))}
-            className="w-full rounded-md px-1 py-0.5 text-left text-[11px] font-medium text-primary hover:underline"
+            className="w-full rounded-md px-1 py-1 text-left text-[11.5px] font-medium text-primary hover:bg-primary/10"
           >
-            {aberto ? "mostrar menos" : `+${escondidos} ${escondidos === 1 ? "item" : "itens"}`}
+            {aberto ? "mostrar menos" : `+${escondidos} neste dia`}
           </button>
         )}
       </div>
     );
   };
 
-  const diasComConteudo = semanas
-    .reduce((acc: string[], s) => acc.concat(s.filter((d): d is string => !!d)), [])
-    .filter((d) => itensPorDia.has(d) || postsSoltosPorDia.has(d));
+  const diasDoMes = semanas.reduce((acc: string[], s) => acc.concat(s.filter((d): d is string => !!d)), []);
+  const diasComConteudo = diasDoMes.filter((d) => itensPorDia.has(d) || postsSoltosPorDia.has(d));
 
   const vazio = !!dados && dados.itens.length === 0 && dados.posts.length === 0;
-  const mesAtual = inicioDoMes();
+
+  const voltar = () => {
+    if (vista === "semana") {
+      if (indiceDaSemana > 0) setSemanaEscolhida({ mes, indice: indiceDaSemana - 1 });
+      else {
+        const anterior = somarMeses(mes, -1);
+        setSemanaEscolhida({ mes: anterior, indice: -1 });
+        setMes(anterior);
+      }
+      return;
+    }
+    setMes(somarMeses(mes, -1));
+  };
+  const avancar = () => {
+    if (vista === "semana") {
+      if (indiceDaSemana < semanas.length - 1) setSemanaEscolhida({ mes, indice: indiceDaSemana + 1 });
+      else {
+        const proximo = somarMeses(mes, 1);
+        setSemanaEscolhida({ mes: proximo, indice: 0 });
+        setMes(proximo);
+      }
+      return;
+    }
+    setMes(somarMeses(mes, 1));
+  };
+  const irParaHoje = () => {
+    setSemanaEscolhida(null);
+    setMes(mesAtual);
+  };
+
+  const semanaAtual = semanas[indiceDaSemana] || [];
+  const diasDaSemanaEscolhida = semanaAtual.filter((d): d is string => !!d);
+  const rotuloDaSemana = diasDaSemanaEscolhida.length
+    ? `${Number(diasDaSemanaEscolhida[0].slice(8, 10))} a ${Number(diasDaSemanaEscolhida[diasDaSemanaEscolhida.length - 1].slice(8, 10))}`
+    : "";
+
+  const cabecalhoDosDias = (
+    <div className="grid grid-cols-7 border-b border-border bg-muted">
+      {DIAS_DA_SEMANA.map((d, i) => (
+        <p key={d} className={`min-w-0 px-2.5 py-2 text-[11px] font-medium uppercase tracking-wider ${i >= 5 ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
+          {d}
+        </p>
+      ))}
+    </div>
+  );
+
+  const numeroDoDia = (dia: string) => (
+    <span
+      className={`inline-flex h-7 min-w-[28px] items-center justify-center rounded-full px-1 text-[12.5px] tabular-nums ${
+        dia === hoje ? "bg-primary font-semibold text-primary-foreground" : "text-muted-foreground"
+      }`}
+    >
+      {Number(dia.slice(8, 10))}
+    </span>
+  );
+
+  // Grade do mês: cada dia com pelo menos 150 px; em tela estreita a grade
+  // rola de lado dentro do próprio cartão, nunca espreme os dias.
+  const gradeDoMes = (
+    <div className="overflow-x-auto overscroll-x-contain" data-vista="mes">
+      <div className={LARGURA_MINIMA_DA_GRADE}>
+        {cabecalhoDosDias}
+        {semanas.map((semana, i) => (
+          <div key={i} className="grid grid-cols-7 border-b border-border last:border-b-0">
+            {semana.map((dia, j) => (
+              <div
+                key={dia || `vazio-${i}-${j}`}
+                data-dia={dia || undefined}
+                className={`min-h-[150px] min-w-0 border-r border-border p-2 last:border-r-0 ${dia ? (j >= 5 ? "bg-muted/40" : "bg-card") : "bg-muted"}`}
+              >
+                {dia && (
+                  <>
+                    <p className="mb-1.5 flex items-center">{numeroDoDia(dia)}</p>
+                    {entradasDoDia(dia, "mes", true)}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Semana: sete colunas com cartões grandes, sem limite por dia.
+  const gradeDaSemana = (
+    <div className="overflow-x-auto overscroll-x-contain" data-vista="semana">
+      <div className="min-w-[1190px]">
+        {cabecalhoDosDias}
+        <div className="grid grid-cols-7">
+          {semanaAtual.map((dia, j) => (
+            <div
+              key={dia || `vazio-${j}`}
+              data-dia={dia || undefined}
+              className={`min-h-[360px] min-w-0 border-r border-border p-2 last:border-r-0 ${dia ? (j >= 5 ? "bg-muted/40" : "bg-card") : "bg-muted"}`}
+            >
+              {dia && (
+                <>
+                  <p className="mb-2 flex items-center">{numeroDoDia(dia)}</p>
+                  <div className="max-h-[70vh] overflow-y-auto overscroll-contain pr-0.5">{entradasDoDia(dia, "mes", false)}</div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Lista: só os dias com conteúdo, cartões grandes; rolagem própria.
+  const lista = (
+    <div className="max-h-[75vh] min-w-0 divide-y divide-border overflow-y-auto overscroll-contain" data-vista="lista">
+      {diasComConteudo.map((dia) => (
+        <div key={dia} className="min-w-0 px-3 py-3 md:flex md:px-4">
+          <p className={`mb-2 text-[12.5px] font-medium first-letter:uppercase md:mb-0 md:mr-4 md:w-36 md:shrink-0 md:pt-1 ${dia === hoje ? "text-primary" : "text-muted-foreground"}`}>
+            {diaPorExtenso(dia)}
+            {dia === hoje ? " · hoje" : ""}
+          </p>
+          <div className="min-w-0 flex-1">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+              {(itensPorDia.get(dia) || []).map((i) => {
+                const doItemPosts = postsPorItem.get(i.id) || [];
+                const post = doItemPosts.length ? doItemPosts[0] : null;
+                return (
+                  <CartaoDoItem
+                    key={i.id}
+                    item={i}
+                    selo={seloDe(i)}
+                    arte={arteDoItem(i.id) || (post ? arteDoPost(post.post_id) : null)}
+                    post={post}
+                    marcado={selecionados.indexOf(i.id) >= 0}
+                    onToggle={() => alternar(i.id)}
+                    tamanho="grande"
+                    resumo={resumoDe(i)}
+                  />
+                );
+              })}
+              {(postsSoltosPorDia.get(dia) || []).map((p) => (
+                <CartaoDoPost key={p.post_id} post={p} arte={arteDoPost(p.post_id)} tamanho="grande" />
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <section id="agenda-do-mes" className="scroll-mt-40 space-y-3">
@@ -457,159 +603,144 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
       {agenda.isError && <AvisoDeErro erro={agenda.error} />}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-          {/* Cabeçalho: mês, contagem e atalho para hoje. */}
-          <div className="flex min-w-0 flex-wrap items-center border-b border-border px-2 py-2">
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setMes(somarMeses(mes, -1))} aria-label="Mês anterior">
-              <ChevronLeft className="h-4 w-4" />
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+        {/* Cabeçalho: mês (ou semana), vistas, contagem e seleção. */}
+        <div className="flex min-w-0 flex-wrap items-center border-b border-border px-2 py-2">
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={voltar} aria-label={vista === "semana" ? "Semana anterior" : "Mês anterior"}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <p className="mx-1 min-w-[140px] text-center text-[14.5px] font-semibold capitalize">
+            {rotuloDoMes(mes)}
+            {vista === "semana" && rotuloDaSemana && <span className="ml-1.5 text-[12px] font-normal normal-case text-muted-foreground">dias {rotuloDaSemana}</span>}
+          </p>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={avancar} aria-label={vista === "semana" ? "Próxima semana" : "Próximo mês"}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          {(mes !== mesAtual || (vista === "semana" && semanaAtual.indexOf(hoje) < 0)) && (
+            <Button type="button" variant="outline" size="sm" className="ml-1 h-7 px-2 text-[11.5px]" onClick={irParaHoje}>
+              Hoje
             </Button>
-            <p className="mx-1 min-w-[130px] text-center text-[14px] font-semibold capitalize">{rotuloDoMes(mes)}</p>
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setMes(somarMeses(mes, 1))} aria-label="Próximo mês">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            {mes !== mesAtual && (
-              <Button type="button" variant="outline" size="sm" className="ml-1 h-7 px-2 text-[11.5px]" onClick={() => setMes(mesAtual)}>
-                Hoje
-              </Button>
-            )}
-            <span className="ml-auto flex min-w-0 items-center px-2 text-[11.5px] text-muted-foreground">
-              {agenda.isFetching ? (
-                <>
-                  <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {agenda.isLoading ? "lendo a agenda" : "atualizando"}
-                </>
-              ) : dados && !vazio ? (
-                `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
-              ) : null}
-            </span>
-          </div>
-
-          {/* Computador: grade do mês, de segunda a domingo. */}
-          <div className="hidden min-w-0 md:block">
-            <div className="grid grid-cols-7 border-b border-border bg-muted">
-              {DIAS_DA_SEMANA.map((d, i) => (
-                <p key={d} className={`min-w-0 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider ${i >= 5 ? "text-muted-foreground/70" : "text-muted-foreground"}`}>
-                  {d}
-                </p>
-              ))}
-            </div>
-            {semanas.map((semana, i) => (
-              <div key={i} className="grid grid-cols-7 border-b border-border last:border-b-0">
-                {semana.map((dia, j) => (
-                  <div
-                    key={dia || `vazio-${i}-${j}`}
-                    className={`min-h-[118px] min-w-0 border-r border-border p-1.5 last:border-r-0 ${dia ? (j >= 5 ? "bg-muted/60" : "bg-card") : "bg-muted"}`}
-                  >
-                    {dia && (
-                      <>
-                        <p className="mb-1 flex items-center">
-                          <span
-                            className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1 text-[12px] tabular-nums ${
-                              dia === hoje ? "bg-primary font-semibold text-primary-foreground" : "text-muted-foreground"
-                            }`}
-                          >
-                            {Number(dia.slice(8, 10))}
-                          </span>
-                        </p>
-                        {entradasDoDia(dia, true)}
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* Celular: lista por dia, só os dias com conteúdo. */}
-          <div className="min-w-0 divide-y divide-border md:hidden">
-            {diasComConteudo.map((dia) => (
-              <div key={dia} className="min-w-0 px-3 py-2.5">
-                <p className={`mb-1.5 text-[12px] font-medium capitalize ${dia === hoje ? "text-primary" : "text-muted-foreground"}`}>
-                  {dataCurta(dia)}{dia === hoje ? " · hoje" : ""}
-                </p>
-                {entradasDoDia(dia, false)}
-              </div>
-            ))}
-          </div>
-
-          {vazio && (
-            <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
-              Nada na agenda deste mês. Planeje abaixo com o estrategista ou crie o item na Agenda.
-            </p>
           )}
-
-          <div className="flex min-w-0 flex-wrap items-center border-t border-border bg-muted px-3 py-2">
-            {(
-              [
-                { rotulo: "sem roteiro", tom: "neutro" },
-                { rotulo: "roteiro pronto", tom: "roteiro" },
-                { rotulo: "direção pronta", tom: "direcao" },
-                { rotulo: "arte em produção", tom: "producao" },
-                { rotulo: "arte pronta", tom: "pronto" },
-                { rotulo: "entregue ou em aprovação", tom: "entregue" },
-              ] as Selo[]
-            ).map((s) => (
-              <SeloDiscreto key={s.tom} selo={s} className="my-0.5 mr-3" />
+          <div role="tablist" aria-label="Vista da agenda" className="ml-2 hidden rounded-lg bg-muted p-0.5 md:flex">
+            {VISTAS.map((v) => (
+              <button
+                key={v.valor}
+                type="button"
+                role="tab"
+                aria-selected={vista === v.valor}
+                onClick={() => trocarVista(v.valor)}
+                className={`inline-flex h-7 items-center rounded-md px-2.5 text-[12px] font-medium ${
+                  vista === v.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <v.Icone className="mr-1 h-3.5 w-3.5" />
+                {v.rotulo}
+              </button>
             ))}
-            <span className="my-0.5 flex items-center text-[11px] text-muted-foreground">
-              <Clock className="mr-1 h-3 w-3" /> horário do post agendado
-            </span>
           </div>
+          <span className="ml-auto flex min-w-0 items-center px-2 text-[11.5px] text-muted-foreground">
+            {agenda.isFetching ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {agenda.isLoading ? "lendo a agenda" : "atualizando"}
+              </>
+            ) : dados && !vazio ? (
+              `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
+            ) : null}
+          </span>
+          {escolhidos.length > 0 && (
+            <Button type="button" size="sm" variant="secondary" className="mr-1 h-7 px-2.5 text-[11.5px]" onClick={irParaSelecao}>
+              {escolhidos.length} {escolhidos.length === 1 ? "selecionado" : "selecionados"}
+            </Button>
+          )}
         </div>
 
-        <aside className="min-w-0">
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="flex items-center border-b border-border px-3 py-2.5">
-              <p className="min-w-0 flex-1 text-[13px] font-medium">
-                Selecionados
-                <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{escolhidos.length}</span>
-              </p>
-              {escolhidos.length > 0 && (
-                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={limpar}>
-                  Limpar
+        {vista === "lista" ? (
+          lista
+        ) : (
+          <>
+            {/* Computador: a vista escolhida. */}
+            <div className="hidden min-w-0 md:block">{vista === "semana" ? gradeDaSemana : gradeDoMes}</div>
+            {/* Celular: lista por dia, cartões grandes. */}
+            <div className="min-w-0 md:hidden">{lista}</div>
+          </>
+        )}
+
+        {vazio && (
+          <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
+            Nada na agenda deste mês. Planeje abaixo com o estrategista ou crie o item na Agenda.
+          </p>
+        )}
+
+        <div className="flex min-w-0 flex-wrap items-center border-t border-border bg-muted px-3 py-2">
+          {LEGENDA_DAS_CORES.map((c) => (
+            <span key={c.rotulo} className="my-0.5 mr-3 flex items-center text-[11px] text-muted-foreground">
+              <span className={`mr-1.5 h-2 w-2 shrink-0 rounded-full ${c.ponto}`} />
+              {c.rotulo}
+            </span>
+          ))}
+          <span className="my-0.5 flex items-center text-[11px] text-muted-foreground">
+            <Clock className="mr-1 h-3 w-3" /> horário do post
+          </span>
+        </div>
+      </div>
+
+      {/* Seleção: abaixo do calendário, na largura toda, com rolagem própria. */}
+      <div id="selecao-do-mes" className="scroll-mt-40 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex min-w-0 flex-wrap items-center border-b border-border px-3 py-2.5">
+          <p className="mr-3 min-w-0 text-[13px] font-medium">
+            Selecionados
+            <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-normal text-muted-foreground">{escolhidos.length}</span>
+          </p>
+          {escolhidos.length > 0 && (
+            <div className="ml-auto flex flex-wrap items-center">
+              <BotaoComCusto
+                rotulo={
+                  <>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Completar e melhorar com o agente ({Math.min(idsParaCompletar.length, MAX_COMPLETAR)})
+                  </>
+                }
+                titulo="Completar e melhorar com o agente"
+                descricao="O estrategista escreve e melhora o roteiro de cada item (gancho, copy e o texto de cada card) sem trocar o tema, a data nem o formato, e deixa a direção pronta no Estúdio."
+                disabled={idsParaCompletar.length === 0 || demais}
+                fecharAoConfirmar
+                className="my-0.5 mr-1.5 h-8 text-[12.5px]"
+                partes={() => [
+                  {
+                    modeloId: modeloEstrategista?.id,
+                    tipo: "texto",
+                    tokensEntrada: TAMANHOS.completarItem.entrada,
+                    tokensSaida: TAMANHOS.completarItem.saidaPorItem * idsParaCompletar.length,
+                  },
+                ]}
+                executar={() => chamarFuncao("agente-calendario", { acao: "completar_itens", client_id: clientId, task_ids: idsParaCompletar })}
+                aoConcluir={(data) => {
+                  atualizarAgenda();
+                  const n = Array.isArray(data?.itens) ? data.itens.length : 0;
+                  const m = Number(data?.direcoes_prontas) || 0;
+                  avisarCustoReal(`${n} roteiro(s) pronto(s), ${m} direção(ões) pronta(s) no Estúdio`, data, mesa.atualizarCusto);
+                }}
+              />
+              {unicoDeArte && (
+                <Button type="button" size="sm" variant="outline" className="my-0.5 mr-1.5 h-8 text-[12.5px]" onClick={() => abrirNoEstudio(unicoDeArte)}>
+                  <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
                 </Button>
               )}
+              <Button type="button" size="sm" variant="ghost" className="my-0.5 h-8 px-2 text-[12px]" onClick={limpar}>
+                Limpar
+              </Button>
             </div>
+          )}
+        </div>
 
-            {escolhidos.length === 0 ? (
-              <p className="px-3 py-4 text-[12.5px] leading-relaxed text-muted-foreground">
-                Clique nos itens do calendário para ver o que já existe, completar e melhorar com o agente e abrir no Estúdio. A seleção fica guardada neste mês.
-              </p>
-            ) : (
-              <div className="space-y-2 border-b border-border px-3 py-3">
-                <BotaoComCusto
-                  rotulo={
-                    <>
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      Completar e melhorar com o agente ({Math.min(idsParaCompletar.length, MAX_COMPLETAR)})
-                    </>
-                  }
-                  titulo="Completar e melhorar com o agente"
-                  descricao="O estrategista escreve e melhora o roteiro de cada item (gancho, copy e o texto de cada card) sem trocar o tema, a data nem o formato, e deixa a direção pronta no Estúdio."
-                  disabled={idsParaCompletar.length === 0 || demais}
-                  fecharAoConfirmar
-                  className="h-9 w-full text-[12.5px]"
-                  partes={() => [
-                    {
-                      modeloId: modeloEstrategista?.id,
-                      tipo: "texto",
-                      tokensEntrada: TAMANHOS.completarItem.entrada,
-                      tokensSaida: TAMANHOS.completarItem.saidaPorItem * idsParaCompletar.length,
-                    },
-                  ]}
-                  executar={() => chamarFuncao("agente-calendario", { acao: "completar_itens", client_id: clientId, task_ids: idsParaCompletar })}
-                  aoConcluir={(data) => {
-                    atualizarAgenda();
-                    const n = Array.isArray(data?.itens) ? data.itens.length : 0;
-                    const m = Number(data?.direcoes_prontas) || 0;
-                    avisarCustoReal(`${n} roteiro(s) pronto(s), ${m} direção(ões) pronta(s) no Estúdio`, data, mesa.atualizarCusto);
-                  }}
-                />
-                {unicoDeArte && (
-                  <Button type="button" size="sm" variant="outline" className="h-9 w-full text-[12.5px]" onClick={() => abrirNoEstudio(unicoDeArte)}>
-                    <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
-                  </Button>
-                )}
+        {escolhidos.length === 0 ? (
+          <p className="px-3 py-3 text-[12.5px] leading-relaxed text-muted-foreground">
+            Clique nos itens do calendário para ver o que já existe, completar e melhorar com o agente e abrir no Estúdio. A seleção fica guardada neste mês.
+          </p>
+        ) : (
+          <>
+            {(demais || foraDoEstudio > 0) && (
+              <div className="space-y-1 border-b border-border px-3 py-2">
                 {demais && <p className="text-[11.5px] text-muted-foreground">O agente completa até {MAX_COMPLETAR} itens por vez. Tire alguns da seleção.</p>}
                 {foraDoEstudio > 0 && (
                   <p className="text-[11.5px] leading-snug text-muted-foreground">
@@ -618,25 +749,23 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                 )}
               </div>
             )}
-
-            {escolhidos.length > 0 && (
-              <ul className="max-h-[560px] divide-y divide-border overflow-y-auto overscroll-contain">
-                {escolhidos.map((i) => (
-                  <ItemSelecionado
-                    key={i.id}
-                    item={i}
-                    selo={seloDe(i)}
-                    roteiro={dados ? doItem(dados.roteiros, i.id) : undefined}
-                    posts={postsPorItem.get(i.id) || []}
-                    abertoDeInicio={escolhidos.length === 1}
-                    onTirar={() => alternar(i.id)}
-                    onAbrir={ehFormatoDeArte(i.delivery_type) ? () => abrirNoEstudio(i) : null}
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
+            <ul className="grid max-h-[560px] grid-cols-1 gap-2 overflow-y-auto overscroll-contain p-3 lg:grid-cols-2">
+              {escolhidos.map((i) => (
+                <ItemSelecionado
+                  key={i.id}
+                  item={i}
+                  selo={seloDe(i)}
+                  arte={arteDoItem(i.id)}
+                  roteiro={dados ? doItem(dados.roteiros, i.id) : undefined}
+                  posts={postsPorItem.get(i.id) || []}
+                  abertoDeInicio={escolhidos.length === 1}
+                  onTirar={() => alternar(i.id)}
+                  onAbrir={ehFormatoDeArte(i.delivery_type) ? () => abrirNoEstudio(i) : null}
+                />
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     </section>
   );

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Circle, CircleDashed, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { Check, Circle, CircleDashed, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import CartaoMarca, { ChipsDaPaleta } from "./ContextoCartaoMarca";
 import FotosDoCliente from "./ContextoFotos";
 import GaleriaDeReferencias from "./ContextoGaleriaDeReferencias";
+import { BarraDoScore, Hub, useHubsAbertos } from "./ContextoHub";
 import { useMesa } from "./MesaContexto";
 import type { ParteDoContexto } from "./AbaContexto";
 import {
@@ -21,6 +22,7 @@ import {
   useKitDoCliente,
   useLeituraDoContexto,
   useReferenciasDoCliente,
+  scoreDoConsolidado,
   type KitDoContexto,
   type RespostaDoMontar,
   type SugestoesDoContexto,
@@ -200,69 +202,19 @@ function Completude({ itens, onIr }: { itens: ItemDoChecklist[]; onIr: (secao: S
   );
 }
 
-// ------------------------------------------------------------------ cartões
+// ------------------------------------------------------------------ hubs
 
-function Cartao({
-  id,
-  titulo,
-  meta,
-  acao,
-  children,
-  className = "",
-}: {
-  id?: SecaoDoContexto;
-  titulo: string;
-  meta?: ReactNode;
-  acao?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section id={id} className={`flex min-w-0 scroll-mt-36 flex-col rounded-xl border border-border bg-card p-3.5 md:scroll-mt-52 sm:p-4 ${className}`}>
-      <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between">
-        <div className="mr-2 min-w-0">
-          <h3 className="text-[13px] font-semibold text-foreground">{titulo}</h3>
-          {meta && <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{meta}</p>}
-        </div>
-        {acao && <div className="flex shrink-0 items-center">{acao}</div>}
-      </div>
-      {children}
-    </section>
-  );
+/** Score de um item do checklist (100, 50 ou 0); null enquanto lê. */
+export function scoreDoItem(item: ItemDoChecklist | undefined): number | null {
+  if (!item || item.situacao === "carregando") return null;
+  return item.situacao === "feito" ? 100 : item.situacao === "parcial" ? 50 : 0;
 }
 
-function CartaoRecolhivel({
-  id,
-  titulo,
-  resumo,
-  aberto,
-  onAlternar,
-  children,
-}: {
-  id?: SecaoDoContexto;
-  titulo: string;
-  resumo: ReactNode;
-  aberto: boolean;
-  onAlternar: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <section id={id} className="min-w-0 scroll-mt-36 rounded-xl border border-border bg-card md:scroll-mt-52">
-      <button
-        type="button"
-        onClick={onAlternar}
-        aria-expanded={aberto}
-        className="flex w-full min-w-0 items-center px-3.5 py-3 text-left sm:px-4"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-semibold text-foreground">{titulo}</span>
-          <span className="block truncate text-[11.5px] text-muted-foreground">{resumo}</span>
-        </span>
-        <ChevronDown className={`ml-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
-      </button>
-      {aberto && <div className="min-w-0 border-t border-border px-3.5 pb-3.5 pt-3 sm:px-4">{children}</div>}
-    </section>
-  );
+/** Score de um grupo de itens (média); null enquanto algum ainda lê. */
+export function scoreDoGrupo(itens: ItemDoChecklist[], chaves: string[]): number | null {
+  const doGrupo = itens.filter((i) => chaves.indexOf(i.chave) >= 0);
+  if (!doGrupo.length || doGrupo.some((i) => i.situacao === "carregando")) return null;
+  return completude(doGrupo);
 }
 
 function Esqueleto({ linhas = 3 }: { linhas?: number }) {
@@ -334,29 +286,113 @@ function CampoRecolhido({ campo, onEditar }: { campo: CampoDoConsolidado; onEdit
   );
 }
 
-function ContextoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto | null | undefined; carregando: boolean; onEditar?: () => void }) {
+const NOME_DO_NIVEL: Record<string, string> = { vazio: "vazio", curto: "curto", medio: "quase", completo: "completo" };
+
+/** Painel do score: número, barra e o que falta para subir. */
+function PainelDoScore({ kit }: { kit: KitDoContexto | null | undefined }) {
+  const r = scoreDoConsolidado(kit);
+  const [todas, setTodas] = useState(false);
+  const faltas = todas ? r.faltas : r.faltas.slice(0, 4);
+  return (
+    <div className="grid min-w-0 grid-cols-1 gap-3 rounded-xl border border-border bg-muted/40 p-3 md:grid-cols-[180px_minmax(0,1fr)]">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Score do contexto</p>
+        <p className="mt-0.5 flex items-baseline">
+          <span className="text-[30px] font-semibold leading-none tabular-nums text-foreground">{r.score}</span>
+          <span className="ml-1 text-[12px] text-muted-foreground">de 100</span>
+        </p>
+        <div className="mt-2 flex items-center">
+          <BarraDoScore score={r.score} />
+        </div>
+        <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+          {r.completos} de {r.campos.length} campos completos
+        </p>
+        <ul className="mt-2 flex min-w-0 flex-wrap" aria-label="Campos do score">
+          {r.campos.map((c) => (
+            <li
+              key={c.chave}
+              title={`${c.rotulo}: ${NOME_DO_NIVEL[c.nivel]} (${c.pontos} de ${c.peso})`}
+              className={`mb-1 mr-1 rounded-full px-1.5 py-px text-[10.5px] ${
+                c.nivel === "completo" ? "bg-success/15 text-foreground" : c.nivel === "vazio" ? "bg-card text-muted-foreground" : "bg-warning/15 text-foreground"
+              }`}
+            >
+              {c.rotulo}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Para subir o score</p>
+        {r.faltas.length === 0 ? (
+          <p className="mt-1.5 text-[12.5px] text-foreground">Contexto completo. O agente segue aprendendo com cada conversa.</p>
+        ) : (
+          <>
+            <ul className="mt-1.5 space-y-1">
+              {faltas.map((f) => (
+                <li key={f.chave} className="flex min-w-0 items-start text-[12.5px] leading-snug">
+                  <span className="mr-2 mt-px shrink-0 rounded-full bg-card px-1.5 py-px text-[10.5px] font-semibold tabular-nums text-primary">+{f.ganho}</span>
+                  <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{f.texto}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[11.5px] text-muted-foreground">
+              Conte ao agente de contexto ao lado (dá para falar no microfone) ou clique em Atualizar contexto.
+              {r.faltas.length > 4 && (
+                <button type="button" onClick={() => setTodas((v) => !v)} className="ml-1 font-medium text-foreground hover:underline" aria-expanded={todas}>
+                  {todas ? "Ver menos" : `Ver as ${r.faltas.length}`}
+                </button>
+              )}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CorpoDoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto | null | undefined; carregando: boolean; onEditar?: () => void }) {
   const { cheios, vazios } = camposDoConsolidado(kit);
   const fontesLidas = ((kit && kit.contexto && Array.isArray(kit.contexto.fontes_lidas) ? kit.contexto.fontes_lidas : []) as string[]).filter(temTexto);
   const [verFontes, setVerFontes] = useState(false);
+  if (carregando && !kit) {
+    return (
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="rounded-lg border border-border p-2.5">
+            <Esqueleto linhas={2} />
+          </div>
+        ))}
+      </div>
+    );
+  }
   return (
-    <Cartao
-      id="ctx-consolidado"
-      titulo="Contexto consolidado"
-      meta={
-        kit && kit.contexto_atualizado_em
-          ? `Montado ${dataEHora(kit.contexto_atualizado_em)}${fontesLidas.length ? ` a partir de ${fontesLidas.length} ${fontesLidas.length === 1 ? "fonte" : "fontes"}` : ""}`
-          : "Ainda não montado"
-      }
-      acao={
-        fontesLidas.length ? (
+    <div className="min-w-0 space-y-3">
+      <PainelDoScore kit={kit} />
+      {cheios.length === 0 ? (
+        <p className="text-[12.5px] text-muted-foreground">Ainda não há contexto montado. Clique em "Montar contexto" ou conte ao agente o que sabe da marca.</p>
+      ) : (
+        <div className="-mr-1.5 max-h-[55vh] min-w-0 overflow-y-auto overscroll-contain pr-1.5">
+          <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
+            {cheios.map((campo) => (
+              <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="flex min-w-0 flex-wrap items-center justify-between">
+        {cheios.length > 0 && vazios.length > 0 ? (
+          <p className="mr-2 min-w-0 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Ainda sem: {vazios.join(", ")}.</p>
+        ) : (
+          <span />
+        )}
+        {fontesLidas.length > 0 && (
           <button type="button" onClick={() => setVerFontes((v) => !v)} className="text-[11.5px] font-medium text-foreground hover:underline" aria-expanded={verFontes}>
-            {verFontes ? "Esconder fontes" : "Ver fontes lidas"}
+            {verFontes ? "Esconder fontes lidas" : `Ver as ${fontesLidas.length} fontes lidas`}
           </button>
-        ) : undefined
-      }
-    >
+        )}
+      </div>
       {verFontes && (
-        <ul className="mb-3 flex min-w-0 flex-wrap">
+        <ul className="flex min-w-0 flex-wrap">
           {fontesLidas.map((f) => (
             <li key={f} className="mb-1 mr-1 min-w-0 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground" title={f}>
               {f}
@@ -364,27 +400,7 @@ function ContextoConsolidado({ kit, carregando, onEditar }: { kit: KitDoContexto
           ))}
         </ul>
       )}
-      {carregando && !kit ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="rounded-lg border border-border p-2.5">
-              <Esqueleto linhas={2} />
-            </div>
-          ))}
-        </div>
-      ) : cheios.length === 0 ? (
-        <p className="text-[12.5px] text-muted-foreground">Ainda não há contexto montado. Clique em "Montar contexto" ou conte ao agente o que sabe da marca.</p>
-      ) : (
-        <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2">
-          {cheios.map((campo) => (
-            <CampoRecolhido key={campo.chave} campo={campo} onEditar={onEditar} />
-          ))}
-        </div>
-      )}
-      {cheios.length > 0 && vazios.length > 0 && (
-        <p className="mt-2.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Ainda sem: {vazios.join(", ")}.</p>
-      )}
-    </Cartao>
+    </div>
   );
 }
 
@@ -452,10 +468,33 @@ function SugestoesPendentes({
 
 // ------------------------------------------------------------------ tela
 
+const RESUMO_DA_LOGO: Record<SituacaoDoItem, string> = {
+  feito: "logo e alternativa",
+  parcial: "logo sem alternativa",
+  falta: "sem logo",
+  carregando: "",
+};
+
+/** Hubs abertos na primeira visita: só a Marca; o resto começa recolhido. */
+const HUBS_ABERTOS_DE_INICIO: Record<string, boolean> = { "ctx-marca": true };
+
+const ROTULO_DO_CAMPO_DO_SCORE: Record<string, string> = {
+  negocio: "negócio",
+  publico: "público",
+  oferta: "oferta",
+  tom_de_voz: "tom de voz",
+  diferenciais: "diferenciais",
+  tipografia: "tipografia",
+  logo: "logo",
+  estilo: "estilo",
+  regras: "regras",
+};
+
 /**
  * Coluna principal da aba Contexto: topo compacto (completude e checklist em
- * chips), cartões sólidos lado a lado (Marca, Referências, Fotos reais,
- * Contexto consolidado, Documentos, Pendências). Cada cartão lê o que precisa
+ * chips) e hubs recolhíveis, um embaixo do outro, cada um com resumo e score
+ * (Marca, Contexto consolidado, Referências, Fotos reais, Documentos e
+ * pendências). Pedido do dono em 23/09: organizado em caixinhas, sem poluir. Cada cartão lê o que precisa
  * direto do banco; o "ler" do agente (documentos, candidatos a logo,
  * pendências) chega em até ~1,5 s e nunca esconde a tela inteira.
  */
@@ -474,8 +513,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const [erroDoMontar, setErroDoMontar] = useState<{ clientId: string; erro: unknown } | null>(null);
   const [sugestoesPorCliente, setSugestoesPorCliente] = useState<Record<string, SugestoesDoContexto>>({});
   const [aplicando, setAplicando] = useState<string | null>(null);
-  const [docsAbertos, setDocsAbertos] = useState(false);
-  const [pendenciasAbertas, setPendenciasAbertas] = useState(false);
+  const hubs = useHubsAbertos(HUBS_ABERTOS_DE_INICIO);
 
   const dados = leitura.data;
   // O kit da tabela responde antes do "ler"; o do "ler" cobre enquanto isso.
@@ -572,7 +610,7 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   }, [dados, clientId, queryClient]);
 
   const irParaSecao = (secao: SecaoDoContexto) => {
-    if (secao === "ctx-documentos") setDocsAbertos(true);
+    hubs.definir(secao, true);
     window.setTimeout(() => {
       const el = document.getElementById(secao);
       if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -607,9 +645,13 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
   const modeloDoContexto = padraoDoContexto(catalogo);
   const docs = documentos || [];
   const docsDeIdentidade = docs.filter((d) => d.prioridade).length;
+  const consolidado = scoreDoConsolidado(kit);
+  const item = (chave: string) => itens.find((i) => i.chave === chave);
+  const paletaDoKit = kit && Array.isArray(kit.paleta) ? kit.paleta : [];
+  const fontesDoResumo = item("fontes");
 
   return (
-    <div className="min-w-0 space-y-4">
+    <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 flex-wrap items-center justify-between">
         <div className="mb-1 mr-3 min-w-0">
           <h2 className="truncate text-[15px] font-semibold text-foreground">Contexto{clientName ? ` de ${clientName}` : ""}</h2>
@@ -688,108 +730,149 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
         onIgnorar={(campo) => tirarSugestao(clientId, campo)}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        <Cartao
-          id="ctx-marca"
-          titulo="Marca"
-          acao={
-            onIrPara ? (
-              <button type="button" onClick={() => onIrPara("marca")} className="text-[11.5px] font-medium text-foreground hover:underline">
-                Editar marca
-              </button>
-            ) : undefined
-          }
-        >
-          <CartaoMarca
-            kit={kit}
-            candidatos={dados ? dados.candidatos_a_logo : []}
-            carregando={carregandoKit}
-            onEditar={onIrPara ? () => onIrPara("marca") : undefined}
-          />
-        </Cartao>
-        <Cartao
-          id="ctx-referencias"
-          titulo="Referências"
-          meta={
-            refsAtivas
-              ? refsAtivas.length
-                ? `${refsAtivas.length} em uso pelo diretor de arte`
-                : "Nenhuma em uso"
-              : "Lendo..."
-          }
-        >
-          <GaleriaDeReferencias
-            contextoMontado={contextoMontado}
-            onGerenciar={onIrPara ? () => onIrPara("referencias") : undefined}
-            aoLer={(data) => depoisDeMontar(clientId, data)}
-          />
-        </Cartao>
-      </div>
+      <Hub
+        id="ctx-marca"
+        titulo="Marca"
+        score={scoreDoGrupo(itens, ["logo", "paleta", "fontes"])}
+        resumo={
+          carregandoKit
+            ? "Lendo a marca..."
+            : [
+                paletaDoKit.length ? `${paletaDoKit.length} ${paletaDoKit.length === 1 ? "cor" : "cores"}` : "sem paleta",
+                RESUMO_DA_LOGO[(item("logo") || { situacao: "falta" }).situacao],
+                fontesDoResumo && fontesDoResumo.situacao !== "carregando" ? fontesDoResumo.detalhe.replace(/\.$/, "") : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")
+        }
+        aberto={hubs.aberto("ctx-marca")}
+        onAlternar={() => hubs.alternar("ctx-marca")}
+        acao={
+          onIrPara ? (
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => onIrPara("marca")}>
+              Editar
+            </Button>
+          ) : undefined
+        }
+      >
+        <CartaoMarca
+          kit={kit}
+          candidatos={dados ? dados.candidatos_a_logo : []}
+          carregando={carregandoKit}
+          onEditar={onIrPara ? () => onIrPara("marca") : undefined}
+        />
+      </Hub>
 
-      <Cartao id="ctx-fotos" titulo="Fotos reais">
+      <Hub
+        id="ctx-consolidado"
+        titulo="Contexto consolidado"
+        score={carregandoKit && !kit ? null : consolidado.score}
+        resumo={
+          carregandoKit && !kit
+            ? "Lendo..."
+            : `${consolidado.completos} de ${consolidado.campos.length} campos completos${
+                consolidado.faltas.length ? ` · falta: ${consolidado.faltas.slice(0, 3).map((f) => ROTULO_DO_CAMPO_DO_SCORE[f.chave] || f.chave).join(", ")}` : ""
+              }`
+        }
+        aberto={hubs.aberto("ctx-consolidado")}
+        onAlternar={() => hubs.alternar("ctx-consolidado")}
+      >
+        <CorpoDoConsolidado kit={kit} carregando={carregandoKit} onEditar={onIrPara ? () => onIrPara("marca") : undefined} />
+      </Hub>
+
+      <Hub
+        id="ctx-referencias"
+        titulo="Referências"
+        score={scoreDoItem(item("referencias"))}
+        resumo={
+          refsAtivas
+            ? refsAtivas.length
+              ? `${refsAtivas.length} em uso pelo diretor de arte · ${(item("referencias") || { detalhe: "" }).detalhe.replace(/\.$/, "")}`
+              : "Nenhuma em uso"
+            : "Lendo..."
+        }
+        aberto={hubs.aberto("ctx-referencias")}
+        onAlternar={() => hubs.alternar("ctx-referencias")}
+        rolagem
+      >
+        <GaleriaDeReferencias
+          contextoMontado={contextoMontado}
+          onGerenciar={onIrPara ? () => onIrPara("referencias") : undefined}
+          aoLer={(data) => depoisDeMontar(clientId, data)}
+        />
+      </Hub>
+
+      <Hub
+        id="ctx-fotos"
+        titulo="Fotos reais"
+        score={scoreDoItem(item("imagens"))}
+        resumo={(item("imagens") || { detalhe: "" }).detalhe}
+        aberto={hubs.aberto("ctx-fotos")}
+        onAlternar={() => hubs.alternar("ctx-fotos")}
+        rolagem
+      >
         <FotosDoCliente onOrganizar={onIrPara ? () => onIrPara("imagens") : undefined} />
-      </Cartao>
+      </Hub>
 
-      <ContextoConsolidado kit={kit} carregando={carregandoKit} onEditar={onIrPara ? () => onIrPara("marca") : undefined} />
-
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-        <CartaoRecolhivel
-          id="ctx-documentos"
-          titulo="Documentos"
-          resumo={
-            documentos
-              ? documentos.length
-                ? `${documentos.length} lido(s), ${docsDeIdentidade} de identidade · dossiê ${dados!.encontrado.tem_dossie ? "sim" : "não"} · ${dados!.encontrado.artes_aprovadas} artes aprovadas`
-                : "Nenhum documento em Arquivos"
-              : leitura.isError
-                ? "Não foi possível ler agora"
-                : "Lendo..."
-          }
-          aberto={docsAbertos}
-          onAlternar={() => setDocsAbertos((v) => !v)}
-        >
-          {!documentos ? (
-            <Esqueleto linhas={3} />
-          ) : documentos.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground">Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho.</p>
-          ) : (
-            <ul className="space-y-1">
-              {documentos.map((d) => (
-                <li key={d.file_id} className="flex min-w-0 items-center text-[12.5px]">
-                  <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate" title={d.nome}>{d.nome}</span>
-                  {d.prioridade && <span className="ml-2 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">identidade</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CartaoRecolhivel>
-        <CartaoRecolhivel
-          titulo="Pendências do agente"
-          resumo={
-            dados || kit
-              ? lacunas.length
-                ? `${lacunas.length} ${lacunas.length === 1 ? "pendência" : "pendências"}`
-                : "Nada pendente"
+      <Hub
+        id="ctx-documentos"
+        titulo="Documentos e pendências"
+        score={scoreDoItem(item("documentos"))}
+        resumo={
+          documentos
+            ? `${documentos.length ? `${documentos.length} lido(s), ${docsDeIdentidade} de identidade` : "Nenhum documento em Arquivos"} · ${
+                lacunas.length ? `${lacunas.length} ${lacunas.length === 1 ? "pendência" : "pendências"}` : "nada pendente"
+              }`
+            : leitura.isError
+              ? "Não foi possível ler agora"
               : "Lendo..."
-          }
-          aberto={pendenciasAbertas}
-          onAlternar={() => setPendenciasAbertas((v) => !v)}
-        >
-          {lacunas.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground">O agente não aponta nada faltando.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {lacunas.map((l) => (
-                <li key={l} className="flex min-w-0 items-start text-[12.5px] leading-relaxed">
-                  <Circle className="mr-2 mt-1.5 h-2.5 w-2.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 [overflow-wrap:anywhere]">{l}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CartaoRecolhivel>
-      </div>
+        }
+        aberto={hubs.aberto("ctx-documentos")}
+        onAlternar={() => hubs.alternar("ctx-documentos")}
+      >
+        <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="min-w-0">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Documentos</p>
+            {dados && (
+              <p className="mb-2 text-[11.5px] text-muted-foreground">
+                Dossiê {dados.encontrado.tem_dossie ? "lido" : "ainda não existe"} · {dados.encontrado.artes_aprovadas} artes aprovadas
+              </p>
+            )}
+            {!documentos ? (
+              <Esqueleto linhas={3} />
+            ) : documentos.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">Envie o manual de marca, o posicionamento ou a apresentação em Arquivos: o agente lê sozinho.</p>
+            ) : (
+              <ul className="-mr-1.5 max-h-[40vh] space-y-1 overflow-y-auto overscroll-contain pr-1.5">
+                {documentos.map((d) => (
+                  <li key={d.file_id} className="flex min-w-0 items-center rounded-lg px-1.5 py-1 text-[12.5px] hover:bg-muted/50">
+                    <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate" title={d.nome}>{d.nome}</span>
+                    {d.prioridade && <span className="ml-2 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">identidade</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Pendências do agente</p>
+            {!(dados || kit) ? (
+              <Esqueleto linhas={2} />
+            ) : lacunas.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground">O agente não aponta nada faltando.</p>
+            ) : (
+              <ul className="-mr-1.5 max-h-[40vh] space-y-1.5 overflow-y-auto overscroll-contain pr-1.5">
+                {lacunas.map((l) => (
+                  <li key={l} className="flex min-w-0 items-start text-[12.5px] leading-relaxed">
+                    <Circle className="mr-2 mt-1.5 h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 [overflow-wrap:anywhere]">{l}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </Hub>
     </div>
   );
 }

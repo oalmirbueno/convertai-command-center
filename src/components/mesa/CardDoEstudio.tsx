@@ -23,19 +23,23 @@ import { rolarAte } from "./EstudioAltura";
 import { ImagemDaMesa } from "./MesaContexto";
 import Moldura45 from "./Moldura45";
 import { funcaoDaLamina } from "./PranchetaDoEstudio";
-import SeletorDoAcervo, { FotoDoAcervo, ROTULO_DA_CATEGORIA, useAcervo, type ImagemDoAcervo } from "./SeletorDoAcervo";
+import SeletorDoAcervo, { FotoDoAcervo, useAcervo } from "./SeletorDoAcervo";
 import type { Area } from "./estudioUtil";
 import type { CardDaDirecao, CardGerado, Verificacao } from "./useItensDoMes";
 
 /**
- * Aba "Lâmina" do inspetor do Estúdio. A imagem grande fica no centro da
- * tela (EstudioLaminaGrande); aqui ficam, numa coluna só e nesta ordem: gerar
- * ou refazer, a conferência numa linha de selos, o texto exato (editável),
- * os três ajustes (pedido livre, uma área marcada na lâmina grande, só o
- * fundo), a foto real do acervo e as versões em miniatura.
+ * Ferramenta "Lâmina" do Estúdio (painel deslizante da barra de
+ * ferramentas). A imagem grande fica no centro da tela
+ * (EstudioLaminaGrande); aqui ficam, numa coluna só e nesta ordem: gerar ou
+ * refazer, a conferência numa linha de selos, o texto exato (editável), os
+ * três ajustes (pedido livre, uma área marcada na lâmina grande, só o fundo)
+ * e as versões em miniatura. As fotos reais para compor têm ferramenta
+ * própria (EstudioFotos).
  *
  * O texto exato fica AO LADO da arte, como conferência, nunca desenhado por
  * cima dela. Tudo que gasta passa pelo BotaoComCusto, com o preço ao lado.
+ * Com a lâmina em andamento, os botões ficam só desabilitados, sem girar:
+ * o indicador da lâmina é um só, na prancheta.
  */
 
 export type PainelDaLamina = "direcao" | "livre" | "areas" | "fundo" | "versoes";
@@ -90,7 +94,7 @@ function Conferencia({ versao, conferindo, acaoConferir }: { versao: CardGerado;
       <div className="flex min-h-9 min-w-0 items-center rounded-lg border border-border bg-background px-2.5 py-1">
         <span className="mr-2 text-[11.5px] font-medium">Conferência</span>
         {conferindo ? (
-          <span className="inline-flex items-center text-[11.5px] text-muted-foreground"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> conferindo</span>
+          <span className="text-[11.5px] text-muted-foreground">em andamento</span>
         ) : (
           <>
             <span className="mr-auto text-[11.5px] text-muted-foreground">não feita</span>
@@ -106,7 +110,6 @@ function Conferencia({ versao, conferindo, acaoConferir }: { versao: CardGerado;
     <div className="rounded-lg border border-border bg-background">
       <button type="button" onClick={() => setAberta((a) => !a)} aria-expanded={aberta} className="flex min-h-9 w-full min-w-0 items-center rounded-lg px-2.5 py-1 text-left hover:bg-secondary">
         <span className="mr-2 shrink-0 text-[11.5px] font-medium">Conferência</span>
-        {conferindo && <Loader2 className="mr-1.5 h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
         <span className="flex min-w-0 flex-1 overflow-hidden">{v && <SelosDaConferencia v={v} />}</span>
         <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} />
       </button>
@@ -144,6 +147,23 @@ function Rotulo({ children, acao }: { children: ReactNode; acao?: ReactNode }) {
   );
 }
 
+type PropsDoBotao = Parameters<typeof BotaoComCusto>[0];
+
+/**
+ * Ação que gasta, desta lâmina. Em andamento, vira um botão desabilitado com
+ * o mesmo rótulo (sem spinner nem preço): o andamento aparece só na prancheta.
+ */
+function BotaoDaLamina({ emAndamento, ...props }: PropsDoBotao & { emAndamento: boolean }) {
+  if (emAndamento) {
+    return (
+      <Button type="button" variant={props.variant || "default"} size={props.size || "sm"} className={props.className} disabled>
+        {props.rotulo}
+      </Button>
+    );
+  }
+  return <BotaoComCusto {...props} />;
+}
+
 const MODOS_DE_AJUSTE: { valor: "livre" | "areas" | "fundo"; rotulo: string; dica: string; icone: ReactNode }[] = [
   { valor: "livre", rotulo: "Livre", dica: "Descreva a mudança; o gerador edita a lâmina inteira", icone: <MessageSquare className="mr-1 h-3.5 w-3.5" /> },
   { valor: "areas", rotulo: "Área", dica: "Marque uma área na lâmina grande; só ela muda", icone: <Crop className="mr-1 h-3.5 w-3.5" /> },
@@ -156,7 +176,6 @@ export default function CardDoEstudio({
   versoes,
   ocupado,
   conferindo,
-  gerandoDesde,
   painel,
   onPainel,
   versaoVista,
@@ -175,11 +194,10 @@ export default function CardDoEstudio({
   conversaId: string | null;
   direcao: CardDaDirecao;
   versoes: CardGerado[];
-  /** Esta lâmina está gerando, ajustando ou na fila agora. */
+  /** Esta lâmina está na fila, gerando, ajustando ou na conferência (ou o trabalho já foi entregue). */
   ocupado: boolean;
   /** Este card está na conferência agora (depois de gerar ou ajustar). */
   conferindo: boolean;
-  gerandoDesde?: number;
   painel: PainelDaLamina;
   onPainel: (p: PainelDaLamina) => void;
   /** Versão mostrada na lâmina grande do centro. */
@@ -202,8 +220,7 @@ export default function CardDoEstudio({
   const ultima = ordenadas[ordenadas.length - 1] || null;
   const [instrucao, setInstrucao] = useState("");
   const [fundoId, setFundoId] = useState<string | null>(null);
-  const [acervoAberto, setAcervoAberto] = useState<"lamina" | "fundo" | null>(null);
-  const [salvandoFoto, setSalvandoFoto] = useState(false);
+  const [acervoAberto, setAcervoAberto] = useState<"fundo" | null>(null);
   const [editandoTexto, setEditandoTexto] = useState(false);
   const [texto, setTexto] = useState(direcao.texto_exato || "");
   const [salvandoTexto, setSalvandoTexto] = useState(false);
@@ -225,12 +242,8 @@ export default function CardDoEstudio({
   const vista = ordenadas.find((v) => v.versao === versaoVista) || ultima;
   const modoAjuste: "livre" | "areas" | "fundo" = painel === "areas" || painel === "fundo" ? painel : "livre";
 
-  const fotosIds = direcao.imagens_ids || [];
-  const precisaAcervo = fotosIds.length > 0 || !!fundoId || acervoAberto !== null;
-  const acervo = useAcervo(precisaAcervo);
-  const achar = (id: string | null): ImagemDoAcervo | null => (id ? (acervo.data || []).find((i) => i.id === id) || null : null);
-  const foto = achar(fotosIds[0] || null);
-  const fundo = achar(fundoId);
+  const acervo = useAcervo(!!fundoId || acervoAberto !== null);
+  const fundo = fundoId ? (acervo.data || []).find((i) => i.id === fundoId) || null : null;
 
   const pedidos = useQuery({
     queryKey: ["mesa", "ajustes", conversaId, direcao.ordem],
@@ -248,21 +261,6 @@ export default function CardDoEstudio({
       });
     },
   });
-
-  const escolherFoto = async (i: ImagemDoAcervo | null) => {
-    setSalvandoFoto(true);
-    try {
-      await onConfigurar({ imagens_ids: i ? [i.id] : [] });
-      setAcervoAberto(null);
-      toast.success(i ? "Foto real ligada à lâmina" : "Foto real removida", {
-        description: i && ultima ? "Gere a lâmina de novo para usar a foto." : undefined,
-      });
-    } catch (e) {
-      toast.error("Não foi possível salvar", { description: textoDoErro(e) });
-    } finally {
-      setSalvandoFoto(false);
-    }
-  };
 
   const salvarTexto = async () => {
     setSalvandoTexto(true);
@@ -285,7 +283,8 @@ export default function CardDoEstudio({
   };
 
   const acaoConferir = vista && vista.versao === ultima?.versao ? (
-    <BotaoComCusto
+    <BotaoDaLamina
+      emAndamento={ocupado}
       rotulo={<><RefreshCw className="mr-1 h-3 w-3" /> Conferir</>}
       titulo={`Conferir a lâmina ${direcao.ordem}`}
       descricao="A leitura compara o texto da imagem com o texto exato e o Jev confere a identidade."
@@ -308,10 +307,11 @@ export default function CardDoEstudio({
             <span className="font-normal text-muted-foreground"> · {funcaoDaLamina(direcao)}</span>
           </p>
           <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-            {gerandoDesde !== undefined ? "gerando agora" : ultima ? `${ordenadas.length} ${ordenadas.length === 1 ? "versão" : "versões"} · vendo v${vista?.versao}` : "ainda sem arte"}
+            {ultima ? `${ordenadas.length} ${ordenadas.length === 1 ? "versão" : "versões"} · vendo v${vista?.versao}` : "ainda sem arte"}
           </p>
         </div>
-        <BotaoComCusto
+        <BotaoDaLamina
+          emAndamento={ocupado}
           rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> {ultima ? "Refazer" : "Gerar"}</>}
           titulo={`${ultima ? "Refazer" : "Gerar"} a lâmina ${direcao.ordem}`}
           descricao="O gerador faz a lâmina inteira com o texto dentro. Depois a leitura confere a ortografia e o Jev confere a identidade."
@@ -386,7 +386,8 @@ export default function CardDoEstudio({
             <div className="mt-2.5 space-y-2">
               <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="Ex.: título maior e a planta mais à esquerda" className="text-[13px]" />
               <div className="flex justify-end">
-                <BotaoComCusto
+                <BotaoDaLamina
+                  emAndamento={ocupado}
                   rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> Ajustar</>}
                   titulo={`Ajustar a lâmina ${direcao.ordem}`}
                   descricao="O diretor transforma o pedido em instrução de edição e o gerador edita a versão atual. A nova versão passa pela conferência."
@@ -415,7 +416,8 @@ export default function CardDoEstudio({
               </div>
               <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={3} placeholder="O que mudar nas áreas. Ex.: trocar o copo por uma xícara branca" className="text-[13px]" />
               <div className="flex justify-end">
-                <BotaoComCusto
+                <BotaoDaLamina
+                  emAndamento={ocupado}
                   rotulo={<><Crop className="mr-1 h-3.5 w-3.5" /> Ajustar a área</>}
                   titulo={`Ajustar áreas da lâmina ${direcao.ordem}`}
                   descricao="O gerador edita só dentro das áreas marcadas (máscara). A nova versão passa pela conferência."
@@ -453,7 +455,8 @@ export default function CardDoEstudio({
               )}
               <Textarea value={instrucao} onChange={(e) => setInstrucao(e.target.value)} rows={2} placeholder="Opcional. Ex.: fundo de madeira clara, luz de manhã" className="text-[13px]" />
               <div className="flex justify-end">
-                <BotaoComCusto
+                <BotaoDaLamina
+                  emAndamento={ocupado}
                   rotulo={<><Paintbrush className="mr-1 h-3.5 w-3.5" /> Trocar o fundo</>}
                   titulo={`Trocar o fundo da lâmina ${direcao.ordem}`}
                   descricao="O gerador troca só o fundo, mantendo o texto e o primeiro plano. A nova versão passa pela conferência."
@@ -488,46 +491,6 @@ export default function CardDoEstudio({
           )}
         </section>
       )}
-
-      {/* Foto real do acervo, usada como está */}
-      <section>
-        <Rotulo>Foto real</Rotulo>
-        {fotosIds.length > 0 ? (
-          <div className="flex min-w-0 items-center rounded-lg border border-border bg-background p-2">
-            <div className="mr-2.5 w-12 shrink-0">
-              {foto ? <FotoDoAcervo imagem={foto} /> : <div className="h-12 w-12 animate-pulse rounded-md bg-secondary" />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[12.5px] font-medium">{foto ? foto.nome : "Foto do acervo"}</p>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {foto ? [ROTULO_DA_CATEGORIA[foto.categoria || ""] || foto.categoria, foto.pasta].filter(Boolean).join(" · ") : acervo.isLoading ? "carregando…" : "não está mais no acervo"}
-              </p>
-            </div>
-            <Button type="button" size="sm" variant="ghost" className="ml-1 h-8 shrink-0 px-2 text-[12px]" disabled={salvandoFoto || ocupado} onClick={() => setAcervoAberto(acervoAberto === "lamina" ? null : "lamina")}>
-              Trocar
-            </Button>
-            <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px] text-destructive hover:text-destructive" disabled={salvandoFoto || ocupado} onClick={() => void escolherFoto(null)}>
-              {salvandoFoto && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
-              Tirar
-            </Button>
-          </div>
-        ) : (
-          <Button type="button" size="sm" variant="outline" className="w-full" disabled={salvandoFoto || ocupado} onClick={() => setAcervoAberto(acervoAberto === "lamina" ? null : "lamina")} title="A foto real é usada como está: só a área do texto é desenhada pelo gerador">
-            {salvandoFoto ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="mr-1.5 h-3.5 w-3.5" />}
-            Escolher do acervo
-          </Button>
-        )}
-        {acervoAberto === "lamina" && (
-          <div className="mt-2">
-            <SeletorDoAcervo
-              titulo="Foto real para esta lâmina"
-              escolhidas={fotosIds}
-              onEscolher={(i) => void escolherFoto(i)}
-              onFechar={() => setAcervoAberto(null)}
-            />
-          </div>
-        )}
-      </section>
 
       {/* Versões: clique mostra a versão na lâmina grande */}
       {ordenadas.length > 0 && (

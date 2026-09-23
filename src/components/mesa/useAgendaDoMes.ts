@@ -66,6 +66,10 @@ export interface PostDaAgenda {
   /** Dia local (AAAA-MM-DD) em que o post sai. */
   dia: string;
   task_id: string | null;
+  /** Arquivo principal do post (capa da arte), para a miniatura. */
+  arquivo_id: string | null;
+  /** editorial_posts.production_status, para a cor da etapa igual à Agenda. */
+  producao: string | null;
 }
 
 /**
@@ -229,7 +233,7 @@ export function useAgendaDoMes(clientId: string, mes: string) {
               .order("atualizado_em", { ascending: false })
           : vazio,
         idsPosts.length
-          ? (supabase as any).from("editorial_posts").select("id, title, content_type").in("id", idsPosts)
+          ? (supabase as any).from("editorial_posts").select("id, title, content_type, production_status, primary_file_id").in("id", idsPosts)
           : vazio,
         idsPosts.length
           ? (supabase as any).from("editorial_post_internal").select("post_id, task_id").in("post_id", idsPosts)
@@ -239,10 +243,9 @@ export function useAgendaDoMes(clientId: string, mes: string) {
       if (trabalhosRes.error) throw trabalhosRes.error;
       if (postsRes.error) throw postsRes.error;
 
-      const titulos: Record<string, { title: string; content_type: string | null }> = {};
-      for (const p of (postsRes.data || []) as { id: string; title: string; content_type: string | null }[]) {
-        titulos[p.id] = { title: p.title, content_type: p.content_type };
-      }
+      type PostLido = { id: string; title: string; content_type: string | null; production_status?: string | null; primary_file_id?: string | null };
+      const titulos: Record<string, PostLido> = {};
+      for (const p of (postsRes.data || []) as PostLido[]) titulos[p.id] = p;
       // A ligação com o item é um extra: sem ela o post aparece do mesmo jeito.
       const tarefaDoPost: Record<string, string> = {};
       for (const r of (internosRes.data || []) as { post_id: string; task_id: string | null }[]) {
@@ -259,6 +262,8 @@ export function useAgendaDoMes(clientId: string, mes: string) {
           scheduled_at: p.scheduled_at,
           dia: diaLocal(p.scheduled_at),
           task_id: doItem(tarefaDoPost, id) || null,
+          arquivo_id: t && t.primary_file_id ? t.primary_file_id : null,
+          producao: t && t.production_status ? t.production_status : null,
         };
       });
 

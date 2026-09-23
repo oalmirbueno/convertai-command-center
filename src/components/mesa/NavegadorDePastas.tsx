@@ -1,19 +1,33 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronRight, Folder, HardDrive, Images, Loader2, Search } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Folder, HardDrive, Images, Loader2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
 import { ehImagem, rotuloDaCategoria } from "@/lib/mesa/api";
+import {
+  imagensDoWorkspace,
+  montarArvore,
+  pastasDoWorkspace,
+  RAIZ,
+  trilhaAte,
+  useArvoreDoWorkspace,
+  type NoDoWorkspace,
+  type PastaDoExplorador,
+} from "@/lib/mesa/pastas";
+import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
 
 /**
  * Navegador de pastas da Mesa: escolhe uma imagem do cliente em qualquer
- * pasta do Workspace, de Arquivos ou do acervo de fotos reais. Só mostra
+ * pasta do Workspace (a mesma árvore de lá, com trilha, Voltar e árvore ao
+ * lado), de Arquivos ou do acervo de fotos reais. Só mostra
  * imagens. Quem chama decide o que fazer com a escolha (ex.: definir_logo).
  */
+
+export type { PastaDoExplorador };
 
 export type OrigemDaImagem = "workspace" | "arquivo" | "acervo";
 
@@ -32,14 +46,6 @@ export function Quadrado({ children, className = "" }: { children: ReactNode; cl
   );
 }
 
-interface NoDoWorkspace {
-  id: string;
-  name: string;
-  kind: "folder" | "file";
-  mime: string | null;
-  storage_path: string | null;
-  parent_id: string | null;
-}
 
 interface ArquivoDePasta {
   id: string;
@@ -123,80 +129,217 @@ function Carregando({ texto }: { texto: string }) {
   );
 }
 
+// ------------------------------------------------------------------ explorador
+
+/**
+ * Explorador de pastas reutilizável da Mesa: trilha (breadcrumb), botão
+ * Voltar, subpastas com a contagem de imagens (a pasta e tudo abaixo dela),
+ * árvore ao lado em telas largas e a grade de itens da pasta aberta. Cada
+ * painel rola sozinho. Pastas sem nenhuma imagem na subárvore ficam ocultas.
+ */
+export function ExploradorDePastas<T>({
+  pastas,
+  itens,
+  pastaDoItem,
+  renderizarItens,
+  raizNome = "Workspace",
+  atual: atualControlado,
+  onAtual,
+  carregando,
+  erro,
+  vazio = "Nenhuma imagem nesta pasta.",
+  alturaMax = "min(60vh, 520px)",
+  semArvore,
+}: {
+  pastas: PastaDoExplorador[];
+  itens: T[];
+  /** Id da pasta do item (RAIZ = "" para o primeiro nível). */
+  pastaDoItem: (item: T) => string;
+  renderizarItens: (itens: T[]) => ReactNode;
+  raizNome?: string;
+  atual?: string;
+  onAtual?: (id: string) => void;
+  carregando?: boolean;
+  erro?: string | null;
+  vazio?: string;
+  alturaMax?: string;
+  /** Sem a árvore lateral (painéis estreitos). */
+  semArvore?: boolean;
+}) {
+  const [atualInterno, setAtualInterno] = useState(RAIZ);
+  const [abertas, setAbertas] = useState<Record<string, boolean>>({});
+
+  const itensPorPasta: Record<string, T[]> = {};
+  for (const item of itens) {
+    const p = pastaDoItem(item) || RAIZ;
+    (itensPorPasta[p] = itensPorPasta[p] || []).push(item);
+  }
+  const diretos: Record<string, number> = {};
+  for (const k of Object.keys(itensPorPasta)) diretos[k] = itensPorPasta[k].length;
+  const arvore = montarArvore(pastas, diretos);
+
+  const pedido = atualControlado !== undefined ? atualControlado : atualInterno;
+  const atual = pedido === RAIZ || arvore.porId[pedido] ? pedido : RAIZ;
+  const irPara = (id: string) => {
+    setAtualInterno(id);
+    if (onAtual) onAtual(id);
+  };
+
+  const trilha = trilhaAte(arvore, atual);
+  const naTrilha = (id: string) => trilha.some((p) => p.id === id);
+  const visiveis = (id: string) => (arvore.filhos[id] || []).filter((p) => (arvore.total[p.id] || 0) > 0);
+  const subpastas = visiveis(atual);
+  const itensAqui = itensPorPasta[atual] || [];
+  const pai = trilha.length > 1 ? trilha[trilha.length - 2].id : RAIZ;
+  const temArvore = !semArvore && visiveis(RAIZ).length > 0;
+
+  const ramo = (id: string, nivel: number): ReactNode => (
+    <ul className="min-w-0">
+      {visiveis(id).map((p) => {
+        const filhos = visiveis(p.id);
+        const aberta = abertas[p.id] !== undefined ? abertas[p.id] : naTrilha(p.id);
+        return (
+          <li key={p.id} className="min-w-0">
+            <div
+              className={`flex min-w-0 items-center rounded-md text-[12px] ${p.id === atual ? "bg-primary/10 font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+              style={{ paddingLeft: nivel * 12 }}
+            >
+              {filhos.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setAbertas((a) => ({ ...a, [p.id]: !aberta }))}
+                  aria-label={aberta ? `Recolher ${p.nome}` : `Expandir ${p.nome}`}
+                  className="flex h-6 w-5 shrink-0 items-center justify-center"
+                >
+                  <ChevronRight className={`h-3.5 w-3.5 transition-transform ${aberta ? "rotate-90" : ""}`} />
+                </button>
+              ) : (
+                <span className="w-5 shrink-0" />
+              )}
+              <button
+                type="button"
+                onClick={() => irPara(p.id)}
+                aria-current={p.id === atual ? "true" : undefined}
+                className="flex min-w-0 flex-1 items-center py-1 pr-1.5 text-left"
+                title={p.nome}
+              >
+                <Folder className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/80" />
+                <span className="min-w-0 flex-1 truncate">{p.nome}</span>
+                <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{arvore.total[p.id] || 0}</span>
+              </button>
+            </div>
+            {aberta && filhos.length > 0 && ramo(p.id, nivel + 1)}
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  return (
+    <div className="flex min-w-0 flex-col">
+      <div className="mb-2 flex min-w-0 items-center">
+        <button
+          type="button"
+          onClick={() => irPara(pai)}
+          disabled={atual === RAIZ}
+          className="mr-2 inline-flex h-7 shrink-0 items-center rounded-md border border-border bg-card px-2 text-[11.5px] font-medium text-foreground transition-colors hover:border-primary/50 disabled:opacity-40"
+        >
+          <ChevronLeft className="mr-0.5 h-3.5 w-3.5" /> Voltar
+        </button>
+        <nav aria-label="Trilha das pastas" className="flex min-w-0 flex-1 flex-wrap items-center text-[12px]">
+          <button
+            type="button"
+            onClick={() => irPara(RAIZ)}
+            className={`rounded px-1 ${atual !== RAIZ ? "text-primary hover:underline" : "font-medium text-foreground"}`}
+          >
+            {raizNome}
+          </button>
+          {trilha.map((p, i) => (
+            <span key={p.id} className="flex min-w-0 items-center">
+              <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <button
+                type="button"
+                onClick={() => irPara(p.id)}
+                className={`min-w-0 max-w-[12rem] truncate rounded px-1 ${i === trilha.length - 1 ? "font-medium text-foreground" : "text-primary hover:underline"}`}
+              >
+                {p.nome}
+              </button>
+            </span>
+          ))}
+        </nav>
+      </div>
+
+      <div className="flex min-w-0">
+        {temArvore && (
+          <aside aria-label="Árvore de pastas" className="mr-3 hidden w-52 shrink-0 overflow-y-auto border-r border-border pr-2 md:block" style={{ maxHeight: alturaMax }}>
+            <button
+              type="button"
+              onClick={() => irPara(RAIZ)}
+              className={`mb-0.5 flex w-full items-center rounded-md px-1.5 py-1 text-left text-[12px] ${atual === RAIZ ? "bg-primary/10 font-medium" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+            >
+              <HardDrive className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{raizNome}</span>
+              <span className="ml-1 shrink-0 text-[10.5px] tabular-nums text-muted-foreground">{arvore.total[RAIZ] || 0}</span>
+            </button>
+            {ramo(RAIZ, 0)}
+          </aside>
+        )}
+        <div className="min-w-0 flex-1 space-y-3 overflow-y-auto pr-0.5" style={{ maxHeight: alturaMax }}>
+          {carregando && <Carregando texto="Lendo as pastas..." />}
+          {erro && <p className="text-[12px] text-destructive">{erro}</p>}
+          {subpastas.length > 0 && (
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {subpastas.map((p) => {
+                const n = arvore.total[p.id] || 0;
+                return <LinhaDePasta key={p.id} nome={p.nome} detalhe={`${n} ${n === 1 ? "imagem" : "imagens"}`} onClick={() => irPara(p.id)} />;
+              })}
+            </div>
+          )}
+          {itensAqui.length > 0 && renderizarItens(itensAqui)}
+          {!carregando && !erro && subpastas.length === 0 && itensAqui.length === 0 && (
+            <p className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[12px] text-muted-foreground">{vazio}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ workspace
 
 function PastasDoWorkspace({ onEscolher, marcadoId, ocupado }: { onEscolher: (e: ImagemEscolhida) => void; marcadoId?: string | null; ocupado?: boolean }) {
   const { clientId } = useMesa();
-  const [trilha, setTrilha] = useState<{ id: string; nome: string }[]>([]);
-  const atual = trilha.length ? trilha[trilha.length - 1].id : null;
-
-  const nos = useQuery({
-    queryKey: ["mesa", "navegador-workspace", clientId, atual],
-    staleTime: 60_000,
-    queryFn: async (): Promise<NoDoWorkspace[]> => {
-      let q = (supabase as any)
-        .from("workspace_nodes")
-        .select("id, name, kind, mime, storage_path, parent_id")
-        .eq("client_id", clientId)
-        .order("name", { ascending: true })
-        .limit(600);
-      q = atual ? q.eq("parent_id", atual) : q.is("parent_id", null);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as NoDoWorkspace[];
-    },
-  });
-
-  const pastas = (nos.data || []).filter((n) => n.kind === "folder");
-  const imagens = (nos.data || []).filter((n) => n.kind === "file" && !!n.storage_path && ehImagem(n.mime, n.name));
-  const outros = (nos.data || []).filter((n) => n.kind === "file").length - imagens.length;
+  const nos = useArvoreDoWorkspace(clientId);
+  const todos = nos.data || [];
+  const imagens = imagensDoWorkspace(todos);
+  const outros = todos.filter((n) => n.kind === "file").length - imagens.length;
 
   return (
-    <div className="min-w-0 space-y-3">
-      <nav aria-label="Pastas do Workspace" className="flex min-w-0 flex-wrap items-center text-[12px]">
-        <button type="button" onClick={() => setTrilha([])} className={`rounded px-1 ${trilha.length ? "text-primary hover:underline" : "font-medium text-foreground"}`}>
-          Workspace
-        </button>
-        {trilha.map((p, i) => (
-          <span key={p.id} className="flex min-w-0 items-center">
-            <ChevronRight className="mx-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <button
-              type="button"
-              onClick={() => setTrilha((t) => t.slice(0, i + 1))}
-              className={`min-w-0 truncate rounded px-1 ${i === trilha.length - 1 ? "font-medium text-foreground" : "text-primary hover:underline"}`}
-            >
-              {p.nome}
-            </button>
-          </span>
-        ))}
-      </nav>
-      {nos.isLoading && <Carregando texto="Lendo as pastas do Workspace..." />}
-      {nos.isError && <p className="text-[12px] text-destructive">Não foi possível ler o Workspace.</p>}
-      {pastas.length > 0 && (
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-          {pastas.map((p) => (
-            <LinhaDePasta key={p.id} nome={p.name} onClick={() => setTrilha((t) => t.concat([{ id: p.id, nome: p.name }]))} />
-          ))}
-        </div>
-      )}
-      {imagens.length > 0 && (
-        <Grade>
-          {imagens.map((n) => (
-            <CartaoDeImagem
-              key={n.id}
-              nome={n.name}
-              marcado={marcadoId === n.id}
-              ocupado={ocupado}
-              onClick={() => onEscolher({ origem: "workspace", id: n.id, nome: n.name })}
-            >
-              <ImagemDaMesa caminho={n.storage_path} bucket="workspace" alt={n.name} className="h-full w-full !object-contain p-1" />
-            </CartaoDeImagem>
-          ))}
-        </Grade>
-      )}
-      {nos.data && pastas.length === 0 && imagens.length === 0 && (
-        <p className="rounded-lg border border-dashed border-border bg-card p-4 text-center text-[12px] text-muted-foreground">Nenhuma imagem nem pasta aqui.</p>
-      )}
+    <div className="min-w-0 space-y-2">
+      <ExploradorDePastas<NoDoWorkspace>
+        pastas={pastasDoWorkspace(todos)}
+        itens={imagens}
+        pastaDoItem={(n) => n.parent_id || RAIZ}
+        carregando={nos.isLoading}
+        erro={nos.isError ? "Não foi possível ler o Workspace." : null}
+        vazio={nos.data && imagens.length === 0 ? "Nenhuma imagem no Workspace deste cliente." : "Nenhuma imagem nesta pasta."}
+        alturaMax="min(56vh, 480px)"
+        renderizarItens={(lista) => (
+          <Grade>
+            {lista.map((n) => (
+              <CartaoDeImagem
+                key={n.id}
+                nome={n.name}
+                marcado={marcadoId === n.id}
+                ocupado={ocupado}
+                onClick={() => onEscolher({ origem: "workspace", id: n.id, nome: n.name })}
+              >
+                <MiniaturaDoStorage bucket="workspace" caminho={n.storage_path} alt={n.name} ajuste="contain" largura={240} className="h-full w-full p-1" />
+              </CartaoDeImagem>
+            ))}
+          </Grade>
+        )}
+      />
       {outros > 0 && <p className="text-[11px] text-muted-foreground">{outros} arquivo(s) que não são imagem ficaram de fora.</p>}
     </div>
   );

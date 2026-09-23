@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createElement as h } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -270,8 +270,12 @@ describe("campanhas", () => {
   it("a aba Campanhas lista as campanhas do cliente", async () => {
     mock.tabelas.mesa_campanhas = [campanha];
     montar(h(AbaCampanhas, {}));
-    expect(await screen.findByText("Promoção do amor")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Nova campanha/ })).toBeTruthy();
+    // Tela estreita (matchMedia falso nos testes): a lista vira seletor e as
+    // recentes aparecem no estado vazio.
+    const recentes = await screen.findByRole("list", { name: "Campanhas recentes" });
+    expect(within(recentes).getByText("Promoção do amor")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Campanha aberta" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /Nova campanha/ }).length).toBeGreaterThan(0);
   });
 
   it("a aba Campanhas existe na Mesa, entre Mês e Estúdio, e baixa sozinha", () => {

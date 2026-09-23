@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { chamarFuncao, padraoDoContexto, TAMANHOS, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { AvisoDeErro, EstimativaInline, avisarCustoReal } from "./Custo";
+import { Ditado } from "./Ditado";
 import { useMesa } from "./MesaContexto";
 import {
   chaveDoHistorico,
@@ -151,15 +152,22 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
           }
         }}
         rows={3}
-        placeholder="O que o agente precisa saber?"
+        placeholder="O que o agente precisa saber? Digite ou toque no microfone para falar."
         disabled={!!pendente}
       />
-      <div className="mt-2 flex shrink-0 flex-wrap items-center justify-between">
-        <EstimativaInline partes={partes} />
-        <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
-          {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-          Enviar
-        </Button>
+      <div className="mt-2 flex min-w-0 shrink-0 flex-wrap items-center justify-between">
+        <div className="mr-2 min-w-0">
+          <EstimativaInline partes={partes} />
+          <p className="hidden text-[10.5px] text-muted-foreground sm:block">Ctrl+Enter envia</p>
+        </div>
+        <div className="ml-auto flex min-w-0 max-w-full items-center justify-end">
+          {/* Microfone grátis: o navegador transcreve enquanto a pessoa fala. */}
+          <Ditado valor={texto} onChange={setTexto} disabled={!!pendente} className="mr-1.5 min-w-0" />
+          <Button type="button" size="sm" className="shrink-0" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
+            {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+            Enviar
+          </Button>
+        </div>
       </div>
     </section>
   );

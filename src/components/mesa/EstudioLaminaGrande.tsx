@@ -1,20 +1,27 @@
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Crop, Loader2, ZoomIn } from "lucide-react";
+import { ChevronLeft, ChevronRight, Crop, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTamanho } from "./EstudioAltura";
 import { ImagemDaMesa } from "./MesaContexto";
-import { Cronometro, Esboco, funcaoDaLamina } from "./PranchetaDoEstudio";
+import { Esboco, funcaoDaLamina } from "./PranchetaDoEstudio";
 import SeletorDeAreas from "./SeletorDeAreas";
 import type { Area } from "./estudioUtil";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 
 /**
- * A lâmina escolhida, grande, abaixo da prancheta. O quadro 4:5 ocupa o
- * espaço que sobra na coluna (largura e altura medidas), sem passar do
- * tamanho real. Só a imagem que o gerador devolveu, ou o esboço do layout
- * antes de gerar; nenhum texto por cima da arte. A barra de cima tem a
- * versão vista e o botão de ver grande (Ampliar).
+ * A lâmina escolhida, GRANDE, no centro do estúdio (pedido do dono em 23/09:
+ * "o estúdio ficou muito pequeno para editar e trabalhar"). O quadro 4:5
+ * ocupa todo o espaço que sobra (largura e altura medidas), sem passar do
+ * tamanho real da imagem gerada. Só a imagem que o gerador devolveu, ou o
+ * esboço do layout antes de gerar; nenhum texto por cima da arte. A barra
+ * de cima tem a versão vista e o botão de ver grande (Ampliar).
+ *
+ * O andamento da geração NÃO aparece aqui: o indicador da lâmina é um só,
+ * na prancheta. Aqui a imagem só fica esmaecida enquanto a lâmina trabalha.
  */
+
+/** Maior largura do quadro (px): a imagem gerada tem 1088 de largura. */
+export const LARGURA_MAXIMA_DA_LAMINA = 1088;
 
 /**
  * Quadro 4:5 que cabe na área do pai: largura = a menor entre a largura da
@@ -23,7 +30,7 @@ import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
  */
 export function QuadroQueCabe({
   children,
-  maximo = 640,
+  maximo = LARGURA_MAXIMA_DA_LAMINA,
   soPelaLargura = false,
 }: {
   children: (largura: number) => ReactNode;
@@ -33,13 +40,13 @@ export function QuadroQueCabe({
 }) {
   const [ref, area] = useTamanho<HTMLDivElement>();
   const pelaAltura = soPelaLargura ? Infinity : Math.floor(area.altura * 0.8);
-  // Na página que rola, a lâmina não passa de 420 px de largura (525 de altura).
-  const teto = soPelaLargura ? Math.min(maximo, 420) : maximo;
+  // Na página que rola, a lâmina não passa de 520 px de largura (650 de altura).
+  const teto = soPelaLargura ? Math.min(maximo, 520) : maximo;
   const largura = Math.max(0, Math.floor(Math.min(area.largura, pelaAltura, teto)));
   return (
-    <div ref={ref} className={`flex min-w-0 flex-1 items-start justify-center ${soPelaLargura ? "" : "min-h-[300px]"}`}>
+    <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 items-start justify-center ${soPelaLargura ? "" : "min-h-[320px]"}`}>
       {largura > 0 && (
-        <div className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-secondary" style={{ width: largura, height: Math.round(largura * 1.25) }}>
+        <div className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm" style={{ width: largura, height: Math.round(largura * 1.25) }}>
           {children(largura)}
         </div>
       )}
@@ -53,7 +60,6 @@ export default function EstudioLaminaGrande({
   versoes,
   versaoVista,
   onVersaoVista,
-  gerandoDesde,
   desenhandoAreas,
   areas,
   onAreas,
@@ -67,11 +73,11 @@ export default function EstudioLaminaGrande({
   versoes: CardGerado[];
   versaoVista: number | null;
   onVersaoVista: (versao: number) => void;
-  gerandoDesde?: number;
   /** Ajuste por área: a lâmina vira a mesa de marcar áreas. */
   desenhandoAreas: boolean;
   areas: Area[];
   onAreas: (areas: Area[]) => void;
+  /** A lâmina está gerando, ajustando ou na conferência: a imagem fica esmaecida. */
   ocupado: boolean;
   onAmpliar: () => void;
   soPelaLargura?: boolean;
@@ -86,16 +92,11 @@ export default function EstudioLaminaGrande({
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="mb-2 flex h-8 min-w-0 shrink-0 items-center">
         <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">
           Lâmina {card.ordem}
-          <span className="font-normal text-muted-foreground"> · {funcaoDaLamina(card)}</span>
-          {gerandoDesde !== undefined && (
-            <span className="ml-2 inline-flex items-center text-[12px] font-normal text-primary">
-              <Loader2 className="mr-1 h-3 w-3 animate-spin" /> gerando <span className="ml-1 tabular-nums"><Cronometro desde={gerandoDesde} /></span>
-            </span>
-          )}
+          <span className="font-normal text-muted-foreground"> · {funcaoDaLamina(card)} · {card.ordem} de {total}</span>
           {desenhandoAreas && (
             <span className="ml-2 inline-flex items-center text-[12px] font-normal text-primary">
               <Crop className="mr-1 h-3 w-3" /> arraste para marcar a área
@@ -115,7 +116,7 @@ export default function EstudioLaminaGrande({
         )}
         {vista && !desenhandoAreas && (
           <Button type="button" size="sm" variant="ghost" className="ml-1 h-8 shrink-0 px-2 text-[12px]" onClick={onAmpliar} title="Ver grande (setas passam entre as lâminas)">
-            <ZoomIn className="mr-1 h-3.5 w-3.5" /> Ver grande
+            <Maximize2 className="mr-1 h-3.5 w-3.5" /> Ver grande
           </Button>
         )}
       </div>
@@ -125,7 +126,7 @@ export default function EstudioLaminaGrande({
             <SeletorDeAreas caminho={ultima.storage_path} areas={areas} onMudar={onAreas} disabled={ocupado} />
           ) : vista ? (
             <button type="button" onDoubleClick={onAmpliar} className="block h-full w-full cursor-zoom-in" aria-label={`Lâmina ${card.ordem}: duplo clique para ver grande`}>
-              <ImagemDaMesa caminho={vista.storage_path} alt={`Lâmina ${card.ordem}, versão ${vista.versao}`} className="h-full w-full" />
+              <ImagemDaMesa caminho={vista.storage_path} alt={`Lâmina ${card.ordem}, versão ${vista.versao}`} className={`h-full w-full transition-opacity ${ocupado ? "opacity-50" : ""}`} />
             </button>
           ) : (
             <Esboco card={card} total={total} largura={largura} />

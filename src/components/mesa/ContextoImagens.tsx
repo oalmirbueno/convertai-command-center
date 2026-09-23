@@ -21,14 +21,19 @@ import { AvisoDeErro, BotaoComCusto, avisarCustoReal, useAvisarErro } from "./Cu
 import { legendaDaFoto } from "./ContextoFotos";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
-import { Quadrado } from "./NavegadorDePastas";
+import { ExploradorDePastas, Quadrado } from "./NavegadorDePastas";
 import { Campo, TituloDeSecao } from "./Seletores";
 import { invalidarAcervo, useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
+import { pastaDaFoto, pastasDoAcervo, useArvoreDoWorkspace } from "@/lib/mesa/pastas";
 
 /**
  * Imagens (acervo de fotos reais do cliente): a Mesa traz as imagens de todas
  * as pastas do Workspace e de Arquivos, a IA organiza (descrição, categoria e
  * tags) e a equipe corrige. O Estúdio usa estas fotos como base das lâminas.
+ *
+ * "Por pasta" espelha a árvore do Workspace do cliente (pedido do dono,
+ * 23/09: "já está tudo pronto lá"): cada foto aparece na mesma pasta onde o
+ * arquivo mora no Workspace; as de Arquivos e as enviadas ganham pasta própria.
  */
 
 const POR_GRUPO = 24;
@@ -174,7 +179,8 @@ export default function ContextoImagens() {
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const acervo = useAcervo(clientId);
-  const [agrupar, setAgrupar] = useState<Agrupar>("categoria");
+  const [agrupar, setAgrupar] = useState<Agrupar>("pasta");
+  const [pastaAberta, setPastaAberta] = useState("");
   const [busca, setBusca] = useState("");
   const [mostrarInativas, setMostrarInativas] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
@@ -183,6 +189,9 @@ export default function ContextoImagens() {
   const [sincronizando, setSincronizando] = useState(false);
 
   const todas = useMemo(() => acervo.data || [], [acervo.data]);
+  const arvore = useArvoreDoWorkspace(clientId, agrupar === "pasta");
+  const espelho = useMemo(() => pastasDoAcervo(arvore.data || [], todas), [arvore.data, todas]);
+  const noExplorador = useMemo(() => (mostrarInativas ? todas : todas.filter((i) => i.ativa)), [todas, mostrarInativas]);
   const ativas = todas.filter((i) => i.ativa);
   const semDescricao = ativas.filter((i) => !i.descricao || !i.descricao.trim());
   const leitor = padraoPara(catalogo, "leitura");
@@ -285,7 +294,7 @@ export default function ContextoImagens() {
               <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, pasta, tag ou descrição" className="h-9 pl-8" />
             </div>
             <div role="group" aria-label="Agrupar por" className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-              {(["categoria", "pasta"] as Agrupar[]).map((a) => (
+              {(["pasta", "categoria"] as Agrupar[]).map((a) => (
                 <button
                   key={a}
                   type="button"
@@ -318,7 +327,30 @@ export default function ContextoImagens() {
         <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma imagem com essa busca.</p>
       )}
 
-      {grupos.map(({ chave, imagens }) => {
+      {agrupar === "pasta" && !termo && todas.length > 0 && (
+        <section className="min-w-0 rounded-xl border border-border bg-card p-3">
+          <ExploradorDePastas<ImagemDoAcervo>
+            pastas={espelho.pastas}
+            itens={noExplorador}
+            pastaDoItem={(i) => pastaDaFoto(i, espelho.pastaDoNo)}
+            atual={pastaAberta}
+            onAtual={setPastaAberta}
+            carregando={arvore.isLoading}
+            erro={arvore.isError ? "Não foi possível ler as pastas do Workspace." : null}
+            vazio="Nenhuma foto nesta pasta."
+            alturaMax="min(70vh, 720px)"
+            renderizarItens={(lista) => (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                {lista.map((i, n) => (
+                  <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista, indice: n })} />
+                ))}
+              </div>
+            )}
+          />
+        </section>
+      )}
+
+      {(agrupar === "categoria" || !!termo) && grupos.map(({ chave, imagens }) => {
         const idGrupo = `${agrupar}:${chave}`;
         const aberto = !!abertos[idGrupo];
         const visiveis = aberto ? imagens : imagens.slice(0, POR_GRUPO);

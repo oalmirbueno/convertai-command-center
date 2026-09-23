@@ -89,6 +89,28 @@ export function planejarTrocaDeFontes(
   return plano;
 }
 
+/** Altura útil da janela (px), atualizada ao girar ou redimensionar (e com o teclado do celular). */
+export function useAlturaDaJanela(): number {
+  const ler = () => (typeof window === "undefined" ? 800 : window.innerHeight || (document.documentElement && document.documentElement.clientHeight) || 800);
+  const [altura, setAltura] = useState(ler);
+  useEffect(() => {
+    const medir = () => setAltura(ler());
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => {
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+    };
+  }, []);
+  return altura;
+}
+
+/** Altura do pop-up: a janela menos uma margem, entre 320 e 900 px. */
+export function alturaDoPopup(alturaDaJanela: number): number {
+  const margem = alturaDaJanela < 600 ? 16 : 48;
+  return Math.max(320, Math.min(900, Math.round(alturaDaJanela - margem)));
+}
+
 function CartaoDaFamilia({
   f,
   url,
@@ -113,7 +135,7 @@ function CartaoDaFamilia({
         marcado ? "border-primary ring-1 ring-primary" : "border-border hover:border-primary/60"
       }`}
     >
-      <span className="flex h-24 w-full items-center justify-center overflow-hidden border-b border-border bg-white px-2">
+      <span className="flex h-24 w-full items-center justify-center overflow-hidden border-b border-border bg-white px-3 sm:h-28">
         {f.amostra_path ? (
           url ? (
             <img src={url} alt={`Amostra da fonte ${f.familia}`} loading="lazy" decoding="async" className="max-h-full max-w-full object-contain" />
@@ -165,6 +187,10 @@ export default function BibliotecaDeFontes({
   const [categoria, setCategoria] = useState("todas");
   const [limite, setLimite] = useState(POR_PAGINA);
   const [salvando, setSalvando] = useState(false);
+  const alturaDaJanela = useAlturaDaJanela();
+  const alturaMaxima = alturaDoPopup(alturaDaJanela);
+  // Tela baixa (celular deitado, notebook com zoom): a descrição sai para a lista ter espaço.
+  const baixa = alturaDaJanela < 620;
 
   const familias = useMemo(() => (biblioteca.data || []).filter((f) => f.suporta_portugues), [biblioteca.data]);
 
@@ -258,77 +284,86 @@ export default function BibliotecaDeFontes({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => { if (!salvando) onOpenChange(v); }}>
-      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-5xl flex-col overflow-hidden bg-background p-4 sm:p-5">
-        <DialogHeader className="text-left">
-          <DialogTitle>Biblioteca de fontes da agência</DialogTitle>
-          <DialogDescription className="text-[12.5px]">
-            Escolha a fonte de título e a de texto. A amostra mostra a família com os acentos do português.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        // Cabe em qualquer tela (360 a 1920 px de largura, notebook de 768 px
+        // de altura): a altura vem da janela medida, cabeçalho e rodapé ficam
+        // fixos e só a lista rola por dentro.
+        style={{ maxHeight: alturaMaxima, height: alturaMaxima }}
+        className="flex w-[calc(100vw-16px)] max-w-5xl flex-col gap-0 overflow-hidden bg-background p-0 sm:w-[calc(100vw-48px)]"
+      >
+        <div className="shrink-0 space-y-2.5 border-b border-border px-3.5 pb-3 pt-3.5 sm:px-5 sm:pt-4">
+          <DialogHeader className="pr-8 text-left">
+            <DialogTitle className="text-[15px] sm:text-lg">Biblioteca de fontes da agência</DialogTitle>
+            <DialogDescription className={`text-[12px] sm:text-[12.5px] ${baixa ? "sr-only" : ""}`}>
+              Escolha a fonte de título e a de texto. A amostra mostra a família com os acentos do português.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div role="tablist" aria-label="Qual fonte escolher" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-          {(["titulo", "texto"] as PapelDaEscolha[]).map((p) => (
-            <button
-              key={p}
-              type="button"
-              role="tab"
-              aria-selected={papel === p}
-              onClick={() => setPapel(p)}
-              className={`min-w-0 rounded-lg px-2.5 py-1.5 text-left ${papel === p ? "bg-card shadow-sm" : "hover:bg-card/60"}`}
-            >
-              <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">{ROTULO_DO_PAPEL[p]}</span>
-              <span className={`block truncate text-[12.5px] font-medium ${escolha[p] ? "text-foreground" : "text-muted-foreground"}`}>
-                {escolha[p] ? escolha[p]!.familia : "Escolher na galeria"}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-          <div className="relative min-w-0">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={busca}
-              onChange={(e) => {
-                setBusca(e.target.value);
-                setLimite(POR_PAGINA);
-              }}
-              placeholder="Buscar por nome, estilo, uso ou nicho"
-              className="h-9 pl-8"
-            />
-          </div>
-          <p className="text-[11.5px] text-muted-foreground sm:text-right">
-            {biblioteca.isLoading ? "Lendo a biblioteca..." : `${filtradas.length} de ${familias.length} famílias`}
-          </p>
-        </div>
-
-        {categorias.length > 0 && (
-          <div className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-0.5" aria-label="Categorias">
-            {["todas"].concat(categorias).map((c) => (
+          <div role="tablist" aria-label="Qual fonte escolher" className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+            {(["titulo", "texto"] as PapelDaEscolha[]).map((p) => (
               <button
-                key={c}
+                key={p}
                 type="button"
-                onClick={() => {
-                  setCategoria(c);
-                  setLimite(POR_PAGINA);
-                }}
-                aria-pressed={categoria === c}
-                className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] capitalize ${
-                  categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
-                }`}
+                role="tab"
+                aria-selected={papel === p}
+                onClick={() => setPapel(p)}
+                className={`min-w-0 rounded-lg px-2.5 py-1 text-left ${papel === p ? "bg-card shadow-sm" : "hover:bg-card/60"}`}
               >
-                {c === "todas" ? "Todas" : c}
+                <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">{ROTULO_DO_PAPEL[p]}</span>
+                <span className={`block truncate text-[12.5px] font-medium ${escolha[p] ? "text-foreground" : "text-muted-foreground"}`}>
+                  {escolha[p] ? escolha[p]!.familia : "Escolher na galeria"}
+                </span>
               </button>
             ))}
           </div>
-        )}
 
-        <div className="-mx-1 min-h-[240px] flex-1 overflow-y-auto px-1 pb-1">
+          <div className="flex min-w-0 items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={busca}
+                onChange={(e) => {
+                  setBusca(e.target.value);
+                  setLimite(POR_PAGINA);
+                }}
+                placeholder="Buscar por nome, estilo, uso ou nicho"
+                aria-label="Buscar fonte"
+                className="h-9 pl-8"
+              />
+            </div>
+            <p className="ml-2.5 shrink-0 text-[11.5px] tabular-nums text-muted-foreground">
+              {biblioteca.isLoading ? "Lendo..." : `${filtradas.length} de ${familias.length}`}
+            </p>
+          </div>
+
+          {categorias.length > 0 && (
+            <div className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-0.5" aria-label="Categorias">
+              {["todas"].concat(categorias).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setCategoria(c);
+                    setLimite(POR_PAGINA);
+                  }}
+                  aria-pressed={categoria === c}
+                  className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] capitalize ${
+                    categoria === c ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {c === "todas" ? "Todas" : c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div data-lista-de-fontes className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 py-3 sm:px-5">
           {biblioteca.isError && <p className="text-[12.5px] text-destructive">Não foi possível ler a biblioteca de fontes: {textoDoErro(biblioteca.error)}</p>}
           {biblioteca.isLoading && (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-[146px] animate-pulse rounded-xl bg-muted" />
+                <div key={i} className="h-[158px] animate-pulse rounded-xl bg-muted" />
               ))}
             </div>
           )}
@@ -361,8 +396,8 @@ export default function BibliotecaDeFontes({
           )}
         </div>
 
-        <div className="flex flex-col border-t border-border pt-3 sm:flex-row sm:items-center">
-          <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:mr-3">
+        <div className="flex shrink-0 flex-col border-t border-border bg-background px-3.5 py-2.5 sm:flex-row sm:items-center sm:px-5 sm:py-3">
+          <p className="line-clamp-2 min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] sm:mr-3">
             {substituiEnviada.length
               ? `Substitui a fonte enviada ${substituiEnviada.map((a) => a.nome).join(" e ")}.`
               : plano.inserir.length

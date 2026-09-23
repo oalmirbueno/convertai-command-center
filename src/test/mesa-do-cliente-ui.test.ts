@@ -54,6 +54,8 @@ const listaDoEstudio = ler("src/components/mesa/EstudioLista.tsx");
 const prepararDoEstudio = ler("src/components/mesa/EstudioPreparar.tsx");
 const laminaGrande = ler("src/components/mesa/EstudioLaminaGrande.tsx");
 const arteDaAgenda = ler("src/components/mesa/EstudioArteDaAgenda.tsx");
+// Estúdio grande (23/09, noite): fotos reais para compor ganharam ferramenta própria.
+const fotosDoEstudio = ler("src/components/mesa/EstudioFotos.tsx");
 const seletorDeAreas = ler("src/components/mesa/SeletorDeAreas.tsx");
 const referenciasDoEstudio = ler("src/components/mesa/ReferenciasDoEstudio.tsx");
 const mesAba = ler("src/components/mesa/AbaMes.tsx");
@@ -288,7 +290,7 @@ describe("o estúdio nunca põe texto por cima da arte", () => {
   it("nenhum canvas, fillText ou camada de texto sobre a imagem do card", () => {
     // Estúdio v3: a prancheta e o desenho de áreas também não pintam nada na arte.
     // Esteira (23/09): a lâmina grande e a arte da Agenda entram na mesma regra.
-    for (const fonte of [estudio, cardEstudio, prancheta, seletorDeAreas, laminaGrande, arteDaAgenda]) {
+    for (const fonte of [estudio, cardEstudio, prancheta, seletorDeAreas, laminaGrande, arteDaAgenda, fotosDoEstudio]) {
       expect(fonte).not.toContain("fillText");
       expect(fonte).not.toContain("getContext");
       expect(fonte).not.toContain("<canvas");
@@ -355,7 +357,11 @@ describe("Estúdio versão 3 (pedido do dono em 23/09)", () => {
     expect(referenciasDoEstudio).toContain("{ card: { ordem, referencias_ids: lista } }");
     expect(referenciasDoEstudio).toContain("{ conjunto: { referencias_ids: lista } }");
     expect(referenciasDoEstudio).toContain("const POR_PAGINA = 24;");
-    expect(cardEstudio).toContain("onConfigurar({ imagens_ids: i ? [i.id] : [] })");
+    // Foto real (V5): saiu do CardDoEstudio para a ferramenta Fotos (EstudioFotos), gravada pelo mesmo configurar.
+    expect(fotosDoEstudio).toContain("return { card: { ordem, fotos_livres: fotosParaSalvar(lista) } };");
+    expect(estudio).toContain("onSalvar={(corpo) => configurar(corpo)}");
+    // A foto do acervo do modo anterior (imagens_ids) continua podendo sair da lâmina.
+    expect(estudio).toContain("configurar({ card: { ordem: cardSelecionado.ordem, imagens_ids: [] } })");
     expect(estudio).toContain("onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}");
   });
 

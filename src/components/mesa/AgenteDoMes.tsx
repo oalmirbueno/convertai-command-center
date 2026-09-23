@@ -8,6 +8,7 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { BotaoDeAnexar, MiniaturasDosAnexos, useAnexos, ZonaDeAnexos } from "./AnexosDoPedido";
 import { BlocoDaProposta } from "./ConteudosPropostos";
 import { Cronometro } from "./Cronometro";
+import { Ditado } from "./Ditado";
 import {
   ajustarProposta,
   chaves,
@@ -79,11 +80,14 @@ export default function AgenteDoMes({
   onAbrirNoEstudio,
   pendenteExterno = null,
   className = "",
+  acaoDoCabecalho = null,
 }: {
   onAbrirNoEstudio?: (taskId: string, mes: string) => void;
   /** Pedido que outra parte da tela mandou (ex.: "Criar conteúdo" de um hype). */
   pendenteExterno?: PedidoEmAndamento | null;
   className?: string;
+  /** Botão extra no cabeçalho (ex.: recolher ou fixar a coluna ao lado). */
+  acaoDoCabecalho?: ReactNode;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
@@ -203,6 +207,7 @@ export default function AgenteDoMes({
         <h2 className="min-w-0 flex-1 truncate text-[13.5px] font-semibold" title="Peça em português o que preparar; os conteúdos chegam prontos para gravar na agenda.">
           Agente do mês
         </h2>
+        {acaoDoCabecalho}
       </div>
 
       <div ref={listaRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3" aria-live="polite">
@@ -325,7 +330,9 @@ export default function AgenteDoMes({
                   </SelectContent>
                 </Select>
               )}
-              <div className="ml-auto shrink-0">
+              <div className="ml-auto flex shrink-0 items-center">
+                {/* Falar em vez de digitar: o texto vai aparecendo no campo enquanto a pessoa fala. */}
+                <Ditado valor={texto} onChange={setTexto} disabled={!!envio} className="mr-1.5" />
                 <BotaoComCusto
                   rotulo={ajustando ? "Ajustar" : "Enviar"}
                   titulo={ajustando ? "Ajuste dos conteúdos" : "Pedido ao agente do mês"}

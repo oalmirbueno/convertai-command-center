@@ -2,7 +2,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { somarMeses } from "@/lib/mesa/api";
 import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
-import { orderEditorialCarouselFiles, type EditorialMediaFile } from "@/lib/editorialMedia";
+import { mediaKindFromFile } from "@/lib/fileUrls";
+import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -54,6 +55,18 @@ export interface CardDaDirecao {
   referencias_ids?: string[];
   /** Descrição da imagem da lâmina anterior (carrossel contínuo). */
   imagem_anterior?: string;
+  /** Fotos reais trazidas pela equipe para compor a lâmina (contrato V5): até 1 fundo e 2 elementos. */
+  fotos_livres?: FotoLivre[];
+}
+
+/** Foto real composta na lâmina: fica como é; o design e o texto vêm em volta ou por cima. */
+export interface FotoLivre {
+  /** Arquivo no bucket `mesa` em `<client_id>/estudio/fotos/<uuid>.<ext>`. */
+  caminho: string;
+  /** "fundo": a foto é o fundo da lâmina. "elemento": pessoa, rosto ou objeto que entra na composição. */
+  papel: "fundo" | "elemento";
+  /** Como usar (até 200 caracteres). */
+  nota?: string;
 }
 
 export interface Trabalho {
@@ -130,6 +143,12 @@ export interface ArteNaAgenda {
   capa: ArquivoDaAgenda | null;
   /** A arte do post é a que o Estúdio entregou (file_ids ou post do trabalho). */
   do_estudio: boolean;
+  /**
+   * De onde a arte veio: o post editorial ligado à tarefa (arquivo principal
+   * ou, sem ele, o arquivo da publicação) ou uma imagem anexada à própria
+   * tarefa. Anexo não tem post: post_id fica vazio.
+   */
+  origem?: "post" | "anexo";
 }
 
 /** Roteiro do estrategista (proposta gravada) do item. */
@@ -180,6 +199,13 @@ export const FORMATOS_POST_UNICO = ["static", "design", "google_post"];
 /** Modo da lista do Estúdio: de hoje até 60 dias para frente, sem olhar o mês. */
 export const PROXIMOS_DIAS = "proximos";
 export const DIAS_A_FRENTE = 60;
+/**
+ * Nos próximos 60 dias a leitura também olha 45 dias para trás, para trazer
+ * as artes que já estão na Agenda (pedido do dono em 23/09: "tem que puxar
+ * da agenda as artes antigas"). Do passado só fica o item que tem arte ou
+ * trabalho do estúdio; pauta vencida e vazia não volta para "A fazer".
+ */
+export const DIAS_ATRAS = 45;
 
 const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
 
@@ -199,6 +225,28 @@ export function janelaDaLista(mes: string, agora = new Date()): { inicio: string
     return { inicio: dataLocal(hoje), fimExclusivo: dataLocal(fim) };
   }
   return { inicio: mes, fimExclusivo: somarMeses(mes, 1) };
+}
+
+/** O que a consulta lê: a janela da lista e, nos próximos 60 dias, também 45 dias para trás. */
+export function janelaDeLeitura(mes: string, agora = new Date()): { inicio: string; fimExclusivo: string } {
+  const lista = janelaDaLista(mes, agora);
+  if (mes !== PROXIMOS_DIAS) return lista;
+  const antes = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - DIAS_ATRAS);
+  return { inicio: dataLocal(antes), fimExclusivo: lista.fimExclusivo };
+}
+
+/**
+ * Do passado (antes de hoje) só fica o item com arte na Agenda ou trabalho
+ * no estúdio. O resto dos dados não muda (JSON puro, vai para o cache).
+ */
+export function semPassadoVazio(dados: DadosDosItens, hoje: string): DadosDosItens {
+  const tem = Object.prototype.hasOwnProperty;
+  return {
+    ...dados,
+    itens: dados.itens.filter(
+      (i) => !i.due_date || i.due_date.slice(0, 10) >= hoje || tem.call(dados.trabalhos, i.id) || tem.call(dados.artes, i.id),
+    ),
+  };
 }
 
 /**
@@ -229,8 +277,12 @@ interface LinhaDoArquivo {
   file_url: string | null;
   storage_bucket: string | null;
   storage_path: string | null;
+  mime_type?: string | null;
+  extension?: string | null;
   created_at?: string | null;
 }
+
+const COLUNAS_DO_ARQUIVO = "id, file_name, file_url, storage_bucket, storage_path, mime_type, extension, created_at";
 
 const paraArquivo = (f: LinhaDoArquivo): ArquivoDaAgenda => ({
   id: f.id,
@@ -247,7 +299,27 @@ export function fonteDoArquivo(a: ArquivoDaAgenda | null | undefined): { caminho
   return { caminho: a.url || null, bucket: "mesa" };
 }
 
-/** Artes que já estão na Agenda, por tarefa (leitura tolerante: sem permissão, some só o aviso). */
+/** Arquivo que não é imagem (vídeo, áudio, PDF, documento) não vale como arte da lâmina. */
+export function arquivoEhImagem(f: { file_name?: string | null; file_url?: string | null; mime_type?: string | null; extension?: string | null; file_type?: string | null }): boolean {
+  const tipo = mediaKindFromFile(f.file_name, f.file_url, f.mime_type || f.file_type, f.extension);
+  return tipo === "image" || tipo === "other";
+}
+
+interface PostDaAgenda {
+  id: string;
+  title: string | null;
+  default_caption: string | null;
+  production_status: string | null;
+  primary_file_id: string | null;
+}
+
+/**
+ * Artes que já estão na Agenda, por tarefa, inclusive as de antes do Estúdio
+ * existir (leitura tolerante: sem permissão, some só o aviso). Vale o post
+ * editorial ligado à tarefa, vivo e não revisado por outro: o arquivo
+ * principal ou, sem ele, o arquivo da publicação (mesma regra da miniatura
+ * da Agenda). Tarefa sem post com arte: a imagem anexada à própria tarefa.
+ */
 async function lerArtesDaAgenda(
   taskIds: string[],
   trabalhos: Record<string, Trabalho>,
@@ -259,44 +331,91 @@ async function lerArtesDaAgenda(
     .from("editorial_post_internal")
     .select("post_id, task_id, revision_of_post_id")
     .in("task_id", taskIds);
-  if (error || !vinculos || !vinculos.length) return artes;
-  const linhas = vinculos as { post_id: string; task_id: string | null; revision_of_post_id: string | null }[];
-  // Post revisado por outro mais novo não vale (mesma regra do estúdio).
-  const revisados = unicos(linhas.map((l) => l.revision_of_post_id));
-  const { data: posts, error: erroPosts } = await sb
-    .from("editorial_posts")
-    .select("id, title, default_caption, production_status, primary_file_id, created_at")
-    .in("id", unicos(linhas.map((l) => l.post_id)))
-    .is("archived_at", null)
-    .not("primary_file_id", "is", null)
-    .order("created_at", { ascending: false });
-  if (erroPosts || !posts || !posts.length) return artes;
-  const listaDePosts = (posts as { id: string; title: string | null; default_caption: string | null; production_status: string | null; primary_file_id: string }[])
-    .filter((p) => revisados.indexOf(p.id) < 0);
-  if (!listaDePosts.length) return artes;
-  const tarefaDoPost: Record<string, string> = {};
-  for (const l of linhas) if (l.task_id) tarefaDoPost[l.post_id] = l.task_id;
+  const linhas = (error || !vinculos ? [] : vinculos) as { post_id: string; task_id: string | null; revision_of_post_id: string | null }[];
 
-  const { data: arquivos } = await sb
-    .from("staff_files_secure")
-    .select("id, file_name, file_url, storage_bucket, storage_path")
-    .in("id", unicos(listaDePosts.map((p) => p.primary_file_id)));
-  const arquivoPorId: Record<string, ArquivoDaAgenda> = {};
-  for (const f of (arquivos || []) as LinhaDoArquivo[]) arquivoPorId[f.id] = paraArquivo(f);
+  if (linhas.length) {
+    // Post revisado por outro mais novo não vale (mesma regra do estúdio).
+    const revisados = unicos(linhas.map((l) => l.revision_of_post_id));
+    const { data: posts, error: erroPosts } = await sb
+      .from("editorial_posts")
+      .select("id, title, default_caption, production_status, primary_file_id, created_at")
+      .in("id", unicos(linhas.map((l) => l.post_id)))
+      .is("archived_at", null)
+      .order("created_at", { ascending: false });
+    const listaDePosts = ((erroPosts || !posts ? [] : posts) as PostDaAgenda[]).filter(
+      (p) => revisados.indexOf(p.id) < 0 && p.production_status !== "archived",
+    );
 
-  // Mais recente primeiro: o primeiro post de cada tarefa é o que vale.
-  for (const p of listaDePosts) {
-    const taskId = tarefaDoPost[p.id];
-    if (!taskId || artes[taskId]) continue;
-    const t = trabalhos[taskId];
-    artes[taskId] = {
-      post_id: p.id,
-      titulo: p.title || null,
-      legenda: p.default_caption || null,
-      status: p.production_status || null,
-      capa: arquivoPorId[p.primary_file_id] || null,
-      do_estudio: !!t && ((t.file_ids || []).indexOf(p.primary_file_id) >= 0 || t.post_id === p.id),
-    };
+    // Post sem arquivo principal: a arte pode estar presa só na publicação.
+    const semPrincipal = listaDePosts.filter((p) => !p.primary_file_id).map((p) => p.id);
+    const arquivoDaPublicacao: Record<string, string> = {};
+    if (semPrincipal.length) {
+      const { data: pubs } = await sb
+        .from("editorial_publications")
+        .select("post_id, file_id, status")
+        .in("post_id", semPrincipal)
+        .neq("status", "cancelled");
+      for (const pb of (pubs || []) as { post_id: string; file_id: string | null }[]) {
+        if (pb.file_id && !arquivoDaPublicacao[pb.post_id]) arquivoDaPublicacao[pb.post_id] = pb.file_id;
+      }
+    }
+    const arquivoDoPost = (p: PostDaAgenda) => p.primary_file_id || arquivoDaPublicacao[p.id] || null;
+    const comArquivo = listaDePosts.filter((p) => !!arquivoDoPost(p));
+
+    const arquivoPorId: Record<string, ArquivoDaAgenda> = {};
+    const naoImagem: Record<string, boolean> = {};
+    const ids = unicos(comArquivo.map(arquivoDoPost));
+    if (ids.length) {
+      const { data: arquivos } = await sb.from("staff_files_secure").select(COLUNAS_DO_ARQUIVO).in("id", ids);
+      for (const f of (arquivos || []) as LinhaDoArquivo[]) {
+        if (arquivoEhImagem(f)) arquivoPorId[f.id] = paraArquivo(f);
+        else naoImagem[f.id] = true;
+      }
+    }
+
+    const tarefaDoPost: Record<string, string> = {};
+    for (const l of linhas) if (l.task_id) tarefaDoPost[l.post_id] = l.task_id;
+    // Mais recente primeiro: o primeiro post de cada tarefa é o que vale.
+    for (const p of comArquivo) {
+      const taskId = tarefaDoPost[p.id];
+      const arquivoId = arquivoDoPost(p) as string;
+      if (!taskId || artes[taskId] || naoImagem[arquivoId]) continue;
+      const t = trabalhos[taskId];
+      artes[taskId] = {
+        post_id: p.id,
+        titulo: p.title || null,
+        legenda: p.default_caption || null,
+        status: p.production_status || null,
+        capa: arquivoPorId[arquivoId] || null,
+        do_estudio: !!t && ((t.file_ids || []).indexOf(arquivoId) >= 0 || t.post_id === p.id),
+        origem: "post",
+      };
+    }
+  }
+
+  // Tarefa sem post com arte: imagem anexada à própria tarefa (artes antigas).
+  const faltam = taskIds.filter((id) => !artes[id]);
+  if (faltam.length) {
+    const { data: anexos, error: erroAnexos } = await sb
+      .from("task_attachments")
+      .select("id, task_id, file_name, file_url, file_type, created_at")
+      .in("task_id", faltam)
+      .order("created_at", { ascending: false });
+    if (!erroAnexos) {
+      for (const a of (anexos || []) as { id: string; task_id: string; file_name: string | null; file_url: string | null; file_type: string | null }[]) {
+        if (!a.task_id || artes[a.task_id] || !a.file_url) continue;
+        if (mediaKindFromFile(a.file_name, a.file_url, a.file_type) !== "image") continue;
+        artes[a.task_id] = {
+          post_id: "",
+          titulo: a.file_name || null,
+          legenda: null,
+          status: null,
+          capa: { id: a.id, nome: a.file_name || null, bucket: null, caminho: null, url: a.file_url },
+          do_estudio: false,
+          origem: "anexo",
+        };
+      }
+    }
   }
   return artes;
 }
@@ -405,7 +524,8 @@ async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDos
   if (erroProjetos) throw erroProjetos;
   const ids = ((projetos || []) as { id: string }[]).map((p) => p.id);
   if (!ids.length) return vazio();
-  const janela = janelaDaLista(mes);
+  const agora = new Date();
+  const janela = janelaDeLeitura(mes, agora);
   const { data, error } = await (supabase as any)
     .from("tasks")
     .select(COLUNAS_DA_TAREFA)
@@ -416,7 +536,8 @@ async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDos
     .lt("due_date", janela.fimExclusivo)
     .order("due_date", { ascending: true });
   if (error) throw error;
-  return lerDetalhesDosItens(clientId, (data || []) as ItemDoMes[]);
+  const dados = await lerDetalhesDosItens(clientId, (data || []) as ItemDoMes[]);
+  return mes === PROXIMOS_DIAS ? semPassadoVazio(dados, dataLocal(agora)) : dados;
 }
 
 /**
@@ -466,6 +587,43 @@ export function useItemAvulso(clientId: string, tarefaId: string | null, ativo: 
   });
 }
 
+interface LaminaDoCarrossel {
+  id: string;
+  file_name: string;
+  file_url: string;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  mime_type: string | null;
+  extension: string | null;
+  created_at: string | null;
+}
+
+/**
+ * Ordem das lâminas da arte da Agenda: a capa e as filhas pela ordem real do
+ * carrossel (a mesma do slider da Agenda: ordenarLaminasDoCarrossel). Anexo
+ * sem caminho no Storage é uma lâmina só.
+ */
+export function laminasNaOrdem(capa: ArquivoDaAgenda, filhas: LinhaDoArquivo[]): ArquivoDaAgenda[] {
+  const paraLamina = (f: LinhaDoArquivo): LaminaDoCarrossel => ({
+    id: f.id,
+    file_name: f.file_name || "",
+    file_url: f.file_url || "",
+    storage_bucket: f.storage_bucket || null,
+    storage_path: f.storage_path || null,
+    mime_type: f.mime_type || null,
+    extension: f.extension || null,
+    created_at: f.created_at || null,
+  });
+  const raiz = paraLamina({ id: capa.id, file_name: capa.nome, file_url: capa.url, storage_bucket: capa.bucket, storage_path: capa.caminho });
+  const ordenadas = ordenarLaminasDoCarrossel<LaminaDoCarrossel>(raiz, filhas.filter(arquivoEhImagem).map(paraLamina));
+  const saida = ordenadas.map((f) =>
+    f.id === capa.id
+      ? capa
+      : paraArquivo({ id: f.id, file_name: f.file_name || null, file_url: f.file_url || null, storage_bucket: f.storage_bucket, storage_path: f.storage_path }),
+  );
+  return saida.length ? saida : [capa];
+}
+
 /**
  * Lâminas da arte que já está na Agenda: o arquivo principal e os filhos do
  * carrossel (files.parent_file_id), na ordem do carrossel da Agenda.
@@ -477,24 +635,15 @@ export function useLaminasDaAgenda(capa: ArquivoDaAgenda | null) {
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<ArquivoDaAgenda[]> => {
       if (!capa) return [];
+      // Anexo da tarefa (sem arquivo em Arquivos): não tem filhas.
+      if (!capa.caminho && !capa.bucket) return [capa];
       const { data, error } = await (supabase as any)
         .from("staff_files_secure")
-        .select("id, file_name, file_url, storage_bucket, storage_path, created_at")
+        .select(COLUNAS_DO_ARQUIVO)
         .eq("parent_file_id", capa.id)
         .is("archived_at", null);
       if (error) throw error;
-      const raiz: EditorialMediaFile = { id: capa.id, file_name: capa.nome || "", file_url: capa.url, storage_bucket: capa.bucket, storage_path: capa.caminho };
-      const filhos: EditorialMediaFile[] = ((data || []) as LinhaDoArquivo[]).map((f) => ({
-        id: f.id,
-        file_name: f.file_name || "",
-        file_url: f.file_url,
-        storage_bucket: f.storage_bucket,
-        storage_path: f.storage_path,
-        created_at: f.created_at || null,
-      }));
-      return orderEditorialCarouselFiles(raiz, filhos).map((f) =>
-        paraArquivo({ id: f.id, file_name: f.file_name, file_url: f.file_url || null, storage_bucket: f.storage_bucket || null, storage_path: f.storage_path || null }),
-      );
+      return laminasNaOrdem(capa, (data || []) as LinhaDoArquivo[]);
     },
   });
 }

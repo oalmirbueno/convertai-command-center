@@ -87,7 +87,7 @@ function CartaoDoHype({
         {ROTULO_DA_JANELA[String(hype.janela || "")] || "esta semana"}
         {hype.formato ? ` · ${hype.formato === "estatico" ? "estático" : hype.formato}` : ""}
       </p>
-      {hype.o_que_e && <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{hype.o_que_e}</p>}
+      {hype.o_que_e && <p title={hype.o_que_e} className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{hype.o_que_e}</p>}
       {detalhes && (
         <dl className="mt-2 space-y-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere]">
           {hype.por_que_agora && (
@@ -245,7 +245,7 @@ export default function HypesDaSemana({
           )}
           {dados && dados.resumo && <p className="text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{dados.resumo}</p>}
           {visiveis.length > 0 && (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
               {visiveis.map((h, i) => (
                 <CartaoDoHype
                   key={`${h.titulo}-${i}`}

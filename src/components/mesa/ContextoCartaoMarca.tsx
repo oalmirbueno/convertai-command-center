@@ -8,6 +8,7 @@ import { BotaoComCusto, avisarCustoReal } from "./Custo";
 import BibliotecaDeFontes, { type PapelDaEscolha } from "./ContextoBibliotecaDeFontes";
 import LogosDaMarca from "./ContextoLogos";
 import { MiniaturaDoStorage } from "./ContextoMiniatura";
+import { PaletaDaMarca } from "./ContextoPaleta";
 import { useMesa } from "./MesaContexto";
 import {
   chaveDasFontes,
@@ -20,9 +21,10 @@ import {
 } from "./contextoDoCliente";
 
 /**
- * Cartão Marca do Contexto: logo principal e alternativa, paleta em chips e
- * as fontes de título e texto com a amostra. Tudo pode ser trocado dali
- * mesmo; o editor completo continua em Detalhes.
+ * Hub Marca do Contexto: paleta em amostras grandes (clique copia o hex),
+ * logo principal e alternativa com fundo de conferência e as fontes de
+ * título e texto com a amostra. Tudo pode ser trocado dali mesmo; o editor
+ * completo continua em "Editar em detalhe".
  */
 
 const ROTULO_DA_ORIGEM: Record<string, string> = { biblioteca: "biblioteca", upload: "enviada", documento: "documento" };
@@ -56,7 +58,7 @@ export function ChipsDaPaleta({ paleta }: { paleta: CorDoKit[] }) {
 function Subtitulo({ children, acao }: { children: string; acao?: ReactNode }) {
   return (
     <div className="mb-1.5 flex min-w-0 items-center justify-between">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{children}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
       {acao}
     </div>
   );
@@ -94,37 +96,39 @@ export function FontesDaMarca() {
       >
         Fontes
       </Subtitulo>
-      <ul className="space-y-1.5">
+      <ul className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {papeis.map(({ papel, rotulo }) => {
           const f = lista.find((x) => x.papel === papel);
           const indice = f ? comAmostra.indexOf(f) : -1;
           return (
-            <li key={papel} className="flex min-w-0 items-center rounded-lg border border-border bg-card p-1.5">
+            <li key={papel} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
               <button
                 type="button"
                 onClick={() => (indice >= 0 ? setAmpliada(indice) : setGaleria(papel))}
-                className="mr-2.5 flex h-11 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-white"
+                className="flex h-20 w-full items-center justify-center overflow-hidden border-b border-border bg-white px-3 transition-opacity hover:opacity-90"
                 aria-label={f ? `Ver a amostra de ${f.nome} maior` : `Escolher a fonte de ${rotulo.toLowerCase()}`}
                 title={f ? "Ver maior" : "Escolher na biblioteca"}
               >
                 {f && f.amostra_path ? (
-                  <MiniaturaDoStorage bucket="mesa" caminho={f.amostra_path} alt={`Amostra de ${f.nome}`} largura={360} ajuste="contain" className="h-full w-full" />
+                  <MiniaturaDoStorage bucket="mesa" caminho={f.amostra_path} alt={`Amostra de ${f.nome}`} largura={640} ajuste="contain" className="h-full w-full" />
                 ) : (
-                  <span className="text-[10px] text-neutral-500">{fontes.isLoading ? "..." : "sem amostra"}</span>
+                  <span className="text-[11px] text-neutral-500">{fontes.isLoading ? "Lendo..." : f ? "Sem amostra" : "Escolher fonte"}</span>
                 )}
               </button>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">{rotulo}</span>
-                <span className={`block truncate text-[12.5px] font-medium ${f ? "text-foreground" : "text-muted-foreground"}`} title={f ? f.nome : undefined}>
-                  {f ? f.nome : fontes.isLoading ? "Lendo..." : "Sem fonte"}
+              <div className="flex min-w-0 items-center px-2.5 py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[10.5px] uppercase tracking-wider text-muted-foreground">
+                    {rotulo}
+                    {f && ROTULO_DA_ORIGEM[f.origem] ? ` · ${ROTULO_DA_ORIGEM[f.origem]}` : ""}
+                  </span>
+                  <span className={`block truncate text-[13px] font-medium ${f ? "text-foreground" : "text-muted-foreground"}`} title={f ? f.nome : undefined}>
+                    {f ? f.nome : fontes.isLoading ? "Lendo..." : "Sem fonte"}
+                  </span>
                 </span>
-              </span>
-              {f && ROTULO_DA_ORIGEM[f.origem] && (
-                <span className="ml-2 hidden shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground sm:inline">{ROTULO_DA_ORIGEM[f.origem]}</span>
-              )}
-              <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => setGaleria(papel)}>
-                {f ? "Trocar" : "Escolher"}
-              </Button>
+                <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => setGaleria(papel)}>
+                  {f ? "Trocar" : "Escolher"}
+                </Button>
+              </div>
             </li>
           );
         })}
@@ -176,17 +180,13 @@ export default function CartaoMarca({
 }) {
   const paleta = Array.isArray(kit?.paleta) ? kit!.paleta! : [];
   return (
-    <div className="flex min-w-0 flex-1 flex-col space-y-4">
-      <div className="min-w-0">
-        <Subtitulo>Logo</Subtitulo>
-        <LogosDaMarca kit={kit} candidatos={candidatos} compacto />
-      </div>
+    <div className="flex min-w-0 flex-1 flex-col space-y-5">
       <div className="min-w-0">
         <Subtitulo
           acao={
             onEditar ? (
               <button type="button" onClick={onEditar} className="text-[11.5px] font-medium text-foreground hover:underline">
-                Editar
+                Editar cores
               </button>
             ) : undefined
           }
@@ -194,16 +194,18 @@ export default function CartaoMarca({
           Paleta
         </Subtitulo>
         {carregando && !kit ? (
-          <div className="flex">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <span key={i} className="mr-1.5 h-6 w-20 animate-pulse rounded-full bg-muted" />
-            ))}
-          </div>
+          <PaletaDaMarca paleta={[]} carregando />
         ) : paleta.length ? (
-          <ChipsDaPaleta paleta={paleta} />
+          <PaletaDaMarca paleta={paleta} />
         ) : (
-          <p className="text-[12px] text-muted-foreground">Sem paleta. Edite a Marca ou conte ao agente as cores da marca.</p>
+          <p className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[12px] text-muted-foreground">
+            Sem paleta. Edite a Marca ou conte ao agente as cores da marca.
+          </p>
         )}
+      </div>
+      <div className="min-w-0">
+        <Subtitulo>Logo</Subtitulo>
+        <LogosDaMarca kit={kit} candidatos={candidatos} compacto />
       </div>
       <FontesDaMarca />
     </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, Plus, Send, Sparkles, X } from "lucide-react";
+import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, PanelRightClose, PanelRightOpen, Plus, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -28,14 +28,17 @@ import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
 import { useMidia } from "./mesaV4Api";
+import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
  * Aba Mês. No alto, os Hypes da semana (HypesDaSemana.tsx) e, sempre à mão,
- * o Agente do mês (AgenteDoMes.tsx): coluna fixa à direita no computador
- * largo, gaveta no celular e no notebook. Depois, a Agenda do mês: o mesmo calendário da Agenda do painel,
+ * o Agente do mês (AgenteDoMes.tsx). O agente nunca espreme o calendário:
+ * até 1800 px de tela ele é uma gaveta à direita (botão fixo "Agente do
+ * mês"); acima disso fica em coluna ao lado, que dá para recolher, porque aí
+ * sobram pelo menos 150 px por dia. Depois, a Agenda do mês: o mesmo calendário da Agenda do painel,
  * onde a equipe seleciona os itens, completa e melhora com o agente e abre no
  * Estúdio (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos,
  * de dois jeitos: "Planejar e preencher a agenda" faz sozinho mês a mês
@@ -253,9 +256,10 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
         ))}
       </div>
       {erro && <AvisoDeErro erro={erro} />}
-      <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder="O que você quer mudar?" />
+      <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder="O que você quer mudar?" aria-label="Pedido ao estrategista" />
       <div className="flex items-center justify-between">
         <EstimativaInline partes={partes} />
+        <Ditado valor={texto} onChange={setTexto} disabled={enviando} className="ml-auto" />
         <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={enviando || !texto.trim()}>
           {enviando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
           Enviar
@@ -574,6 +578,19 @@ function lerModo(): ModoDePlanejar {
   }
 }
 
+/** Tela a partir da qual o agente pode ficar em coluna ao lado sem espremer os dias. */
+export const TELA_DO_AGENTE_AO_LADO = "(min-width: 1800px)";
+
+const chaveDoAgenteRecolhido = "mesa:agente:recolhido";
+
+function lerAgenteRecolhido(): boolean {
+  try {
+    return window.localStorage.getItem(chaveDoAgenteRecolhido) === "1";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
@@ -587,8 +604,11 @@ export default function AbaMes({
   onCriarCampanha?: (hypeIndice: number) => void;
 } = {}) {
   const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
-  // Coluna fixa do agente só em tela larga; abaixo disso, gaveta.
-  const larga = useMidia("(min-width: 1280px)");
+  // Coluna ao lado só em tela muito larga (e se a pessoa não recolheu);
+  // abaixo disso, gaveta. Assim cada dia do calendário tem largura de leitura.
+  const larga = useMidia(TELA_DO_AGENTE_AO_LADO);
+  const [recolhido, setRecolhido] = useState(lerAgenteRecolhido);
+  const aoLado = larga && !recolhido;
   const [gaveta, setGaveta] = useState(false);
   const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
   const trocarModo = (m: ModoDePlanejar) => {
@@ -599,15 +619,35 @@ export default function AbaMes({
       /* sem armazenamento: vale só nesta visita */
     }
   };
-  const agente = <AgenteDoMes onAbrirNoEstudio={onAbrirNoEstudio} pendenteExterno={pendente} className="h-full" />;
+  const fixarAoLado = (fixar: boolean) => {
+    setRecolhido(!fixar);
+    if (fixar) setGaveta(false);
+    try {
+      window.localStorage.setItem(chaveDoAgenteRecolhido, fixar ? "0" : "1");
+    } catch {
+      /* sem armazenamento: vale só nesta visita */
+    }
+  };
+  const acao = larga ? (
+    <button
+      type="button"
+      onClick={() => fixarAoLado(!aoLado)}
+      className="inline-flex h-8 shrink-0 items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      aria-label={aoLado ? "Recolher o agente" : "Fixar o agente ao lado"}
+      title={aoLado ? "Recolher o agente e dar a largura toda ao calendário" : "Fixar o agente ao lado do calendário"}
+    >
+      {aoLado ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+    </button>
+  ) : null;
+  const agente = <AgenteDoMes onAbrirNoEstudio={onAbrirNoEstudio} pendenteExterno={pendente} className="h-full" acaoDoCabecalho={acao} />;
   return (
-    <div className="min-w-0 xl:grid xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-6">
-      <div className="min-w-0 space-y-8">
+    <div className={aoLado ? "grid min-w-0 grid-cols-[minmax(0,1fr)_400px] gap-6" : "min-w-0"} data-agente={aoLado ? "ao-lado" : "gaveta"}>
+      <div className="min-w-0 space-y-6">
         <HypesDaSemana
           onCriarCampanha={(i) => onCriarCampanha?.(i)}
           onPedidoInicio={(p) => {
             setPendente(p);
-            if (!larga) setGaveta(true);
+            if (!aoLado) setGaveta(true);
           }}
           onPedidoFim={() => setPendente(null)}
         />
@@ -639,7 +679,7 @@ export default function AbaMes({
         </section>
       </div>
 
-      {larga ? (
+      {aoLado ? (
         <aside className="min-w-0" aria-label="Agente do mês">
           {/* Abaixo do cabeçalho fixo da Mesa (80px do painel mais a barra de custo e as etapas). */}
           <div className="sticky top-[212px] h-[calc(100vh-228px)] min-h-[480px] overflow-hidden rounded-xl border border-border bg-card">
@@ -657,7 +697,7 @@ export default function AbaMes({
             Agente do mês
           </button>
           <Sheet open={gaveta} onOpenChange={setGaveta}>
-            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
               <SheetTitle className="sr-only">Agente do mês</SheetTitle>
               {agente}
             </SheetContent>

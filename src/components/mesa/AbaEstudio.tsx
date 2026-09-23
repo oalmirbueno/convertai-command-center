@@ -1,20 +1,25 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
+  Bookmark,
+  CalendarCheck,
   Check,
   Copy,
   Hash,
+  ImagePlus,
+  Layers,
   ListChecks,
   Loader2,
   MessageSquare,
-  PanelLeft,
+  PenLine,
   RefreshCw,
   Send,
   Sparkles,
   Square,
   Star,
+  Type,
   Wand2,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,9 +27,9 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   chamarFuncao,
   custoDaResposta,
@@ -40,6 +45,7 @@ import {
   TAMANHOS,
   textoDoErro,
   usd,
+  type ModeloIa,
   type ParteDaEstimativa,
   type Qualidade,
 } from "@/lib/mesa/api";
@@ -49,11 +55,11 @@ import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { emColunas, encaixarNaJanela, rolarAte, useAlturaDaEsteira, useFaixa } from "./EstudioAltura";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
 import EstudioEntrega from "./EstudioEntrega";
+import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
 import EstudioLista, { DICA_DO_ROTEIRO, formatoDoItem, SeloDoItem, type FontesDaLista } from "./EstudioLista";
 import EstudioPreparar from "./EstudioPreparar";
 import {
-  contarFiltros,
   ETAPAS_DA_ESTEIRA,
   etapaDoItem,
   faltaEnviar,
@@ -64,7 +70,7 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
-import PranchetaDoEstudio from "./PranchetaDoEstudio";
+import PranchetaDoEstudio, { type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import {
   copiarTexto,
@@ -90,59 +96,119 @@ import {
 } from "./useItensDoMes";
 
 /**
- * Aba Estúdio como esteira de produção (pedido do dono em 23/09: "está meio
- * confuso", "tem que ser como uma esteira de produção", "a sensação de que
- * precisa ficar rolando lá infinito", "apertar menos botões").
+ * Aba Estúdio (pedido do dono em 23/09: "o estúdio ficou muito pequeno para
+ * editar e trabalhar"; "quando entra no Estúdio não tem a arte
+ * selecionada").
  *
- * No computador a aba ocupa a altura da janela abaixo do cabeçalho fixo da
- * Mesa, em três colunas com rolagem própria: as pautas (esquerda), a
- * produção (centro: barra do item, barra de ação, prancheta e a lâmina
- * escolhida grande) e o inspetor em abas (Lâmina, Conjunto, Referências,
- * Legenda, Entrega). Entre 1024 e 1279 px as pautas viram gaveta; abaixo de
- * 1024 a página rola numa coluna só, com o inspetor embaixo.
+ * EM CIMA, a faixa das pautas (EstudioLista): período, filtros e os posts um
+ * ao lado do outro por semana, numa tira com rolagem própria, recolhível.
+ * EMBAIXO, o estúdio ocupando a largura: a barra do item (título, estado,
+ * qualidade com o preço de cada uma, gerador e a ação principal), a
+ * prancheta das lâminas e a lâmina escolhida GRANDE. Na borda direita, uma
+ * barra de ferramentas fina com ícones (Lâmina, Fotos, Referências,
+ * Conjunto, Legenda, Entrega): o clique abre o painel deslizante da
+ * ferramenta, sem cartões empilhados. No celular tudo vira uma coluna e o
+ * painel abre embaixo da lâmina.
  *
- * A esteira: sem direção, o centro mostra o cartão "Preparar" (roteiro ou
- * diretor, quantidade de lâminas, contínuo e pedido, tudo antes da direção).
- * Item que já tem arte na Agenda aparece como "Na agenda", com as lâminas
- * que existem, e só refaz se pedir. Depois de entregar, o próprio inspetor
- * oferece o envio para aprovação.
+ * O Estúdio sempre abre com um item: o último aberto neste cliente ou,
+ * senão, o primeiro de "A fazer" (sem mexer no endereço; o clique na faixa
+ * é que grava o item na URL).
  *
  * Nenhuma ação de IA abre janela: o BotaoComCusto mostra o preço ao lado e
- * executa no clique; o andamento aparece na própria lâmina (cronômetro), sem
- * travar o resto. "Gerar as que faltam" roda até 3 lâminas ao mesmo tempo; no
- * carrossel contínuo, uma de cada vez, porque cada lâmina continua a
- * anterior. A conferência roda logo depois de cada lâmina. A tela nunca
- * desenha texto por cima da arte.
+ * executa no clique. O andamento de cada lâmina é UM indicador só, na
+ * prancheta (etapa e cronômetro que não recomeça). "Gerar as que faltam"
+ * roda até 3 lâminas ao mesmo tempo; no carrossel contínuo, uma de cada vez,
+ * porque cada lâmina continua a anterior. A conferência roda logo depois de
+ * cada lâmina. A tela nunca desenha texto por cima da arte.
  */
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
 const EM_PARALELO = 3;
 /** Largura das lâminas na prancheta (px); a altura é 1,25 vez. */
-const LARGURA_NA_PRANCHETA = 128;
+const LARGURA_NA_PRANCHETA = 112;
+const LARGURA_NA_PRANCHETA_PILHA = 104;
+/** Largura do painel deslizante das ferramentas (px). */
+const LARGURA_DO_PAINEL = 360;
 
-const QUALIDADES_DO_ESTUDIO: { valor: Qualidade; rotulo: string; dica: string }[] = [
+export const QUALIDADES_DO_ESTUDIO: { valor: Qualidade; rotulo: string; dica: string }[] = [
   { valor: "baixa", rotulo: "Rascunho", dica: "para testar ideia e layout" },
   { valor: "media", rotulo: "Padrão", dica: "texto nítido, o normal para postar" },
   { valor: "alta", rotulo: "Final", dica: "máximo detalhe, mais caro e mais lento" },
 ];
 
+/** Partes da estimativa de uma lâmina (imagem + leitura da conferência). */
+export function partesDaLamina(modeloImagem: string, leitorId: string | undefined, q: Qualidade, vezes = 1): ParteDaEstimativa[] {
+  return [
+    { modeloId: modeloImagem, tipo: "imagem", imagens: 1, qualidade: q, tokensEntrada: TAMANHOS.imagemAnexos.entrada, vezes },
+    { modeloId: leitorId, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida, vezes },
+  ];
+}
+
+/** Preço de uma lâmina em cada qualidade, pela estimativa local (vazio quando não dá para estimar). */
+export function precosPorQualidade(modeloImagem: string, leitorId: string | undefined, catalogo: ModeloIa[]): Record<Qualidade, string> {
+  const saida: Record<Qualidade, string> = { baixa: "", media: "", alta: "" };
+  if (!modeloImagem) return saida;
+  for (const q of QUALIDADES_DO_ESTUDIO) {
+    const v = estimarLocal(partesDaLamina(modeloImagem, leitorId, q.valor), catalogo);
+    saida[q.valor] = v === null ? "" : `~${usd(v)}`;
+  }
+  return saida;
+}
+
 type Filtro = FiltroDoEstudio;
-type AbaDoInspetor = "lamina" | "conjunto" | "referencias" | "legenda" | "entrega";
+type Ferramenta = "lamina" | "fotos" | "referencias" | "conjunto" | "legenda" | "entrega" | "post" | "pauta";
+type EstadoDoItem = "producao" | "agenda" | "preparar";
 
-const ABAS_DO_INSPETOR: { valor: AbaDoInspetor; rotulo: string }[] = [
-  { valor: "lamina", rotulo: "Lâmina" },
-  { valor: "conjunto", rotulo: "Conjunto" },
-  { valor: "referencias", rotulo: "Referências" },
-  { valor: "legenda", rotulo: "Legenda" },
-  { valor: "entrega", rotulo: "Entrega" },
-];
+const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
+  lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
+  fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
+  referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
+  conjunto: { rotulo: "Conjunto", dica: "Conceito, fio visual, carrossel contínuo e pedido ao diretor", icone: Layers },
+  legenda: { rotulo: "Legenda", dica: "Legenda e hashtags do post", icone: Type },
+  entrega: { rotulo: "Entrega", dica: "Entregar em Arquivos e enviar para aprovação", icone: Send },
+  post: { rotulo: "Post", dica: "O post na Agenda, a data e a legenda", icone: CalendarCheck },
+  pauta: { rotulo: "Pauta", dica: "A pauta e as etapas da esteira", icone: ListChecks },
+};
 
-const semOrdem = (g: Record<number, number>, ordem: number) => {
+export const FERRAMENTAS_DO_ESTADO: Record<EstadoDoItem, Ferramenta[]> = {
+  producao: ["lamina", "fotos", "referencias", "conjunto", "legenda", "entrega"],
+  agenda: ["post"],
+  preparar: ["pauta"],
+};
+
+const semOrdem = <T,>(g: Record<number, T>, ordem: number) => {
   const n = { ...g };
   delete n[ordem];
   return n;
 };
+
+/**
+ * Item que abre sozinho quando a URL não traz nenhum: o último aberto (se
+ * ainda está na faixa), senão o primeiro de "A fazer", senão o primeiro.
+ */
+export function itemInicial(itens: ItemDoMes[], ultimo: string | null, aFazer: (i: ItemDoMes) => boolean): string | null {
+  if (!itens.length) return null;
+  if (ultimo && itens.some((i) => i.id === ultimo)) return ultimo;
+  const primeiro = itens.find(aFazer);
+  return (primeiro || itens[0]).id;
+}
+
+const chaveDoUltimo = (clientId: string) => `mesa:estudio:ultimo:${clientId}`;
+function lerUltimo(clientId: string): string | null {
+  try {
+    return window.localStorage.getItem(chaveDoUltimo(clientId));
+  } catch {
+    return null;
+  }
+}
+function gravarUltimo(clientId: string, id: string) {
+  try {
+    window.localStorage.setItem(chaveDoUltimo(clientId), id);
+  } catch {
+    /* sem localStorage: abre pelo primeiro de "A fazer" */
+  }
+}
 
 function Rotulo({ children, acao }: { children: ReactNode; acao?: ReactNode }) {
   return (
@@ -176,6 +242,59 @@ function EtapasDaEsteira({ atual }: { atual: number }) {
   );
 }
 
+/** Barra de ferramentas: ícones finos (com dica) que abrem o painel deslizante. */
+function BarraDeFerramentas({
+  ferramentas,
+  ativa,
+  onAbrir,
+  marca,
+  vertical,
+}: {
+  ferramentas: Ferramenta[];
+  ativa: Ferramenta | null;
+  onAbrir: (f: Ferramenta) => void;
+  marca: (f: Ferramenta) => boolean;
+  vertical: boolean;
+}) {
+  return (
+    <TooltipProvider delayDuration={250}>
+      <nav
+        aria-label="Ferramentas"
+        className={vertical ? "flex w-12 shrink-0 flex-col items-center border-l border-border py-2" : "flex min-w-0 overflow-x-auto border-t border-border px-2 py-1.5"}
+      >
+        {ferramentas.map((f) => {
+          const def = FERRAMENTAS[f];
+          const Icone = def.icone;
+          const aberta = ativa === f;
+          return (
+            <Tooltip key={f}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => onAbrir(f)}
+                  aria-label={def.rotulo}
+                  aria-pressed={aberta}
+                  className={`relative flex shrink-0 items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    vertical ? "mb-1 h-10 w-10" : "mr-1 h-10 min-w-[64px] flex-col px-2"
+                  } ${aberta ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
+                >
+                  <Icone className="h-[18px] w-[18px]" />
+                  {!vertical && <span className="mt-0.5 text-[10px] leading-none">{def.rotulo}</span>}
+                  {marca(f) && <span className={`absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full ${aberta ? "bg-primary-foreground" : "bg-primary"}`} aria-label="pede atenção" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side={vertical ? "left" : "top"} className="max-w-[240px]">
+                <p className="text-[12px] font-medium">{def.rotulo}</p>
+                <p className="text-[11.5px] text-muted-foreground">{def.dica}</p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </nav>
+    </TooltipProvider>
+  );
+}
+
 function DetalheDoItem({
   item,
   trabalho,
@@ -184,7 +303,6 @@ function DetalheDoItem({
   temRoteiro,
   publicacaoDe,
   modo,
-  navegacao,
 }: {
   item: ItemDoMes;
   trabalho: Trabalho | null;
@@ -192,10 +310,8 @@ function DetalheDoItem({
   roteiro: InfoDoRoteiro | null;
   temRoteiro: boolean;
   publicacaoDe: (postId: string) => PublicacaoDoPost | null;
-  /** "colunas": altura fixa e rolagem por coluna; "pilha": a página rola. */
+  /** "colunas": altura fixa e rolagem por área; "pilha": a página rola. */
   modo: "colunas" | "pilha";
-  /** Botão à esquerda da barra do item (voltar ou abrir as pautas). */
-  navegacao: ReactNode;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
@@ -213,24 +329,23 @@ function DetalheDoItem({
   const [entregando, setEntregando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erroDoEnvio, setErroDoEnvio] = useState<string | null>(null);
-  const [gerando, setGerando] = useState<Record<number, number>>({});
-  const [fila, setFila] = useState<number[]>([]);
+  // O andamento de cada lâmina (fila, gerando, ajustando, conferindo): a fonte do indicador único da prancheta.
+  const [andamento, setAndamento] = useState<Record<number, AndamentoDaLamina>>({});
   const [emLote, setEmLote] = useState(false);
-  const [conferindo, setConferindo] = useState<Record<number, boolean>>({});
   const [pedidoAoDiretor, setPedidoAoDiretor] = useState("");
   const [salvandoContinuo, setSalvandoContinuo] = useState(false);
   const [versaoVista, setVersaoVista] = useState<number | null>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [refazendo, setRefazendo] = useState(false);
-  // Guardados na sessão: voltar de outra aba devolve a mesma lâmina, o mesmo painel e a mesma aba do inspetor.
+  // Guardados na sessão: voltar de outra aba devolve a mesma lâmina, o mesmo painel e a mesma ferramenta.
   const [selecionado, setSelecionado] = useEstadoGuardado<number | null>(`${chave}:lamina`, null);
   const [painel, setPainel] = useEstadoGuardado<PainelDaLamina>(`${chave}:painel`, "direcao");
-  const [abaDoInspetor, setAbaDoInspetor] = useEstadoGuardado<AbaDoInspetor>(`${chave}:aba`, "lamina");
+  const [ferramentaGuardada, setFerramenta] = useEstadoGuardado<Ferramenta | "">(`${chave}:ferramenta`, "lamina");
   const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "conjunto");
   const [refsAba, setRefsAba] = useEstadoGuardado<"cliente" | "banco">(`${chave}:refs-aba`, "cliente");
   const parar = useRef(false);
-  const inspetor = useRef<HTMLElement>(null);
+  const painelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setModeloImagem(trabalho?.modelo_imagem_id || padraoPara(catalogo, "imagem")?.id || "");
@@ -263,10 +378,7 @@ function DetalheDoItem({
   const partesConferir = (): ParteDaEstimativa[] => [
     { modeloId: leitor?.id, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida },
   ];
-  const partesGerar = (vezes = 1, q: Qualidade = qualidade): ParteDaEstimativa[] => [
-    { modeloId: modeloImagem, tipo: "imagem", imagens: 1, qualidade: q, tokensEntrada: TAMANHOS.imagemAnexos.entrada, vezes },
-    { modeloId: leitor?.id, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida, vezes },
-  ];
+  const partesGerar = (vezes = 1, q: Qualidade = qualidade): ParteDaEstimativa[] => partesDaLamina(modeloImagem, leitor?.id, q, vezes);
   const partesAjustar = (): ParteDaEstimativa[] => [
     { modeloId: leitor?.id, tipo: "texto", tokensEntrada: TAMANHOS.ajuste.entrada, tokensSaida: TAMANHOS.ajuste.saida },
     ...partesGerar(1),
@@ -274,21 +386,24 @@ function DetalheDoItem({
   const partesDiretor = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
   ];
-  const precoPorLamina = (q: Qualidade) => {
-    const v = modeloImagem ? estimarLocal(partesGerar(1, q), catalogo) : null;
-    return v === null ? "" : `, cerca de ${usd(v)} por lâmina`;
-  };
+  const precos = precosPorQualidade(modeloImagem, leitor?.id, catalogo);
 
+  /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
+  const marcar = (ordem: number, etapa: EtapaDaLamina) =>
+    setAndamento((a) => {
+      const antes = a[ordem];
+      const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();
+      return { ...a, [ordem]: { etapa, desde } };
+    });
+  const soltar = (ordem: number) => setAndamento((a) => semOrdem(a, ordem));
+
+  /** Conferência de uma lâmina; é a última etapa: no fim a lâmina fica livre. */
   const conferir = async (trabalhoId: string, ordem: number) => {
-    setConferindo((c) => ({ ...c, [ordem]: true }));
+    marcar(ordem, "conferindo");
     try {
       return await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
     } finally {
-      setConferindo((c) => {
-        const n = { ...c };
-        delete n[ordem];
-        return n;
-      });
+      soltar(ordem);
       atualizar();
     }
   };
@@ -304,19 +419,20 @@ function DetalheDoItem({
     }
   };
 
+  /** Gera uma lâmina. Com erro a lâmina fica livre; com sucesso segue para a conferência. */
   const gerarUma = async (trabalhoId: string, ordem: number): Promise<number> => {
-    setFila((f) => f.filter((o) => o !== ordem));
-    setGerando((g) => ({ ...g, [ordem]: Date.now() }));
+    marcar(ordem, "gerando");
     try {
       const g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
       atualizar();
       return custoDaResposta(g) || 0;
-    } finally {
-      setGerando((g) => semOrdem(g, ordem));
+    } catch (e) {
+      soltar(ordem);
+      throw e;
     }
   };
 
-  /** Uma lâmina só (inspetor ou barrinha da prancheta): gera e confere em seguida. */
+  /** Uma lâmina só (ferramenta Lâmina ou barrinha da prancheta): gera e confere em seguida. */
   const gerarEConferir = async (ordem: number) => {
     if (!trabalho) return { custo_usd: 0 };
     const custo = await gerarUma(trabalho.id, ordem);
@@ -329,14 +445,13 @@ function DetalheDoItem({
   const semImagem = cardsDaDirecao.filter((c) => !ultimas.has(c.ordem));
   const filaDeGeracao = semImagem.length ? semImagem : cardsDaDirecao;
   const todosComImagem = cardsDaDirecao.length > 0 && semImagem.length === 0;
-  const gerandoAgora = Object.keys(gerando).length;
-  const algoGerando = emLote || gerandoAgora > 0;
+  const algoGerando = emLote || Object.keys(andamento).length > 0;
   const ocupado = algoGerando || entregando;
   const infinito = !!trabalho?.direcao?.carrossel_infinito;
-  const laminaOcupada = (ordem: number) => gerando[ordem] !== undefined || fila.indexOf(ordem) >= 0 || entregando;
+  const laminaOcupada = (ordem: number) => !!andamento[ordem] || entregando;
   const progresso = cardsDaDirecao.length ? Math.round((ultimas.size / cardsDaDirecao.length) * 100) : 0;
   const entregue = !!trabalho && (trabalho.status === "entregue" || trabalho.entrega_status === "agendado");
-  const estado: "producao" | "agenda" | "preparar" = cardsDaDirecao.length > 0 ? "producao" : arte && !refazendo ? "agenda" : "preparar";
+  const estado: EstadoDoItem = cardsDaDirecao.length > 0 ? "producao" : arte && !refazendo ? "agenda" : "preparar";
 
   // Lâmina escolhida: a guardada na sessão, se ainda existir; senão a primeira.
   useEffect(() => {
@@ -359,7 +474,12 @@ function DetalheDoItem({
     if (!trabalho) return { custo_usd: 0 };
     parar.current = false;
     setEmLote(true);
-    setFila(ordens.slice());
+    const agora = Date.now();
+    setAndamento((a) => {
+      const n = { ...a };
+      for (const o of ordens) if (!n[o]) n[o] = { etapa: "fila", desde: agora };
+      return n;
+    });
     const limite = infinito ? 1 : EM_PARALELO;
     let proximo = 0;
     let total = 0;
@@ -383,7 +503,12 @@ function DetalheDoItem({
       total += custosConferencia.reduce((s, v) => s + v, 0);
     } finally {
       setEmLote(false);
-      setFila([]);
+      // Parou no meio: quem ficou na fila sai dela.
+      setAndamento((a) => {
+        const n: Record<number, AndamentoDaLamina> = {};
+        for (const k of Object.keys(a)) if (a[Number(k)].etapa !== "fila") n[Number(k)] = a[Number(k)];
+        return n;
+      });
       atualizar();
     }
     if (falhas.length) {
@@ -403,7 +528,7 @@ function DetalheDoItem({
   };
   const aoPreparar = () => {
     setRefazendo(false);
-    setAbaDoInspetor("lamina");
+    setFerramenta("lamina");
     setPainel("direcao");
     atualizar();
   };
@@ -411,7 +536,8 @@ function DetalheDoItem({
   /** Ajuste da lâmina: livre, por áreas (frações 0 a 1) ou só o fundo. */
   const ajustar = async (ordem: number, instrucao: string, opcoes: OpcoesDoAjuste = {}) => {
     if (!trabalho) return { custo_usd: 0 };
-    setGerando((g) => ({ ...g, [ordem]: Date.now() }));
+    marcar(ordem, "ajustando");
+    let custo = 0;
     try {
       const a = await chamarFuncao<any>("estudio-arte", {
         acao: "ajustar_card",
@@ -423,14 +549,16 @@ function DetalheDoItem({
         imagem_id: opcoes.imagem_id,
       });
       atualizar();
-      const custoConferencia = await conferirDepois(trabalho.id, ordem);
-      return { custo_usd: (custoDaResposta(a) || 0) + custoConferencia };
-    } finally {
-      setGerando((g) => semOrdem(g, ordem));
+      custo = custoDaResposta(a) || 0;
+    } catch (e) {
+      soltar(ordem);
+      throw e;
     }
+    const custoConferencia = await conferirDepois(trabalho.id, ordem);
+    return { custo_usd: custo + custoConferencia };
   };
 
-  /** Grava escolhas sem custo no trabalho (referências, foto real, texto, contínuo). */
+  /** Grava escolhas sem custo no trabalho (referências, fotos, texto, contínuo). */
   const configurar = async (corpo: Record<string, unknown>) => {
     if (!trabalho) return;
     await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
@@ -533,7 +661,7 @@ function DetalheDoItem({
           toast.error("Entregue em Arquivos, mas o envio para aprovação falhou", { description: textoDoErro(e) });
         }
       } else {
-        toast.success("Entregue em Arquivos", { description: "O envio para aprovação fica aqui mesmo, na aba Entrega." });
+        toast.success("Entregue em Arquivos", { description: "O envio para aprovação fica aqui mesmo, na ferramenta Entrega." });
       }
       atualizar();
       void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
@@ -562,22 +690,31 @@ function DetalheDoItem({
     }
   };
 
-  /** Troca a aba do inspetor; na pilha (celular), o inspetor fica embaixo e a tela desce até ele. */
-  const irParaAba = (a: AbaDoInspetor) => {
-    setAbaDoInspetor(a);
-    if (!colunas) window.setTimeout(() => rolarAte(inspetor.current, "start"), 60);
+  // Ferramentas do estado do item; a guardada vale se existir neste estado, senão abre a primeira dele. Fechada ("") fica fechada.
+  const ferramentas = FERRAMENTAS_DO_ESTADO[estado];
+  const ferramenta: Ferramenta | null = !ferramentaGuardada
+    ? null
+    : ferramentas.indexOf(ferramentaGuardada as Ferramenta) >= 0
+      ? (ferramentaGuardada as Ferramenta)
+      : ferramentas[0];
+
+  /** Abre a ferramenta (o mesmo ícone fecha). No celular, o painel fica embaixo e a tela desce até ele. */
+  const abrirFerramenta = (f: Ferramenta, alternar = true) => {
+    const fechar = alternar && ferramenta === f;
+    setFerramenta(fechar ? "" : f);
+    if (!colunas && !fechar) window.setTimeout(() => rolarAte(painelRef.current, "start"), 60);
   };
 
   const abrirPainel = (ordem: number, p: PainelDaLamina) => {
     setSelecionado(ordem);
     setPainel(p);
-    irParaAba("lamina");
+    abrirFerramenta("lamina", false);
   };
 
   /**
    * Clique simples na prancheta: só escolhe a lâmina. O ajuste livre e as
-   * versões voltam ao topo do inspetor (sem rolar sozinho a cada clique); a
-   * marcação de área e a troca de fundo continuam, para seguir lâmina a lâmina.
+   * versões voltam ao topo da ferramenta (sem rolar sozinho a cada clique);
+   * a marcação de área e a troca de fundo continuam, para seguir lâmina a lâmina.
    */
   const escolherLamina = (ordem: number) => {
     setSelecionado(ordem);
@@ -590,7 +727,7 @@ function DetalheDoItem({
     .map((c) => {
       const lista = (trabalho?.cards || []).filter((v) => v.ordem === c.ordem);
       const vista = c.ordem === selecionado && versaoVista !== null ? lista.find((v) => v.versao === versaoVista) || ultimas.get(c.ordem)! : ultimas.get(c.ordem)!;
-      return { ordem: c.ordem, imagem: { caminho: vista.storage_path, titulo: `Lâmina ${c.ordem} · v${vista.versao}` } };
+      return { ordem: c.ordem, imagem: { caminho: vista.storage_path, titulo: `Lâmina ${c.ordem} · v${vista.versao}`, proporcao: 0.8 } };
     });
   const ampliarLamina = (ordem: number) => {
     const i = paraAmpliar.findIndex((a) => a.ordem === ordem);
@@ -598,235 +735,280 @@ function DetalheDoItem({
   };
 
   const situacao = situacaoDoItem(trabalho, arte, temRoteiro);
-  const publicacao = trabalho?.post_id ? publicacaoDe(trabalho.post_id) : arte ? publicacaoDe(arte.post_id) : null;
+  const publicacao = trabalho?.post_id ? publicacaoDe(trabalho.post_id) : arte && arte.post_id ? publicacaoDe(arte.post_id) : null;
   const linkAgendaDoItem = trabalho?.post_id
     ? linkDaAgenda(clientId, trabalho.post_id, publicacao?.scheduled_at || trabalho.agendado_para)
-    : arte
+    : arte && arte.post_id
       ? linkDaAgenda(clientId, arte.post_id, publicacao?.scheduled_at)
       : null;
-  const desenhandoAreas = estado === "producao" && abaDoInspetor === "lamina" && painel === "areas" && !!ultimaDaEscolhida;
+  const desenhandoAreas = estado === "producao" && ferramenta === "lamina" && painel === "areas" && !!ultimaDaEscolhida;
   const prontoParaEntregar = todosComImagem && !entregue;
   const opcoesDeImagem = modelosAtivos(catalogo, "imagem");
 
-  // ---------------------------------------------------------------- centro
+  const marcaNaFerramenta = (f: Ferramenta) =>
+    (f === "entrega" && (prontoParaEntregar || faltaEnviar(trabalho))) || (f === "legenda" && todosComImagem && !legenda.trim() && !entregue);
+
+  // ---------------------------------------------------------------- barra do item
+
+  const seletorDeQualidade = (
+    <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da lâmina">
+      {QUALIDADES_DO_ESTUDIO.map((q) => {
+        const ativa = qualidade === q.valor;
+        return (
+          <button
+            key={q.valor}
+            type="button"
+            role="radio"
+            aria-checked={ativa}
+            disabled={emLote}
+            title={`${q.rotulo}: ${q.dica}${precos[q.valor] ? `, cerca de ${precos[q.valor].slice(1)} por lâmina` : ""}`}
+            onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
+            className={`flex h-10 min-w-[72px] flex-col items-center justify-center rounded-md px-2 leading-tight transition-colors ${
+              ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            <span className={`text-[11.5px] ${ativa ? "font-medium" : ""}`}>{q.rotulo}</span>
+            <span className={`text-[10px] tabular-nums ${ativa ? "text-primary-foreground/80" : "text-muted-foreground"}`} data-preco-da-qualidade={q.valor}>
+              {precos[q.valor] || "sem preço"}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const seletorDeGerador = (
+    <div className="mb-1 mr-2 mt-1 w-[150px] min-w-0 shrink-0">
+      <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
+        <SelectTrigger className="h-10 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
+          <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
+        </SelectTrigger>
+        <SelectContent>
+          {opcoesDeImagem.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const acaoPrincipal = (
+    <div className="mb-1 mt-1 flex shrink-0 items-center">
+      {emLote ? (
+        <Button type="button" size="sm" variant="outline" className="h-10" onClick={() => { parar.current = true; }} title="Para depois das lâminas que já estão gerando">
+          <Square className="mr-1 h-3.5 w-3.5" /> Parar
+        </Button>
+      ) : (
+        <BotaoComCusto
+          rotulo={
+            <>
+              {semImagem.length ? <Wand2 className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {semImagem.length
+                ? semImagem.length === cardsDaDirecao.length
+                  ? `Gerar todas (${semImagem.length})`
+                  : `Gerar as que faltam (${semImagem.length})`
+                : "Refazer todas"}
+            </>
+          }
+          titulo={`Gerar ${filaDeGeracao.length} lâmina(s)`}
+          descricao={infinito
+            ? "Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma."
+            : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
+          fecharAoConfirmar
+          variant={semImagem.length ? "default" : "outline"}
+          className="h-10 gap-1 px-3 text-[12.5px]"
+          disabled={ocupado || entregue}
+          partes={() => partesGerar(filaDeGeracao.length)}
+          executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
+          aoConcluir={(data) => {
+            toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
+          }}
+        />
+      )}
+      {prontoParaEntregar && !emLote && (
+        <Button type="button" size="sm" className="ml-2 h-10 gap-1 px-3 text-[12.5px]" onClick={() => abrirFerramenta("entrega", false)} title="Abre a ferramenta Entrega">
+          <Send className="h-3.5 w-3.5" /> Entregar
+        </Button>
+      )}
+    </div>
+  );
 
   const barraDoItem = (
-    <div className="flex h-12 min-w-0 shrink-0 items-center border-b border-border px-3">
-      {navegacao}
-      {temRoteiro && (
-        <span title={DICA_DO_ROTEIRO} className="mr-1.5 shrink-0">
-          <Star className="h-4 w-4 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />
-        </span>
-      )}
-      <h2 className="min-w-0 flex-1 truncate text-[15px] font-semibold" title={item.title}>{item.title}</h2>
-      <span className="ml-2 hidden shrink-0 text-[11.5px] text-muted-foreground sm:inline">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
-      <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
-      {trabalho && trabalho.custo_usd > 0 && (
-        <span className="ml-2 shrink-0 text-[11.5px] tabular-nums text-muted-foreground" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
-      )}
-    </div>
-  );
-
-  const barraDeAcao = (
     <div className="shrink-0 border-b border-border">
-      <div className="flex min-w-0 flex-wrap items-center px-3 py-2">
-        <div className="mb-1 mr-2 mt-1 grid shrink-0 grid-cols-3 gap-0.5 rounded-lg border border-border bg-background p-0.5" role="radiogroup" aria-label="Qualidade da lâmina">
-          {QUALIDADES_DO_ESTUDIO.map((q) => (
-            <button
-              key={q.valor}
-              type="button"
-              role="radio"
-              aria-checked={qualidade === q.valor}
-              disabled={emLote}
-              title={`${q.rotulo}: ${q.dica}${precoPorLamina(q.valor)}`}
-              onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
-              className={`h-7 rounded-md px-2 text-[11.5px] transition-colors ${
-                qualidade === q.valor ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              }`}
-            >
-              {q.rotulo}
-            </button>
-          ))}
-        </div>
-        <div className="mb-1 mr-2 mt-1 w-[136px] min-w-0 shrink-0">
-          <Select value={modeloImagem || ""} onValueChange={(id) => { setModeloImagem(id); void guardarEscolha({ modelo_imagem_id: id }); }} disabled={emLote || opcoesDeImagem.length === 0}>
-            <SelectTrigger className="h-8 min-w-0 text-[12px]" aria-label="Gerador de imagem" title="Gerador de imagem">
-              <SelectValue placeholder={opcoesDeImagem.length ? "Gerador" : "Sem gerador"} />
-            </SelectTrigger>
-            <SelectContent>
-              {opcoesDeImagem.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {nomeDoModelo(m)} <span className="text-muted-foreground">· {precoDoModelo(m, qualidade)}</span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="mb-1 ml-auto mt-1 flex shrink-0 items-center">
-          {emLote ? (
-            <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => { parar.current = true; }} title="Para depois das lâminas que já estão gerando">
-              <Square className="mr-1 h-3.5 w-3.5" /> Parar
-            </Button>
-          ) : (
-            <BotaoComCusto
-              rotulo={
-                <>
-                  {semImagem.length ? <Wand2 className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  {semImagem.length
-                    ? semImagem.length === cardsDaDirecao.length
-                      ? `Gerar todas (${semImagem.length})`
-                      : `Gerar as que faltam (${semImagem.length})`
-                    : "Refazer todas"}
-                </>
-              }
-              titulo={`Gerar ${filaDeGeracao.length} lâmina(s)`}
-              descricao={infinito
-                ? "Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma."
-                : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
-              fecharAoConfirmar
-              variant={semImagem.length ? "default" : "outline"}
-              className="h-8 gap-1 px-2.5 text-[12px]"
-              disabled={ocupado || entregue}
-              partes={() => partesGerar(filaDeGeracao.length)}
-              executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
-              aoConcluir={(data) => {
-                toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
-              }}
-            />
+      <div className="flex min-w-0 flex-wrap items-center px-3 py-1.5">
+        <div className="mb-1 mr-3 mt-1 flex min-w-[200px] flex-1 items-center">
+          {temRoteiro && (
+            <span title={DICA_DO_ROTEIRO} className="mr-1.5 shrink-0">
+              <Star className="h-4 w-4 fill-warning text-warning" aria-label={DICA_DO_ROTEIRO} />
+            </span>
           )}
-          {prontoParaEntregar && !emLote && (
-            <Button type="button" size="sm" className="ml-2 h-8 gap-1 px-2.5 text-[12px]" onClick={() => irParaAba("entrega")} title="Abre a entrega no inspetor">
-              <Send className="h-3.5 w-3.5" /> Entregar
-            </Button>
-          )}
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-[15px] font-semibold leading-tight" title={item.title}>{item.title}</h2>
+            <p className="mt-0.5 flex min-w-0 items-center text-[11.5px] text-muted-foreground">
+              <span className="truncate">{dataCurta(item.due_date)} · {formatoDoItem(item)}</span>
+              <SeloDoItem tom={situacao.tom} className="ml-2 shrink-0">{situacao.rotulo}</SeloDoItem>
+              {trabalho && trabalho.custo_usd > 0 && (
+                <span className="ml-2 shrink-0 tabular-nums" title="Gasto de IA neste item">{usd(trabalho.custo_usd)}</span>
+              )}
+            </p>
+          </div>
         </div>
+        {estado === "producao" && (
+          <>
+            {seletorDeQualidade}
+            {seletorDeGerador}
+            {acaoPrincipal}
+          </>
+        )}
       </div>
-      <div className="h-0.5 w-full bg-secondary" aria-hidden="true">
-        <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progresso}%` }} />
-      </div>
+      {estado === "producao" && (
+        <div className="h-0.5 w-full bg-secondary" aria-hidden="true">
+          <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progresso}%` }} />
+        </div>
+      )}
     </div>
   );
 
-  const centroDaProducao = (
+  // ---------------------------------------------------------------- centro
+
+  const avisoDeAjuste =
+    trabalho?.entrega_status === "reprovado" && trabalho.status !== "entregue" ? (
+      <button
+        type="button"
+        onClick={() => abrirFerramenta("entrega", false)}
+        className="mb-3 w-full rounded-lg border border-warning/50 bg-background px-3 py-2 text-left text-[12px] leading-snug [overflow-wrap:anywhere]"
+      >
+        <span className="font-semibold text-warning">Pediram ajuste</span>
+        {trabalho.entrega_aviso ? `: “${trabalho.entrega_aviso}”` : ". Ajuste as lâminas e entregue de novo."}
+      </button>
+    ) : null;
+
+  const acoesDaPrancheta = (c: { ordem: number }, v: unknown) => (
+    <BotaoComCusto
+      rotulo={<><Wand2 className="h-3.5 w-3.5" /><span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
+      titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
+      descricao={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`}
+      variant={v ? "outline" : "default"}
+      className="h-8 w-full gap-1 px-2 text-[11px]"
+      disabled={laminaOcupada(c.ordem) || entregue}
+      partes={() => partesGerar(1)}
+      executar={() => gerarEConferir(c.ordem)}
+    />
+  );
+
+  const prancheta = (vertical: boolean) => (
+    <PranchetaDoEstudio
+      cards={cardsDaDirecao}
+      ultimas={ultimas}
+      selecionado={selecionado}
+      onSelecionar={escolherLamina}
+      onAmpliar={ampliarLamina}
+      andamento={andamento}
+      infinito={infinito}
+      largura={vertical ? LARGURA_NA_PRANCHETA : LARGURA_NA_PRANCHETA_PILHA}
+      orientacao={vertical ? "vertical" : "horizontal"}
+      podeReordenar={!ocupado && cardsDaDirecao.length > 1 && !entregue}
+      onReordenar={(ordens) => void reordenar(ordens)}
+      onVersoes={(ordem) => abrirPainel(ordem, "versoes")}
+      onAjustar={(ordem) => abrirPainel(ordem, "livre")}
+      acoes={acoesDaPrancheta}
+    />
+  );
+
+  const resumoDaPrancheta = (
+    <span className="min-w-0 truncate">
+      {trabalho?.direcao?.origem === "roteiro" ? "do roteiro" : "do diretor"} · {ultimas.size} de {cardsDaDirecao.length} com arte
+      {infinito ? " · contínuo" : ""}
+    </span>
+  );
+
+  const laminaGrande = cardSelecionado ? (
+    <EstudioLaminaGrande
+      card={cardSelecionado}
+      total={cardsDaDirecao.length}
+      versoes={(trabalho?.cards || []).filter((v) => v.ordem === cardSelecionado.ordem)}
+      versaoVista={versaoVista}
+      onVersaoVista={setVersaoVista}
+      desenhandoAreas={desenhandoAreas}
+      areas={areas}
+      onAreas={setAreas}
+      ocupado={laminaOcupada(cardSelecionado.ordem)}
+      onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
+      soPelaLargura={!colunas}
+    />
+  ) : null;
+
+  const centroDaProducao = colunas ? (
     <>
-      {barraDeAcao}
-      <div className={colunas ? "flex min-h-0 flex-1 flex-col overflow-y-auto" : "flex flex-col"}>
-        {trabalho?.entrega_status === "reprovado" && trabalho.status !== "entregue" && (
-          <button
-            type="button"
-            onClick={() => irParaAba("entrega")}
-            className="mx-3 mt-3 rounded-lg border border-warning/50 bg-background px-3 py-2 text-left text-[12px] leading-snug [overflow-wrap:anywhere]"
-          >
-            <span className="font-semibold text-warning">Pediram ajuste</span>
-            {trabalho.entrega_aviso ? `: “${trabalho.entrega_aviso}”` : ". Ajuste as lâminas e entregue de novo."}
-          </button>
-        )}
-        <div className="shrink-0 px-3 pt-3">
-          <p className="mb-2 flex min-w-0 items-center text-[11px] text-muted-foreground">
-            <span className="mr-2 shrink-0 font-medium uppercase tracking-wider">Prancheta</span>
-            <span className="min-w-0 truncate">
-              {trabalho?.direcao?.origem === "roteiro" ? "do roteiro" : "do diretor"} · {ultimas.size} de {cardsDaDirecao.length} com arte
-              {infinito ? " · contínuo" : ""}
-              {gerandoAgora > 0 ? ` · gerando ${gerandoAgora}` : ""}
-            </span>
-          </p>
-          <PranchetaDoEstudio
-            cards={cardsDaDirecao}
-            ultimas={ultimas}
-            selecionado={selecionado}
-            onSelecionar={escolherLamina}
-            onAmpliar={ampliarLamina}
-            gerando={gerando}
-            fila={fila}
-            infinito={infinito}
-            largura={LARGURA_NA_PRANCHETA}
-            podeReordenar={!ocupado && cardsDaDirecao.length > 1 && !entregue}
-            onReordenar={(ordens) => void reordenar(ordens)}
-            onVersoes={(ordem) => abrirPainel(ordem, "versoes")}
-            onAjustar={(ordem) => abrirPainel(ordem, "livre")}
-            acoes={(c, v) => (
-              <BotaoComCusto
-                rotulo={<><Wand2 className="h-3.5 w-3.5" /><span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
-                titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
-                descricao={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`}
-                variant={v ? "outline" : "default"}
-                className="h-8 w-full gap-1 px-2 text-[11px]"
-                disabled={laminaOcupada(c.ordem) || entregue}
-                partes={() => partesGerar(1)}
-                executar={() => gerarEConferir(c.ordem)}
-              />
-            )}
-          />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col px-3 pb-3 pt-2">
-          {cardSelecionado && (
-            <EstudioLaminaGrande
-              card={cardSelecionado}
-              total={cardsDaDirecao.length}
-              versoes={(trabalho?.cards || []).filter((v) => v.ordem === cardSelecionado.ordem)}
-              versaoVista={versaoVista}
-              onVersaoVista={setVersaoVista}
-              gerandoDesde={gerando[cardSelecionado.ordem]}
-              desenhandoAreas={desenhandoAreas}
-              areas={areas}
-              onAreas={setAreas}
-              ocupado={laminaOcupada(cardSelecionado.ordem)}
-              onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
-              soPelaLargura={!colunas}
-            />
-          )}
+      <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
+        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem">
+          Prancheta
+        </p>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
+          <p className="mb-2 text-[11px] leading-snug text-muted-foreground">{resumoDaPrancheta}</p>
+          {prancheta(true)}
         </div>
       </div>
-      <Ampliar imagens={paraAmpliar.map((a) => a.imagem)} indice={ampliada} onFechar={() => setAmpliada(null)} />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
+        {avisoDeAjuste}
+        {laminaGrande}
+      </div>
     </>
+  ) : (
+    <div className="flex min-w-0 flex-col p-3">
+      {avisoDeAjuste}
+      <p className="mb-2 flex min-w-0 items-center text-[11px] text-muted-foreground">
+        <span className="mr-2 shrink-0 font-medium uppercase tracking-wider">Prancheta</span>
+        {resumoDaPrancheta}
+      </p>
+      {prancheta(false)}
+      <div className="mt-3 flex min-w-0 flex-col">{laminaGrande}</div>
+    </div>
   );
 
-  const centro = (
-    <section className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card ${colunas ? "min-h-0" : ""}`} aria-label="Produção">
-      {barraDoItem}
-      {estado === "producao" && centroDaProducao}
-      {estado === "agenda" && arte && (
-        <div className={colunas ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-3" : "flex flex-col p-3"}>
-          <EstudioArteDaAgenda arte={arte} linkAgenda={linkAgendaDoItem || `/calendario?client=${clientId}`} onRefazer={() => setRefazendo(true)} soPelaLargura={!colunas} />
-        </div>
-      )}
-      {estado === "preparar" && (
-        <div className={colunas ? "min-h-0 flex-1 overflow-y-auto p-3 sm:p-5" : "p-3"}>
-          <EstudioPreparar
-            roteiro={roteiro}
-            postUnico={postUnico}
-            partesDiretor={partesDiretor}
-            onPreparar={preparar}
-            onConcluido={aoPreparar}
-            aviso={
-              refazendo && arte ? (
-                <p className="text-[12px] leading-snug text-muted-foreground">
-                  Refazendo: a arte atual continua na Agenda até a nova ser entregue.{" "}
-                  <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setRefazendo(false)}>
-                    Voltar para a arte atual
-                  </button>
-                </p>
-              ) : trabalho && trabalho.status === "erro" ? (
-                <p className="text-[12px] text-destructive">A última tentativa terminou com erro. Prepare de novo.</p>
-              ) : null
-            }
-          />
-        </div>
-      )}
-    </section>
-  );
+  const centro =
+    estado === "producao" ? (
+      centroDaProducao
+    ) : estado === "agenda" && arte ? (
+      <div className={colunas ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4" : "flex flex-col p-3"}>
+        <EstudioArteDaAgenda arte={arte} linkAgenda={linkAgendaDoItem || `/calendario?client=${clientId}`} onRefazer={() => setRefazendo(true)} soPelaLargura={!colunas} />
+      </div>
+    ) : (
+      <div className={colunas ? "min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6" : "p-3"}>
+        <EstudioPreparar
+          roteiro={roteiro}
+          postUnico={postUnico}
+          partesDiretor={partesDiretor}
+          onPreparar={preparar}
+          onConcluido={aoPreparar}
+          aviso={
+            refazendo && arte ? (
+              <p className="text-[12px] leading-snug text-muted-foreground">
+                Refazendo: a arte atual continua na Agenda até a nova ser entregue.{" "}
+                <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => setRefazendo(false)}>
+                  Voltar para a arte atual
+                </button>
+              </p>
+            ) : trabalho && trabalho.status === "erro" ? (
+              <p className="text-[12px] text-destructive">A última tentativa terminou com erro. Prepare de novo.</p>
+            ) : null
+          }
+        />
+      </div>
+    );
 
-  // ---------------------------------------------------------------- inspetor
+  // ---------------------------------------------------------------- ferramentas
 
-  const abaLamina = cardSelecionado && trabalho ? (
+  const ferramentaLamina = cardSelecionado && trabalho ? (
     <CardDoEstudio
       key={cardSelecionado.ordem}
       conversaId={trabalho.conversa_id}
       direcao={cardSelecionado}
       versoes={(trabalho.cards || []).filter((v) => v.ordem === cardSelecionado.ordem)}
       ocupado={laminaOcupada(cardSelecionado.ordem) || entregue}
-      conferindo={!!conferindo[cardSelecionado.ordem]}
-      gerandoDesde={gerando[cardSelecionado.ordem]}
+      conferindo={!!andamento[cardSelecionado.ordem] && andamento[cardSelecionado.ordem].etapa === "conferindo"}
       painel={painel}
       onPainel={setPainel}
       versaoVista={versaoVista}
@@ -846,7 +1028,50 @@ function DetalheDoItem({
     <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
   );
 
-  const abaConjunto = trabalho ? (
+  const ferramentaFotos = cardSelecionado && trabalho ? (
+    <div className="min-w-0 space-y-3">
+      <p className="text-[12.5px] font-semibold">Lâmina {cardSelecionado.ordem}</p>
+      <EstudioFotos
+        key={cardSelecionado.ordem}
+        card={cardSelecionado}
+        ocupado={laminaOcupada(cardSelecionado.ordem) || entregue}
+        temArte={!!ultimaDaEscolhida}
+        onSalvar={(corpo) => configurar(corpo)}
+        onTirarFotoAntiga={() => configurar({ card: { ordem: cardSelecionado.ordem, imagens_ids: [] } })}
+      />
+    </div>
+  ) : (
+    <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
+  );
+
+  const referenciasDoConjunto = (trabalho?.direcao?.referencias_ids || []).length;
+  const referenciasDaLamina = (cardSelecionado?.referencias_ids || []).length;
+  const ferramentaReferencias = trabalho ? (
+    <div className="min-w-0 space-y-3">
+      <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+        <p className="text-[12.5px] font-medium leading-snug">As escolhidas aqui são seguidas de perto</p>
+        <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
+          O gerador copia o layout, a composição, a hierarquia e o tratamento das referências escolhidas e aplica a identidade visual da marca, com uma
+          diferenciação leve. As da lâmina valem no lugar das do conjunto.
+        </p>
+        <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
+          Conjunto: {referenciasDoConjunto} escolhida{referenciasDoConjunto === 1 ? "" : "s"}
+          {cardSelecionado ? ` · Lâmina ${cardSelecionado.ordem}: ${referenciasDaLamina} escolhida${referenciasDaLamina === 1 ? "" : "s"}` : ""}
+        </p>
+      </div>
+      <ReferenciasDoEstudio
+        trabalho={trabalho}
+        cardSelecionado={cardSelecionado}
+        alvo={refsAlvo}
+        onAlvo={setRefsAlvo}
+        aba={refsAba}
+        onAba={setRefsAba}
+        onAtualizar={atualizar}
+      />
+    </div>
+  ) : null;
+
+  const ferramentaConjunto = trabalho ? (
     <div className="space-y-4">
       <section>
         <Rotulo>Conceito</Rotulo>
@@ -917,7 +1142,7 @@ function DetalheDoItem({
     </div>
   ) : null;
 
-  const abaLegenda = trabalho ? (
+  const ferramentaLegenda = trabalho ? (
     <div className="space-y-3">
       <div className="flex min-w-0 items-center">
         <p className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Legenda</p>
@@ -977,7 +1202,7 @@ function DetalheDoItem({
     </div>
   ) : null;
 
-  const abaEntrega = trabalho ? (
+  const ferramentaEntrega = trabalho ? (
     <EstudioEntrega
       trabalho={trabalho}
       laminasFeitas={ultimas.size}
@@ -995,104 +1220,113 @@ function DetalheDoItem({
     />
   ) : null;
 
-  const marcaNaAba = (a: AbaDoInspetor) =>
-    (a === "entrega" && (prontoParaEntregar || faltaEnviar(trabalho))) || (a === "legenda" && todosComImagem && !legenda.trim() && !entregue);
-
-  const corpoDoInspetor = colunas ? "min-h-0 flex-1 overflow-y-auto p-4 pb-16" : "p-4";
-
-  const inspetorDaProducao = (
-    <>
-      <div className={`flex shrink-0 border-b border-border ${colunas ? "" : "overflow-x-auto"}`} role="tablist" aria-label="Inspetor">
-        {ABAS_DO_INSPETOR.map((a) => {
-          const ativa = abaDoInspetor === a.valor;
-          return (
-            <button
-              key={a.valor}
-              type="button"
-              role="tab"
-              aria-selected={ativa}
-              onClick={() => setAbaDoInspetor(a.valor)}
-              className={`relative -mb-px flex h-11 min-w-0 flex-1 items-center justify-center border-b-2 px-1 text-[12px] transition-colors ${colunas ? "" : "min-w-[76px]"} ${
-                ativa ? "border-primary font-semibold text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span className="truncate">{a.rotulo}</span>
-              {marcaNaAba(a.valor) && <span className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" aria-label="pede atenção" />}
-            </button>
-          );
-        })}
-      </div>
-      <div className={corpoDoInspetor} role="tabpanel">
-        {abaDoInspetor === "lamina" && abaLamina}
-        {abaDoInspetor === "conjunto" && abaConjunto}
-        {abaDoInspetor === "referencias" && trabalho && (
-          <ReferenciasDoEstudio
-            trabalho={trabalho}
-            cardSelecionado={cardSelecionado}
-            alvo={refsAlvo}
-            onAlvo={setRefsAlvo}
-            aba={refsAba}
-            onAba={setRefsAba}
-            onAtualizar={atualizar}
-          />
+  const ferramentaPauta = (
+    <div className="space-y-5">
+      <div>
+        <Rotulo>Pauta</Rotulo>
+        <p className="text-[14px] font-semibold leading-snug [overflow-wrap:anywhere]">{item.title}</p>
+        <p className="mt-1 text-[12px] text-muted-foreground">{dataCurta(item.due_date)} · {formatoDoItem(item)}</p>
+        {temRoteiro && roteiro && (
+          <p className="mt-2 flex items-start text-[12px] leading-snug text-muted-foreground">
+            <Star className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 fill-warning text-warning" />
+            <span>Roteiro do estrategista com {roteiro.laminas} lâmina{roteiro.laminas === 1 ? "" : "s"}: a direção sai dele, sem custo de IA.</span>
+          </p>
         )}
-        {abaDoInspetor === "legenda" && abaLegenda}
-        {abaDoInspetor === "entrega" && abaEntrega}
       </div>
-    </>
-  );
-
-  const inspetorDaPauta = (
-    <div className={corpoDoInspetor}>
-      <div className="space-y-5">
-        <div>
-          <Rotulo>Pauta</Rotulo>
-          <p className="text-[14px] font-semibold leading-snug [overflow-wrap:anywhere]">{item.title}</p>
-          <p className="mt-1 text-[12px] text-muted-foreground">{dataCurta(item.due_date)} · {formatoDoItem(item)}</p>
-          {temRoteiro && roteiro && (
-            <p className="mt-2 flex items-start text-[12px] leading-snug text-muted-foreground">
-              <Star className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 fill-warning text-warning" />
-              <span>Roteiro do estrategista com {roteiro.laminas} lâmina{roteiro.laminas === 1 ? "" : "s"}: a direção sai dele, sem custo de IA.</span>
-            </p>
-          )}
-        </div>
-        <div>
-          <Rotulo>Esteira</Rotulo>
-          <EtapasDaEsteira atual={etapaDoItem(trabalho, refazendo ? null : arte)} />
-        </div>
+      <div>
+        <Rotulo>Esteira</Rotulo>
+        <EtapasDaEsteira atual={etapaDoItem(trabalho, refazendo ? null : arte)} />
       </div>
     </div>
   );
 
-  const inspetorDaArte = arte ? (
-    <div className={corpoDoInspetor}>
-      <InspetorDaArte arte={arte} publicacao={publicacao} linkAgenda={linkAgendaDoItem || `/calendario?client=${clientId}`} />
+  const ferramentaPost = arte ? (
+    <InspetorDaArte arte={arte} publicacao={publicacao} linkAgenda={linkAgendaDoItem || `/calendario?client=${clientId}`} />
+  ) : null;
+
+  const conteudoDaFerramenta = (f: Ferramenta): ReactNode => {
+    switch (f) {
+      case "lamina":
+        return ferramentaLamina;
+      case "fotos":
+        return ferramentaFotos;
+      case "referencias":
+        return ferramentaReferencias;
+      case "conjunto":
+        return ferramentaConjunto;
+      case "legenda":
+        return ferramentaLegenda;
+      case "entrega":
+        return ferramentaEntrega;
+      case "post":
+        return ferramentaPost;
+      default:
+        return ferramentaPauta;
+    }
+  };
+
+  const cabecalhoDoPainel = ferramenta ? (
+    <div className="flex h-11 shrink-0 items-center border-b border-border px-4">
+      <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{FERRAMENTAS[ferramenta].rotulo}</p>
+      <button
+        type="button"
+        onClick={() => setFerramenta("")}
+        aria-label="Fechar a ferramenta"
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   ) : null;
 
-  const lateral = (
-    <aside ref={inspetor} className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card ${colunas ? "min-h-0" : ""}`} aria-label="Inspetor">
-      {estado === "producao" ? inspetorDaProducao : estado === "agenda" ? inspetorDaArte : inspetorDaPauta}
-    </aside>
+  const barraDeFerramentas = (
+    <BarraDeFerramentas ferramentas={ferramentas} ativa={ferramenta} onAbrir={(f) => abrirFerramenta(f)} marca={marcaNaFerramenta} vertical={colunas} />
   );
+
+  const ampliar = <Ampliar imagens={paraAmpliar.map((a) => a.imagem)} indice={ampliada} onFechar={() => setAmpliada(null)} />;
 
   if (colunas) {
     return (
-      <>
-        {centro}
-        {lateral}
-      </>
+      <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card" aria-label="Estúdio">
+        {barraDoItem}
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-1">{centro}</div>
+          {/* Painel deslizante da ferramenta: abre ao lado da barra, com rolagem própria. */}
+          <div
+            className="min-h-0 shrink-0 overflow-hidden border-border transition-[width] duration-200 ease-out"
+            style={{ width: ferramenta ? LARGURA_DO_PAINEL : 0, borderLeftWidth: ferramenta ? 1 : 0 }}
+          >
+            {ferramenta && (
+              <div ref={painelRef} className="flex h-full min-h-0 flex-col" style={{ width: LARGURA_DO_PAINEL }} role="region" aria-label={FERRAMENTAS[ferramenta].rotulo}>
+                {cabecalhoDoPainel}
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-16">{conteudoDaFerramenta(ferramenta)}</div>
+              </div>
+            )}
+          </div>
+          {barraDeFerramentas}
+        </div>
+        {ampliar}
+      </section>
     );
   }
+
   return (
-    <div className="min-w-0 space-y-3">
+    <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card" aria-label="Estúdio">
+      {barraDoItem}
       {centro}
-      {lateral}
-    </div>
+      {barraDeFerramentas}
+      {ferramenta && (
+        <div ref={painelRef} className="border-t border-border" role="region" aria-label={FERRAMENTAS[ferramenta].rotulo}>
+          {cabecalhoDoPainel}
+          <div className="p-4">{conteudoDaFerramenta(ferramenta)}</div>
+        </div>
+      )}
+      {ampliar}
+    </section>
   );
 }
 
-/** Meses para o seletor da coluna: 6 para trás e 6 para frente do atual. */
+/** Meses para o seletor da faixa: 6 para trás e 6 para frente do atual. */
 function mesesDoSeletor(mesAtual: string): string[] {
   const base = inicioDoMes();
   const lista: string[] = [];
@@ -1101,24 +1335,21 @@ function mesesDoSeletor(mesAtual: string): string[] {
   return lista.sort();
 }
 
-/** Centro e inspetor antes de escolher uma pauta: o resumo e a próxima a fazer. */
-function SemPauta({ contagem, proxima, onEscolher, acaoDaLista }: { contagem: Record<FiltroDoEstudio, number>; proxima: ItemDoMes | null; onEscolher: (id: string) => void; acaoDaLista?: ReactNode }) {
+/** O estúdio antes de haver pauta para abrir (lista vazia ou ainda lendo). */
+function SemPauta({ carregando, vazia }: { carregando: boolean; vazia: boolean }) {
   return (
-    <div className="col-span-2 flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center">
-      <ListChecks className="h-6 w-6 text-primary" />
-      <p className="mt-3 text-[15px] font-semibold">Escolha uma pauta para abrir a esteira</p>
-      <p className="mt-1 text-[12.5px] text-muted-foreground">
-        {contagem.a_fazer} a fazer · {contagem.com_arte} com arte · {contagem.na_agenda} na agenda
-      </p>
-      <div className="mt-4 flex flex-wrap items-center justify-center">
-        {proxima && (
-          <Button type="button" className="mb-2 mr-2 h-10" onClick={() => onEscolher(proxima.id)}>
-            <Sparkles className="mr-1.5 h-4 w-4" /> Abrir a próxima a fazer
-          </Button>
-        )}
-        {acaoDaLista}
-      </div>
-      {proxima && <p className="mt-1 max-w-sm truncate text-[12px] text-muted-foreground" title={proxima.title}>{dataCurta(proxima.due_date)} · {proxima.title}</p>}
+    <div className="flex min-h-[320px] flex-1 flex-col items-center justify-center rounded-xl border border-border bg-card p-8 text-center">
+      {carregando ? (
+        <p className="inline-flex items-center text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…</p>
+      ) : (
+        <>
+          <ListChecks className="h-6 w-6 text-primary" />
+          <p className="mt-3 text-[15px] font-semibold">{vazia ? "Nenhuma pauta de arte neste período" : "Escolha uma pauta na faixa acima"}</p>
+          <p className="mt-1 max-w-sm text-[12.5px] text-muted-foreground">
+            {vazia ? "Troque o período na faixa ou complete a agenda pela aba Mês." : "O estúdio abre com a pauta escolhida."}
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -1139,31 +1370,48 @@ export default function AbaEstudio({
   const colunas = emColunas(faixa);
   const altura = useAlturaDaEsteira(colunas);
   const raiz = useRef<HTMLDivElement>(null);
-  const [gaveta, setGaveta] = useState(false);
   // A lista abre nos próximos 60 dias; escolher um mês muda para aquele mês (e a URL acompanha).
   const [modoDaLista, setModoDaLista] = useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos");
   const [filtroGuardado, setFiltro] = useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer");
+  const [recolhida, setRecolhida] = useEstadoGuardado<boolean>("mesa:estudio:pautas-recolhidas", false);
   const filtro = filtroValido(filtroGuardado);
   const janela = modoDaLista === "proximos" ? PROXIMOS_DIAS : mes;
   const dados = useItensDoMes(clientId, janela);
   const itens = dados.data?.itens || [];
-  const naLista = tarefaId ? itens.find((i) => i.id === tarefaId) || null : null;
-  // Item aberto fora da janela: consulta pequena à parte, só depois que a lista certa chegou.
   const listaPronta = !!dados.data && !dados.isPlaceholderData;
+
+  const fontes: FontesDaLista = {
+    trabalhoDe: (i) => dados.data?.trabalhos.get(i.id) || null,
+    arteDe: (i) => dados.data?.artes.get(i.id) || null,
+    temRoteiro: (i) => !!dados.data?.roteiros.has(i.id),
+  };
+
+  // Sem item na URL, o Estúdio abre sozinho no último aberto (ou no primeiro de "A fazer"), sem mexer no endereço.
+  // Trocando o período, a escolha segue na lista anterior até a nova chegar (sem o estúdio sumir no meio).
+  const temLista = !!dados.data;
+  const automatico = useMemo(
+    () => (tarefaId || !temLista ? null : itemInicial(itens, lerUltimo(clientId), (i) => passaNoFiltro("a_fazer", fontes.trabalhoDe(i), fontes.arteDe(i)))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tarefaId, temLista, itens, clientId],
+  );
+  const aberto = tarefaId || automatico;
+  const naLista = aberto ? itens.find((i) => i.id === aberto) || null : null;
+  // Item aberto fora da janela: consulta pequena à parte, só depois que a lista certa chegou.
   const avulso = useItemAvulso(clientId, tarefaId, !!tarefaId && listaPronta && !naLista);
   const itemFora = !naLista && tarefaId && avulso.data ? avulso.data.itens.find((i) => i.id === tarefaId) || null : null;
   const selecionado = naLista || itemFora;
   const meses = useMemo(() => mesesDoSeletor(mes), [mes]);
 
-  const fontes: FontesDaLista = {
-    trabalhoDe: (i) => dados.data?.trabalhos.get(i.id) || avulso.data?.trabalhos.get(i.id) || null,
-    arteDe: (i) => dados.data?.artes.get(i.id) || avulso.data?.artes.get(i.id) || null,
-    temRoteiro: (i) => !!(dados.data?.roteiros.has(i.id) || avulso.data?.roteiros.has(i.id)),
-  };
+  useEffect(() => {
+    if (tarefaId) gravarUltimo(clientId, tarefaId);
+  }, [clientId, tarefaId]);
+
+  const trabalhoDe = (i: ItemDoMes) => fontes.trabalhoDe(i) || avulso.data?.trabalhos.get(i.id) || null;
+  const arteDe = (i: ItemDoMes) => fontes.arteDe(i) || avulso.data?.artes.get(i.id) || null;
+  const temRoteiroDe = (i: ItemDoMes) => fontes.temRoteiro(i) || !!avulso.data?.roteiros.has(i.id);
+  const fontesDaFaixa: FontesDaLista = { trabalhoDe, arteDe, temRoteiro: temRoteiroDe };
   const roteiroDe = (i: ItemDoMes) => dados.data?.infoDoRoteiro.get(i.id) || avulso.data?.infoDoRoteiro.get(i.id) || null;
   const publicacaoDe = (postId: string) => dados.data?.publicacoes.get(postId) || avulso.data?.publicacoes.get(postId) || null;
-  const contagem = contarFiltros(itens, fontes.trabalhoDe, fontes.arteDe);
-  const proxima = itens.find((i) => passaNoFiltro("a_fazer", fontes.trabalhoDe(i), fontes.arteDe(i))) || null;
 
   const escolherJanela = (v: string) => {
     if (v === PROXIMOS_DIAS) {
@@ -1175,13 +1423,13 @@ export default function AbaEstudio({
   };
 
   const escolher = (id: string) => {
+    gravarUltimo(clientId, id);
     onTarefa(id);
-    setGaveta(false);
-    // No computador, a esteira encaixa na janela (o cabeçalho da Mesa gruda no topo).
+    // No computador, o estúdio encaixa na janela (o cabeçalho da Mesa gruda no topo).
     if (colunas) encaixarNaJanela(raiz.current);
   };
 
-  const lista = (emColuna: boolean) => (
+  const faixaDasPautas = (
     <EstudioLista
       janela={janela}
       meses={meses}
@@ -1190,107 +1438,47 @@ export default function AbaEstudio({
       onFiltro={setFiltro}
       itens={itens}
       itemFora={itemFora}
-      fontes={fontes}
+      fontes={fontesDaFaixa}
       carregando={dados.isLoading}
       atualizando={dados.isPlaceholderData}
       erro={dados.isError ? dados.error : null}
-      tarefaId={tarefaId}
+      tarefaId={selecionado ? selecionado.id : aberto}
       onEscolher={escolher}
-      emColuna={emColuna}
+      recolhida={recolhida}
+      onRecolher={setRecolhida}
     />
   );
-
-  const navegacao =
-    faixa === "mesa" ? null : faixa === "compacto" ? (
-      <Button type="button" variant="ghost" size="sm" className="mr-2 h-9 shrink-0 px-2" onClick={() => setGaveta(true)} title="Abrir a lista de pautas">
-        <PanelLeft className="mr-1 h-4 w-4" /> Pautas
-      </Button>
-    ) : (
-      <Button type="button" variant="ghost" size="icon" className="mr-1 h-10 w-10 shrink-0" onClick={() => onTarefa(null)} aria-label="Voltar às pautas">
-        <ArrowLeft className="h-4 w-4" />
-      </Button>
-    );
 
   const detalhe = selecionado ? (
     <DetalheDoItem
       key={selecionado.id}
       item={selecionado}
-      trabalho={fontes.trabalhoDe(selecionado)}
-      arte={fontes.arteDe(selecionado)}
+      trabalho={trabalhoDe(selecionado)}
+      arte={arteDe(selecionado)}
       roteiro={roteiroDe(selecionado)}
-      temRoteiro={fontes.temRoteiro(selecionado)}
+      temRoteiro={temRoteiroDe(selecionado)}
       publicacaoDe={publicacaoDe}
       modo={colunas ? "colunas" : "pilha"}
-      navegacao={navegacao}
     />
   ) : null;
 
-  const carregandoItem = !!tarefaId && !selecionado && (dados.isLoading || avulso.isLoading || avulso.isFetching);
+  const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));
+  const vazio = <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />;
 
-  if (faixa === "mesa") {
+  if (colunas) {
     return (
-      <div
-        ref={raiz}
-        className="grid min-w-0 grid-cols-[280px_minmax(0,1fr)_360px] grid-rows-[minmax(0,1fr)] gap-4"
-        style={altura ? { height: altura } : undefined}
-      >
-        <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card" aria-label="Pautas">
-          {lista(true)}
-        </aside>
-        {detalhe ||
-          (carregandoItem ? (
-            <div className="col-span-2 flex items-center justify-center rounded-xl border border-border bg-card text-[12.5px] text-muted-foreground">
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Abrindo a pauta…
-            </div>
-          ) : (
-            <SemPauta contagem={contagem} proxima={proxima} onEscolher={escolher} />
-          ))}
+      <div ref={raiz} className="flex min-w-0 flex-col" style={altura ? { height: altura } : undefined}>
+        <div className="shrink-0">{faixaDasPautas}</div>
+        <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">{detalhe || vazio}</div>
       </div>
     );
   }
 
-  if (faixa === "compacto") {
-    return (
-      <>
-        <div
-          ref={raiz}
-          className="grid min-w-0 grid-cols-[minmax(0,1fr)_340px] grid-rows-[minmax(0,1fr)] gap-4"
-          style={altura ? { height: altura } : undefined}
-        >
-          {detalhe || (
-            <SemPauta
-              contagem={contagem}
-              proxima={proxima}
-              onEscolher={escolher}
-              acaoDaLista={
-                <Button type="button" variant="outline" className="mb-2 h-10" onClick={() => setGaveta(true)}>
-                  <PanelLeft className="mr-1.5 h-4 w-4" /> Ver as pautas
-                </Button>
-              }
-            />
-          )}
-        </div>
-        <Sheet open={gaveta} onOpenChange={setGaveta}>
-          <SheetContent side="left" className="flex w-[320px] flex-col gap-0 p-0 sm:max-w-[320px]">
-            <div className="flex h-14 shrink-0 items-center border-b border-border px-4">
-              <SheetTitle className="text-[14px] font-semibold">Pautas</SheetTitle>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col">{lista(true)}</div>
-          </SheetContent>
-        </Sheet>
-      </>
-    );
-  }
-
-  // Celular e tablet em pé: uma coluna; a lista e a pauta aberta se revezam.
+  // Celular e tablet em pé: uma coluna; a faixa em cima e o estúdio embaixo, a página rola.
   return (
-    <div ref={raiz} className="min-w-0">
-      {detalhe || (
-        <div className="rounded-xl border border-border bg-card p-3">
-          {carregandoItem && <p className="mb-2 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Abrindo a pauta…</p>}
-          {lista(false)}
-        </div>
-      )}
+    <div ref={raiz} className="min-w-0 space-y-3">
+      {faixaDasPautas}
+      {detalhe || vazio}
     </div>
   );
 }

@@ -3,21 +3,34 @@ import { Loader2 } from "lucide-react";
 import { chamarFuncao, padraoDoContexto, padraoPara, TAMANHOS, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
-import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { useMesa } from "./MesaContexto";
 import { Quadrado } from "./NavegadorDePastas";
-import { useReferenciasDoCliente, type ReferenciaDoCliente, type RespostaDoMontar } from "./contextoDoCliente";
+import { BotaoDestaque, ImagemDeReferencia, LegendaDosPapeis, SeloDoPapel } from "./SeletorDeReferencias";
+import { type ReferenciaDoCliente, type RespostaDoMontar } from "./contextoDoCliente";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { textoDoErro } from "@/lib/mesa/api";
+import {
+  ampliavelDaFonte,
+  chaveDasReferenciasComDestaque,
+  fonteDaReferencia,
+  gravarDestaque,
+  ordenarPorDestaque,
+  PAPEIS,
+  useReferenciasComDestaque,
+  type ReferenciaComDestaque,
+} from "@/lib/mesa/referencias";
 
 /**
  * Galeria das referências do cliente no Contexto: todas as ativas, de onde
  * vierem (pasta de referências do Workspace, artes aprovadas, Pinterest,
- * envio), com o selo identidade ou técnica e um ponto nas que ainda não
- * foram lidas. O clique abre a imagem grande com a leitura como legenda.
+ * envio), com o papel dito com clareza (Artes da marca ou Composição), as em
+ * destaque primeiro (estrela) e um ponto nas que ainda não foram lidas. O
+ * clique abre a imagem grande com a leitura como legenda.
  */
 
 type Filtro = "todas" | "identidade" | "tecnica";
 
-const ROTULO_DO_PAPEL: Record<ReferenciaDoCliente["papel"], string> = { identidade: "identidade", tecnica: "técnica" };
 const NA_TELA = 12;
 /** O servidor lê no máximo 12 referências por vez (MAX_LEITURAS_POR_VEZ). */
 const LEITURAS_POR_VEZ = 12;
@@ -37,7 +50,9 @@ export default function GaleriaDeReferencias({
   aoLer?: (data: RespostaDoMontar | null) => void;
 }) {
   const { clientId, catalogo } = useMesa();
-  const refs = useReferenciasDoCliente(clientId);
+  const queryClient = useQueryClient();
+  const refs = useReferenciasComDestaque(clientId);
+  const [gravando, setGravando] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const [todas, setTodas] = useState(false);
   const [aberta, setAberta] = useState<number | null>(null);
@@ -52,13 +67,28 @@ export default function GaleriaDeReferencias({
   const lista = filtro === "todas" ? ativas : ativas.filter((r) => r.papel === filtro);
   const visiveis = todas ? lista : lista.slice(0, NA_TELA);
 
-  const comImagem = visiveis.filter((r) => !!r.imagem);
+  const comImagem = visiveis.filter((r) => !!ampliavelDaFonte(fonteDaReferencia(r)));
   const ampliaveis: ImagemAmpliavel[] = comImagem.map((r) => ({
-    caminho: r.imagem!.caminho,
-    bucket: r.imagem!.bucket,
-    titulo: `${r.nome} · ${ROTULO_DO_PAPEL[r.papel]}`,
+    ...(ampliavelDaFonte(fonteDaReferencia(r)) as { caminho: string; bucket?: string }),
+    titulo: `${r.nome} · ${PAPEIS[r.papel].curto}`,
     legenda: legendaDaReferencia(r),
   }));
+
+  const alternarDestaque = async (r: ReferenciaComDestaque) => {
+    const chave = chaveDasReferenciasComDestaque(clientId);
+    const antes = queryClient.getQueryData<ReferenciaComDestaque[]>(chave);
+    if (antes) queryClient.setQueryData(chave, ordenarPorDestaque(antes.map((x) => (x.id === r.id ? { ...x, destaque: !r.destaque } : x))));
+    setGravando(r.id);
+    try {
+      await gravarDestaque(r.id, !r.destaque);
+    } catch (e) {
+      if (antes) queryClient.setQueryData(chave, antes);
+      toast.error("Destaque não salvo", { description: textoDoErro(e) });
+    } finally {
+      setGravando(null);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "referencias", clientId] });
+    }
+  };
 
   const leitor = padraoPara(catalogo, "leitura");
   const modeloDoContexto = padraoDoContexto(catalogo);
@@ -89,11 +119,12 @@ export default function GaleriaDeReferencias({
               type="button"
               onClick={() => setFiltro(f)}
               aria-pressed={filtro === f}
+              title={f === "todas" ? undefined : PAPEIS[f].dica}
               className={`mb-1 mr-1 rounded-full px-2.5 py-0.5 text-[11.5px] ${
                 filtro === f ? "bg-primary/15 font-medium text-primary" : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {f === "todas" ? "Todas" : f === "identidade" ? "Identidade" : "Técnica"} {contagem[f]}
+              {f === "todas" ? "Todas" : PAPEIS[f].rotulo} {contagem[f]}
             </button>
           ))}
         </div>
@@ -111,6 +142,11 @@ export default function GaleriaDeReferencias({
         )}
       </div>
 
+      {ativas.length > 0 && (
+        <div className="mb-2">
+          <LegendaDosPapeis />
+        </div>
+      )}
       {refs.isError && <AvisoDeErro erro={refs.error} />}
 
       {refs.isLoading ? (
@@ -126,7 +162,7 @@ export default function GaleriaDeReferencias({
           <p className="text-[12.5px] text-muted-foreground">
             {ativas.length
               ? "Nenhuma referência neste filtro."
-              : 'Nenhuma referência ainda. Crie no Workspace uma pasta com "Referências" no nome, ou importe um pin e envie imagens em Gerenciar.'}
+              : 'Nenhuma referência ainda. Em Gerenciar, escolha imagens nas pastas do workspace ou cole um pin do Pinterest.'}
           </p>
         </div>
       ) : (
@@ -136,34 +172,27 @@ export default function GaleriaDeReferencias({
               const lida = !!(r.leitura && r.leitura.trim());
               const indice = comImagem.indexOf(r);
               return (
-                <li key={r.id} className="min-w-0">
+                <li key={r.id} className="relative min-w-0">
                   <button
                     type="button"
                     onClick={() => {
                       if (indice >= 0) setAberta(indice);
                     }}
                     title={`${r.nome}${lida ? "" : " · sem leitura"}`}
-                    aria-label={`Ver maior: ${r.nome}, ${ROTULO_DO_PAPEL[r.papel]}${lida ? "" : ", sem leitura"}`}
+                    aria-label={`Ver maior: ${r.nome}, ${PAPEIS[r.papel].curto}${lida ? "" : ", sem leitura"}`}
                     className="block w-full rounded-lg text-left outline-none ring-offset-background transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
-                    <Quadrado className="border border-border">
-                      {r.imagem ? (
-                        <MiniaturaDoStorage bucket={r.imagem.bucket} caminho={r.imagem.caminho} alt={r.nome} className="h-full w-full" />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground">sem imagem</span>
-                      )}
-                      <span
-                        className={`absolute left-1 top-1 rounded px-1 py-px text-[9.5px] font-medium ${
-                          r.papel === "identidade" ? "bg-primary text-primary-foreground" : "bg-background/90 text-foreground"
-                        }`}
-                      >
-                        {ROTULO_DO_PAPEL[r.papel]}
-                      </span>
+                    <Quadrado className={`border ${r.destaque ? "border-amber-400" : "border-border"}`}>
+                      <ImagemDeReferencia fonte={fonteDaReferencia(r)} alt={r.nome} largura={240} className="h-full w-full" />
                       {!lida && (
                         <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 border-background bg-warning" aria-hidden="true" />
                       )}
                     </Quadrado>
                   </button>
+                  <BotaoDestaque ativo={r.destaque} ocupado={gravando === r.id} onClick={() => void alternarDestaque(r)} className="absolute left-1 top-1" />
+                  <div className="mt-1 flex min-w-0">
+                    <SeloDoPapel papel={r.papel} />
+                  </div>
                 </li>
               );
             })}

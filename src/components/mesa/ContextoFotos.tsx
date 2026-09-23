@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderSync, Loader2 } from "lucide-react";
+import { Folder, FolderSync, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { chamarFuncao, rotuloDaCategoria } from "@/lib/mesa/api";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
@@ -9,11 +9,13 @@ import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { useMesa } from "./MesaContexto";
 import { Quadrado } from "./NavegadorDePastas";
 import { invalidarAcervo, useAcervo } from "./contextoDoCliente";
+import { montarArvore, pastaDaFoto, pastasDoAcervo, RAIZ, trilhaAte, useArvoreDoWorkspace } from "@/lib/mesa/pastas";
 
 /**
  * Fotos reais do cliente (acervo) em galeria compacta no Contexto: as
- * primeiras fotos ativas, cada uma abre maior com a descrição. Organizar e
- * editar continua no editor de Imagens (Detalhes).
+ * primeiras fotos ativas, cada uma abre maior com a descrição. As pastas de
+ * cima espelham o Workspace do cliente (mesma organização de lá) e filtram a
+ * galeria. Organizar e editar continua no editor de Imagens (Detalhes).
  */
 
 export function legendaDaFoto(i: { descricao: string | null; categoria: string | null; pasta: string | null }): string {
@@ -31,8 +33,29 @@ export default function FotosDoCliente({ colunas = 6, onOrganizar }: { colunas?:
   const [aberta, setAberta] = useState<number | null>(null);
   const [buscando, setBuscando] = useState(false);
 
-  const ativas = useMemo(() => (acervo.data || []).filter((i) => i.ativa), [acervo.data]);
-  const semDescricao = ativas.filter((i) => !(i.descricao && i.descricao.trim())).length;
+  const arvoreDoWorkspace = useArvoreDoWorkspace(clientId);
+  const [pasta, setPasta] = useState(RAIZ);
+
+  const todasAtivas = useMemo(() => (acervo.data || []).filter((i) => i.ativa), [acervo.data]);
+  const semDescricao = todasAtivas.filter((i) => !(i.descricao && i.descricao.trim())).length;
+
+  // Pastas do primeiro nível, com as fotos de toda a subárvore.
+  const espelho = useMemo(() => {
+    const { pastas, pastaDoNo } = pastasDoAcervo(arvoreDoWorkspace.data || [], todasAtivas);
+    const pastaDe: Record<string, string> = {};
+    const diretos: Record<string, number> = {};
+    for (const i of todasAtivas) {
+      const p = pastaDaFoto(i, pastaDoNo);
+      pastaDe[i.id] = p;
+      diretos[p] = (diretos[p] || 0) + 1;
+    }
+    const arvore = montarArvore(pastas, diretos);
+    const topo = (arvore.filhos[RAIZ] || []).filter((p) => (arvore.total[p.id] || 0) > 0).map((p) => ({ id: p.id, nome: p.nome, total: arvore.total[p.id] || 0 }));
+    const dentro = (fotoId: string, alvo: string) => trilhaAte(arvore, pastaDe[fotoId] || RAIZ).some((p) => p.id === alvo);
+    return { topo, dentro };
+  }, [arvoreDoWorkspace.data, todasAtivas]);
+
+  const ativas = pasta === RAIZ ? todasAtivas : todasAtivas.filter((i) => espelho.dentro(i.id, pasta));
   const naTela = colunas === 6 ? 11 : 7;
   const visiveis = ativas.slice(0, naTela);
   const resto = ativas.length - visiveis.length;
@@ -66,8 +89,8 @@ export default function FotosDoCliente({ colunas = 6, onOrganizar }: { colunas?:
         <p className="mb-1 mr-2 min-w-0 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">
           {acervo.isLoading
             ? "Lendo o acervo..."
-            : ativas.length
-              ? `${ativas.length} ${ativas.length === 1 ? "foto ativa" : "fotos ativas"}${semDescricao ? `, ${semDescricao} sem descrição` : ", todas organizadas"}`
+            : todasAtivas.length
+              ? `${todasAtivas.length} ${todasAtivas.length === 1 ? "foto ativa" : "fotos ativas"}${semDescricao ? `, ${semDescricao} sem descrição` : ", todas organizadas"}`
               : "Nenhuma foto real no acervo ainda."}
         </p>
         <div className="mb-1 flex items-center">
@@ -90,6 +113,27 @@ export default function FotosDoCliente({ colunas = 6, onOrganizar }: { colunas?:
 
       {acervo.isError && <AvisoDeErro erro={acervo.error} />}
 
+      {espelho.topo.length > 1 && (
+        <div role="group" aria-label="Pastas do Workspace" className="-mx-0.5 mb-2 flex min-w-0 overflow-x-auto pb-1">
+          {[{ id: RAIZ, nome: "Todas", total: todasAtivas.length }].concat(espelho.topo).map((p) => (
+            <button
+              key={p.id || "todas"}
+              type="button"
+              onClick={() => setPasta(p.id)}
+              aria-pressed={pasta === p.id}
+              title={p.nome}
+              className={`mx-0.5 inline-flex max-w-[11rem] shrink-0 items-center rounded-full border px-2.5 py-0.5 text-[11px] transition-colors ${
+                pasta === p.id ? "border-primary bg-primary/10 font-medium text-primary" : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {p.id !== RAIZ && <Folder className="mr-1 h-3 w-3 shrink-0" />}
+              <span className="min-w-0 truncate">{p.nome}</span>
+              <span className="ml-1 shrink-0 tabular-nums opacity-70">{p.total}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {acervo.isLoading ? (
         <div className={`grid gap-2 ${grade}`}>
           {Array.from({ length: colunas === 6 ? 6 : 4 }).map((_, i) => (
@@ -98,7 +142,7 @@ export default function FotosDoCliente({ colunas = 6, onOrganizar }: { colunas?:
             </Quadrado>
           ))}
         </div>
-      ) : ativas.length === 0 ? (
+      ) : todasAtivas.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-5 text-center text-[12.5px] text-muted-foreground">
           Clique em "Buscar nas pastas" para trazer as fotos do Workspace e de Arquivos.
         </p>

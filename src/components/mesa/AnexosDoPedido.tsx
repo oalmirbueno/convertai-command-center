@@ -167,6 +167,23 @@ export function BotaoDeAnexar({ anexos, className = "" }: { anexos: ControleDeAn
   );
 }
 
+/**
+ * Colar só vira anexo quando o que foi copiado é imagem de verdade (um print):
+ * há arquivo na área de transferência e nenhum texto junto. Texto colado
+ * (o ditado do Wispr Flow cola com Ctrl+V, e o Word cola texto com uma imagem
+ * de brinde) segue o caminho normal do campo e nunca é interceptado.
+ */
+export function colagemEhImagem(dados: { files?: FileList | File[] | null; getData?: (tipo: string) => string } | null | undefined): boolean {
+  if (!dados || !dados.files || !dados.files.length) return false;
+  let texto = "";
+  try {
+    texto = dados.getData ? dados.getData("text/plain") || "" : "";
+  } catch {
+    texto = "";
+  }
+  return !texto.trim();
+}
+
 /** Área que aceita arrastar e soltar imagens (e colar prints). */
 export function ZonaDeAnexos({ anexos, children, className = "" }: { anexos: ControleDeAnexos; children: ReactNode; className?: string }) {
   const [sobre, setSobre] = useState(false);
@@ -195,11 +212,9 @@ export function ZonaDeAnexos({ anexos, children, className = "" }: { anexos: Con
         anexos.adicionar(e.dataTransfer.files);
       }}
       onPaste={(e) => {
-        const itens = e.clipboardData ? e.clipboardData.files : null;
-        if (itens && itens.length) {
-          e.preventDefault();
-          anexos.adicionar(itens);
-        }
+        if (!colagemEhImagem(e.clipboardData)) return;
+        e.preventDefault();
+        anexos.adicionar(e.clipboardData.files);
       }}
     >
       {children}

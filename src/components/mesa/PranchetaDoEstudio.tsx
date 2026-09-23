@@ -9,24 +9,42 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Clock, GripVertical, Loader2, MessageSquare } from "lucide-react";
+import { Clock, GripVertical, MessageSquare } from "lucide-react";
 import { blocosDoTexto, caixaDaZona, ESCALA_DO_PAPEL, zonaPadrao, type Caixa } from "@/lib/mesa/layout";
 import { ImagemDaMesa } from "./MesaContexto";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 
 /**
- * Prancheta do Estúdio: as lâminas do item lado a lado, em 4:5 (altura
- * calculada pela largura, sem aspect-ratio), numa faixa que rola para o lado
- * por dentro. Lâmina sem arte mostra o esboço do layout (zona do texto,
- * hierarquia e margens de segurança), nas mesmas posições que o gerador
- * recebe. O carrossel contínuo aparece colado, como panorama.
+ * Prancheta do Estúdio: as lâminas do item em 4:5 (altura calculada pela
+ * largura, sem aspect-ratio). Na horizontal, uma faixa que rola para o lado
+ * por dentro; na vertical (computador), uma coluna ao lado da lâmina grande.
+ * Lâmina sem arte mostra o esboço do layout (zona do texto, hierarquia e
+ * margens de segurança), nas mesmas posições que o gerador recebe. O
+ * carrossel contínuo aparece colado, como panorama (só na horizontal).
  *
  * Sob cada lâmina, sempre visíveis (não só no hover): número e função, o
  * ajuste, a versão (abre as versões) e a barrinha com gerar ou refazer e o
- * preço. Gerando, a barrinha mostra o cronômetro no lugar, sem travar as
- * outras. Clique seleciona; duplo clique abre a lâmina grande (Ampliar).
- * Nada sobe nem desce no hover.
+ * preço. Com a lâmina em andamento, a barrinha vira O indicador dela (um só
+ * por lâmina, em toda a tela): a etapa e um cronômetro discreto que corre
+ * da fila até o fim da conferência, sem recomeçar nem piscar. Clique
+ * seleciona; duplo clique abre a lâmina grande (Ampliar). Nada sobe nem
+ * desce no hover.
  */
+
+export type EtapaDaLamina = "fila" | "gerando" | "ajustando" | "conferindo";
+
+/** O que está acontecendo com a lâmina agora e desde quando (o cronômetro não recomeça entre etapas). */
+export interface AndamentoDaLamina {
+  etapa: EtapaDaLamina;
+  desde: number;
+}
+
+export const ROTULO_DA_ETAPA: Record<EtapaDaLamina, string> = {
+  fila: "na fila",
+  gerando: "gerando",
+  ajustando: "ajustando",
+  conferindo: "conferindo",
+};
 
 type Props = {
   cards: CardDaDirecao[];
@@ -35,20 +53,20 @@ type Props = {
   onSelecionar: (ordem: number) => void;
   /** Duplo clique numa lâmina com arte. */
   onAmpliar?: (ordem: number) => void;
-  /** ordem -> momento em que a geração começou (para o cronômetro). */
-  gerando: Record<number, number>;
-  /** Lâminas esperando a vez no "Gerar as que faltam". */
-  fila?: number[];
+  /** ordem -> etapa e início (fila, geração, ajuste, conferência). */
+  andamento: Record<number, AndamentoDaLamina>;
   infinito: boolean;
   /** Largura de cada lâmina em px (a altura é 1,25 vez). */
   largura: number;
+  /** "vertical": coluna ao lado da lâmina grande (computador). */
+  orientacao?: "horizontal" | "vertical";
   podeReordenar: boolean;
   onReordenar: (ordens: number[]) => void;
   /** Barrinha de ações sob a lâmina (sempre visível). */
   acoes?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
-  /** Versão sob a lâmina, clicável (abre as versões no inspetor). */
+  /** Versão sob a lâmina, clicável (abre as versões na ferramenta Lâmina). */
   onVersoes?: (ordem: number) => void;
-  /** Ícone de ajuste sob a lâmina com arte (abre o ajuste no inspetor). */
+  /** Ícone de ajuste sob a lâmina com arte (abre o ajuste na ferramenta Lâmina). */
   onAjustar?: (ordem: number) => void;
 };
 
@@ -60,6 +78,31 @@ export function Cronometro({ desde }: { desde: number }) {
   }, []);
   const s = Math.max(0, Math.round((agora - desde) / 1000));
   return <span>{s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60 < 10 ? "0" : ""}${s % 60} s`}</span>;
+}
+
+/** O indicador único da lâmina em andamento: a etapa e o tempo, discretos. */
+export function ProgressoDaLamina({ ordem, andamento }: { ordem: number; andamento: AndamentoDaLamina }) {
+  const naFila = andamento.etapa === "fila";
+  return (
+    <span
+      role="status"
+      aria-label={`Lâmina ${ordem}: ${ROTULO_DA_ETAPA[andamento.etapa]}`}
+      data-progresso-da-lamina={ordem}
+      className="inline-flex h-7 min-w-0 max-w-full items-center rounded-full bg-secondary px-2.5 text-[11px]"
+    >
+      {naFila ? (
+        <Clock className="mr-1 h-3 w-3 shrink-0 text-muted-foreground" />
+      ) : (
+        <span className="mr-1.5 h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+      )}
+      <span className={`truncate ${naFila ? "text-muted-foreground" : "font-medium text-foreground"}`}>{ROTULO_DA_ETAPA[andamento.etapa]}</span>
+      {!naFila && (
+        <span className="ml-1 shrink-0 tabular-nums text-muted-foreground">
+          <Cronometro desde={andamento.desde} />
+        </span>
+      )}
+    </span>
+  );
 }
 
 export const funcaoDaLamina = (card: CardDaDirecao) =>
@@ -175,8 +218,7 @@ function Lamina({
   total,
   versao,
   ativo,
-  desde,
-  naFila,
+  andamento,
   onSelecionar,
   onAmpliar,
   onVersoes,
@@ -184,6 +226,7 @@ function Lamina({
   largura,
   arrastavel,
   colado,
+  vertical,
   primeira,
   ultima,
   acoes,
@@ -192,8 +235,7 @@ function Lamina({
   total: number;
   versao: CardGerado | undefined;
   ativo: boolean;
-  desde: number | undefined;
-  naFila: boolean;
+  andamento: AndamentoDaLamina | undefined;
   onSelecionar: () => void;
   onAmpliar?: () => void;
   onVersoes?: () => void;
@@ -201,6 +243,7 @@ function Lamina({
   largura: number;
   arrastavel: boolean;
   colado: boolean;
+  vertical: boolean;
   primeira: boolean;
   ultima: boolean;
   acoes?: ReactNode;
@@ -212,11 +255,13 @@ function Lamina({
   const funcao = funcaoDaLamina(card);
   const altura = Math.round(largura * 1.25);
   const cantos = colado ? `${primeira ? "rounded-l-lg" : ""} ${ultima ? "rounded-r-lg" : ""}` : "rounded-lg border";
+  const trabalhando = !!andamento && andamento.etapa !== "fila";
+  const espaco = colado ? "" : vertical ? (ultima ? "" : "mb-3") : "mr-3";
 
   return (
     <li
       ref={alvo.setNodeRef}
-      className={`relative shrink-0 list-none ${colado ? "" : "mr-3"} ${alvo.isOver && !arrasto.isDragging ? "rounded-lg ring-2 ring-primary" : ""}`}
+      className={`relative shrink-0 list-none ${espaco} ${alvo.isOver && !arrasto.isDragging ? "rounded-lg ring-2 ring-primary" : ""}`}
       style={{ width: largura }}
     >
       <div
@@ -235,7 +280,7 @@ function Lamina({
           className={`relative block w-full overflow-hidden bg-card text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cantos} ${ativo ? (colado ? "ring-[3px] ring-inset ring-primary" : "border-primary ring-2 ring-primary") : colado ? "" : "border-border hover:border-primary/60"}`}
         >
           {versao ? (
-            <ImagemDaMesa caminho={versao.storage_path} alt={`Lâmina ${card.ordem}`} className={`absolute inset-0 h-full w-full ${desde !== undefined ? "opacity-60" : ""}`} />
+            <ImagemDaMesa caminho={versao.storage_path} alt={`Lâmina ${card.ordem}`} className={`absolute inset-0 h-full w-full transition-opacity ${trabalhando ? "opacity-50" : ""}`} />
           ) : (
             <Esboco card={card} total={total} largura={largura} />
           )}
@@ -245,7 +290,7 @@ function Lamina({
             <span className={`font-semibold tabular-nums ${ativo ? "text-primary" : "text-foreground"}`}>{card.ordem}</span>
             <span className={funcao === "capa" ? "font-medium text-primary" : "text-muted-foreground"}> {funcao}</span>
           </span>
-          {versao && onAjustar && desde === undefined && (
+          {versao && onAjustar && !andamento && (
             <button
               type="button"
               onClick={onAjustar}
@@ -281,19 +326,9 @@ function Lamina({
             </span>
           )}
         </div>
-        {/* Barrinha de ações: sempre visível, com o cronômetro no lugar enquanto gera. */}
+        {/* Barrinha: as ações, ou o indicador único da lâmina enquanto ela está em andamento. */}
         <div className="mt-1 flex h-8 min-w-0 items-center justify-center">
-          {desde !== undefined ? (
-            <span className="inline-flex items-center text-[11px] font-medium text-primary">
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> <span className="tabular-nums"><Cronometro desde={desde} /></span>
-            </span>
-          ) : naFila ? (
-            <span className="inline-flex items-center text-[11px] text-muted-foreground">
-              <Clock className="mr-1 h-3 w-3" /> na fila
-            </span>
-          ) : (
-            acoes
-          )}
+          {andamento ? <ProgressoDaLamina ordem={card.ordem} andamento={andamento} /> : acoes}
         </div>
       </div>
     </li>
@@ -306,10 +341,10 @@ export default function PranchetaDoEstudio({
   selecionado,
   onSelecionar,
   onAmpliar,
-  gerando,
-  fila = [],
+  andamento,
   infinito,
   largura,
+  orientacao = "horizontal",
   podeReordenar,
   onReordenar,
   acoes,
@@ -320,6 +355,8 @@ export default function PranchetaDoEstudio({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
   );
+  const vertical = orientacao === "vertical";
+  const colado = infinito && !vertical;
   const aoSoltar = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
     const ordens = cards.map((c) => c.ordem);
@@ -332,34 +369,36 @@ export default function PranchetaDoEstudio({
     onReordenar(nova);
   };
 
+  const lista = (
+    <ul className={vertical ? "flex flex-col items-center" : "inline-flex items-start"} aria-label="Lâminas do item">
+      {cards.map((c, i) => (
+        <Lamina
+          key={c.ordem}
+          card={c}
+          total={cards.length}
+          versao={ultimas.get(c.ordem)}
+          ativo={selecionado === c.ordem}
+          andamento={andamento[c.ordem]}
+          onSelecionar={() => onSelecionar(c.ordem)}
+          onAmpliar={onAmpliar ? () => onAmpliar(c.ordem) : undefined}
+          onVersoes={onVersoes ? () => onVersoes(c.ordem) : undefined}
+          onAjustar={onAjustar ? () => onAjustar(c.ordem) : undefined}
+          largura={largura}
+          arrastavel={podeReordenar}
+          colado={colado}
+          vertical={vertical}
+          primeira={i === 0}
+          ultima={i === cards.length - 1}
+          acoes={acoes ? acoes(c, ultimas.get(c.ordem)) : undefined}
+        />
+      ))}
+    </ul>
+  );
+
   return (
     <DndContext sensors={sensores} onDragEnd={aoSoltar}>
-      {/* Rola dentro da própria faixa: a página nunca rola para o lado. */}
-      <div className="min-w-0 overflow-x-auto pb-1">
-        <ul className="inline-flex items-start" aria-label="Lâminas do item">
-          {cards.map((c, i) => (
-            <Lamina
-              key={c.ordem}
-              card={c}
-              total={cards.length}
-              versao={ultimas.get(c.ordem)}
-              ativo={selecionado === c.ordem}
-              desde={gerando[c.ordem]}
-              naFila={fila.indexOf(c.ordem) >= 0}
-              onSelecionar={() => onSelecionar(c.ordem)}
-              onAmpliar={onAmpliar ? () => onAmpliar(c.ordem) : undefined}
-              onVersoes={onVersoes ? () => onVersoes(c.ordem) : undefined}
-              onAjustar={onAjustar ? () => onAjustar(c.ordem) : undefined}
-              largura={largura}
-              arrastavel={podeReordenar}
-              colado={infinito}
-              primeira={i === 0}
-              ultima={i === cards.length - 1}
-              acoes={acoes ? acoes(c, ultimas.get(c.ordem)) : undefined}
-            />
-          ))}
-        </ul>
-      </div>
+      {/* Na horizontal, rola dentro da própria faixa: a página nunca rola para o lado. Na vertical, quem rola é a coluna. */}
+      {vertical ? lista : <div className="min-w-0 overflow-x-auto pb-1">{lista}</div>}
     </DndContext>
   );
 }

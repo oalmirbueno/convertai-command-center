@@ -47,7 +47,7 @@ export default function EstudioArteDaAgenda({
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mb-2 mr-3 min-w-0 flex-1 text-[13px] font-semibold">
-          Arte já na Agenda
+          {arte.origem === "anexo" ? "Arte anexada à tarefa" : "Arte já na Agenda"}
           <span className="font-normal text-muted-foreground">
             {" "}· {lista.length} lâmina{lista.length === 1 ? "" : "s"}
             {arte.do_estudio ? " · entregue pelo Estúdio" : ""}
@@ -153,7 +153,7 @@ export function InspetorDaArte({ arte, publicacao, linkAgenda }: { arte: ArteNaA
   return (
     <div className="min-w-0 space-y-4">
       <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Post na Agenda</p>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{arte.origem === "anexo" ? "Imagem anexada à tarefa" : "Post na Agenda"}</p>
         <p className="mt-1 text-[14px] font-semibold leading-snug [overflow-wrap:anywhere]">{arte.titulo || "Sem título"}</p>
         <p className="mt-1 text-[12px] text-muted-foreground">
           {publicacao?.status === "published" ? "Publicado" : quando ? "Agendado" : "Sem data de publicação"}

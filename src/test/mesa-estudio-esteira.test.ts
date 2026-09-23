@@ -421,7 +421,7 @@ describe("o esboço da lâmina sem arte não vaza da caixa", () => {
   });
 });
 
-describe("a aba inteira no computador (três colunas)", () => {
+describe("a aba inteira no computador (faixa das pautas em cima, estúdio grande embaixo)", () => {
   const daqui = (dias: number) => {
     const d = new Date();
     d.setDate(d.getDate() + dias);
@@ -474,17 +474,18 @@ describe("a aba inteira no computador (três colunas)", () => {
     mock.invoke.mockResolvedValue({ data: { custo_usd: 0.04 }, error: null });
     try {
       const aba = montarAba("i-3");
-      // Lista na coluna da esquerda, com a arte da Agenda fora de "A fazer".
+      // Faixa das pautas em cima, com a arte da Agenda fora de "A fazer".
       expect(await screen.findByText("Pauta sem nada")).toBeTruthy();
       expect(screen.queryByText("Pauta com arte na Agenda")).toBeNull();
-      // Centro: barra do item, prancheta e a lâmina escolhida; inspetor em abas.
+      // Embaixo: barra do item, prancheta e a lâmina escolhida; ferramentas na barra lateral (antes, abas do inspetor).
       expect(await screen.findByText("Prancheta")).toBeTruthy();
       expect(screen.getAllByText("Pauta em produção").length).toBeGreaterThan(0);
-      expect(screen.getByRole("tab", { name: "Lâmina" })).toBeTruthy();
+      expect(screen.getByRole("navigation", { name: "Ferramentas" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Lâmina" }).getAttribute("aria-pressed")).toBe("true");
       expect(screen.getByRole("button", { name: /Gerar as que faltam \(1\)/ })).toBeTruthy();
-      fireEvent.click(screen.getByRole("tab", { name: "Conjunto" }));
+      fireEvent.click(screen.getByRole("button", { name: "Conjunto" }));
       expect(screen.getByText("Mesma luz")).toBeTruthy();
-      fireEvent.click(screen.getByRole("tab", { name: "Entrega" }));
+      fireEvent.click(screen.getByRole("button", { name: "Entrega" }));
       expect((screen.getByRole("button", { name: /Só entregar em Arquivos/ }) as HTMLButtonElement).disabled).toBe(true);
 
       // Arte já na Agenda: mostra a arte e só refaz se pedir.

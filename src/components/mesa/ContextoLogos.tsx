@@ -54,23 +54,44 @@ export function imagemDoArquivo(a: ArquivoDoPainel | null | undefined): { bucket
 
 type QualLogo = "logo" | "alt";
 
+/** Fundo de conferência da logo: xadrez (transparência), claro ou escuro. */
+export type FundoDaLogo = "xadrez" | "claro" | "escuro";
+const PROXIMO_FUNDO: Record<FundoDaLogo, FundoDaLogo> = { xadrez: "claro", claro: "escuro", escuro: "xadrez" };
+const NOME_DO_FUNDO: Record<FundoDaLogo, string> = { xadrez: "xadrez", claro: "claro", escuro: "escuro" };
+
+const XADREZ = {
+  backgroundColor: "#ffffff",
+  backgroundImage:
+    "linear-gradient(45deg, #ececec 25%, transparent 25%), linear-gradient(-45deg, #ececec 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ececec 75%), linear-gradient(-45deg, transparent 75%, #ececec 75%)",
+  backgroundSize: "16px 16px",
+  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+};
+
+function estiloDoFundo(fundo: FundoDaLogo) {
+  if (fundo === "claro") return { backgroundColor: "#ffffff" };
+  if (fundo === "escuro") return { backgroundColor: "#141414" };
+  return XADREZ;
+}
+
 function QuadroDaLogo({
   imagem,
   rotulo,
   carregando,
   onAmpliar,
   compacto,
+  fundo,
 }: {
   imagem: { bucket: string; caminho: string } | null;
   rotulo: string;
   carregando: boolean;
   onAmpliar: () => void;
   compacto: boolean;
+  fundo: FundoDaLogo;
 }) {
-  const altura = compacto ? "h-20" : "h-28";
+  const altura = compacto ? "h-24 sm:h-28" : "h-32";
   if (!imagem) {
     return (
-      <div className={`flex ${altura} w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted text-[11px] text-muted-foreground`}>
+      <div className={`flex ${altura} w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted text-[11.5px] text-muted-foreground`}>
         {carregando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sem logo"}
       </div>
     );
@@ -81,7 +102,8 @@ function QuadroDaLogo({
       onClick={onAmpliar}
       aria-label={`Ver ${rotulo.toLowerCase()} maior`}
       title="Ver maior"
-      className={`group relative flex ${altura} w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-muted p-2 transition-colors hover:border-primary/60`}
+      style={estiloDoFundo(fundo)}
+      className={`group relative flex ${altura} w-full items-center justify-center overflow-hidden rounded-xl border border-border p-3 transition-shadow hover:shadow-md`}
     >
       <MiniaturaDoStorage bucket={imagem.bucket} caminho={imagem.caminho} alt={rotulo} largura={480} ajuste="contain" className="h-full w-full" />
       <span className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md bg-background/90 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
@@ -109,6 +131,7 @@ export default function LogosDaMarca({
   const [gravando, setGravando] = useState<string | null>(null);
   const [tirando, setTirando] = useState<QualLogo | null>(null);
   const [ampliada, setAmpliada] = useState<number | null>(null);
+  const [fundos, setFundos] = useState<Record<QualLogo, FundoDaLogo>>({ logo: "xadrez", alt: "xadrez" });
 
   const principalPath = kit?.logo_path || null;
   const altPath = kit?.logo_alt_path || null;
@@ -161,7 +184,7 @@ export default function LogosDaMarca({
 
   return (
     <div className="min-w-0 space-y-2">
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2">
         {tiles.map((t) => {
           const indice = t.imagem ? ampliaveis.findIndex((a) => a.caminho === t.imagem!.caminho) : -1;
           return (
@@ -172,10 +195,25 @@ export default function LogosDaMarca({
                 carregando={t.carregando}
                 onAmpliar={() => setAmpliada(indice >= 0 ? indice : 0)}
                 compacto={compacto}
+                fundo={fundos[t.qual]}
               />
               <div className="mt-1.5 flex min-w-0 items-center justify-between">
-                <span className="min-w-0 truncate text-[11.5px] text-muted-foreground">{t.rotulo}</span>
+                <span className="min-w-0 truncate text-[12px] font-medium text-foreground">{t.rotulo}</span>
                 <div className="ml-1 flex shrink-0 items-center">
+                  {t.imagem && (
+                    <button
+                      type="button"
+                      onClick={() => setFundos((f) => ({ ...f, [t.qual]: PROXIMO_FUNDO[f[t.qual]] }))}
+                      title={`Fundo ${NOME_DO_FUNDO[fundos[t.qual]]}: trocar para ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundos[t.qual]]]}`}
+                      aria-label={`Conferir a ${t.rotulo.toLowerCase()} em fundo ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundos[t.qual]]]}`}
+                      className="mr-0.5 flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted"
+                    >
+                      <span
+                        className="h-3.5 w-3.5 rounded-full border border-border"
+                        style={fundos[t.qual] === "escuro" ? { backgroundColor: "#141414" } : fundos[t.qual] === "claro" ? { backgroundColor: "#ffffff" } : { backgroundImage: "linear-gradient(90deg, #ffffff 50%, #141414 50%)" }}
+                      />
+                    </button>
+                  )}
                   {!compacto && t.imagem && (
                     <Button
                       type="button"

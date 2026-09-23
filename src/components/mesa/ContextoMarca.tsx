@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { textoDoErro } from "@/lib/mesa/api";
 import LogosDaMarca from "./ContextoLogos";
+import { PaletaDaMarca } from "./ContextoPaleta";
 import { useMesa } from "./MesaContexto";
 import { Campo, TituloDeSecao } from "./Seletores";
 import { useInvalidarContexto, useKitDoCliente } from "./contextoDoCliente";
@@ -91,6 +92,10 @@ export default function ContextoMarca() {
           Paleta
         </TituloDeSecao>
         {paleta.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhuma cor ainda. Comece pela cor principal da marca.</p>}
+        {paleta.length > 0 && (
+          // Prévia ao vivo, como a paleta aparece no hub Marca (clique copia o hex).
+          <PaletaDaMarca paleta={paleta.filter((c) => HEX.test(c.hex))} />
+        )}
         <ul className="space-y-2">
           {paleta.map((cor, i) => (
             <li key={i} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border border-border bg-card p-2 sm:grid-cols-[40px_minmax(0,1fr)_120px_140px_auto]">

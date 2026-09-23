@@ -196,6 +196,119 @@ export const ROTULOS_DO_QUE_MUDOU: Record<string, string> = {
 
 export const temTexto = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
 
+// ------------------------------------------------------------------ score
+
+/**
+ * Score do contexto consolidado (0 a 100), calculado na tela, sem IA.
+ * Cada campo vale um peso; o texto ganha pela profundidade (vazio, curto,
+ * médio, completo pelo tamanho ideal) e a lista pela quantidade de itens.
+ * Devolve também o que falta, na ordem do que mais sobe o score.
+ */
+export type NivelDoCampo = "vazio" | "curto" | "medio" | "completo";
+
+export interface CampoDoScore {
+  chave: string;
+  rotulo: string;
+  peso: number;
+  pontos: number;
+  nivel: NivelDoCampo;
+}
+
+export interface FaltaDoScore {
+  chave: string;
+  texto: string;
+  /** Quanto o score sobe se o campo ficar completo. */
+  ganho: number;
+}
+
+export interface ScoreDoContexto {
+  score: number;
+  campos: CampoDoScore[];
+  faltas: FaltaDoScore[];
+  completos: number;
+}
+
+interface RegraDoCampo {
+  chave: string;
+  rotulo: string;
+  peso: number;
+  /** Tamanho (em caracteres) a partir do qual o texto conta como completo. */
+  ideal?: number;
+  dica: string;
+}
+
+const REGRAS_DO_SCORE: RegraDoCampo[] = [
+  { chave: "negocio", rotulo: "Negócio", peso: 15, ideal: 160, dica: "o que a empresa faz, onde e para quem" },
+  { chave: "publico", rotulo: "Público", peso: 15, ideal: 140, dica: "quem compra, idade, momento de vida e dores" },
+  { chave: "oferta", rotulo: "Oferta", peso: 12, ideal: 120, dica: "produtos, serviços e preços de entrada" },
+  { chave: "tom_de_voz", rotulo: "Tom de voz", peso: 12, ideal: 100, dica: "como a marca fala e o que evita dizer" },
+  { chave: "diferenciais", rotulo: "Diferenciais", peso: 12, dica: "pelo menos 3 motivos para escolher a marca" },
+  { chave: "tipografia", rotulo: "Tipografia", peso: 8, dica: "fonte de título e fonte de texto" },
+  { chave: "logo", rotulo: "Logo", peso: 6, ideal: 60, dica: "como é a logo e como usar" },
+  { chave: "estilo", rotulo: "Estilo", peso: 10, ideal: 160, dica: "luz, cores, composição e clima das artes" },
+  { chave: "regras", rotulo: "Regras", peso: 10, ideal: 120, dica: "o que sempre fazer e o que nunca fazer" },
+];
+
+const FRACAO_DO_NIVEL: Record<NivelDoCampo, number> = { vazio: 0, curto: 0.4, medio: 0.7, completo: 1 };
+
+/** Nível do texto pelo tamanho ideal do campo. */
+export function nivelDoTexto(texto: unknown, ideal: number): NivelDoCampo {
+  const n = temTexto(texto) ? texto.trim().length : 0;
+  if (!n) return "vazio";
+  if (n >= ideal) return "completo";
+  if (n >= ideal * 0.45) return "medio";
+  return "curto";
+}
+
+export function scoreDoConsolidado(kit: KitDoContexto | null | undefined): ScoreDoContexto {
+  const c = (kit && kit.contexto) || null;
+  const textoDe = (chave: string): unknown => {
+    if (chave === "estilo") return kit ? kit.estilo : null;
+    if (chave === "regras") return kit ? kit.regras : null;
+    if (chave === "logo") return c && c.logo ? c.logo.descricao : null;
+    return c ? (c as Record<string, unknown>)[chave] : null;
+  };
+  const campos: CampoDoScore[] = [];
+  const faltas: FaltaDoScore[] = [];
+  for (const r of REGRAS_DO_SCORE) {
+    let nivel: NivelDoCampo = "vazio";
+    let texto = "";
+    if (r.chave === "diferenciais") {
+      const n = (c && Array.isArray(c.diferenciais) ? c.diferenciais : []).filter(temTexto).length;
+      nivel = n >= 3 ? "completo" : n === 2 ? "medio" : n === 1 ? "curto" : "vazio";
+      if (nivel !== "completo") texto = n ? `Acrescentar diferenciais (hoje ${n}, o ideal é 3 ou mais).` : `Listar os diferenciais: ${r.dica}.`;
+    } else if (r.chave === "tipografia") {
+      const t = (c && c.tipografia) || null;
+      const titulo = !!t && temTexto(t.titulo);
+      const corpo = !!t && temTexto(t.texto);
+      nivel = titulo && corpo ? "completo" : titulo || corpo ? "medio" : "vazio";
+      if (nivel !== "completo") texto = titulo ? "Dizer a fonte de texto." : corpo ? "Dizer a fonte de título." : `Dizer a tipografia: ${r.dica}.`;
+    } else {
+      nivel = nivelDoTexto(textoDe(r.chave), r.ideal || 100);
+      if (nivel === "vazio") texto = `Preencher ${r.rotulo.toLowerCase()}: ${r.dica}.`;
+      else if (nivel !== "completo") texto = `Aprofundar ${r.rotulo.toLowerCase()} (${nivel === "curto" ? "muito curto" : "quase lá"}): ${r.dica}.`;
+    }
+    const pontos = Math.round(r.peso * FRACAO_DO_NIVEL[nivel] * 10) / 10;
+    campos.push({ chave: r.chave, rotulo: r.rotulo, peso: r.peso, pontos, nivel });
+    if (texto) faltas.push({ chave: r.chave, texto, ganho: Math.round(r.peso - pontos) });
+  }
+  faltas.sort((a, b) => b.ganho - a.ganho);
+  const total = campos.reduce((t, f) => t + f.pontos, 0);
+  return {
+    score: Math.max(0, Math.min(100, Math.round(total))),
+    campos,
+    faltas,
+    completos: campos.filter((f) => f.nivel === "completo").length,
+  };
+}
+
+/** Faixa de cor do score: baixo (até 39), médio (40 a 74) e bom (75+). */
+export function faixaDoScore(score: number): "baixo" | "medio" | "bom" {
+  if (score >= 75) return "bom";
+  if (score >= 40) return "medio";
+  return "baixo";
+}
+
 // ------------------------------------------------------------------ acervo
 
 /** Foto real do cliente (tabela cliente_imagens). */
