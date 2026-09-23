@@ -961,6 +961,14 @@
       "remote_name": "mesa_referencias_destaque",
       "remote_statements_sha256": "abbff4ee1497eeae3a8bf789cfab5cab2dcb919f172bd5d627f7fe328fd3e34f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260923203526",
+      "path": "supabase/migrations/20260923203526_mesa_storage_leitura_compartilhada.sql",
+      "local_sha256": "1f2771944ab4aa4210b52a668d70c56717a37f1112b0d2731e04b20af99cd027",
+      "remote_name": "mesa_storage_leitura_compartilhada",
+      "remote_statements_sha256": "9f7b21b891f769c8d4654ed437e46e4eeba845e9120de6ece94a942a88829db1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
