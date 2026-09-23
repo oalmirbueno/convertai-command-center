@@ -218,7 +218,10 @@ export class IaMotorErro extends Error {
 
 // Tempos limite de toda chamada externa.
 export const TIMEOUT_TEXTO_MS = 120_000;
-export const TIMEOUT_IMAGEM_MS = 150_000;
+// Imagem: 280 s. O panorama do carrossel contínuo (3264 x 1360) levou 136 s na
+// qualidade baixa; nas maiores passaria de 150 s. A função tem 400 s no plano Pro e
+// faz uma imagem por chamada (preparar_fundo e gerar_card são chamadas separadas).
+export const TIMEOUT_IMAGEM_MS = 280_000;
 export const TIMEOUT_LISTA_MS = 30_000;
 
 // Busca na web cobrada por chamada, fora dos tokens (US$ 10 por mil nos dois).

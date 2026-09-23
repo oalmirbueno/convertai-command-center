@@ -25,9 +25,9 @@ describe("motor de modelos: toda chamada externa tem tempo limite", () => {
     expect(motor).toContain("await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });");
   });
 
-  it("texto usa 120 s e imagem usa 150 s", () => {
+  it("texto usa 120 s e imagem usa 280 s (panorama do contínuo)", () => {
     expect(motor).toContain("export const TIMEOUT_TEXTO_MS = 120_000;");
-    expect(motor).toContain("export const TIMEOUT_IMAGEM_MS = 150_000;");
+    expect(motor).toContain("export const TIMEOUT_IMAGEM_MS = 280_000;");
     for (const url of ["https://api.openai.com/v1/responses", "https://api.anthropic.com/v1/messages"]) {
       const trecho = motor.slice(motor.indexOf(url), motor.indexOf(url) + 400);
       expect(trecho).toContain("TIMEOUT_TEXTO_MS");
