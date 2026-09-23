@@ -28,7 +28,8 @@
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { carregarModelo, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ModeloIa } from "../_shared/ia-motor.ts";
+import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
+import { logoLimpa } from "../_shared/imagem-local.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import {
   createEditorialItem,
@@ -134,6 +135,8 @@ type Item = {
   // Preenchido no gravar: a tarefa da agenda deste item (criada ou ja
   // existente). O estudio-arte acha o roteiro dos cards por itens[].task_id.
   task_id?: string | null;
+  /** Campanha (mesa_campanhas) a que o conteúdo pertence; o Estúdio segue a identidade dela. */
+  campanha_id?: string | null;
 };
 
 type Proposta = {
@@ -1015,7 +1018,7 @@ TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do c
 ${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato sugerido ${t.formato_sugerido} | data ${dataDoTema.get(t.id)} | por que: ${t.por_que}`).join("\n")}
 Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão (gancho escuro e forte), cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido para o tema.
 - copy: a legenda completa do post.
 - data: use exatamente a data indicada para o tema.
@@ -1183,6 +1186,8 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
       const original = String((bruto as Record<string, unknown>)?.data ?? "");
       const item = normalizarItem(bruto, uteis);
       if (tarefaDoTema.has(item.tema_id)) item.task_id = tarefaDoTema.get(item.tema_id) ?? null;
+      // O vínculo com a campanha é da proposta: ajuste na conversa não perde.
+      if (typeof p.parametros.campanha_id === "string") item.campanha_id = p.parametros.campanha_id;
       if (original && original !== item.data) ajustes.push(`"${item.tema}" foi de ${original} para ${item.data} (só segunda a sexta dentro do período).`);
       return item;
     }).filter((i) => i.tema);
@@ -1378,6 +1383,9 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   });
 
   await registrarMemoriaDaEscolha(servico, p);
+  if (typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id)) {
+    await servico.from("mesa_campanhas").update({ status: "gravada" }).eq("id", p.parametros.campanha_id).eq("client_id", p.client_id);
+  }
   // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA).
   const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa, chamador.userId);
 
@@ -1450,6 +1458,11 @@ async function criarDirecoesDoRoteiro(
   ]);
   if (!modeloImagem) return 0;
   const jaTem = new Set(((existentes as { task_id: string }[] | null) ?? []).map((e) => e.task_id));
+  const idsCampanha = [...new Set(comTarefa.map((i) => i.campanha_id).filter((x): x is string => !!x && UUID.test(x)))];
+  const { data: campanhasBrutas } = idsCampanha.length
+    ? await servico.from("mesa_campanhas").select("id, nome, identidade").eq("client_id", clientId).in("id", idsCampanha)
+    : { data: [] };
+  const campanhas = new Map(((campanhasBrutas as { id: string; nome: string; identidade: Record<string, unknown> }[] | null) ?? []).map((x) => [x.id, x]));
   const formato = new Map(((tarefas as { id: string; delivery_type: string; deleted_at: string | null }[] | null) ?? [])
     .filter((t) => !t.deleted_at)
     .map((t) => [t.id, t.delivery_type]));
@@ -1457,13 +1470,15 @@ async function criarDirecoesDoRoteiro(
   for (const item of comTarefa) {
     const tipo = formato.get(item.task_id!);
     if (!tipo || !FORMATOS_COM_ARTE.has(tipo) || jaTem.has(item.task_id!)) continue;
+    const campanha = item.campanha_id ? campanhas.get(item.campanha_id) : undefined;
     const direcao = direcaoDoRoteiro(item.cards, marca, {
       postUnico: tipo !== "carousel",
       carrosselInfinito: !!item.carrossel_infinito,
-      conceito: `${item.tema}. ${item.resumo}`.slice(0, 600),
+      conceito: `${item.tema}. ${item.resumo}${campanha ? ` Campanha "${campanha.nome}": ${String(campanha.identidade?.tema_visual ?? "")}` : ""}`.slice(0, 900),
       levaLogo: (ordem, total) => ordem === 1 || ordem === total,
     });
     if (!direcao.cards.length) continue;
+    if (campanha) (direcao as Record<string, unknown>).campanha_id = campanha.id;
     linhas.push({
       client_id: clientId,
       task_id: item.task_id,
@@ -1528,7 +1543,7 @@ TAREFA: estes itens JÁ ESTÃO na agenda do cliente. Complete cada um com todos 
 ${validas.map((t, i) => `- tema_id i${i}: "${t.title}" | formato ${t.delivery_type === "carousel" ? "carrossel" : "estatico"} | data ${t.due_date ?? inicio} | o que já existe: ${(t.description ?? "").replace(/\s+/g, " ").slice(0, 900) || "só o título"}`).join("\n")}
 Regras dos itens:
 - formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão (gancho escuro e forte), cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido.
 - copy: a legenda completa do post.
 - data: exatamente a data do item.
@@ -1587,7 +1602,610 @@ Regras dos itens:
   return json({ proposta, itens, direcoes_prontas: direcoes, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
+// ------------------------------------------- agente do mês, hypes e campanhas
+
+const MAX_ANEXOS_PEDIDO = 6;
+const MAX_BYTES_ANEXO = 12 * 1024 * 1024;
+const REF_AGENTE_DO_MES = "agente_do_mes";
+
+/** Hoje no fuso de São Paulo (AAAA-MM-DD). */
+function hojeSaoPaulo(): string {
+  const agora = new Date(Date.now() - 3 * 3600_000);
+  return agora.toISOString().slice(0, 10);
+}
+
+/** Segunda-feira da semana de uma data. */
+function segundaDaSemana(data: string): string {
+  const d = diaDaSemana(data);
+  return somarDias(data, d === 0 ? -6 : 1 - d);
+}
+
+function mimeDaImagem(b: Uint8Array): string | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0x89 && b[1] === 0x50) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8) return "image/jpeg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45) return "image/webp";
+  return null;
+}
+
+/**
+ * Imagens anexadas ao pedido (prints, fotos): a tela sobe no bucket mesa em
+ * <cliente>/pedidos/; aqui só entra caminho do próprio cliente.
+ */
+async function baixarAnexos(servico: SupabaseClient, clientId: string, bruto: unknown): Promise<{ imagens: ImagemEntrada[]; caminhos: string[] }> {
+  const caminhos = (Array.isArray(bruto) ? bruto : [])
+    .map((c) => String(c ?? ""))
+    .filter((c) => c.startsWith(`${clientId}/`) && c.indexOf("..") < 0)
+    .slice(0, MAX_ANEXOS_PEDIDO);
+  const imagens: ImagemEntrada[] = [];
+  const validos: string[] = [];
+  for (const c of caminhos) {
+    const { data, error } = await servico.storage.from("mesa").download(c);
+    if (error || !data) continue;
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    const mime = mimeDaImagem(bytes);
+    if (!mime || bytes.byteLength > MAX_BYTES_ANEXO) continue;
+    imagens.push({ bytes, mime, nome: `anexo-${imagens.length + 1}.${mime.split("/")[1]}` });
+    validos.push(c);
+  }
+  return { imagens, caminhos: validos };
+}
+
+/** Projeto de social do cliente (para gravar sem perguntar), o mais recente. */
+async function projetoSocialDoCliente(servico: SupabaseClient, clientId: string): Promise<string | null> {
+  const { data } = await servico
+    .from("projects")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("project_type", "social_media")
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  return ((data as { id: string }[] | null) ?? [])[0]?.id ?? null;
+}
+
+async function conversaDoAgenteDoMes(servico: SupabaseClient, clientId: string, userId: string): Promise<string> {
+  const { data } = await servico
+    .from("agente_conversas")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("agente", AGENTE)
+    .eq("referencia_tipo", REF_AGENTE_DO_MES)
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  const existente = ((data as { id: string }[] | null) ?? [])[0]?.id;
+  if (existente) return existente;
+  const { data: nova, error } = await servico
+    .from("agente_conversas")
+    .insert({ client_id: clientId, agente: AGENTE, referencia_tipo: REF_AGENTE_DO_MES, criado_por: userId })
+    .select("id")
+    .single();
+  if (error || !nova) throw new ErroHttp(500, "conversa_nao_criada", "Não foi possível abrir a conversa do agente do mês.");
+  return nova.id;
+}
+
+type Campanha = {
+  id: string;
+  client_id: string;
+  nome: string;
+  pedido: string | null;
+  objetivo: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  conceito: string | null;
+  identidade: Record<string, unknown>;
+  referencias_ids: string[];
+  selo_path: string | null;
+  proposta_id: string | null;
+  status: string;
+  custo_usd: number;
+};
+
+async function carregarCampanha(servico: SupabaseClient, id: unknown): Promise<Campanha> {
+  const cid = String(id ?? "");
+  if (!UUID.test(cid)) throw new ErroHttp(400, "campanha_invalida", "Campanha inválida.");
+  const { data, error } = await servico.from("mesa_campanhas").select("*").eq("id", cid).maybeSingle();
+  if (error) throw new ErroHttp(500, "campanha_indisponivel", "Não foi possível ler a campanha.");
+  if (!data) throw new ErroHttp(404, "campanha_inexistente", "Campanha não encontrada.");
+  return data as Campanha;
+}
+
+const resumoDaCampanha = (c: Campanha) => ({
+  nome: c.nome,
+  objetivo: c.objetivo,
+  conceito: c.conceito,
+  identidade: c.identidade,
+  periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim },
+});
+
+const REGRAS_DOS_ITENS = `Regras dos itens:
+- formato: carrossel ou estatico. Estático tem exatamente 1 card.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim, variando só a pose, o gesto e o enquadramento; prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6. Nunca escreva o nome da marca no texto dos cards.
+- carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
+- copy: a legenda completa do post.
+- tipo_conteudo: principal (ou extra_sazonal para data comemorativa).
+- status: planejado.`;
+
+const ESQUEMA_PEDIDO = {
+  nome: "pedido_do_mes",
+  schema: obj({
+    resposta: S("string"),
+    itens: { type: "array", items: ESQUEMA_ITEM },
+  }),
+};
+
+/**
+ * pedido_livre { client_id, mensagem, anexos?, data_inicio?, campanha_id? }:
+ * o agente do mês. A equipe pede em linguagem livre ("prepare três conteúdos
+ * para a campanha X", "a agenda de hoje", "arte de depoimentos com estes
+ * prints do Google") e o estrategista devolve os itens prontos numa proposta
+ * pronta para gravar (gravar / conversar continuam iguais).
+ */
+async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const mensagem = texto(corpo.mensagem, 4000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer que o agente prepare.");
+  const inicio = typeof corpo.data_inicio === "string" && DATA.test(corpo.data_inicio) ? corpo.data_inicio : hojeSaoPaulo();
+  const fim = somarDias(inicio, 30);
+  const uteis = diasUteisDoPeriodo(inicio, fim);
+
+  const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
+  if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
+
+  const [ctx, anexos, projectId, conversaId] = await Promise.all([
+    montarContexto(servico, clientId, inicio, fim),
+    baixarAnexos(servico, clientId, corpo.anexos),
+    projetoSocialDoCliente(servico, clientId),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+
+  const { data: historico } = await servico
+    .from("agente_mensagens")
+    .select("papel, conteudo")
+    .eq("conversa_id", conversaId)
+    .order("criado_em", { ascending: false })
+    .limit(10);
+  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
+    .reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente")
+    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
+
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito e a identidade):\n${JSON.stringify(resumoDaCampanha(campanha))}\n` : ""}
+PEDIDO DA EQUIPE: ${mensagem}
+${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
+
+TAREFA: faça exatamente o que o pedido diz.
+- Quantidade: a pedida (se não disser, 1 conteúdo).
+- Datas: se o pedido disser uma data ou "hoje", use essa data (hoje é ${inicio}); senão, os próximos dias úteis livres a partir de ${inicio}. Só segunda a sexta.
+- resposta: em 1 a 3 frases, o que você preparou e por quê.
+${REGRAS_DOS_ITENS}`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+    raciocinio,
+    esquemaJson: ESQUEMA_PEDIDO,
+    referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+  const itens = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
+    const item = normalizarItem(bruto, uteis);
+    item.tema_id = `p${i + 1}`;
+    if (campanha) (item as Item & { campanha_id?: string }).campanha_id = campanha.id;
+    return item;
+  }).filter((i) => i.tema);
+  if (!itens.length) throw new ErroHttp(502, "pedido_sem_itens", "O agente não devolveu nenhum conteúdo. Tente descrever de novo.", { uso_id: s.usoId });
+  itens.sort((a, b) => a.data.localeCompare(b.data));
+
+  const { data: proposta, error } = await servico
+    .from("calendario_propostas")
+    .insert({
+      client_id: clientId,
+      project_id: projectId,
+      periodo_inicio: itens[0].data,
+      periodo_fim: itens[itens.length - 1].data,
+      parametros: { origem: "pedido_livre", mensagem, anexos: anexos.caminhos, campanha_id: campanha?.id ?? null, modelo: modelo.id },
+      status: "pronta",
+      diagnostico: null,
+      temas: [],
+      itens,
+      task_ids: [],
+      conversa_id: conversaId,
+      criado_por: chamador.userId,
+    })
+    .select("*")
+    .single();
+  if (error || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "O agente preparou os conteúdos, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
+
+  const resposta = texto(r.resposta, 2000) || `Preparei ${itens.length} conteúdo(s).`;
+  await registrarMensagens(servico, conversaId, clientId, [
+    { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((c) => ({ caminho: c })) },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
+  ]);
+  return json({ proposta, resposta, conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+// ------------------------------------------------------------------ hypes
+
+const ESQUEMA_HYPES = {
+  nome: "hypes_da_semana",
+  schema: obj({
+    resumo: S("string"),
+    hypes: {
+      type: "array",
+      items: obj({
+        titulo: S("string"),
+        o_que_e: S("string"),
+        por_que_agora: S("string"),
+        fonte: S("string"),
+        janela: S("string", { enum: ["hoje", "esta_semana", "proximas_semanas"] }),
+        como_usar: S("string"),
+        formato: S("string", { enum: [...FORMATOS] }),
+        cuidado: S("string"),
+      }),
+    },
+  }),
+};
+
+const NIVEIS_HYPE = [
+  "Não serve: fora do nicho, do público ou da região, ou arriscado para a marca.",
+  "Serve pouco: dá para forçar uma ligação, mas o público do cliente não se importa.",
+  "Serve: o público do cliente conhece o assunto e a marca tem algo a dizer.",
+  "Serve muito: assunto quente para o público do cliente, com ligação natural com a oferta e seguro para a marca.",
+];
+
+/**
+ * buscar_hypes { client_id, forcar? }: os assuntos em alta da semana que servem
+ * a ESTE cliente (pesquisa na web + contexto do cliente), com a nota do Jev de
+ * relevância. Uma busca por semana: repetir o clique devolve a mesma, sem custo.
+ */
+async function buscarHypes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const hoje = hojeSaoPaulo();
+  const semana = segundaDaSemana(hoje);
+  if (corpo.forcar !== true) {
+    const { data: ja } = await servico.from("mesa_hypes").select("*").eq("client_id", clientId).eq("semana", semana).maybeSingle();
+    if (ja) return json({ hypes: ja, cache: true, custo_usd: 0 });
+  }
+
+  const ctx = await montarContexto(servico, clientId, hoje, somarDias(hoje, 14));
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, { pesquisaWeb: true });
+  const pedido = `${contextoEmTexto(ctx, { inicio: hoje, fim: somarDias(hoje, 14), parametros: {} })}
+
+TAREFA: hoje é ${hoje}. Pesquise na web o que está em alta AGORA (esta semana e as próximas duas) no Brasil e na região deste cliente: datas comemorativas, notícias, eventos locais, tendências e formatos virais no Instagram, memes e assuntos que o público deste nicho está comentando. Escolha de 5 a 8 hypes que ESTE cliente pode usar com naturalidade e segurança.
+Para cada um:
+- titulo curto; o_que_e em 1 a 2 frases; por_que_agora (o que está acontecendo, com data); fonte: um link real da pesquisa.
+- janela: hoje, esta_semana ou proximas_semanas.
+- como_usar: a ideia de conteúdo concreta para este cliente (gancho e ângulo), ligada à oferta dele.
+- formato: carrossel ou estatico.
+- cuidado: o que evitar para a marca não parecer oportunista ou errar o tom (vazio se não houver).
+- resumo: 1 frase sobre o clima da semana para este nicho.
+Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca invente evento nem data.`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio,
+    pesquisaWeb: true,
+    esquemaJson: ESQUEMA_HYPES,
+    referencia: { tipo: "mesa_hypes", id: clientId },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as { resumo?: string; hypes?: Record<string, unknown>[] };
+  let hypes = (Array.isArray(r.hypes) ? r.hypes : []).slice(0, 10).map((h) => ({
+    titulo: texto(h.titulo, 160),
+    o_que_e: texto(h.o_que_e, 600),
+    por_que_agora: texto(h.por_que_agora, 600),
+    fonte: texto(h.fonte, 500),
+    janela: ["hoje", "esta_semana", "proximas_semanas"].includes(String(h.janela)) ? String(h.janela) : "esta_semana",
+    como_usar: texto(h.como_usar, 800),
+    formato: String(h.formato) === "estatico" ? "estatico" : "carrossel",
+    cuidado: texto(h.cuidado, 400),
+    nota: null as number | null,
+  })).filter((h) => h.titulo);
+  let custo = s.custoUsd;
+
+  // Relevância para ESTE cliente pelo Jev (centavos); ordena pela nota.
+  if (hypes.length) {
+    try {
+      const questions: Record<string, PerguntaJev> = {};
+      hypes.forEach((_, i) => {
+        questions[`h${i}`] = {
+          type: "score",
+          instructions: `Quanto o assunto \`hypes[${i}]\` serve para a marca em \`cliente\` falar com o público dela nesta semana?`,
+          criteria: NIVEIS_HYPE,
+        };
+      });
+      const kit = (ctx.kit_marca ?? {}) as { contexto?: Record<string, unknown> };
+      const j = await jevPerguntar({
+        state: { cliente: { nome: ctx.cliente.nome, negocio: kit.contexto?.negocio ?? null, publico: kit.contexto?.publico ?? null }, hypes },
+        questions,
+      });
+      const cobrado = await cobrarJev(j, { clientId, tarefa: "calendario", referencia: { tipo: "mesa_hypes", id: clientId }, criadoPor: chamador.userId });
+      if (cobrado) custo += cobrado.custoUsd;
+      hypes = hypes
+        .map((h, i) => ({ ...h, nota: notaDe0a10(notaScore(j.answers[`h${i}`]), NIVEIS_HYPE.length) }))
+        .sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1));
+    } catch {
+      // Sem Jev a lista vai na ordem da pesquisa.
+    }
+  }
+
+  const { data: gravado, error } = await servico
+    .from("mesa_hypes")
+    .upsert({ client_id: clientId, semana, itens: hypes, resumo: texto(r.resumo, 600) || null, custo_usd: custo, criado_por: chamador.userId, criado_em: new Date().toISOString() }, { onConflict: "client_id,semana" })
+    .select("*")
+    .single();
+  if (error || !gravado) throw new ErroHttp(503, "hypes_nao_gravados", "A pesquisa foi feita, mas não foi guardada. Tente de novo.", { uso_id: s.usoId });
+  return json({ hypes: gravado, cache: false, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+// --------------------------------------------------------------- campanhas
+
+const ESQUEMA_CAMPANHA = {
+  nome: "campanha",
+  schema: obj({
+    nome: S("string"),
+    objetivo: S("string"),
+    conceito: S("string"),
+    resposta: S("string"),
+    identidade: obj({
+      tema_visual: S("string"),
+      paleta_apoio: { type: "array", items: obj({ nome: S("string"), hex: S("string") }) },
+      tipografia: S("string"),
+      elementos: S("string"),
+      tom: S("string"),
+      selo: obj({ texto: S("string"), descricao: S("string") }),
+    }),
+    itens: { type: "array", items: ESQUEMA_ITEM },
+  }),
+};
+
+function normalizarIdentidade(bruto: unknown): Record<string, unknown> {
+  const o = (bruto ?? {}) as Record<string, any>;
+  const HEX = /^#[0-9a-f]{6}$/i;
+  return {
+    tema_visual: texto(o.tema_visual, 1200),
+    paleta_apoio: (Array.isArray(o.paleta_apoio) ? o.paleta_apoio : [])
+      .map((p: any) => ({ nome: texto(p?.nome, 40), hex: texto(p?.hex, 7).toUpperCase() }))
+      .filter((p: { hex: string }) => HEX.test(p.hex))
+      .slice(0, 4),
+    tipografia: texto(o.tipografia, 400),
+    elementos: texto(o.elementos, 800),
+    tom: texto(o.tom, 400),
+    selo: { texto: texto(o.selo?.texto, 60), descricao: texto(o.selo?.descricao, 600) },
+  };
+}
+
+/**
+ * campanha_criar { client_id, pedido, periodo_inicio?, periodo_fim?, quantidade?,
+ * anexos?, referencias_ids?, hype? }: o estrategista cria a campanha inteira
+ * (nome, conceito, identidade do tema com selo, e os conteúdos) numa proposta
+ * pronta para gravar. Os conteúdos gravados chegam ao Estúdio com a campanha.
+ */
+async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const pedidoTexto = texto(corpo.pedido, 4000);
+  if (!pedidoTexto) throw new ErroHttp(400, "pedido_vazio", "Descreva a campanha (tema, ocasião, oferta).");
+  const inicio = typeof corpo.periodo_inicio === "string" && DATA.test(corpo.periodo_inicio) ? corpo.periodo_inicio : hojeSaoPaulo();
+  let fim = typeof corpo.periodo_fim === "string" && DATA.test(corpo.periodo_fim) ? corpo.periodo_fim : somarDias(inicio, 21);
+  if (fim < inicio) fim = inicio;
+  if (diasEntre(inicio, fim) > 62) throw new ErroHttp(400, "periodo_longo", "Campanha de até 2 meses por vez.");
+  const uteis = diasUteisDoPeriodo(inicio, fim);
+  if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
+  const quantidade = Number.isInteger(Number(corpo.quantidade)) && Number(corpo.quantidade) >= 1 && Number(corpo.quantidade) <= 12 ? Number(corpo.quantidade) : null;
+  const referencias = (Array.isArray(corpo.referencias_ids) ? corpo.referencias_ids : []).map(String).filter((r) => /^(g:)?[0-9a-f-]{36}$/i.test(r)).slice(0, 8);
+  const hype = corpo.hype && typeof corpo.hype === "object" ? corpo.hype : null;
+
+  const [ctx, anexos, projectId] = await Promise.all([
+    montarContexto(servico, clientId, inicio, fim),
+    baixarAnexos(servico, clientId, corpo.anexos),
+    projetoSocialDoCliente(servico, clientId),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+
+PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
+${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}
+TAREFA: crie a campanha completa para ${inicio} a ${fim}.
+- nome: nome curto e memorável da campanha (é o tema, não o nome da marca).
+- objetivo: o resultado de negócio que a campanha busca, em 1 frase.
+- conceito: a grande ideia em 2 a 4 frases (o que a campanha diz, por que funciona para este público).
+- identidade: a identidade visual DO TEMA, que vive dentro da marca: tema_visual (clima, fotografia, composição recorrente em 3 a 5 frases), paleta_apoio (1 a 3 cores de apoio em hex que harmonizam com a paleta da marca, nunca substituindo a principal), tipografia (como o título da campanha aparece), elementos (grafismos, formas, selo, texturas), tom (como a campanha fala), selo (texto curto do selo ou logo do tema, até 4 palavras, e a descricao visual do selo).
+- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período, contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}.
+- resposta: 1 a 3 frases com o resumo da campanha para a equipe.
+${REGRAS_DOS_ITENS}`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [{ papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+    raciocinio,
+    esquemaJson: ESQUEMA_CAMPANHA,
+    referencia: { tipo: "mesa_campanha", id: clientId },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+  const campanhaId = crypto.randomUUID();
+  const itens = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
+    const item = normalizarItem(bruto, uteis);
+    item.tema_id = `c${i + 1}`;
+    (item as Item & { campanha_id?: string }).campanha_id = campanhaId;
+    return item;
+  }).filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
+  if (!itens.length) throw new ErroHttp(502, "campanha_sem_itens", "O estrategista não devolveu os conteúdos da campanha. Tente de novo.", { uso_id: s.usoId });
+
+  const { data: proposta, error: erroProposta } = await servico
+    .from("calendario_propostas")
+    .insert({
+      client_id: clientId,
+      project_id: projectId,
+      periodo_inicio: inicio,
+      periodo_fim: fim,
+      parametros: { origem: "campanha", campanha_id: campanhaId, modelo: modelo.id },
+      status: "pronta",
+      diagnostico: texto(r.conceito, 4000) || null,
+      temas: [],
+      itens,
+      task_ids: [],
+      criado_por: chamador.userId,
+    })
+    .select("*")
+    .single();
+  if (erroProposta || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "A campanha foi escrita, mas os conteúdos não foram guardados.", { uso_id: s.usoId });
+
+  const { data: campanha, error } = await servico
+    .from("mesa_campanhas")
+    .insert({
+      id: campanhaId,
+      client_id: clientId,
+      nome: texto(r.nome, 120) || "Campanha",
+      pedido: pedidoTexto,
+      objetivo: texto(r.objetivo, 600) || null,
+      periodo_inicio: inicio,
+      periodo_fim: fim,
+      conceito: texto(r.conceito, 2000) || null,
+      identidade: normalizarIdentidade(r.identidade),
+      referencias_ids: referencias,
+      proposta_id: proposta.id,
+      status: "planejada",
+      custo_usd: s.custoUsd,
+      criado_por: chamador.userId,
+    })
+    .select("*")
+    .single();
+  if (error || !campanha) throw new ErroHttp(503, "campanha_nao_gravada", "A campanha foi escrita, mas não foi guardada. Tente de novo.", { uso_id: s.usoId });
+
+  return json({ campanha, proposta, resposta: texto(r.resposta, 2000), project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+const ESQUEMA_AJUSTE_CAMPANHA = {
+  nome: "ajuste_da_campanha",
+  schema: obj({
+    resposta: S("string"),
+    nome: S("string"),
+    objetivo: S("string"),
+    conceito: S("string"),
+    identidade: ESQUEMA_CAMPANHA.schema.properties.identidade,
+  }),
+};
+
+/** campanha_ajustar { campanha_id, mensagem }: muda nome, conceito e identidade pelo pedido (os conteúdos se ajustam em conversar da proposta). */
+async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const mensagem = texto(corpo.mensagem, 3000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o ajuste que você quer na campanha.");
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "low");
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "conversa",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `Você é o estrategista da agência ajustando uma campanha já criada. Mantenha tudo o que o pedido não manda mudar. Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
+    mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade) e em resposta o que mudou.` }],
+    raciocinio,
+    esquemaJson: ESQUEMA_AJUSTE_CAMPANHA,
+    referencia: { tipo: "mesa_campanha", id: c.id },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update({
+      nome: texto(r.nome, 120) || c.nome,
+      objetivo: texto(r.objetivo, 600) || c.objetivo,
+      conceito: texto(r.conceito, 2000) || c.conceito,
+      identidade: r.identidade ? normalizarIdentidade(r.identidade) : c.identidade,
+      custo_usd: Math.round((Number(c.custo_usd) + s.custoUsd) * 1e6) / 1e6,
+    })
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "O ajuste foi feito, mas não foi salvo.", { uso_id: s.usoId });
+  return json({ campanha: data, resposta: texto(r.resposta, 2000) || "Campanha ajustada.", custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
+}
+
+/**
+ * campanha_selo { campanha_id }: desenha o selo (logo do tema) da campanha com
+ * o gerador de imagem, no fundo limpo, e guarda em mesa/<cliente>/campanhas/.
+ * O Estúdio anexa o selo na capa e no fechamento dos conteúdos da campanha.
+ */
+async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const modelo = await modeloPadrao("imagem");
+  if (!modelo) throw new ErroHttp(409, "sem_modelo_de_imagem", "O catálogo não tem gerador de imagem padrão.");
+  const id = (c.identidade ?? {}) as Record<string, any>;
+  const { data: kit } = await servico.from("cliente_kit_marca").select("paleta").eq("client_id", c.client_id).maybeSingle();
+  const paleta = [...(Array.isArray((kit as any)?.paleta) ? (kit as any).paleta : []), ...(Array.isArray(id.paleta_apoio) ? id.paleta_apoio : [])]
+    .map((p: any) => `${p?.nome ?? "cor"} ${p?.hex ?? ""}`).join(", ");
+  const textoSelo = texto(id.selo?.texto, 60) || c.nome;
+  const prompt = [
+    `SELO (logo do tema) da campanha "${c.nome}".`,
+    `Escreva exatamente este texto, com a grafia e os acentos certos, e nenhum outro: "${textoSelo}".`,
+    id.selo?.descricao ? `Desenho do selo: ${id.selo.descricao}` : "Selo gráfico simples e marcante, legível em tamanho pequeno.",
+    id.tipografia ? `Tipografia: ${id.tipografia}` : "",
+    paleta ? `Cores: ${paleta}.` : "",
+    "Fundo branco liso e vazio em volta (o fundo será removido). Um único selo centralizado, com margem, sem mockup, sem sombra de cena, sem outros elementos, vetorial e limpo.",
+  ].filter(Boolean).join("\n");
+  const img = await chamarImagem({
+    clientId: c.client_id,
+    modeloId: modelo.id,
+    prompt,
+    referencias: [],
+    qualidade: "media",
+    tamanho: "1024x1024",
+    referencia: { tipo: "mesa_campanha", id: c.id },
+    criadoPor: chamador.userId,
+    tarefa: "estudio",
+    agente: "gerador_imagem",
+  });
+  let png = img.png;
+  try {
+    png = await logoLimpa(img.png);
+  } catch {
+    // vai com o fundo branco
+  }
+  const caminho = `${c.client_id}/campanhas/${c.id}/selo-${Date.now()}.png`;
+  const { error: erroUpload } = await servico.storage.from("mesa").upload(caminho, new Blob([new Uint8Array(png)], { type: "image/png" }), { contentType: "image/png" });
+  if (erroUpload) throw new ErroHttp(503, "selo_nao_guardado", "O selo foi desenhado, mas não foi guardado.", { uso_id: img.usoId });
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update({ selo_path: caminho, custo_usd: Math.round((Number(c.custo_usd) + img.custoUsd) * 1e6) / 1e6 })
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "O selo foi guardado, mas a campanha não foi atualizada.");
+  return json({ campanha: data, selo_path: caminho, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  pedido_livre: pedidoLivre,
+  buscar_hypes: buscarHypes,
+  campanha_criar: campanhaCriar,
+  campanha_ajustar: campanhaAjustar,
+  campanha_selo: campanhaSelo,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,

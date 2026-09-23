@@ -284,7 +284,43 @@ type Direcao = {
   pedido?: string | null;
   /** Protagonista, cenário, luz e tratamento que se repetem em todas as lâminas (a série). */
   fio_visual?: string | null;
+  /** Campanha (mesa_campanhas) do conteúdo: identidade do tema e selo entram em cada lâmina. */
+  campanha_id?: string | null;
 };
+
+type CampanhaDaLamina = {
+  id: string;
+  nome: string;
+  conceito: string | null;
+  identidade: { tema_visual?: string; paleta_apoio?: { nome?: string; hex?: string }[]; tipografia?: string; elementos?: string; tom?: string; selo?: { texto?: string; descricao?: string } } | null;
+  referencias_ids: string[] | null;
+  selo_path: string | null;
+};
+
+async function lerCampanha(clientId: string, id: unknown): Promise<CampanhaDaLamina | null> {
+  const cid = typeof id === "string" ? id : "";
+  if (!UUID.test(cid)) return null;
+  const { data } = await servico()
+    .from("mesa_campanhas")
+    .select("id, nome, conceito, identidade, referencias_ids, selo_path")
+    .eq("id", cid)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  return (data as CampanhaDaLamina | null) ?? null;
+}
+
+/** Bloco do prompt da lâmina com a identidade do tema da campanha (dentro da marca). */
+function blocoDaCampanha(c: CampanhaDaLamina): string {
+  const i = c.identidade ?? {};
+  const apoio = (i.paleta_apoio ?? []).filter((p) => p.hex).map((p) => `${p.nome || "apoio"} ${p.hex}`).join(", ");
+  return [
+    `CAMPANHA "${c.nome}" (identidade do tema, sempre dentro da marca)`,
+    i.tema_visual ? `- Tema visual: ${i.tema_visual}` : "",
+    apoio ? `- Cores de apoio da campanha (só como acento, a paleta da marca continua dominante): ${apoio}` : "",
+    i.tipografia ? `- Título da campanha: ${i.tipografia}` : "",
+    i.elementos ? `- Elementos gráficos: ${i.elementos}` : "",
+  ].filter(Boolean).join("\n");
+}
 
 /** Conferencia ainda nao feita: gerar_card e ajustar_card gravam so isto. */
 type VerificacaoPendente = { pendente: true };
@@ -819,6 +855,7 @@ NARRATIVA E CONTINUIDADE (obrigatório)
 - A capa tem destaque a mais dentro do sistema da marca: a maior headline, peso black, palavra-chave na cor de destaque, o maior contraste de texto, com a mesma luz e cenário da série. Não escureça a capa se a marca é clara, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo.
 - Se \`pedido_da_equipe\` vier preenchido, refaça a direção atendendo o pedido e mantenha o que ele não manda mudar da \`direcao_atual\`.
+- Se \`item.campanha\` vier, o conteúdo é de uma campanha: siga o tema visual, as cores de apoio, os elementos e o tom da campanha, sempre dentro da marca; o fio_visual inclui o tema da campanha.
 
 Seja específico e curto: cada campo em uma ou duas frases.`;
 
@@ -939,6 +976,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         ? item.itemProposta.carrossel_infinito as boolean
         : null;
   const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
+  const campanha = await lerCampanha(clientId, item.itemProposta?.campanha_id);
   const laminasPedidas = Number.isInteger(Number(corpo.laminas)) && Number(corpo.laminas) >= 1 && Number(corpo.laminas) <= 10
     ? Number(corpo.laminas)
     : null;
@@ -994,6 +1032,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         carrossel_infinito_pedido: pedidoInfinito,
         // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
         quantidade_de_laminas_pedida: laminasPedidas,
+        campanha: campanha ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade } : null,
       },
       marca: {
         nome: marca.nomeCliente,
@@ -1049,6 +1088,11 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     usoId = r.usoId;
     saldo = r.saldoUsd;
     reserva = r.reservaUsada ?? null;
+  }
+
+  if (campanha) {
+    direcao.campanha_id = campanha.id;
+    if (!direcao.referencias_ids?.length && campanha.referencias_ids?.length) direcao.referencias_ids = campanha.referencias_ids.slice(0, 4);
   }
 
   if (existente) {
@@ -1553,6 +1597,16 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     anexos.push(a.imagem);
     legendar(`amostra da fonte ${a.fonte.nome} (${a.fonte.papel}), siga o desenho destas letras`);
   }
+  // Conteúdo de campanha: selo do tema na capa e no fechamento, e a identidade da campanha no prompt.
+  const campanha = t.direcao.campanha_id ? await lerCampanha(t.client_id, t.direcao.campanha_id) : null;
+  if (campanha?.selo_path && levaLogo(t, ordem)) {
+    try {
+      anexos.push(await baixarImagem("mesa", campanha.selo_path, "selo-da-campanha"));
+      legendar(`selo da campanha "${campanha.nome}": use como está, pequeno, perto do título ou no canto oposto à logo, sem redesenhar`);
+    } catch {
+      // Selo sumido não impede a lâmina.
+    }
+  }
   // Sem tela dupla, a anterior vai como referência; no contínuo o final também vê a capa.
   if (anterior && !continuar) {
     anexos.push({ bytes: await baixar("mesa", anterior.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
@@ -1603,6 +1657,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       logo: tomDaLogo,
     })
     : card.prompt_imagem;
+  const baseComCampanha = campanha ? `${base}\n\n${blocoDaCampanha(campanha)}` : base;
   const comum = {
     clientId: t.client_id,
     modeloId: t.modelo_imagem_id!,
@@ -1619,7 +1674,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const areas = areasDeDesenho(card, total, comLogo);
     const prompt = [
       `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
-      base,
+      baseComCampanha,
       regrasDeRender(t, card, legendas(1), comLogo),
     ].join("\n\n");
     const img = await chamarImagem({
@@ -1643,7 +1698,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       const dupla = await telaDupla(await baixar("mesa", anterior!.storage_path));
       const prompt = [
         `TELA DUPLA ${TAMANHO_TELA_DUPLA.replace("x", " x ")}: a metade esquerda (imagem 1) é a lâmina ${ordem - 1}, já pronta, e não pode mudar. Pinte SÓ a metade direita como a lâmina ${ordem} de ${total}, continuação direta da mesma cena: o fundo, o horizonte, a luz, a escala e os elementos que chegam à borda direita da esquerda continuam na mesma altura, sem emenda visível. O quadro 1080 x 1350 descrito abaixo é a metade direita. Nenhum texto cruza a divisa e todo texto fica a pelo menos 90 px dela. O fundo da metade direita é a continuação da cena da esquerda: ignore qualquer cor de fundo sugerida abaixo que quebre essa continuidade.`,
-        base,
+        baseComCampanha,
         regrasDeRender(t, card, legendas(1), comLogo),
       ].join("\n\n");
       const img = await chamarImagem({
@@ -1668,7 +1723,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
 
   // 3) Normal.
-  const prompt = `${base}\n\n${regrasDeRender(t, card, legendas(0), comLogo)}`;
+  const prompt = `${baseComCampanha}\n\n${regrasDeRender(t, card, legendas(0), comLogo)}`;
   const img = await chamarImagem({
     ...comum,
     prompt,
