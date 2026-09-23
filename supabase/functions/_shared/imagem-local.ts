@@ -211,3 +211,79 @@ export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
 export function ampliar(a: Area, margem = 0.03): Area {
   return { x0: limitar(a.x0 - margem), y0: limitar(a.y0 - margem), x1: limitar(a.x1 + margem), y1: limitar(a.y1 + margem) };
 }
+
+// ------------------------------------------------ panorama do carrossel contínuo
+//
+// Correção de 23/09 (noite): a tela dupla antiga não emendava. O gerador
+// redesenha a tela inteira mesmo com máscara, e a lâmina nova continuava a
+// cópia redesenhada da anterior, não a anterior de verdade. Agora o fundo do
+// carrossel nasce como UM panorama (trechos de até 3 lâminas), é fatiado e
+// cada lâmina recebe o texto por cima só na área do texto: as emendas batem
+// porque as fatias vêm da mesma imagem.
+
+/** Tamanho do trecho de k lâminas lado a lado (múltiplos de 16, proporção até 2,4:1). */
+export const tamanhoDoTrecho = (k: number) => `${LARGURA_LAMINA * k}x${ALTURA_LAMINA}`;
+
+/**
+ * Tela do trecho seguinte: a primeira lâmina (o fundo já pronto do trecho
+ * anterior) à esquerda e o resto aberto na máscara para o gerador continuar.
+ */
+export async function telaDoTrecho(k: number, primeira: Uint8Array): Promise<{ tela: Uint8Array; mascara: Uint8Array }> {
+  const W = LARGURA_LAMINA * k;
+  const tela = new Image(W, ALTURA_LAMINA);
+  tela.fill(0x808080ff);
+  tela.composite(cobrir(await decodificar(primeira)), 0, 0);
+  return {
+    tela: await tela.encode(1),
+    mascara: await mascara(W, ALTURA_LAMINA, [{ x0: 1 / k, y0: 0, x1: 1, y1: 1 }]),
+  };
+}
+
+/** Corta o trecho em k fundos 1088 x 1360, da esquerda para a direita. */
+export async function fatiarPanorama(bytes: Uint8Array, k: number): Promise<Uint8Array[]> {
+  const img = cobrir(await decodificar(bytes), LARGURA_LAMINA * k, ALTURA_LAMINA);
+  const fatias: Uint8Array[] = [];
+  for (let i = 0; i < k; i++) {
+    fatias.push(await img.clone().crop(i * LARGURA_LAMINA, 0, LARGURA_LAMINA, ALTURA_LAMINA).encode(1));
+  }
+  return fatias;
+}
+
+/**
+ * Emenda entre trechos: o gerador redesenha de leve a lâmina de ligação, então
+ * a borda esquerda do fundo novo pode sair num tom um pouco diferente da borda
+ * direita do fundo que já existe. Aqui a diferença de cor de cada linha na
+ * divisa é medida e aplicada no fundo novo, sumindo aos poucos em `faixa` px.
+ */
+export async function corrigirEmenda(anterior: Uint8Array, nova: Uint8Array, faixa = 180): Promise<Uint8Array> {
+  const a = cobrir(await decodificar(anterior));
+  const n = cobrir(await decodificar(nova));
+  const W = n.width, H = n.height;
+  const pa = a.bitmap, pn = n.bitmap;
+  const media = (bm: Uint8ClampedArray, y: number, x0: number, x1: number, c: number) => {
+    let s = 0, q = 0;
+    for (let x = x0; x < x1; x++) { s += bm[(y * W + x) * 4 + c]; q++; }
+    return s / Math.max(1, q);
+  };
+  // Diferença por linha (R, G, B) medida em 6 colunas de cada lado da divisa.
+  const delta: number[][] = [];
+  for (let y = 0; y < H; y++) {
+    delta.push([0, 1, 2].map((c) => media(pa, y, W - 6, W, c) - media(pn, y, 0, 6, c)));
+  }
+  // Suaviza entre linhas para não criar listras.
+  const R = 16;
+  const suave = delta.map((_, y) => [0, 1, 2].map((c) => {
+    let s = 0, q = 0;
+    for (let d = -R; d <= R; d++) { const yy = y + d; if (yy >= 0 && yy < H) { s += delta[yy][c]; q++; } }
+    return s / q;
+  }));
+  const larg = Math.min(faixa, W);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < larg; x++) {
+      const peso = 1 - x / larg;
+      const i = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) pn[i + c] = Math.max(0, Math.min(255, pn[i + c] + suave[y][c] * peso));
+    }
+  }
+  return await n.encode(1);
+}

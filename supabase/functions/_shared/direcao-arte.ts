@@ -459,3 +459,15 @@ export function direcaoDoRoteiro(
     origem: "roteiro",
   };
 }
+
+// Carrossel contínuo: o panorama nasce em trechos de até 3 lâminas lado a lado
+// (proporção até 2,4:1 no gerador); a primeira lâmina de cada trecho liga ao anterior.
+export const LAMINAS_POR_TRECHO = 3;
+
+/** Trecho do panorama que contém a lâmina: 1 a 3, depois 3 a 5, 5 a 7... (a primeira de cada trecho liga ao anterior). */
+export function trechoDaLamina(ordem: number, total: number): { inicio: number; fim: number } {
+  if (total <= LAMINAS_POR_TRECHO || ordem <= LAMINAS_POR_TRECHO) return { inicio: 1, fim: Math.min(LAMINAS_POR_TRECHO, total) };
+  const j = Math.ceil((ordem - LAMINAS_POR_TRECHO) / (LAMINAS_POR_TRECHO - 1));
+  const inicio = j * (LAMINAS_POR_TRECHO - 1) + 1;
+  return { inicio, fim: Math.min(inicio + LAMINAS_POR_TRECHO - 1, total) };
+}

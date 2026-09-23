@@ -423,9 +423,16 @@ function DetalheDoItem({
   const gerarUma = async (trabalhoId: string, ordem: number): Promise<number> => {
     marcar(ordem, "gerando");
     try {
+      // Contínuo: o fundo panorâmico do trecho nasce antes, numa chamada própria
+      // (cabe no tempo da função); a lâmina depois só recebe o texto por cima.
+      let custoFundo = 0;
+      if (infinito) {
+        const f = await chamarFuncao<any>("estudio-arte", { acao: "preparar_fundo", trabalho_id: trabalhoId, ordem });
+        custoFundo = custoDaResposta(f) || 0;
+      }
       const g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
       atualizar();
-      return custoDaResposta(g) || 0;
+      return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
       soltar(ordem);
       throw e;
@@ -563,6 +570,18 @@ function DetalheDoItem({
     if (!trabalho) return;
     await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
     atualizar();
+  };
+
+  const refazerFundo = async () => {
+    setSalvandoContinuo(true);
+    try {
+      await configurar({ conjunto: { refazer_fundo: true } });
+      toast.success("Fundo contínuo apagado", { description: "Gere as lâminas de novo, em ordem: o panorama nasce outra vez." });
+    } catch (e) {
+      avisarErro(e, "Não foi possível refazer o fundo");
+    } finally {
+      setSalvandoContinuo(false);
+    }
   };
 
   const alternarContinuo = async (valor: boolean) => {
@@ -1099,6 +1118,20 @@ function DetalheDoItem({
             <span className="block text-[11.5px] leading-snug text-muted-foreground">A cena atravessa as lâminas, como um panorama. Gera uma de cada vez.</span>
           </span>
         </label>
+      )}
+      {infinito && cardsDaDirecao.length > 1 && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2">
+          <span className="min-w-0 text-[11.5px] leading-snug text-muted-foreground">
+            {Object.keys((trabalho.direcao as any)?.panorama?.fundos ?? {}).length
+              ? "O fundo panorâmico está pronto: refazer uma lâmina troca só o texto, a emenda continua."
+              : "O fundo panorâmico nasce ao gerar a primeira lâmina."}
+          </span>
+          {Object.keys((trabalho.direcao as any)?.panorama?.fundos ?? {}).length > 0 && (
+            <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => void refazerFundo()} disabled={salvandoContinuo || algoGerando || entregue}>
+              Refazer o fundo
+            </Button>
+          )}
+        </div>
       )}
 
       <section className="space-y-2">

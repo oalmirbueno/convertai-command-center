@@ -61,6 +61,7 @@ import {
   type BlocoTexto,
   type CardDirecao,
   type FotoLivre,
+  trechoDaLamina,
   type MarcaParaDirecao,
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
@@ -76,6 +77,12 @@ import {
   normalizarAreas,
   TAMANHO_TELA_DUPLA,
   telaDupla,
+  ALTURA_LAMINA,
+  corrigirEmenda,
+  fatiarPanorama,
+  LARGURA_LAMINA,
+  tamanhoDoTrecho,
+  telaDoTrecho,
 } from "../_shared/imagem-local.ts";
 
 const corsHeaders = {
@@ -287,6 +294,8 @@ type Direcao = {
   fio_visual?: string | null;
   /** Campanha (mesa_campanhas) do conteúdo: identidade do tema e selo entram em cada lâmina. */
   campanha_id?: string | null;
+  /** Carrossel contínuo: fundo panorâmico fatiado por lâmina (ordem -> caminho no bucket mesa). */
+  panorama?: { fundos: Record<string, string> } | null;
 };
 
 type CampanhaDaLamina = {
@@ -1560,6 +1569,106 @@ function areasDeDesenho(card: CardDirecao, total: number, comLogo: boolean): Are
 const descreverArea = (a: Area) =>
   `de ${Math.round(a.x0 * 100)}% a ${Math.round(a.x1 * 100)}% da largura e de ${Math.round(a.y0 * 100)}% a ${Math.round(a.y1 * 100)}% da altura`;
 
+// ---------------------------------------------- fundo do carrossel contínuo
+
+/** A lâmina usa o fundo panorâmico: contínuo ligado, mais de uma lâmina, editor da OpenAI e layout definido. */
+function usaPanorama(t: Trabalho, card: CardDirecao, provedor: string): boolean {
+  return !!t.direcao.carrossel_infinito && totalCards(t) > 1 && provedor === "openai" && !!card.layout;
+}
+
+/**
+ * Garante o fundo contínuo da lâmina: gera o trecho do panorama que falta (só
+ * a cena, sem texto) e guarda as fatias em direcao.panorama.fundos. Um trecho
+ * por vez; o trecho seguinte continua a partir do fundo da lâmina de ligação.
+ */
+async function garantirFundoContinuo(ch: Chamador, t: Trabalho, ordem: number, kit: Kit): Promise<{ t: Trabalho; caminho: string; custo: number }> {
+  const pronto = t.direcao.panorama?.fundos?.[String(ordem)];
+  if (pronto) return { t, caminho: pronto, custo: 0 };
+  const total = totalCards(t);
+  const { inicio, fim } = trechoDaLamina(ordem, total);
+  let atual = t;
+  let custo = 0;
+  // O trecho seguinte precisa do fundo da lâmina de ligação (do trecho anterior).
+  if (inicio > 1 && !atual.direcao.panorama?.fundos?.[String(inicio)]) {
+    const antes = await garantirFundoContinuo(ch, atual, inicio, kit);
+    atual = antes.t;
+    custo += antes.custo;
+  }
+  const ligacao = inicio > 1 ? atual.direcao.panorama?.fundos?.[String(inicio)] ?? null : null;
+  const k = fim - inicio + 1;
+  const cards = atual.direcao.cards.filter((c) => c.ordem >= inicio && c.ordem <= fim).sort((a, b) => a.ordem - b.ordem);
+  const cores = (kit as { paleta?: unknown } | null)?.paleta;
+  const paleta = (Array.isArray(cores) ? (cores as { nome?: string; hex?: string }[]) : [])
+    .filter((p) => p && p.hex).map((p) => `${p.nome || "cor"} ${p.hex}`).join(", ");
+  const quadros = cards.map((c, i) => {
+    const zona = c.layout?.zona_texto ?? "base-esquerda";
+    const cena = texto(c.layout?.imagem || c.ilustracao || c.composicao, 500);
+    return `- quadro ${i + 1} (lâmina ${c.ordem}${c.funcao ? `, ${c.funcao}` : ""}): ${cena}. Deixe CALMA e uniforme a zona "${zona}" deste quadro (ali entra o texto depois).`;
+  }).join("\n");
+  const divisas: number[] = [];
+  for (let i = 1; i < k; i++) divisas.push(LARGURA_LAMINA * i);
+  const prompt = [
+    `PANORAMA CONTÍNUO para um carrossel do Instagram: UMA imagem larga de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px que será cortada em ${k} quadros verticais 4:5 de ${LARGURA_LAMINA} px, lado a lado, nesta ordem. É só o FUNDO e a CENA: nenhum texto, letra, número, logo, moldura, borda ou divisão entre os quadros. A cena atravessa as divisas em x = ${divisas.join(" e ")} px sem emenda: mesmo chão, horizonte, luz, perspectiva e escala; objetos e pessoas podem cruzar a divisa, mas nenhum rosto fica cortado nela.`,
+    ligacao ? "A imagem 1 já traz o PRIMEIRO quadro pronto (à esquerda): não mude nada nele e continue a cena exatamente a partir da borda direita dele." : "",
+    atual.direcao.fio_visual ? `Fio visual da série (igual em todos os quadros): ${texto(atual.direcao.fio_visual, 800)}` : "",
+    `Conceito: ${texto(atual.direcao.conceito, 600)}`,
+    `Cena de cada quadro:\n${quadros}`,
+    paleta ? `Paleta da marca para luz, objetos e ambiente: ${paleta}.` : "",
+    "Fotografia realista de campanha, luz natural coerente, alta qualidade.",
+  ].filter(Boolean).join("\n\n");
+
+  const qualidade = (QUALIDADES.includes(atual.qualidade as Qualidade) ? atual.qualidade : QUALIDADE_PADRAO) as Qualidade;
+  const tela = ligacao ? await telaDoTrecho(k, await baixar("mesa", ligacao)) : null;
+  const img = await chamarImagem({
+    clientId: atual.client_id,
+    modeloId: atual.modelo_imagem_id!,
+    prompt,
+    referencias: [],
+    qualidade,
+    tamanho: tamanhoDoTrecho(k),
+    tamanhoFixo: true,
+    ...(tela ? { editar: { bytes: tela.tela, mascara: tela.mascara } } : {}),
+    referencia: { tipo: "estudio_trabalho", id: atual.id },
+    criadoPor: ch.userId,
+    tarefa: "estudio",
+    agente: "gerador_imagem",
+  });
+  custo += img.custoUsd;
+  const fatias = await fatiarPanorama(img.png, k);
+  // A lâmina de ligação fica com o fundo que já tinha; a seguinte ganha a correção de tom na emenda.
+  if (ligacao && fatias.length > 1) fatias[1] = await corrigirEmenda(await baixar("mesa", ligacao), fatias[1]);
+  const novos: Record<string, string> = {};
+  const carimbo = Date.now();
+  for (let i = 0; i < k; i++) {
+    const o = inicio + i;
+    if (ligacao && i === 0) continue;
+    const caminho = `${atual.client_id}/estudio/${atual.id}/fundo-${o}-${carimbo}.png`;
+    const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(fatias[i])], { type: "image/png" }), { contentType: "image/png", upsert: false });
+    if (error) throw new ErroEstudio(503, "armazenamento_falhou", "O fundo contínuo foi gerado, mas não foi possível guardá-lo.");
+    novos[String(o)] = caminho;
+  }
+  const gravado = await mutarTrabalho(atual.id, (x) => ({
+    direcao: { ...x.direcao, panorama: { fundos: { ...(x.direcao.panorama?.fundos ?? {}), ...novos } } },
+    custo_usd: arred(num(x.custo_usd) + img.custoUsd),
+  }));
+  const caminho = gravado.direcao.panorama?.fundos?.[String(ordem)];
+  if (!caminho) throw new ErroEstudio(500, "fundo_ausente", "O fundo contínuo desta lâmina não foi gerado. Tente de novo.");
+  return { t: gravado, caminho, custo };
+}
+
+/** preparar_fundo { trabalho_id, ordem }: gera antes o trecho do panorama da lâmina (a tela chama antes de gerar_card no contínuo). */
+async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  garantirEditavel(t);
+  const card = cardDaDirecao(t, ordem);
+  const modelo = await carregarModelo(t.modelo_imagem_id!, "imagem");
+  const temFotoPropria = !!card.imagens_ids?.length || !!(card.fotos_livres ?? []).length;
+  if (!usaPanorama(t, card, modelo.provedor) || temFotoPropria) return json({ trabalho: t, custo_usd: 0, fundo: null });
+  const r = await garantirFundoContinuo(ch, t, ordem, await lerKit(t.client_id));
+  return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.caminho });
+}
+
 /**
  * gerar_card { trabalho_id, ordem }: uma lâmina por chamada, em um de três modos:
  * - foto real: a lâmina tem imagens_ids; a foto do acervo é a base, o gerador
@@ -1597,7 +1706,16 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       throw new ErroEstudio(409, "foto_sumiu", "A foto de fundo desta lâmina não foi encontrada. Escolha outra na ferramenta Fotos.");
     }
   }
-  const resumoDoFundo = foto ? resumoDaFoto(foto) : fundoLivre ? texto(fundoLivre.nota || "foto real trazida pela equipe", 300) : null;
+  let resumoDoFundo = foto ? resumoDaFoto(foto) : fundoLivre ? texto(fundoLivre.nota || "foto real trazida pela equipe", 300) : null;
+  // Carrossel contínuo: o fundo é a fatia do panorama; o gerador só desenha o texto e a logo por cima.
+  const panorama = !baseFoto && !elementos.length && usaPanorama(t, card, modeloImagem.provedor);
+  let custoFundo = 0;
+  if (panorama) {
+    const f = await garantirFundoContinuo(ch, t, ordem, kit);
+    custoFundo = f.custo;
+    baseFoto = await baixar("mesa", f.caminho);
+    resumoDoFundo = "fundo panorâmico contínuo do carrossel, já pronto: o texto e a logo entram por cima, sem mudar a cena";
+  }
 
   // Continuidade real: só no carrossel contínuo, com a anterior pronta, sem foto real e no editor da OpenAI (máscara).
   const anterior = ordem > 1 ? versaoAtual(t, ordem - 1) : null;
@@ -1728,7 +1846,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   if (baseFoto) {
     const areas = areasDeDesenho(card, total, comLogo);
     const prompt = [
-      `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
+      panorama
+        ? `EDITE a imagem 1 (o fundo contínuo desta lâmina, parte de um panorama que atravessa o carrossel). Desenhe SÓ o texto e a logo dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas o fundo fica exatamente como está, para a emenda com as lâminas vizinhas continuar perfeita.`
+        : `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
       baseComCampanha,
       regrasDeRender(t, card, legendas(1), comLogo),
     ].join("\n\n");
@@ -1743,7 +1863,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
-      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: "foto_real", imagem_id: foto?.id ?? null, foto_livre: fundoLivre ? fundoLivre.caminho : null },
+      custoExtraUsd: custoFundo || undefined,
+      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: panorama ? "panorama" : "foto_real", imagem_id: foto?.id ?? null, foto_livre: fundoLivre ? fundoLivre.caminho : null },
     });
   }
 
@@ -2626,7 +2747,9 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
         ...x.direcao,
         cards,
         ...(refsConjunto !== undefined ? { referencias_ids: refsConjunto } : {}),
-        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1 } : {}),
+        // Ligar, desligar ou pedir para refazer apaga o panorama: o próximo gerar faz outro.
+        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1, panorama: null } : {}),
+        ...(conjunto && conjunto.refazer_fundo === true ? { panorama: null } : {}),
       },
     };
   });
@@ -2638,6 +2761,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   preparar,
   configurar,
+  preparar_fundo: prepararFundo,
   gerar_card: gerarCard,
   conferir_card: conferirCard,
   ajustar_card: ajustarCard,

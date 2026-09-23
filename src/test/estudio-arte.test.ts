@@ -81,7 +81,9 @@ describe("estudio-arte: uma lamina por chamada", () => {
   });
 
   it("o gerador so e chamado em gerar (foto composta, foto real, continuo ou normal, um por vez) e em ajustar, fora de laco", () => {
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(5);
+    // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada).
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(6);
+    expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");
     expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
     // Cada modo termina a chamada: foto real e continuo retornam antes do normal.
