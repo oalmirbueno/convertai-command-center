@@ -51,6 +51,7 @@ import { JevErro, jevPerguntar, notaScore, type PerguntaJev } from "../_shared/j
 import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../_shared/conhecimento-design.ts";
 import {
   blocosDoTexto,
+  layoutPadrao,
   caixaDaLogo,
   caixaDaZona,
   direcaoDoRoteiro,
@@ -433,7 +434,26 @@ function versaoAtual(t: Trabalho, ordem: number): VersaoCard | null {
 function cardDaDirecao(t: Trabalho, ordem: number): CardDirecao {
   const card = t.direcao.cards.find((c) => c.ordem === ordem);
   if (!card) throw new ErroEstudio(404, "card_inexistente", `A direção não tem o card ${ordem}.`);
-  return card;
+  return comLayout(card, t.direcao.cards.length);
+}
+
+/**
+ * Direção antiga (de antes do layout por lâmina) não tinha layout: o gerador
+ * usava o prompt_imagem gravado na época, sem paleta, regras nem estilo da
+ * marca, e cada "refazer" mandava o mesmo pedido (dono, 23/09: "as 4 versões
+ * só mudam a fonte e não têm nada a ver com a identidade"). Agora a lâmina sem
+ * layout ganha na hora o layout padrão da função dela, com a cena do roteiro,
+ * e passa pelo prompt da marca como as outras.
+ */
+function comLayout(card: CardDirecao, total: number): CardDirecao {
+  if (card.layout) return card;
+  const padrao = layoutPadrao(card.funcao, card.ordem, total);
+  const cena = texto(card.ilustracao || card.composicao, 500);
+  return {
+    ...card,
+    layout: { ...padrao, imagem: cena || padrao.imagem },
+    blocos: card.blocos?.length ? card.blocos : blocosDoTexto(card.texto_exato, card.funcao),
+  };
 }
 
 const totalCards = (t: Trabalho) => t.direcao.cards.length;
@@ -1397,7 +1417,10 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     v.texto_lido = texto(l.texto_lido, 2000);
     v.descricao_visual = texto(l.descricao_visual, 2000) || null;
     v.logo_presente = typeof l.logo_presente === "boolean" ? l.logo_presente : null;
-    v.logo_ok = v.logo_presente == null ? null : v.logo_presente === levaLogo(t, card.ordem);
+    // Logo só é esperada quando a lâmina leva logo E o cliente tem o arquivo:
+    // sem logo cadastrada, "logo faltando" era alarme falso (Mirante Luz, 23/09).
+    const esperaLogo = levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit).catch(() => null));
+    v.logo_ok = v.logo_presente == null ? null : !esperaLogo && !v.logo_presente ? null : v.logo_presente === esperaLogo;
     const cmp = compararTexto(card.texto_exato, v.texto_lido);
     v.ortografia_ok = cmp.ortografia_ok;
     v.faltando = cmp.faltando;

@@ -118,3 +118,21 @@ describe("carrossel contínuo por panorama (dono, 23/09 noite)", () => {
     expect(aba.indexOf('acao: "preparar_fundo"')).toBeLessThan(aba.indexOf('acao: "gerar_card"'));
   });
 });
+
+describe("refazer que refaz (dono, 23/09 noite)", () => {
+  it("lâmina de direção antiga, sem layout, ganha o layout padrão com a cena do roteiro", () => {
+    expect(corpoDe(estudio, "cardDaDirecao")).toContain("return comLayout(card, t.direcao.cards.length);");
+    const c = corpoDe(estudio, "comLayout");
+    expect(c).toContain("layoutPadrao(card.funcao, card.ordem, total)");
+    expect(c).toContain("imagem: cena || padrao.imagem");
+    expect(c).toContain("blocosDoTexto(card.texto_exato, card.funcao)");
+  });
+  it("sem logo cadastrada, a conferência não acusa logo faltando", () => {
+    const v = corpoDe(estudio, "verificar");
+    expect(v).toContain("levaLogo(t, card.ordem) && !!(await baixarLogoBruta(t.client_id, kit)");
+    expect(v).toContain("!esperaLogo && !v.logo_presente ? null");
+  });
+  it("a Mesa usa a tela larga", () => {
+    expect(ler("src/components/AppLayout.tsx")).toContain('location.pathname.indexOf("/mesa") === 0');
+  });
+});
