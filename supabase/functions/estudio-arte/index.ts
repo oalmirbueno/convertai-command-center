@@ -1603,16 +1603,16 @@ async function garantirFundoContinuo(ch: Chamador, t: Trabalho, ordem: number, k
   const quadros = cards.map((c, i) => {
     const zona = c.layout?.zona_texto ?? "base-esquerda";
     const cena = texto(c.layout?.imagem || c.ilustracao || c.composicao, 500);
-    return `- quadro ${i + 1} (lâmina ${c.ordem}${c.funcao ? `, ${c.funcao}` : ""}): ${cena}. Deixe CALMA e uniforme a zona "${zona}" deste quadro (ali entra o texto depois).`;
+    return `- trecho ${i + 1} de ${k} (da esquerda para a direita): o que aparece nesta parte da MESMA cena: ${cena}. Deixe calma e uniforme a zona "${zona}" desta parte (ali entra o texto depois).`;
   }).join("\n");
   const divisas: number[] = [];
   for (let i = 1; i < k; i++) divisas.push(LARGURA_LAMINA * i);
   const prompt = [
-    `PANORAMA CONTÍNUO para um carrossel do Instagram: UMA imagem larga de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px que será cortada em ${k} quadros verticais 4:5 de ${LARGURA_LAMINA} px, lado a lado, nesta ordem. É só o FUNDO e a CENA: nenhum texto, letra, número, logo, moldura, borda ou divisão entre os quadros. A cena atravessa as divisas em x = ${divisas.join(" e ")} px sem emenda: mesmo chão, horizonte, luz, perspectiva e escala; objetos e pessoas podem cruzar a divisa, mas nenhum rosto fica cortado nela.`,
+    `UMA ÚNICA FOTOGRAFIA PANORÂMICA de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px: um só lugar, visto por uma só câmera, na mesma altura e no mesmo ângulo, com o mesmo chão, a mesma parede, o mesmo horizonte e a mesma luz de ponta a ponta. NÃO é um tríptico nem uma colagem: nada de quadros separados, cenas diferentes, mudança de ângulo (por exemplo, de frente para vista de cima), bordas ou divisões. Depois ela será cortada em ${k} partes verticais 4:5 de ${LARGURA_LAMINA} px (cortes em x = ${divisas.join(" e ")} px) para um carrossel do Instagram, então a cena atravessa esses cortes sem emenda: móveis, objetos e o chão continuam de uma parte para a outra; nenhum rosto fica cortado num corte. É só o fundo: nenhum texto, letra, número ou logo.`,
     ligacao ? "A imagem 1 já traz o PRIMEIRO quadro pronto (à esquerda): não mude nada nele e continue a cena exatamente a partir da borda direita dele." : "",
     atual.direcao.fio_visual ? `Fio visual da série (igual em todos os quadros): ${texto(atual.direcao.fio_visual, 800)}` : "",
     `Conceito: ${texto(atual.direcao.conceito, 600)}`,
-    `Cena de cada quadro:\n${quadros}`,
+    `O que aparece ao longo da cena, da esquerda para a direita (tudo no mesmo ambiente; adapte o que for de outro ambiente para caber neste mesmo lugar):\n${quadros}`,
     paleta ? `Paleta da marca para luz, objetos e ambiente: ${paleta}.` : "",
     "Fotografia realista de campanha, luz natural coerente, alta qualidade.",
   ].filter(Boolean).join("\n\n");
