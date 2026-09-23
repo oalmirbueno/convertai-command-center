@@ -953,6 +953,14 @@
       "remote_name": "mesa_campanhas_e_hypes",
       "remote_statements_sha256": "71ba00cd298df5a3cffc8f076d26149aa72ca6c89b3a3d64070b440d86aafe3d",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260923195925",
+      "path": "supabase/migrations/20260923195925_mesa_referencias_destaque.sql",
+      "local_sha256": "15ac24e952bf290b0270663b4c954014803634322cf631c302cf01b5db4d3ac9",
+      "remote_name": "mesa_referencias_destaque",
+      "remote_statements_sha256": "abbff4ee1497eeae3a8bf789cfab5cab2dcb919f172bd5d627f7fe328fd3e34f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
