@@ -80,19 +80,21 @@ describe("estudio-arte: uma lamina por chamada", () => {
     expect(corpoDe("gerarCard")).toContain("const ordem = lerOrdem(corpo);");
   });
 
-  it("o gerador so e chamado em gerar (foto real, continuo ou normal, um por vez) e em ajustar, fora de laco", () => {
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
+  it("o gerador so e chamado em gerar (foto composta, foto real, continuo ou normal, um por vez) e em ajustar, fora de laco", () => {
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(5);
     const g = corpoDe("gerarCard");
-    expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(3);
+    expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
     // Cada modo termina a chamada: foto real e continuo retornam antes do normal.
+    expect(g.indexOf("if (baseFoto && elementos.length) {")).toBeLessThan(g.indexOf("if (baseFoto) {"));
     expect(g.indexOf("if (baseFoto) {")).toBeLessThan(g.indexOf("if (continuar) {"));
-    expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(3);
+    expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(4);
     expect(corpoDe("ajustarCard").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     // Nenhum laco envolve a chamada ao gerador.
     const gerar = corpoDe("gerarCard");
     const antes = gerar.slice(0, gerar.indexOf("await chamarImagem("));
     const abertos = (antes.match(/\bfor \(/g) ?? []).length;
-    expect(abertos).toBeLessThanOrEqual(2);
+    // Fontes, fotos-elemento da equipe e referências: todos fecham antes do gerador.
+    expect(abertos).toBeLessThanOrEqual(3);
     expect(antes.lastIndexOf("}")).toBeGreaterThan(antes.lastIndexOf("for ("));
   });
 

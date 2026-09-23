@@ -2200,12 +2200,163 @@ async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: 
   return json({ campanha: data, selo_path: caminho, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
 }
 
+// ------------------------------------------------- conversa da campanha
+
+const REF_CAMPANHA = "mesa_campanha";
+
+const ESQUEMA_CONVERSA_CAMPANHA = {
+  nome: "conversa_da_campanha",
+  schema: obj({
+    resposta: S("string"),
+    campanha: {
+      ...obj({
+        nome: S("string"),
+        objetivo: S("string"),
+        conceito: S("string"),
+        identidade: ESQUEMA_CAMPANHA.schema.properties.identidade,
+      }),
+      type: ["object", "null"],
+    },
+    itens: { type: ["array", "null"], items: ESQUEMA_ITEM },
+  }),
+};
+
+async function conversaDaCampanha(servico: SupabaseClient, c: Campanha, userId: string): Promise<string> {
+  const { data } = await servico
+    .from("agente_conversas")
+    .select("id")
+    .eq("client_id", c.client_id)
+    .eq("agente", AGENTE)
+    .eq("referencia_tipo", REF_CAMPANHA)
+    .eq("referencia_id", c.id)
+    .limit(1);
+  const existente = ((data as { id: string }[] | null) ?? [])[0]?.id;
+  if (existente) return existente;
+  const { data: nova, error } = await servico
+    .from("agente_conversas")
+    .insert({ client_id: c.client_id, agente: AGENTE, referencia_tipo: REF_CAMPANHA, referencia_id: c.id, criado_por: userId })
+    .select("id")
+    .single();
+  if (error || !nova) throw new ErroHttp(500, "conversa_nao_criada", "Não foi possível abrir a conversa da campanha.");
+  return nova.id;
+}
+
+/**
+ * campanha_conversar { campanha_id, mensagem, anexos? }: o agente da campanha.
+ * Aplica o pedido na campanha (nome, objetivo, conceito, identidade) e nos
+ * conteúdos da proposta ligada (muda, acrescenta ou tira). Conteúdo já gravado
+ * na agenda não muda por aqui: a resposta diz para ajustar no Estúdio.
+ */
+async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const mensagem = texto(corpo.mensagem, 4000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer na campanha.");
+
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const inicio = c.periodo_inicio ?? hojeSaoPaulo();
+  const fim = c.periodo_fim ?? somarDias(inicio, 21);
+  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const podeMudarItens = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
+
+  const [ctx, anexos, conversaId] = await Promise.all([
+    montarContexto(servico, c.client_id, inicio, fim),
+    baixarAnexos(servico, c.client_id, corpo.anexos),
+    conversaDaCampanha(servico, c, chamador.userId),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+
+  const { data: historico } = await servico
+    .from("agente_mensagens")
+    .select("papel, conteudo")
+    .eq("conversa_id", conversaId)
+    .order("criado_em", { ascending: false })
+    .limit(12);
+  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
+    .reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente")
+    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
+
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+
+CAMPANHA ATUAL (JSON):
+${JSON.stringify({ ...resumoDaCampanha(c), status: c.status })}
+
+CONTEÚDOS DA CAMPANHA (JSON${podeMudarItens ? "" : "; JÁ GRAVADOS NA AGENDA, NÃO MUDE"}):
+${JSON.stringify(proposta?.itens ?? [])}
+
+PEDIDO DA EQUIPE: ${mensagem}
+${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}
+Aplique o pedido. Devolva:
+- resposta: o que você mudou ou respondeu, em até 4 frases.
+- campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade) só se algo dela mudou; senão null.
+- itens: ${podeMudarItens ? `a lista COMPLETA de conteúdos atualizada só se algum conteúdo mudou, entrou ou saiu (mantenha tema_id dos que ficam; novo recebe tema_id novo); senão null. Datas só de segunda a sexta entre ${inicio} e ${fim}.` : "sempre null (os conteúdos já estão na agenda; se o pedido for sobre eles, diga na resposta para ajustar no Estúdio)."}
+${REGRAS_DOS_ITENS}`;
+
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "conversa",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+    raciocinio,
+    esquemaJson: ESQUEMA_CONVERSA_CAMPANHA,
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+
+  let campanha: Campanha = c;
+  const nova = r.campanha && typeof r.campanha === "object" ? (r.campanha as Record<string, unknown>) : null;
+  const campos: Record<string, unknown> = { custo_usd: Math.round((Number(c.custo_usd) + s.custoUsd) * 1e6) / 1e6 };
+  if (nova) {
+    campos.nome = texto(nova.nome, 120) || c.nome;
+    campos.objetivo = texto(nova.objetivo, 600) || c.objetivo;
+    campos.conceito = texto(nova.conceito, 2000) || c.conceito;
+    if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade);
+  }
+  const { data: gravada, error } = await servico
+    .from("mesa_campanhas")
+    .update(campos)
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error || !gravada) throw new ErroHttp(503, "campanha_nao_salva", "O agente respondeu, mas a campanha não foi salva.", { uso_id: s.usoId });
+  campanha = gravada as Campanha;
+
+  let propostaFinal = proposta;
+  if (podeMudarItens && proposta && Array.isArray(r.itens) && uteis.length) {
+    const tarefaDoTema = new Map(proposta.itens.filter((i) => i.task_id).map((i) => [i.tema_id, i.task_id]));
+    let seq = proposta.itens.length;
+    const usados = new Set<string>();
+    const itens = r.itens.slice(0, 12).map((bruto) => {
+      const item = normalizarItem(bruto, uteis);
+      if (!item.tema_id || usados.has(item.tema_id)) item.tema_id = `c${++seq}`;
+      usados.add(item.tema_id);
+      item.campanha_id = c.id;
+      if (tarefaDoTema.has(item.tema_id)) item.task_id = tarefaDoTema.get(item.tema_id) ?? null;
+      return item;
+    }).filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
+    if (itens.length) propostaFinal = await salvarProposta(servico, proposta, { itens });
+  }
+
+  const resposta = texto(r.resposta, 2000) || "Campanha atualizada.";
+  await registrarMensagens(servico, conversaId, c.client_id, [
+    { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId },
+  ]);
+  return json({ campanha, proposta: propostaFinal, resposta, conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   pedido_livre: pedidoLivre,
   buscar_hypes: buscarHypes,
   campanha_criar: campanhaCriar,
   campanha_ajustar: campanhaAjustar,
   campanha_selo: campanhaSelo,
+  campanha_conversar: campanhaConversar,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,

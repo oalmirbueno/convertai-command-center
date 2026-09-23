@@ -52,7 +52,15 @@ export type CardDirecao = {
   imagens_ids?: string[];
   /** Referências escolhidas na tela para esta lâmina (sobrepõem as do conjunto; prefixo g: = banco global). */
   referencias_ids?: string[];
+  /**
+   * Fotos reais trazidas pela equipe (coladas, soltas ou escolhidas), no
+   * bucket mesa: "fundo" é a foto de fundo da lâmina, mantida como está;
+   * "elemento" é pessoa, rosto ou objeto real que entra na composição igual.
+   */
+  fotos_livres?: FotoLivre[];
 };
+
+export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string };
 
 export type MarcaParaDirecao = {
   nomeCliente: string;

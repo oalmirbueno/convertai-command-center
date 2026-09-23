@@ -60,6 +60,7 @@ import {
   resumoDaComposicao,
   type BlocoTexto,
   type CardDirecao,
+  type FotoLivre,
   type MarcaParaDirecao,
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
@@ -1105,6 +1106,7 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         ...c,
         imagens_ids: c.imagens_ids?.length ? c.imagens_ids : velho?.imagens_ids,
         referencias_ids: velho?.referencias_ids,
+        fotos_livres: velho?.fotos_livres,
       };
     });
     const atualizado = await mutarTrabalho(existente.id, (x) => ({
@@ -1224,6 +1226,22 @@ async function escolherReferencias(
     const refs = await referenciasPorId(t.client_id, escolhidasNaTela);
     if (refs.length) return { refs: refs.slice(0, MAX_REFERENCIAS), jev: "escolha_da_equipe" };
   }
+  // Em destaque (marcadas pela equipe): entram sempre, antes das outras.
+  const { data: emDestaque } = await servico()
+    .from("cliente_referencias")
+    .select(CAMPOS_REF_CLIENTE)
+    .eq("client_id", t.client_id)
+    .eq("ativa", true)
+    .eq("destaque", true)
+    .order("criado_em", { ascending: false })
+    .limit(MAX_REFERENCIAS);
+  const destaques = (emDestaque as Referencia[] | null) ?? [];
+  if (destaques.length >= MAX_REFERENCIAS) return { refs: destaques.slice(0, MAX_REFERENCIAS), jev: "destaque" };
+  const comDestaque = (r: { refs: Referencia[]; jev: string }) => {
+    if (!destaques.length) return r;
+    const resto = r.refs.filter((x) => !destaques.some((d) => d.id === x.id));
+    return { refs: [...destaques, ...resto].slice(0, MAX_REFERENCIAS), jev: r.jev === "ok" ? "destaque_e_jev" : r.jev };
+  };
   const [doCliente, globais] = await Promise.all([
     servico()
       .from("cliente_referencias")
@@ -1241,7 +1259,7 @@ async function escolherReferencias(
   ];
   if (!candidatas.length) {
     const identidade = await artePublicadaMaisRecente(t.client_id);
-    return { refs: identidade ? [identidade] : [], jev: "sem_referencias_lidas" };
+    return comDestaque({ refs: identidade ? [identidade] : [], jev: "sem_referencias_lidas" });
   }
 
   const referencias: Record<string, { tipo: string; tecnica: string; tags: string[] }> = {};
@@ -1282,11 +1300,11 @@ async function escolherReferencias(
     const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id);
     const tecnica = notas.find((x) => x.r.papel !== "identidade")?.r;
     const escolhidas = [identidade, tecnica].filter(Boolean).slice(0, MAX_REFERENCIAS) as Referencia[];
-    return { refs: escolhidas, jev: "ok" };
+    return comDestaque({ refs: escolhidas, jev: "ok" });
   } catch (e) {
     // Sem Jev, ao menos a arte publicada mais recente da marca vai junto.
     const identidade = await artePublicadaMaisRecente(t.client_id);
-    return { refs: identidade ? [identidade] : [], jev: codigoMotor(e) };
+    return comDestaque({ refs: identidade ? [identidade] : [], jev: codigoMotor(e) });
   }
 }
 
@@ -1565,13 +1583,25 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
 
-  // Foto real escolhida para a lâmina (pelo diretor ou pela equipe).
+  // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
+  // ou trazida pela equipe (colada ou solta) como fundo.
   const [foto] = card.imagens_ids?.length ? await imagensDoAcervo(t.client_id, card.imagens_ids) : [];
-  const baseFoto = foto ? await fotoRealNaLamina(foto) : null;
+  const livres = card.fotos_livres ?? [];
+  const fundoLivre = foto ? undefined : livres.find((f) => f.papel === "fundo");
+  const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
+  let baseFoto: Uint8Array | null = foto ? await fotoRealNaLamina(foto) : null;
+  if (!baseFoto && fundoLivre) {
+    try {
+      baseFoto = await fotoNaLamina(await baixar("mesa", fundoLivre.caminho));
+    } catch {
+      throw new ErroEstudio(409, "foto_sumiu", "A foto de fundo desta lâmina não foi encontrada. Escolha outra na ferramenta Fotos.");
+    }
+  }
+  const resumoDoFundo = foto ? resumoDaFoto(foto) : fundoLivre ? texto(fundoLivre.nota || "foto real trazida pela equipe", 300) : null;
 
   // Continuidade real: só no carrossel contínuo, com a anterior pronta, sem foto real e no editor da OpenAI (máscara).
   const anterior = ordem > 1 ? versaoAtual(t, ordem - 1) : null;
-  const continuar = !baseFoto && t.direcao.carrossel_infinito && !!anterior && modeloImagem.provedor === "openai" && !!card.layout;
+  const continuar = !baseFoto && !elementos.length && t.direcao.carrossel_infinito && !!anterior && modeloImagem.provedor === "openai" && !!card.layout;
 
   const anexos: ImagemEntrada[] = [];
   // Rótulo de cada anexo; a numeração sai na hora do prompt, porque a imagem
@@ -1627,13 +1657,22 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const escolha = !daEquipe && anterior
     ? { ...escolhida, refs: escolhida.refs.filter((r) => r.papel === "identidade") }
     : escolhida;
+  // Pessoas, rostos ou objetos reais trazidos pela equipe: entram iguais.
+  for (const el of elementos) {
+    try {
+      anexos.push(await baixarImagem("mesa", el.caminho, "elemento-real"));
+      legendar(`foto REAL trazida pela equipe (${el.nota ? texto(el.nota, 200) : "pessoa ou objeto real"}): coloque esta pessoa ou objeto na lâmina exatamente como é, mesmo rosto, feições, cabelo, roupa e proporções, integrado à luz da cena; não redesenhe nem troque por outra pessoa`);
+    } catch {
+      // Foto removida do bucket fica de fora.
+    }
+  }
   const idsReferencias: string[] = [];
   for (const ref of escolha.refs) {
     try {
       anexos.push(await imagemDaReferencia(ref));
       idsReferencias.push(ref.id);
       legendar(daEquipe
-        ? "referência escolhida pela equipe: siga de perto a composição, a tipografia, a hierarquia e o tratamento desta peça, com o texto e a marca deste post"
+        ? "referência ESCOLHIDA PELA EQUIPE: reproduza de perto esta peça (mesma estrutura de layout, posição dos blocos, escala da tipografia, hierarquia, recorte e tratamento da imagem), trocando só o texto, as cores e os elementos pela identidade desta marca, com uma diferenciação leve para não ser cópia"
         : ref.papel === "identidade"
           ? "arte já publicada da própria marca: siga a mesma identidade (cores, tipografia, tratamento de foto, estilo das pessoas); não copie o layout"
           : "referência de técnica (absorva composição e hierarquia, não copie a peça)");
@@ -1652,7 +1691,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       levaLogo: levaLogo(t, ordem),
       conceito: t.direcao.conceito,
       anteriores: imagensAnteriores(t.direcao.cards, ordem),
-      fotoReal: foto ? resumoDaFoto(foto) : null,
+      fotoReal: resumoDoFundo,
       fioVisual: t.direcao.fio_visual ?? null,
       logo: tomDaLogo,
     })
@@ -1669,7 +1708,23 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "gerador_imagem" as const,
   };
 
-  // 1) Foto real como base.
+  // 1a) Foto de fundo com pessoas ou objetos reais: edição sem máscara, a foto
+  // continua o fundo e os elementos entram por cima, integrados.
+  if (baseFoto && elementos.length) {
+    const prompt = [
+      `EDITE a imagem 1: ela é a foto REAL de fundo desta lâmina e fica como está (mesmo lugar, luz, cores e enquadramento). Componha por cima dela a pessoa ou o objeto real das fotos anexadas indicadas abaixo, sem mudar o rosto nem as feições, e depois o texto e a marca nas áreas livres.`,
+      baseComCampanha,
+      regrasDeRender(t, card, legendas(1), comLogo),
+    ].join("\n\n");
+    const img = await chamarImagem({ ...comum, prompt, editar: { bytes: baseFoto }, tamanho: TAMANHO_GERADOR });
+    return await gravarVersao(ch, t, card, img, {
+      origem: "gerar",
+      referencias: idsReferencias,
+      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: "foto_composta", imagem_id: foto?.id ?? null, fotos_livres: livres.length },
+    });
+  }
+
+  // 1b) Foto real como base.
   if (baseFoto) {
     const areas = areasDeDesenho(card, total, comLogo);
     const prompt = [
@@ -1688,7 +1743,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
-      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: "foto_real", imagem_id: foto!.id },
+      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: "foto_real", imagem_id: foto?.id ?? null, foto_livre: fundoLivre ? fundoLivre.caminho : null },
     });
   }
 
@@ -2496,6 +2551,25 @@ function idsDeReferencia(v: unknown): string[] | undefined {
   return [...new Set(v.map((x) => texto(x, 80)).filter((x) => ID_REFERENCIA.test(x)))].slice(0, 4);
 }
 
+/** Fotos trazidas pela equipe: só do bucket mesa deste cliente, 1 fundo e até 2 elementos. */
+function lerFotosLivres(v: unknown, clientId: string): FotoLivre[] {
+  if (!Array.isArray(v)) throw new ErroEstudio(400, "fotos_invalidas", "Fotos em formato inválido.");
+  const saida: FotoLivre[] = [];
+  for (const bruto of v.slice(0, 6)) {
+    const o = (bruto ?? {}) as Record<string, unknown>;
+    const caminho = texto(o.caminho, 300);
+    const papel = o.papel === "fundo" ? "fundo" : o.papel === "elemento" ? "elemento" : null;
+    if (!papel || !caminho.startsWith(`${clientId}/`) || caminho.indexOf("..") >= 0) {
+      throw new ErroEstudio(400, "foto_invalida", "Foto fora da pasta deste cliente ou sem papel (fundo ou elemento).");
+    }
+    if (papel === "fundo" && saida.some((f) => f.papel === "fundo")) continue;
+    if (papel === "elemento" && saida.filter((f) => f.papel === "elemento").length >= 2) continue;
+    const nota = texto(o.nota, 200);
+    saida.push(nota ? { caminho, papel, nota } : { caminho, papel });
+  }
+  return saida;
+}
+
 /**
  * configurar { trabalho_id, conjunto?, card? }: escolhas da tela, sem custo.
  * Conjunto: referências e carrossel contínuo. Lâmina: fotos reais do acervo,
@@ -2517,6 +2591,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
   let imagens: string[] | undefined;
   let refsCard: string[] | undefined;
   let novoTexto: string | undefined;
+  let fotosLivres: FotoLivre[] | undefined;
   if (cardPedido) {
     ordem = lerOrdem(cardPedido);
     cardDaDirecao(t, ordem);
@@ -2526,6 +2601,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       imagens = (await imagensDoAcervo(t.client_id, (cardPedido.imagens_ids as unknown[]).map((x) => texto(x, 64)))).map((a) => a.id).slice(0, 1);
     }
     refsCard = idsDeReferencia(cardPedido.referencias_ids);
+    if (cardPedido.fotos_livres !== undefined) fotosLivres = lerFotosLivres(cardPedido.fotos_livres, t.client_id);
     if (cardPedido.texto_exato !== undefined) {
       novoTexto = texto(cardPedido.texto_exato, 1200);
       if (!novoTexto) throw new ErroEstudio(400, "texto_vazio", "O texto da lâmina não pode ficar vazio.");
@@ -2538,6 +2614,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       const mudou: CardDirecao = { ...c };
       if (imagens !== undefined) mudou.imagens_ids = imagens;
       if (refsCard !== undefined) mudou.referencias_ids = refsCard;
+      if (fotosLivres !== undefined) mudou.fotos_livres = fotosLivres;
       if (novoTexto !== undefined && novoTexto !== c.texto_exato) {
         mudou.texto_exato = novoTexto;
         mudou.blocos = blocosDoTexto(novoTexto, c.funcao);
