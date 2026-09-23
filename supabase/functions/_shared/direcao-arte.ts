@@ -239,8 +239,8 @@ export function layoutPadrao(funcao: string, ordem: number, total: number): Layo
       alinhamento: "esquerda",
       imagem: "fotografia real e marcante do assunto, ocupando a lâmina inteira",
       ponto_focal: "o elemento principal da foto no terço superior, com a headline na base",
-      fundo: "a própria fotografia, escurecida de forma sutil só na área do texto para garantir leitura",
-      tratamento: "editorial, luz natural, contraste alto na headline",
+      fundo: "a própria fotografia, com uma área calma e uniforme na zona do texto para garantir leitura",
+      tratamento: "editorial, luz natural, headline grande que para a rolagem, um elemento visual forte",
     };
   }
   if (funcao === "cta" || ordem === total) {
@@ -327,7 +327,7 @@ export function promptDaLamina(
       ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").slice(0, 600)} Mesma pessoa, mesmo cenário, mesma luz e paleta em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
       : "",
     capa
-      ? "- CAPA COM DESTAQUE A MAIS, dentro do sistema da marca: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, o maior contraste entre texto e fundo e um gesto visual forte; mesma luz, cenário e paleta das lâminas seguintes. Nada competindo com a headline."
+      ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma luz, cenário e paleta das lâminas seguintes. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : "",
     opcoes.anteriores && opcoes.anteriores.length && opcoes.total > 1
       ? `- Lâminas anteriores desta série mostraram: ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}. Mantenha a mesma protagonista, cenário e luz; mude só a pose e o enquadramento (não repita a pose da lâmina anterior).`

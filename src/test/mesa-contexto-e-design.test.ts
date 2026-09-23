@@ -222,10 +222,18 @@ describe("regressão de 23/09: série contínua, capa da marca e logo legível",
     expect(p).not.toContain("não repita cena");
   });
 
-  it("a capa ganha destaque dentro do sistema da marca, sem escurecer à força", () => {
-    const p = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true });
-    expect(p).toContain("dentro do sistema da marca");
-    expect(p).not.toContain("fundo escuro e travado");
+  it("a capa existe para parar a rolagem, nunca escurecendo a imagem (correção do dono, 23/09)", () => {
+    for (const total of [5, 1]) {
+      const p = promptDaLamina(capa, marca(), { total, carrosselInfinito: false, levaLogo: true });
+      expect(p).toContain("CAPA QUE PARA A ROLAGEM");
+      expect(p).toContain("Não escureça a imagem para criar destaque");
+      expect(p).not.toContain("fundo escuro e travado");
+      expect(p).not.toMatch(/escurecid|foto escurecida/);
+    }
+    expect(CONHECIMENTO_DIRETOR).toContain("fazer quem está rolando o feed PARAR");
+    expect(CONHECIMENTO_DIRETOR).toContain("Nunca escurecer a imagem para criar destaque");
+    expect(CONHECIMENTO_DIRETOR).not.toContain("Fundo escuro só quando");
+    expect(ler("supabase/functions/estudio-arte/index.ts")).not.toContain("Não escureça a capa se a marca é clara");
   });
 
   it("logo escura ou colorida pede fundo claro atrás dela; logo clara pede fundo escuro", () => {

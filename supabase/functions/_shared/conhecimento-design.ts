@@ -16,7 +16,7 @@
  * de cada prompt de imagem e no sistema do ajuste de lâmina.
  */
 
-export const VERSAO_CONHECIMENTO = "2026-09-23.4";
+export const VERSAO_CONHECIMENTO = "2026-09-23.5";
 
 export const CONHECIMENTO_DIRETOR = `BASE DE CONHECIMENTO DO DIRETOR DE ARTE (versão ${VERSAO_CONHECIMENTO})
 
@@ -200,11 +200,13 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px. O gerador de imag
 - Genérico: nada da seção 10 aparece?
 
 12. CAPA QUE PARA A ROLAGEM (pedido do dono, 23/09)
-- A capa tem um destaque a mais que as lâminas do miolo, DENTRO do sistema da marca: a maior headline do conjunto, em peso extra negrito ou black, o maior contraste entre texto e fundo, uma palavra-chave na cor de destaque e um gesto visual forte (escala, recorte, objeto cortado na borda). Nada competindo com a headline.
-- A capa usa a mesma luz, cenário e paleta das lâminas seguintes: ela abre a série, não é uma peça de outra marca. Fundo escuro só quando a própria marca é escura ou quando a logo é clara; marca clara e arejada ganha destaque pelo tamanho e pelo contraste da headline, não por escurecer tudo.
-- Logo sempre legível: nunca sobre fundo da mesma cor ou do mesmo valor (logo azul em fundo azul, logo escura em fundo escuro). Atrás da logo vai um fundo de valor oposto ao dela.
-- Composição da capa escolhida pela foto: headline à esquerda quando o sujeito está à direita; centralizada (topo ou centro) quando o sujeito está no centro ou embaixo. Não use sempre a esquerda.
-
+- O objetivo da capa, do carrossel ou do post estático, é um só: fazer quem está rolando o feed PARAR. Destaque a mais que o miolo, sempre dentro do sistema da marca (mesma luz, cenário e paleta da série). Nunca escurecer a imagem para criar destaque: o destaque vem do gancho, da escala e do contraste.
+- Gancho de até 7 palavras que gera curiosidade ou identificação na hora: pergunta que a pessoa se faz, número concreto, contradição, erro comum, promessa específica. A headline é a maior do conjunto, peso black, com a palavra-chave na cor de destaque.
+- Um elemento visual forte e inesperado, um só: escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação, movimento. Nada competindo com ele e com a headline.
+- Contraste de verdade pela escala, pela cor de destaque ou pelo recorte, dentro da paleta; legível mesmo reduzida ao tamanho da miniatura do feed.
+- No carrossel, algo convida a passar (elemento saindo pela borda direita, seta sutil, frase que pede a próxima lâmina).
+- Logo sempre legível: nunca sobre fundo da mesma cor ou do mesmo valor (logo azul em fundo azul). Atrás da logo vai um fundo de valor oposto ao dela.
+- Composição escolhida pela foto: headline à esquerda quando o sujeito está à direita; centralizada (topo ou centro) quando o sujeito está no centro ou embaixo. Não use sempre a esquerda.
 13. NARRATIVA DO CARROSSEL (storytelling, nunca picotado)
 - O carrossel é uma história só, com começo, meio e fim: a capa abre uma pergunta ou tensão, cada lâmina do miolo avança um passo e puxa a próxima (a última frase de uma lâmina prepara a seguinte), o final resolve e chama para a ação.
 - Texto corrido entre as lâminas: conectivos e continuidade de sentido ("e é aí que", "o segundo erro", "resultado:"), nunca frases soltas que poderiam estar em qualquer ordem.
