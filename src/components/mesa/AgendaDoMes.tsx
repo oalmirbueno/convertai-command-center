@@ -17,6 +17,7 @@ import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { TituloDeSecao } from "./Seletores";
 import {
+  doItem,
   ehFormatoDeArte,
   rotuloDaPublicacao,
   seloDoItem,
@@ -364,7 +365,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   const hoje = hojeLocal();
 
   const seloDe = (item: ItemDaAgenda): Selo =>
-    seloDoItem(item, dados ? dados.roteiros.get(item.id) : undefined, dados ? (dados.trabalhos.get(item.id) as TrabalhoDaAgenda | undefined) : undefined);
+    seloDoItem(item, dados ? doItem(dados.roteiros, item.id) : undefined, dados ? (doItem(dados.trabalhos, item.id) as TrabalhoDaAgenda | undefined) : undefined);
 
   const horarioDe = (item: ItemDaAgenda): string | null => {
     const posts = postsPorItem.get(item.id) || [];
@@ -625,7 +626,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                     key={i.id}
                     item={i}
                     selo={seloDe(i)}
-                    roteiro={dados ? dados.roteiros.get(i.id) : undefined}
+                    roteiro={dados ? doItem(dados.roteiros, i.id) : undefined}
                     posts={postsPorItem.get(i.id) || []}
                     abertoDeInicio={escolhidos.length === 1}
                     onTirar={() => alternar(i.id)}

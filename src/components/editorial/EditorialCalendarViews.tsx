@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import {
   addDays,
   eachDayOfInterval,
@@ -40,6 +40,8 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type {
+  ArteDoEstudioNaAgenda,
+  EditorialFileRow,
   EditorialPostBundle,
   EditorialPublicationBundle,
 } from "@/hooks/useEditorialCalendar";
@@ -91,6 +93,11 @@ interface EditorialCalendarViewsProps {
   ancorasPorDia?: Map<string, EditorialPostBundle[]>;
   /** Posts já ancorados num dia, para não repetirem na lista de sem prazo. */
   idsNaGrade?: Set<string>;
+  /**
+   * Tarefa → arte que o Estúdio da Mesa já entregou (item ainda sem post).
+   * Só a equipe recebe; o cliente não vê nada disso.
+   */
+  artesDoEstudio?: Record<string, ArteDoEstudioNaAgenda>;
   onShowBacklog: () => void;
 }
 
@@ -429,20 +436,38 @@ function ContentDirection({
 export function EditorialFileThumbnail({
   post,
   publication,
+  file: fileProp,
+  fileChildren: fileChildrenProp,
+  total,
   className,
   showArtBadge = false,
 }: {
-  post: EditorialPostBundle;
+  post?: EditorialPostBundle | null;
   publication?: EditorialPublicationBundle | null;
+  /**
+   * Arquivo direto, sem post: a arte que o Estúdio entregou para um item da
+   * agenda que ainda não virou post (o post só nasce na aprovação).
+   */
+  file?: EditorialFileRow | null;
+  fileChildren?: EditorialFileRow[];
+  /** Quantas lâminas mostrar no selo, quando já se sabe (arte do Estúdio). */
+  total?: number;
   className?: string;
   /** Selo "Com arte"/"Sem arte" para leitura instantânea no board. */
   showArtBadge?: boolean;
 }) {
   const hasPublicationOverride = Boolean(publication?.publication.file_id);
-  const file = hasPublicationOverride ? publication?.file : post.primaryFile;
-  const fileChildren = hasPublicationOverride
-    ? publication?.fileChildren
-    : post.primaryFileChildren;
+  const direto = fileProp !== undefined;
+  const file = direto
+    ? fileProp
+    : hasPublicationOverride
+      ? publication?.file
+      : post?.primaryFile;
+  const fileChildren = direto
+    ? fileChildrenProp
+    : hasPublicationOverride
+      ? publication?.fileChildren
+      : post?.primaryFileChildren;
   const kind = mediaKindFromFile(
     file?.file_name,
     file?.file_url,
@@ -457,7 +482,9 @@ export function EditorialFileThumbnail({
       kind === "image" ? { width: 640, quality: 74, resize: "cover" } : null,
     expiresIn: 3600,
   });
-  const fileCount = file ? 1 + (fileChildren?.length || 0) : 0;
+  const fileCount = file
+    ? Math.max(1 + (fileChildren?.length || 0), total || 0)
+    : 0;
 
   return (
     <span
@@ -511,6 +538,96 @@ export function EditorialFileThumbnail({
       )}
     </span>
   );
+}
+
+const SEM_ARTES_DO_ESTUDIO: Record<string, ArteDoEstudioNaAgenda> = {};
+
+/** Arte do Estúdio por tarefa, para os cartões da agenda sem passar prop por prop. */
+const ArtesDoEstudioContexto = createContext<Record<string, ArteDoEstudioNaAgenda>>(
+  SEM_ARTES_DO_ESTUDIO,
+);
+
+/** A arte entregue pelo Estúdio para esta tarefa, se houver (com capa). */
+function useArteDoEstudio(taskId: string): ArteDoEstudioNaAgenda | null {
+  const artes = useContext(ArtesDoEstudioContexto);
+  const arte = artes[taskId];
+  return arte && arte.capa ? arte : null;
+}
+
+/**
+ * Texto do selo discreto da arte do Estúdio, pelo estado da entrega. Sem
+ * post, o item ainda depende da aprovação: por padrão, "aguardando aprovação".
+ */
+export function seloDaArteDoEstudio(arte: Pick<ArteDoEstudioNaAgenda, "entregaStatus" | "total">) {
+  const texto =
+    arte.entregaStatus === "reprovado"
+      ? "Arte reprovada · em ajuste"
+      : arte.entregaStatus === "precisa_de_atencao"
+        ? "Arte pronta · precisa de atenção"
+        : arte.entregaStatus === "aprovado" || arte.entregaStatus === "agendado"
+          ? "Arte aprovada · entrando na agenda"
+          : "Arte pronta · aguardando aprovação";
+  const laminas = arte.total > 1 ? `${arte.total} lâminas` : null;
+  const alerta =
+    arte.entregaStatus === "reprovado" ||
+    arte.entregaStatus === "precisa_de_atencao";
+  return { texto, laminas, alerta };
+}
+
+function SeloDaArteDoEstudio({
+  arte,
+  compact = false,
+}: {
+  arte: ArteDoEstudioNaAgenda;
+  compact?: boolean;
+}) {
+  const selo = seloDaArteDoEstudio(arte);
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md font-medium",
+        compact ? "text-[9.5px]" : "mt-1.5 px-1.5 py-0.5 text-[10px]",
+        !compact &&
+          (selo.alerta
+            ? "bg-amber-500/10"
+            : "bg-emerald-500/10"),
+        selo.alerta
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-emerald-600 dark:text-emerald-400",
+      )}
+      title={[selo.texto, selo.laminas].filter(Boolean).join(" · ")}
+    >
+      <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden="true" />
+      <span className="truncate">{selo.texto}</span>
+      {selo.laminas && (
+        <span className="shrink-0 opacity-80">· {selo.laminas}</span>
+      )}
+    </span>
+  );
+}
+
+/** Miniatura da arte do Estúdio (capa + lâminas), sem post. */
+function MiniaturaDaArteDoEstudio({
+  arte,
+  className,
+}: {
+  arte: ArteDoEstudioNaAgenda;
+  className?: string;
+}) {
+  return (
+    <EditorialFileThumbnail
+      file={arte.capa}
+      fileChildren={arte.filhos}
+      total={arte.total}
+      className={className}
+    />
+  );
+}
+
+function descricaoDaArteDoEstudio(arte: ArteDoEstudioNaAgenda | null) {
+  if (!arte) return "";
+  const selo = seloDaArteDoEstudio(arte);
+  return ` ${selo.texto.replace(" · ", ", ")}${selo.laminas ? `, ${selo.laminas}` : ""}.`;
 }
 
 function PublicationPill({
@@ -772,11 +889,14 @@ function TaskSchedulePill({
     "dd 'de' MMMM 'de' yyyy",
     { locale: ptBR },
   );
+  // Arte que o Estúdio já entregou (item ainda sem post): aparece aqui sem
+  // precisar abrir o item.
+  const arte = useArteDoEstudio(task.id);
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
+      aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}.${descricaoDaArteDoEstudio(arte)}`}
       className={cn(
         "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
         compact ? "px-2 py-1.5" : "p-2.5",
@@ -786,12 +906,19 @@ function TaskSchedulePill({
       {compact ? (
         <>
           <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
-            <Palette
-              className="h-3.5 w-3.5 shrink-0 text-violet-500"
-              aria-hidden="true"
-            />
+            {arte ? (
+              <MiniaturaDaArteDoEstudio
+                arte={arte}
+                className="h-7 w-7 shrink-0 rounded-md"
+              />
+            ) : (
+              <Palette
+                className="h-3.5 w-3.5 shrink-0 text-violet-500"
+                aria-hidden="true"
+              />
+            )}
             <span
-              className="truncate font-medium"
+              className="min-w-0 truncate font-medium"
               title={`Tema: ${task.title}`}
             >
               <span className="font-semibold opacity-60">Tema:</span>{" "}
@@ -804,32 +931,47 @@ function TaskSchedulePill({
               Prazo · {deliveryType}
             </span>
           </div>
-          <p
-            className="mt-0.5 truncate text-[10px] text-muted-foreground"
-            title={`Contexto: ${context || "Não informado"}`}
-          >
-            <span className="font-semibold">Contexto:</span>{" "}
-            {context || "Não informado"}
-          </p>
+          {arte ? (
+            <p className="mt-0.5 flex min-w-0">
+              <SeloDaArteDoEstudio arte={arte} compact />
+            </p>
+          ) : (
+            <p
+              className="mt-0.5 truncate text-[10px] text-muted-foreground"
+              title={`Contexto: ${context || "Não informado"}`}
+            >
+              <span className="font-semibold">Contexto:</span>{" "}
+              {context || "Não informado"}
+            </p>
+          )}
         </>
       ) : (
-        <>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Palette
-              className="h-3.5 w-3.5 shrink-0 text-violet-500"
-              aria-hidden="true"
+        <div className="flex min-w-0 gap-2">
+          {arte && (
+            <MiniaturaDaArteDoEstudio
+              arte={arte}
+              className="h-12 w-12 shrink-0"
             />
-            <span className="truncate text-[10px] font-medium text-violet-500">
-              Prazo Kanban · {deliveryType}
-              {projectScopeName ? ` · ${projectScopeName}` : ""}
-            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Palette
+                className="h-3.5 w-3.5 shrink-0 text-violet-500"
+                aria-hidden="true"
+              />
+              <span className="truncate text-[10px] font-medium text-violet-500">
+                Prazo Kanban · {deliveryType}
+                {projectScopeName ? ` · ${projectScopeName}` : ""}
+              </span>
+            </div>
+            <ContentDirection
+              theme={task.title}
+              context={context}
+              className="mt-1"
+            />
+            {arte && <SeloDaArteDoEstudio arte={arte} />}
           </div>
-          <ContentDirection
-            theme={task.title}
-            context={context}
-            className="mt-1"
-          />
-        </>
+        </div>
       )}
     </button>
   );
@@ -1531,6 +1673,7 @@ function BoardTaskCard({
   onCreate: () => void;
 }) {
   const draggable = canEdit && !moving;
+  const arte = useArteDoEstudio(task.id);
   const {
     attributes,
     listeners,
@@ -1586,6 +1729,15 @@ function BoardTaskCard({
           <p className="mt-1 truncate text-[10px] text-muted-foreground">
             {projectScopeName}
           </p>
+          {arte && (
+            <span className="mt-2 flex min-w-0 items-center gap-2">
+              <MiniaturaDaArteDoEstudio
+                arte={arte}
+                className="h-14 w-14 shrink-0"
+              />
+              <SeloDaArteDoEstudio arte={arte} />
+            </span>
+          )}
         </button>
         {draggable && (
           <button
@@ -1866,6 +2018,7 @@ function ListView({
     targetDateKey?: string,
   ) => void;
 }) {
+  const artesDoEstudio = useContext(ArtesDoEstudioContexto);
   const backlogItems = flattenBacklog(posts, idsNaGrade);
   const monthStartKey = localDateKey(startOfMonth(anchorDate));
   const monthEndKey = localDateKey(endOfMonth(anchorDate));
@@ -1920,6 +2073,7 @@ function ListView({
           {timelineItems.map((timelineItem) => {
             if (timelineItem.kind === "task") {
               const { task, dateKey } = timelineItem;
+              const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
               return (
                 <button
                   key={`task:${task.id}`}
@@ -1939,12 +2093,19 @@ function ListView({
                     </p>
                   </div>
                   <span className="h-9 w-1 shrink-0 rounded-full bg-violet-500" />
+                  {arte && (
+                    <MiniaturaDaArteDoEstudio
+                      arte={arte}
+                      className="h-12 w-12 shrink-0"
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <ContentDirection
                       theme={task.title}
                       context={taskContentContext(task)}
                       className="text-sm text-foreground"
                     />
+                    {arte && <SeloDaArteDoEstudio arte={arte} />}
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                       {taskDeliveryTypeLabel(task)}
@@ -2090,14 +2251,23 @@ function ListView({
             </Badge>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {undatedTasks.map((task) => (
+            {undatedTasks.map((task) => {
+              const arte = artesDoEstudio[task.id] && artesDoEstudio[task.id].capa ? artesDoEstudio[task.id] : null;
+              return (
               <button
                 key={task.id}
                 type="button"
                 onClick={() => onCreateFromTask(task)}
-                aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}`}
-                className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
+                aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}.${descricaoDaArteDoEstudio(arte)}`}
+                className="flex items-start gap-2.5 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
               >
+                {arte && (
+                  <MiniaturaDaArteDoEstudio
+                    arte={arte}
+                    className="h-12 w-12 shrink-0"
+                  />
+                )}
+                <span className="block min-w-0 flex-1">
                 <ContentDirection
                   theme={task.title}
                   context={taskContentContext(task)}
@@ -2108,8 +2278,11 @@ function ListView({
                   {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                   {taskDeliveryTypeLabel(task)}
                 </p>
+                {arte && <SeloDaArteDoEstudio arte={arte} />}
+                </span>
               </button>
-            ))}
+              );
+            })}
             {backlogItems.map(({ post, publication }) => {
               /* Sem data não quer dizer sem estado: o conteúdo pode estar em
                  revisão, pronto ou já publicado por fora. O card saía todo
@@ -2171,7 +2344,22 @@ function ListView({
   );
 }
 
-export default function EditorialCalendarViews({
+/**
+ * A agenda inteira enxerga a arte do Estúdio por contexto: os cartões de
+ * tarefa (grade, semana, celular, quadro e lista) leem dali, sem mudar a
+ * assinatura de cada visão.
+ */
+export default function EditorialCalendarViews(props: EditorialCalendarViewsProps) {
+  return (
+    <ArtesDoEstudioContexto.Provider
+      value={props.artesDoEstudio || SEM_ARTES_DO_ESTUDIO}
+    >
+      <VistasDoCalendario {...props} />
+    </ArtesDoEstudioContexto.Provider>
+  );
+}
+
+function VistasDoCalendario({
   view,
   anchorDate,
   posts,

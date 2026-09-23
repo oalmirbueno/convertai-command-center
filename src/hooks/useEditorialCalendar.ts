@@ -1502,3 +1502,89 @@ export function useEditorialMutations() {
 
   return { savePost, transitionPublication, archivePost };
 }
+
+// ------------------------------------------------------------------ Mesa
+
+/**
+ * Arte que o Estúdio da Mesa já entregou para um item da agenda que ainda
+ * não tem post editorial (o post só nasce na aprovação, pelo agendador).
+ * Serve para a agenda da equipe mostrar a miniatura sem precisar abrir o
+ * item; nada aqui cria post.
+ */
+export interface ArteDoEstudioNaAgenda {
+  clientId: string;
+  /** estudio_trabalhos.status (rascunho, dirigido, gerando, pronto, entregue, erro). */
+  status: string | null;
+  /** estudio_trabalhos.entrega_status (aguardando_agencia, aguardando_cliente, reprovado...). */
+  entregaStatus: string | null;
+  capa: EditorialFileRow | null;
+  /** Lâminas depois da capa, na ordem do carrossel. */
+  filhos: EditorialFileRow[];
+  /** Quantas lâminas a entrega tem (capa incluída). */
+  total: number;
+}
+
+export interface TrabalhoDoEstudioNaAgenda {
+  task_id: string | null;
+  client_id: string;
+  status: string | null;
+  entrega_status: string | null;
+  file_ids: string[] | null;
+  atualizado_em?: string | null;
+}
+
+/** Colunas de arquivo que a agenda usa para desenhar a miniatura. */
+export const COLUNAS_DA_ARTE_DO_ESTUDIO =
+  "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, caption, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at";
+
+/**
+ * Tarefa → arte do Estúdio. Com mais de um trabalho para a mesma tarefa,
+ * vale o que tem arte entregue e, entre esses, o mais recente. O resultado é
+ * JSON puro (objeto simples, sem Map), pronto para cache persistido.
+ */
+export function montarArteDoEstudio(
+  trabalhos: TrabalhoDoEstudioNaAgenda[],
+  capas: EditorialFileRow[],
+  filhos: EditorialFileRow[],
+): Record<string, ArteDoEstudioNaAgenda> {
+  const capaPorId: Record<string, EditorialFileRow> = {};
+  for (const c of capas) capaPorId[c.id] = c;
+  const filhosPorPai: Record<string, EditorialFileRow[]> = {};
+  for (const f of filhos) {
+    if (!f.parent_file_id || f.archived_at) continue;
+    (filhosPorPai[f.parent_file_id] = filhosPorPai[f.parent_file_id] || []).push(f);
+  }
+  const escolhido: Record<string, TrabalhoDoEstudioNaAgenda> = {};
+  const temArte = (t: TrabalhoDoEstudioNaAgenda) => Array.isArray(t.file_ids) && t.file_ids.length > 0;
+  for (const t of trabalhos) {
+    if (!t.task_id) continue;
+    const atual = escolhido[t.task_id];
+    if (!atual) {
+      escolhido[t.task_id] = t;
+      continue;
+    }
+    if (temArte(t) !== temArte(atual)) {
+      if (temArte(t)) escolhido[t.task_id] = t;
+      continue;
+    }
+    if (String(t.atualizado_em || "") > String(atual.atualizado_em || "")) escolhido[t.task_id] = t;
+  }
+  const saida: Record<string, ArteDoEstudioNaAgenda> = {};
+  for (const taskId of Object.keys(escolhido)) {
+    const t = escolhido[taskId];
+    const ids = Array.isArray(t.file_ids) ? t.file_ids : [];
+    const capa = ids.length ? capaPorId[ids[0]] || null : null;
+    const ordenados = capa
+      ? (orderEditorialCarouselFiles(capa, filhosPorPai[capa.id] || []).slice(1) as EditorialFileRow[])
+      : [];
+    saida[taskId] = {
+      clientId: t.client_id,
+      status: t.status ?? null,
+      entregaStatus: t.entrega_status ?? null,
+      capa,
+      filhos: ordenados,
+      total: capa ? Math.max(1 + ordenados.length, ids.length) : 0,
+    };
+  }
+  return saida;
+}

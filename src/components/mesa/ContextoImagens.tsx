@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { EyeOff, FolderSync, Loader2, Search, Sparkles } from "lucide-react";
+import { EyeOff, FolderSync, Loader2, Maximize2, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,14 @@ import {
   rotuloDaCategoria,
   textoDoErro,
 } from "@/lib/mesa/api";
+import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal, useAvisarErro } from "./Custo";
+import { legendaDaFoto } from "./ContextoFotos";
+import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { Quadrado } from "./NavegadorDePastas";
 import { Campo, TituloDeSecao } from "./Seletores";
-import { chaveDoAcervo, useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
+import { invalidarAcervo, useAcervo, type ImagemDoAcervo } from "./contextoDoCliente";
 
 /**
  * Imagens (acervo de fotos reais do cliente): a Mesa traz as imagens de todas
@@ -67,7 +70,7 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
         .eq("id", imagem.id);
       if (error) throw error;
       toast.success("Imagem salva");
-      void queryClient.invalidateQueries({ queryKey: chaveDoAcervo(clientId) });
+      invalidarAcervo(queryClient, clientId);
       onFechar();
     } catch (e) {
       toast.error("Imagem não salva", { description: textoDoErro(e) });
@@ -128,35 +131,41 @@ function EditorDaImagem({ imagem, onFechar }: { imagem: ImagemDoAcervo; onFechar
   );
 }
 
-function CartaoDoAcervo({ imagem, onAbrir }: { imagem: ImagemDoAcervo; onAbrir: () => void }) {
+function CartaoDoAcervo({ imagem, onAbrir, onAmpliar }: { imagem: ImagemDoAcervo; onAbrir: () => void; onAmpliar: () => void }) {
   const tags = imagem.tags || [];
   return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      title={imagem.descricao || imagem.nome}
-      className={`min-w-0 rounded-xl border border-border bg-card p-1.5 text-left transition-colors hover:border-primary/60 ${imagem.ativa ? "" : "opacity-60"}`}
-    >
-      <Quadrado>
-        <ImagemDaMesa caminho={imagem.storage_path} bucket={imagem.storage_bucket} alt={imagem.nome} className="h-full w-full" />
-        {!imagem.ativa && (
-          <span className="absolute left-1.5 top-1.5 flex items-center rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            <EyeOff className="mr-1 h-3 w-3" /> desativada
+    <div className={`relative min-w-0 rounded-xl border border-border bg-card p-1.5 transition-colors hover:border-primary/60 ${imagem.ativa ? "" : "opacity-60"}`}>
+      <button type="button" onClick={onAbrir} title={imagem.descricao || imagem.nome} className="block w-full min-w-0 text-left">
+        <Quadrado>
+          <MiniaturaDoStorage bucket={imagem.storage_bucket || "mesa"} caminho={imagem.storage_path} alt={imagem.nome} className="h-full w-full" />
+          {!imagem.ativa && (
+            <span className="absolute left-1.5 top-1.5 flex items-center rounded-full bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <EyeOff className="mr-1 h-3 w-3" /> desativada
+            </span>
+          )}
+        </Quadrado>
+        <span className="mt-1.5 block truncate px-0.5 text-[12px] font-medium">{imagem.nome}</span>
+        <span className="block truncate px-0.5 text-[11px] text-muted-foreground">
+          {imagem.descricao ? imagem.descricao : "sem descrição"}
+        </span>
+        {tags.length > 0 && (
+          <span className="mt-1 flex flex-wrap px-0.5">
+            {tags.slice(0, 3).map((t) => (
+              <span key={t} className="mb-0.5 mr-1 max-w-full truncate rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{t}</span>
+            ))}
           </span>
         )}
-      </Quadrado>
-      <span className="mt-1.5 block truncate px-0.5 text-[12px] font-medium">{imagem.nome}</span>
-      <span className="block truncate px-0.5 text-[11px] text-muted-foreground">
-        {imagem.descricao ? imagem.descricao : "sem descrição"}
-      </span>
-      {tags.length > 0 && (
-        <span className="mt-1 flex flex-wrap px-0.5">
-          {tags.slice(0, 3).map((t) => (
-            <span key={t} className="mb-0.5 mr-1 max-w-full truncate rounded-full bg-muted px-1.5 py-px text-[10px] text-muted-foreground">{t}</span>
-          ))}
-        </span>
-      )}
-    </button>
+      </button>
+      <button
+        type="button"
+        onClick={onAmpliar}
+        aria-label={`Ver ${imagem.nome} maior`}
+        title="Ver maior"
+        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground shadow-sm hover:bg-background"
+      >
+        <Maximize2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
 
@@ -170,6 +179,7 @@ export default function ContextoImagens() {
   const [mostrarInativas, setMostrarInativas] = useState(false);
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
   const [editando, setEditando] = useState<ImagemDoAcervo | null>(null);
+  const [ampliada, setAmpliada] = useState<{ lista: ImagemDoAcervo[]; indice: number } | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
 
   const todas = useMemo(() => acervo.data || [], [acervo.data]);
@@ -217,7 +227,7 @@ export default function ContextoImagens() {
       toast.success(novas ? `${novas} ${novas === 1 ? "imagem nova" : "imagens novas"} no acervo` : "O acervo já estava em dia", {
         description: total ? `${total} ${total === 1 ? "imagem" : "imagens"} no total.` : undefined,
       });
-      void queryClient.invalidateQueries({ queryKey: chaveDoAcervo(clientId) });
+      invalidarAcervo(queryClient, clientId);
     } catch (e) {
       avisarErro(e, "Imagens não buscadas");
     } finally {
@@ -262,7 +272,7 @@ export default function ContextoImagens() {
               aoConcluir={(data) => {
                 const n = Number(data?.classificadas || 0);
                 avisarCustoReal(`${n} ${n === 1 ? "imagem organizada" : "imagens organizadas"}`, data, atualizarCusto);
-                void queryClient.invalidateQueries({ queryKey: chaveDoAcervo(clientId) });
+                invalidarAcervo(queryClient, clientId);
               }}
             />
           </div>
@@ -318,7 +328,9 @@ export default function ContextoImagens() {
               <span className="[overflow-wrap:anywhere]">{rotuloDoGrupo(chave)}</span>
             </TituloDeSecao>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-              {visiveis.map((i) => <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} />)}
+              {visiveis.map((i, n) => (
+                <CartaoDoAcervo key={i.id} imagem={i} onAbrir={() => setEditando(i)} onAmpliar={() => setAmpliada({ lista: imagens, indice: n })} />
+              ))}
             </div>
             {imagens.length > POR_GRUPO && (
               <Button
@@ -336,6 +348,13 @@ export default function ContextoImagens() {
       })}
 
       {editando && <EditorDaImagem key={editando.id} imagem={editando} onFechar={() => setEditando(null)} />}
+      <Ampliar
+        imagens={(ampliada ? ampliada.lista : []).map(
+          (i): ImagemAmpliavel => ({ caminho: i.storage_path, bucket: i.storage_bucket || "mesa", titulo: i.nome, legenda: legendaDaFoto(i) }),
+        )}
+        indice={ampliada ? ampliada.indice : null}
+        onFechar={() => setAmpliada(null)}
+      />
     </div>
   );
 }

@@ -271,6 +271,9 @@ export function useClients() {
       }));
     },
     enabled: !!user && isTeamOrAdmin,
+    // Lista de clientes muda pouco e quem cria ou edita invalida ["clients"]:
+    // 10 minutos sem reler, e a Mesa já abre com o nome do cliente.
+    staleTime: 10 * 60_000,
   });
 }
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, FolderSync, Link2, Loader2, Trash2, Upload } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, FolderSync, Link2, Loader2, Maximize2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -8,30 +8,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { chamarFuncao, extensao, padraoPara, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
+import { Ampliar } from "./Ampliar";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
-import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import { legendaDaReferencia } from "./ContextoGaleriaDeReferencias";
+import { MiniaturaDoStorage } from "./ContextoMiniatura";
+import { useMesa } from "./MesaContexto";
+import { Quadrado } from "./NavegadorDePastas";
 import { TituloDeSecao } from "./Seletores";
+import { chaveDasReferencias, useReferenciasDoCliente, type ReferenciaDoCliente } from "./contextoDoCliente";
 
-interface Referencia {
-  id: string;
-  origem: "workspace" | "pinterest" | "upload";
-  url_origem: string | null;
-  storage_path: string | null;
-  leitura: string | null;
-  tags: string[];
-  ativa: boolean;
-}
+type Referencia = ReferenciaDoCliente;
 
-const ORIGENS: { valor: "todas" | Referencia["origem"]; rotulo: string }[] = [
+const ORIGENS: { valor: string; rotulo: string }[] = [
   { valor: "todas", rotulo: "Todas" },
   { valor: "workspace", rotulo: "Workspace" },
+  { valor: "arquivo", rotulo: "Artes aprovadas" },
   { valor: "pinterest", rotulo: "Pinterest" },
   { valor: "upload", rotulo: "Enviadas" },
 ];
 
 const IMAGENS = ["png", "jpg", "jpeg", "webp"];
 
-function CartaoDeReferencia({ r, onMudou }: { r: Referencia; onMudou: () => void }) {
+function CartaoDeReferencia({ r, onMudou, onAmpliar }: { r: Referencia; onMudou: () => void; onAmpliar: () => void }) {
   const { catalogo } = useMesa();
   const confirmar = useConfirm();
   const [verLeitura, setVerLeitura] = useState(false);
@@ -59,12 +57,30 @@ function CartaoDeReferencia({ r, onMudou }: { r: Referencia; onMudou: () => void
 
   return (
     <li className={`min-w-0 overflow-hidden rounded-xl border border-border bg-card ${r.ativa ? "" : "opacity-60"}`}>
-      <div className="relative">
-        <ImagemDaMesa caminho={r.storage_path} alt="Referência" className="aspect-[4/5] w-full" />
+      <button
+        type="button"
+        onClick={onAmpliar}
+        disabled={!r.imagem}
+        aria-label={`Ver maior: ${r.nome}`}
+        title={r.nome}
+        className="group relative block w-full text-left"
+      >
+        <Quadrado className="rounded-none">
+          {r.imagem ? (
+            <MiniaturaDoStorage bucket={r.imagem.bucket} caminho={r.imagem.caminho} alt={r.nome} className="h-full w-full" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">Sem imagem</span>
+          )}
+        </Quadrado>
         <span className="absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-medium text-foreground">
-          {ORIGENS.find((o) => o.valor === r.origem)?.rotulo || r.origem}
+          {ORIGENS.find((o) => o.valor === r.origem)?.rotulo || r.origem} · {r.papel === "identidade" ? "identidade" : "técnica"}
         </span>
-      </div>
+        {r.imagem && (
+          <span className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-background/90 text-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            <Maximize2 className="h-3.5 w-3.5" />
+          </span>
+        )}
+      </button>
       <div className="space-y-2 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -108,23 +124,15 @@ export default function ContextoReferencias() {
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const entrada = useRef<HTMLInputElement>(null);
-  const [filtro, setFiltro] = useState<(typeof ORIGENS)[number]["valor"]>("todas");
+  const [filtro, setFiltro] = useState("todas");
   const [link, setLink] = useState("");
   const [ocupado, setOcupado] = useState<"pinterest" | "workspace" | "upload" | null>(null);
+  const [ampliada, setAmpliada] = useState<number | null>(null);
 
-  const refs = useQuery({
-    queryKey: ["mesa", "referencias", clientId],
-    queryFn: async (): Promise<Referencia[]> => {
-      const { data, error } = await (supabase as any)
-        .from("cliente_referencias")
-        .select("id, origem, url_origem, storage_path, leitura, tags, ativa")
-        .eq("client_id", clientId)
-        .order("criado_em", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-  });
-  const atualizar = () => void queryClient.invalidateQueries({ queryKey: ["mesa", "referencias", clientId] });
+  // Mesma leitura da galeria do Contexto: a imagem vem do bucket mesa, do
+  // Workspace ou de Arquivos, conforme a origem da referência.
+  const refs = useReferenciasDoCliente(clientId);
+  const atualizar = () => void queryClient.invalidateQueries({ queryKey: chaveDasReferencias(clientId) });
 
   const importarPinterest = async () => {
     const url = link.trim();
@@ -192,6 +200,7 @@ export default function ContextoReferencias() {
   };
 
   const lista = (refs.data || []).filter((r) => filtro === "todas" || r.origem === filtro);
+  const comImagem = lista.filter((r) => !!r.imagem);
 
   return (
     <div className="space-y-5">
@@ -240,9 +249,29 @@ export default function ContextoReferencias() {
           <p className="text-[12.5px] text-muted-foreground">Nenhuma referência aqui. Importe um pin, sincronize a pasta de referências do workspace ou envie imagens.</p>
         )}
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {lista.map((r) => <CartaoDeReferencia key={r.id} r={r} onMudou={atualizar} />)}
+          {lista.map((r) => (
+            <CartaoDeReferencia
+              key={r.id}
+              r={r}
+              onMudou={atualizar}
+              onAmpliar={() => {
+                const i = comImagem.indexOf(r);
+                if (i >= 0) setAmpliada(i);
+              }}
+            />
+          ))}
         </ul>
       </section>
+      <Ampliar
+        imagens={comImagem.map((r) => ({
+          caminho: r.imagem!.caminho,
+          bucket: r.imagem!.bucket,
+          titulo: `${r.nome} · ${r.papel === "identidade" ? "identidade" : "técnica"}`,
+          legenda: legendaDaReferencia(r),
+        }))}
+        indice={ampliada}
+        onFechar={() => setAmpliada(null)}
+      />
     </div>
   );
 }

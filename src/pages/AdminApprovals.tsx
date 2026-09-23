@@ -14,6 +14,7 @@ import { AlertTriangle, FileImage, FileText, Film, Loader2, MessageSquare, Refre
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import {
   recordOfflineClientApproval,
   releaseFileToClient,
@@ -219,7 +220,10 @@ export default function AdminApprovals() {
   const getCarouselImages = (f: any) => {
     const children = childrenMap.get(f.id) || [];
     if (isCarouselAssetGroup(f, children)) {
-      return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
+      // Ordem numérica real das lâminas: "card 2" antes de "card 10" (o
+      // localeCompare alfabético embaralhava a partir de 10 lâminas), igual
+      // à aprovação do cliente.
+      return orderEditorialCarouselFiles(f, children);
     }
     return [f];
   };

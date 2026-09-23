@@ -17,6 +17,25 @@ type Slide = {
 };
 
 /**
+ * Ordem das lâminas no slider: a capa e depois as filhas pela ordem real do
+ * carrossel (orderEditorialCarouselFiles: número no caminho, "(2/10)" no
+ * nome, e só então a data). Vale também quando quem chama já manda as
+ * filhas (initialChildren): elas chegavam na ordem de criação decrescente
+ * (capa, N, N-1...) e o slider mostrava o carrossel de trás para frente.
+ */
+export function ordenarLaminasDoCarrossel<T extends Slide>(parent: T, children: T[]): T[] {
+  const validChildren = isCarouselAssetGroup(parent, children) ? children : [];
+  const filhas = validChildren.filter((c) => c.id !== parent.id);
+  return orderEditorialCarouselFiles(
+    { ...parent, id: parent.id || "carousel-root" },
+    filhas.map((file, index) => ({
+      ...file,
+      id: file.id || `carousel-child-${index}`,
+    })),
+  ) as unknown as T[];
+}
+
+/**
  * Robust carousel preview. Always fetches sibling slides directly from the DB
  * so a parent's children never go missing (previous versions relied on a
  * hook-cached childrenMap which could be empty during a refetch window).
@@ -53,19 +72,7 @@ export default function CarouselSlider({
     return () => { alive = false; };
   }, [initialChildren, parent?.id]);
 
-  const files = useMemo(() => {
-    const validChildren = isCarouselAssetGroup(parent, children) ? children : [];
-    const list: Slide[] = [parent, ...validChildren.filter((c) => c.id !== parent.id)];
-    if (initialChildren !== undefined) return list;
-
-    return orderEditorialCarouselFiles(
-      { ...parent, id: parent.id || "carousel-root" },
-      list.slice(1).map((file, index) => ({
-        ...file,
-        id: file.id || `carousel-child-${index}`,
-      })),
-    );
-  }, [children, initialChildren, parent]);
+  const files = useMemo(() => ordenarLaminasDoCarrossel<Slide>(parent, children), [children, parent]);
 
   useEffect(() => {
     prefetchImages(files.map((f) => f.file_url).filter(Boolean));

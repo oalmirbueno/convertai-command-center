@@ -945,6 +945,14 @@
       "remote_name": "mesa_acervo_e_horarios",
       "remote_statements_sha256": "1413b742bd8840327c4b45e330c43d9ca8aa8ce5d9374c7fc54bebf134ddd08f",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260923171454",
+      "path": "supabase/migrations/20260923171454_mesa_campanhas_e_hypes.sql",
+      "local_sha256": "cbd04ad74357d7a5297522506b3e3b56f2ccd7e12d020011538451d0b01b5805",
+      "remote_name": "mesa_campanhas_e_hypes",
+      "remote_statements_sha256": "71ba00cd298df5a3cffc8f076d26149aa72ca6c89b3a3d64070b440d86aafe3d",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

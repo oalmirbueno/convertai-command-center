@@ -31,7 +31,7 @@ import { BotaoComCusto } from "@/components/mesa/Custo";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import ChavesECotas from "@/components/mesa/ChavesECotas";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
-import { legendaParaCopiar, normalizarArea, normalizarHashtags } from "@/components/mesa/estudioUtil";
+import { corpoDoPreparar, legendaParaCopiar, normalizarArea, normalizarHashtags } from "@/components/mesa/estudioUtil";
 import { janelaDaLista, PROXIMOS_DIAS } from "@/components/mesa/useItensDoMes";
 import {
   custoDaResposta,
@@ -49,6 +49,11 @@ const app = ler("src/App.tsx");
 const estudio = ler("src/components/mesa/AbaEstudio.tsx");
 const cardEstudio = ler("src/components/mesa/CardDoEstudio.tsx");
 const prancheta = ler("src/components/mesa/PranchetaDoEstudio.tsx");
+// Esteira (23/09): lista, preparo e lâmina grande saíram do AbaEstudio para arquivos próprios.
+const listaDoEstudio = ler("src/components/mesa/EstudioLista.tsx");
+const prepararDoEstudio = ler("src/components/mesa/EstudioPreparar.tsx");
+const laminaGrande = ler("src/components/mesa/EstudioLaminaGrande.tsx");
+const arteDaAgenda = ler("src/components/mesa/EstudioArteDaAgenda.tsx");
 const seletorDeAreas = ler("src/components/mesa/SeletorDeAreas.tsx");
 const referenciasDoEstudio = ler("src/components/mesa/ReferenciasDoEstudio.tsx");
 const mesAba = ler("src/components/mesa/AbaMes.tsx");
@@ -106,16 +111,18 @@ describe("rota /mesa só para a equipe que produz", () => {
 
 describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo", () => {
   // Pedido do dono em 2026-09-23: gerar estava lento demais um card por vez.
+  // O fim do trecho era "const montarDoRoteiro"; o preparo agora é "const preparar" (esteira de 23/09).
   it("o limite de lâminas simultâneas é 3, e 1 no carrossel contínuo", () => {
     expect(estudio).toContain("const EM_PARALELO = 3;");
-    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const montarDoRoteiro"));
+    expect(estudio.indexOf("const preparar = async")).toBeGreaterThan(estudio.indexOf("const gerarVarias = async"));
+    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const preparar = async"));
     expect(corpo).toContain("const limite = infinito ? 1 : EM_PARALELO;");
     expect(corpo).toContain("Array.from({ length: Math.min(limite, ordens.length) }, trabalhador)");
     expect(corpo).toContain("while (proximo < ordens.length && !parar.current)");
   });
 
   it("saldo, cota ou chave param tudo; a conferência roda depois de cada lâmina", () => {
-    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const montarDoRoteiro"));
+    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const preparar = async"));
     expect(corpo).toContain("CODIGOS_QUE_PARAM_TUDO.indexOf(e.codigo) >= 0) parar.current = true");
     const gerar = corpo.indexOf("await gerarUma(trabalho.id, ordem)");
     const conferir = corpo.indexOf("conferirDepois(trabalho.id, ordem)");
@@ -129,9 +136,19 @@ describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo
     expect(estudio).toContain('(trabalho?.qualidade as Qualidade) || "media"');
   });
 
+  // Esteira (23/09): o corpo do "preparar" sai de corpoDoPreparar (testado de verdade abaixo),
+  // e o cartão Preparar tem o botão grátis do roteiro e o do diretor com custo.
   it("item com roteiro monta a direção sem custo; o diretor é opcional e passa pelo botão com custo", () => {
-    expect(estudio).toContain('acao: "preparar", task_id: item.id, modo: "roteiro"');
+    const roteiro = corpoDoPreparar("t-1", { modo: "roteiro", laminas: 5, continuo: false, pedido: "capa centralizada" });
+    expect(roteiro).toMatchObject({ acao: "preparar", task_id: "t-1", modo: "roteiro" });
+    // No roteiro, nem quantidade nem pedido: um pedido viraria diretor, com custo.
+    expect(roteiro.laminas).toBeUndefined();
+    expect(roteiro.instrucao).toBeUndefined();
+    expect(estudio).toContain("corpoDoPreparar(item.id, escolhas, { postUnico, modeloImagemId: modeloImagem || undefined, qualidade })");
     expect(estudio).toContain('modo: "diretor"');
+    const gratis = prepararDoEstudio.slice(prepararDoEstudio.indexOf('modo === "roteiro" ? ('), prepararDoEstudio.indexOf("Montar do roteiro · grátis"));
+    expect(gratis).toContain("<Button");
+    expect(gratis).not.toContain("BotaoComCusto");
   });
 });
 
@@ -227,9 +244,13 @@ describe("estimativa antes de toda ação que gasta", () => {
       expect(mesAba.slice(botao, i)).toContain("executar=");
     }
     expect(mesAba).toContain("<EstimativaInline partes={partes} />");
-    // Estúdio
-    const preparar = estudio.indexOf('rotulo="Preparar direção"');
-    expect(estudio.slice(preparar, estudio.indexOf('acao: "preparar"', preparar))).toContain("partes={");
+    // Estúdio (o preparo mudou para o cartão EstudioPreparar em 23/09)
+    const preparar = prepararDoEstudio.indexOf("Preparar direção</>}");
+    expect(preparar).toBeGreaterThan(0);
+    const botaoDoDiretor = prepararDoEstudio.slice(prepararDoEstudio.lastIndexOf("<BotaoComCusto", preparar), prepararDoEstudio.indexOf("executar={preparar}", preparar) + 20);
+    expect(botaoDoDiretor).toContain("partes={partesDiretor}");
+    expect(botaoDoDiretor).toContain("executar={preparar}");
+    expect(estudio).toContain("partesDiretor={partesDiretor}");
     expect(estudio).toContain("executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}");
     expect(estudio).toContain("partes={() => partesGerar(filaDeGeracao.length)}");
     expect(estudio.slice(estudio.indexOf('titulo="Escrever a legenda"'), estudio.indexOf('acao: "legenda"'))).toContain("partes={");
@@ -266,18 +287,23 @@ describe("recusas da IA viram frase com o próximo passo", () => {
 describe("o estúdio nunca põe texto por cima da arte", () => {
   it("nenhum canvas, fillText ou camada de texto sobre a imagem do card", () => {
     // Estúdio v3: a prancheta e o desenho de áreas também não pintam nada na arte.
-    for (const fonte of [estudio, cardEstudio, prancheta, seletorDeAreas]) {
+    // Esteira (23/09): a lâmina grande e a arte da Agenda entram na mesma regra.
+    for (const fonte of [estudio, cardEstudio, prancheta, seletorDeAreas, laminaGrande, arteDaAgenda]) {
       expect(fonte).not.toContain("fillText");
       expect(fonte).not.toContain("getContext");
       expect(fonte).not.toContain("<canvas");
       expect(fonte).not.toContain("html2canvas");
       expect(fonte).not.toContain("<svg");
     }
-    // O texto exato fica fora do bloco da imagem, como conferência.
-    const blocoDaImagem = cardEstudio.slice(cardEstudio.indexOf('<div className="overflow-hidden rounded-lg border border-border">'), cardEstudio.indexOf("{ordenadas.length > 1 && ("));
-    expect(blocoDaImagem).toContain("<ImagemDaMesa");
-    expect(blocoDaImagem).not.toContain("texto_exato");
-    expect(blocoDaImagem).not.toContain("absolute");
+    // A imagem grande mudou do CardDoEstudio (inspetor) para o centro (EstudioLaminaGrande).
+    // O texto exato fica fora do quadro da imagem, como conferência no inspetor; com arte,
+    // o quadro mostra só a imagem (o esboço aparece só sem arte, no lugar dela).
+    const quadro = laminaGrande.slice(laminaGrande.indexOf("<QuadroQueCabe soPelaLargura"), laminaGrande.indexOf("</QuadroQueCabe>"));
+    expect(quadro).toContain("<ImagemDaMesa");
+    expect(quadro).not.toContain("texto_exato");
+    expect(quadro).not.toContain("absolute");
+    expect(quadro.indexOf("vista ? (")).toBeLessThan(quadro.indexOf("<Esboco"));
+    expect(cardEstudio).not.toContain("<ImagemDaMesa caminho={vista");
   });
 });
 
@@ -305,7 +331,8 @@ describe("Estúdio versão 3 (pedido do dono em 23/09)", () => {
     expect(janelaDaLista(PROXIMOS_DIAS, new Date(2026, 8, 23, 15, 0))).toEqual({ inicio: "2026-09-23", fimExclusivo: "2026-11-23" });
     expect(janelaDaLista("2026-09-01")).toEqual({ inicio: "2026-09-01", fimExclusivo: "2026-10-01" });
     expect(estudio).toContain('useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos")');
-    expect(estudio).toContain("<SelectItem value={PROXIMOS_DIAS}>Próximos 60 dias</SelectItem>");
+    // A coluna da lista virou o componente EstudioLista (esteira de 23/09).
+    expect(listaDoEstudio).toContain("<SelectItem value={PROXIMOS_DIAS}>Próximos 60 dias</SelectItem>");
     expect(estudio).toContain('useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer")');
   });
 

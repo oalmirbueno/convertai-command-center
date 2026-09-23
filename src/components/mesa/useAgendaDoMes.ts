@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { somarMeses } from "@/lib/mesa/api";
 import type { EntregaStatus } from "./useItensDoMes";
@@ -68,11 +68,20 @@ export interface PostDaAgenda {
   task_id: string | null;
 }
 
+/**
+ * Roteiro e trabalho por id do item, em objeto simples (não Map): assim a
+ * agenda atravessa JSON e vai para o cache guardado no navegador.
+ */
 export interface AgendaDoMes {
   itens: ItemDaAgenda[];
   posts: PostDaAgenda[];
-  roteiros: Map<string, RoteiroDoItem>;
-  trabalhos: Map<string, TrabalhoDaAgenda>;
+  roteiros: Record<string, RoteiroDoItem>;
+  trabalhos: Record<string, TrabalhoDaAgenda>;
+}
+
+/** Valor do item no registro, sem cair em nada herdado do objeto. */
+export function doItem<T>(registro: Record<string, T> | undefined | null, id: string): T | undefined {
+  return registro && Object.prototype.hasOwnProperty.call(registro, id) ? registro[id] : undefined;
 }
 
 /** Dia local de uma data ISO, em AAAA-MM-DD. */
@@ -90,71 +99,158 @@ function inicioLocalIso(mes: string): string {
 
 const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v : undefined);
 
+type PublicacaoDoMes = { post_id: string; scheduled_at: string | null; status: string };
+
+/** Roteiro de cada item a partir das propostas gravadas (da mais nova para a mais antiga). */
+function roteirosDasPropostas(
+  propostas: { id: string; task_ids: string[] | null; itens: any[] | null }[],
+  idsItens: string[],
+): Record<string, RoteiroDoItem> {
+  const roteiros: Record<string, RoteiroDoItem> = {};
+  const doMes = new Set(idsItens);
+  // Da mais recente para a mais antiga: vale o roteiro mais novo de cada item.
+  for (const p of propostas) {
+    const itensDaProposta = Array.isArray(p.itens) ? p.itens : [];
+    for (const taskId of p.task_ids || []) {
+      if (!doMes.has(taskId)) continue;
+      const atual = doItem(roteiros, taskId);
+      if (atual && atual.detalhado) continue;
+      const it = itensDaProposta.find((x) => x && x.task_id === taskId);
+      if (!it) {
+        if (!atual) roteiros[taskId] = { propostaId: p.id, cards: [], detalhado: false };
+        continue;
+      }
+      const cards = (Array.isArray(it.cards) ? it.cards : [])
+        .filter((c: any) => c && typeof c === "object")
+        .map((c: any) => ({
+          ordem: Number(c.ordem) || 0,
+          funcao: texto(c.funcao),
+          texto: texto(c.texto),
+          ilustracao: texto(c.ilustracao),
+          estilo: texto(c.estilo),
+        }))
+        .sort((a: CardDoRoteiroDaAgenda, b: CardDoRoteiroDaAgenda) => a.ordem - b.ordem);
+      roteiros[taskId] = {
+        propostaId: p.id,
+        gancho: texto(it.gancho),
+        copy: texto(it.copy),
+        legenda: texto(it.legenda),
+        resumo: texto(it.resumo),
+        tema: texto(it.tema),
+        cta: texto(it.cta),
+        cards,
+        detalhado: true,
+      };
+    }
+  }
+  return roteiros;
+}
+
+/**
+ * Duas rodadas ao banco, cada uma em paralelo (antes eram seis em fila):
+ * 1. itens do mês (tarefas já filtradas pelo cliente com o join em projects)
+ *    e as publicações do mês;
+ * 2. o que depende delas: roteiros, trabalhos do estúdio, títulos dos posts e
+ *    a ligação post-item.
+ */
 export function useAgendaDoMes(clientId: string, mes: string) {
   return useQuery({
     queryKey: ["mesa", "agenda-do-mes", clientId, mes],
     enabled: !!clientId,
+    // Trocar de mês mantém a agenda anterior na tela até a nova chegar.
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<AgendaDoMes> => {
       const proximo = somarMeses(mes, 1);
 
-      // 1. Itens da agenda: tarefas dos projetos do cliente com data no mês.
-      const { data: projetos, error: erroProjetos } = await (supabase as any)
-        .from("projects")
-        .select("id")
-        .eq("client_id", clientId)
-        .is("deleted_at", null);
-      if (erroProjetos) throw erroProjetos;
-      const idsProjetos = ((projetos || []) as { id: string }[]).map((p) => p.id);
-      let itens: ItemDaAgenda[] = [];
-      if (idsProjetos.length) {
-        const { data, error } = await (supabase as any)
+      // 1. Itens da agenda (tarefas dos projetos do cliente com data no mês)
+      //    e posts agendados ou publicados no mês, juntos.
+      const [tarefasRes, publicacoesRes] = await Promise.all([
+        (supabase as any)
           .from("tasks")
-          .select("id, title, description, due_date, delivery_type, status, project_id")
-          .in("project_id", idsProjetos)
+          .select("id, title, description, due_date, delivery_type, status, project_id, projects!inner(client_id, deleted_at)")
+          .eq("projects.client_id", clientId)
+          .is("projects.deleted_at", null)
           .is("deleted_at", null)
           .gte("due_date", mes)
           .lt("due_date", proximo)
-          .order("due_date", { ascending: true });
-        if (error) throw error;
-        itens = (data || []) as ItemDaAgenda[];
-      }
+          .order("due_date", { ascending: true }),
+        (supabase as any)
+          .from("editorial_publications")
+          .select("post_id, scheduled_at, status")
+          .eq("client_id", clientId)
+          .neq("status", "cancelled")
+          .gte("scheduled_at", inicioLocalIso(mes))
+          .lt("scheduled_at", inicioLocalIso(proximo))
+          .order("scheduled_at", { ascending: true }),
+      ]);
+      if (tarefasRes.error) throw tarefasRes.error;
+      if (publicacoesRes.error) throw publicacoesRes.error;
+
+      // Sem o objeto do join: só os campos do item.
+      const itens: ItemDaAgenda[] = ((tarefasRes.data || []) as any[]).map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        due_date: t.due_date,
+        delivery_type: t.delivery_type,
+        status: t.status,
+        project_id: t.project_id,
+      }));
       const idsItens = itens.map((i) => i.id);
 
-      // 2. Posts agendados ou publicados no mês (uma pílula por post).
-      const { data: publicacoes, error: erroPub } = await (supabase as any)
-        .from("editorial_publications")
-        .select("post_id, scheduled_at, status")
-        .eq("client_id", clientId)
-        .neq("status", "cancelled")
-        .gte("scheduled_at", inicioLocalIso(mes))
-        .lt("scheduled_at", inicioLocalIso(proximo))
-        .order("scheduled_at", { ascending: true });
-      if (erroPub) throw erroPub;
-      const primeiraPorPost = new Map<string, { post_id: string; scheduled_at: string; status: string }>();
-      for (const p of (publicacoes || []) as { post_id: string; scheduled_at: string | null; status: string }[]) {
-        if (!p.scheduled_at || primeiraPorPost.has(p.post_id)) continue;
-        primeiraPorPost.set(p.post_id, { post_id: p.post_id, scheduled_at: p.scheduled_at, status: p.status });
+      const primeiraPorPost: Record<string, { post_id: string; scheduled_at: string; status: string }> = {};
+      const idsPosts: string[] = [];
+      for (const p of (publicacoesRes.data || []) as PublicacaoDoMes[]) {
+        if (!p.scheduled_at || doItem(primeiraPorPost, p.post_id)) continue;
+        primeiraPorPost[p.post_id] = { post_id: p.post_id, scheduled_at: p.scheduled_at, status: p.status };
+        idsPosts.push(p.post_id);
       }
-      const idsPosts = Array.from(primeiraPorPost.keys());
-      const titulos = new Map<string, { title: string; content_type: string | null }>();
-      const tarefaDoPost = new Map<string, string>();
-      if (idsPosts.length) {
-        const [postsRes, internosRes] = await Promise.all([
-          (supabase as any).from("editorial_posts").select("id, title, content_type").in("id", idsPosts),
-          (supabase as any).from("editorial_post_internal").select("post_id, task_id").in("post_id", idsPosts),
-        ]);
-        if (postsRes.error) throw postsRes.error;
-        for (const p of (postsRes.data || []) as { id: string; title: string; content_type: string | null }[]) {
-          titulos.set(p.id, { title: p.title, content_type: p.content_type });
-        }
-        // A ligação com o item é um extra: sem ela o post aparece do mesmo jeito.
-        for (const r of (internosRes.data || []) as { post_id: string; task_id: string | null }[]) {
-          if (r.task_id) tarefaDoPost.set(r.post_id, r.task_id);
-        }
+
+      // 2. Tudo que depende da rodada 1, em paralelo.
+      const vazio = Promise.resolve({ data: [] as any[], error: null as any });
+      const [propostasRes, trabalhosRes, postsRes, internosRes] = await Promise.all([
+        // Roteiro gravado: proposta gravada cujo task_ids contém o item.
+        idsItens.length
+          ? (supabase as any)
+              .from("calendario_propostas")
+              .select("id, task_ids, itens, criado_em")
+              .eq("client_id", clientId)
+              .eq("status", "gravada")
+              .overlaps("task_ids", idsItens)
+              .order("criado_em", { ascending: false })
+          : vazio,
+        // Trabalho mais recente do estúdio de cada item.
+        idsItens.length
+          ? (supabase as any)
+              .from("estudio_trabalhos")
+              .select("id, task_id, status, cards, direcao, entrega_status, atualizado_em")
+              .eq("client_id", clientId)
+              .in("task_id", idsItens)
+              .order("atualizado_em", { ascending: false })
+          : vazio,
+        idsPosts.length
+          ? (supabase as any).from("editorial_posts").select("id, title, content_type").in("id", idsPosts)
+          : vazio,
+        idsPosts.length
+          ? (supabase as any).from("editorial_post_internal").select("post_id, task_id").in("post_id", idsPosts)
+          : vazio,
+      ]);
+      if (propostasRes.error) throw propostasRes.error;
+      if (trabalhosRes.error) throw trabalhosRes.error;
+      if (postsRes.error) throw postsRes.error;
+
+      const titulos: Record<string, { title: string; content_type: string | null }> = {};
+      for (const p of (postsRes.data || []) as { id: string; title: string; content_type: string | null }[]) {
+        titulos[p.id] = { title: p.title, content_type: p.content_type };
+      }
+      // A ligação com o item é um extra: sem ela o post aparece do mesmo jeito.
+      const tarefaDoPost: Record<string, string> = {};
+      for (const r of (internosRes.data || []) as { post_id: string; task_id: string | null }[]) {
+        if (r.task_id) tarefaDoPost[r.post_id] = r.task_id;
       }
       const posts: PostDaAgenda[] = idsPosts.map((id) => {
-        const p = primeiraPorPost.get(id)!;
-        const t = titulos.get(id);
+        const p = primeiraPorPost[id];
+        const t = doItem(titulos, id);
         return {
           post_id: id,
           titulo: t ? t.title : "Post sem título",
@@ -162,72 +258,18 @@ export function useAgendaDoMes(clientId: string, mes: string) {
           status: p.status,
           scheduled_at: p.scheduled_at,
           dia: diaLocal(p.scheduled_at),
-          task_id: tarefaDoPost.get(id) || null,
+          task_id: doItem(tarefaDoPost, id) || null,
         };
       });
 
-      // 3. Roteiro gravado: proposta gravada cujo task_ids contém o item.
-      const roteiros = new Map<string, RoteiroDoItem>();
-      if (idsItens.length) {
-        const { data, error } = await (supabase as any)
-          .from("calendario_propostas")
-          .select("id, task_ids, itens, criado_em")
-          .eq("client_id", clientId)
-          .eq("status", "gravada")
-          .overlaps("task_ids", idsItens)
-          .order("criado_em", { ascending: false });
-        if (error) throw error;
-        const doMes = new Set(idsItens);
-        // Da mais recente para a mais antiga: vale o roteiro mais novo de cada item.
-        for (const p of (data || []) as { id: string; task_ids: string[] | null; itens: any[] | null }[]) {
-          const itensDaProposta = Array.isArray(p.itens) ? p.itens : [];
-          for (const taskId of p.task_ids || []) {
-            if (!doMes.has(taskId)) continue;
-            const atual = roteiros.get(taskId);
-            if (atual && atual.detalhado) continue;
-            const it = itensDaProposta.find((x) => x && x.task_id === taskId);
-            if (!it) {
-              if (!atual) roteiros.set(taskId, { propostaId: p.id, cards: [], detalhado: false });
-              continue;
-            }
-            const cards = (Array.isArray(it.cards) ? it.cards : [])
-              .filter((c: any) => c && typeof c === "object")
-              .map((c: any) => ({
-                ordem: Number(c.ordem) || 0,
-                funcao: texto(c.funcao),
-                texto: texto(c.texto),
-                ilustracao: texto(c.ilustracao),
-                estilo: texto(c.estilo),
-              }))
-              .sort((a: CardDoRoteiroDaAgenda, b: CardDoRoteiroDaAgenda) => a.ordem - b.ordem);
-            roteiros.set(taskId, {
-              propostaId: p.id,
-              gancho: texto(it.gancho),
-              copy: texto(it.copy),
-              legenda: texto(it.legenda),
-              resumo: texto(it.resumo),
-              tema: texto(it.tema),
-              cta: texto(it.cta),
-              cards,
-              detalhado: true,
-            });
-          }
-        }
-      }
+      const roteiros = roteirosDasPropostas(
+        (propostasRes.data || []) as { id: string; task_ids: string[] | null; itens: any[] | null }[],
+        idsItens,
+      );
 
-      // 4. Trabalho mais recente do estúdio de cada item.
-      const trabalhos = new Map<string, TrabalhoDaAgenda>();
-      if (idsItens.length) {
-        const { data, error } = await (supabase as any)
-          .from("estudio_trabalhos")
-          .select("id, task_id, status, cards, direcao, entrega_status, atualizado_em")
-          .eq("client_id", clientId)
-          .in("task_id", idsItens)
-          .order("atualizado_em", { ascending: false });
-        if (error) throw error;
-        for (const t of (data || []) as TrabalhoDaAgenda[]) {
-          if (t.task_id && !trabalhos.has(t.task_id)) trabalhos.set(t.task_id, t);
-        }
+      const trabalhos: Record<string, TrabalhoDaAgenda> = {};
+      for (const t of (trabalhosRes.data || []) as TrabalhoDaAgenda[]) {
+        if (t.task_id && !doItem(trabalhos, t.task_id)) trabalhos[t.task_id] = t;
       }
 
       return { itens, posts, roteiros, trabalhos };

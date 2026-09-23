@@ -228,15 +228,25 @@ export const PAPEIS: { valor: Papel; rotulo: string; tipo: "texto" | "imagem" }[
   { valor: "leitura", rotulo: "Leitura de imagem", tipo: "texto" },
 ];
 
-/** Catálogo pela função; se ela ainda não estiver no ar, lê a tabela (RLS da equipe). */
+/** Mesmas colunas que o ia-gateway devolve na ação "catalogo". */
+export const COLUNAS_DO_CATALOGO =
+  "id, provedor, modelo_api, tipo, rotulo, preco_entrada_1m, preco_saida_1m, preco_cache_1m, preco_imagem, raciocinio, padrao_para, ativo, novo, disponivel, contexto_tokens, modalidades, fonte_preco, conferido_em, criado_em";
+
+/**
+ * Catálogo direto da tabela, pela RLS da equipe (o ia-gateway fazia o mesmo
+ * select com o token de quem chamou): uma ida ao banco em vez de uma função
+ * de borda na abertura da Mesa. Banco sem as colunas da sincronização ainda:
+ * lê todas.
+ */
 export async function lerCatalogo(): Promise<ModeloIa[]> {
-  try {
-    const data = await chamarFuncao<{ modelos: ModeloIa[] }>("ia-gateway", { acao: "catalogo" });
-    if (Array.isArray(data?.modelos)) return data.modelos;
-  } catch {
-    /* cai na leitura direta */
+  const ler = (colunas: string) =>
+    (supabase as any).from("ia_modelos").select(colunas).order("tipo").order("provedor").order("id");
+  let { data, error } = await ler(COLUNAS_DO_CATALOGO);
+  if (error && /column|coluna/i.test(String(error.message || ""))) {
+    const tudo = await ler("*");
+    data = tudo.data;
+    error = tudo.error;
   }
-  const { data, error } = await (supabase as any).from("ia_modelos").select("*").order("tipo").order("provedor").order("id");
   if (error) throw error;
   return (data || []) as ModeloIa[];
 }

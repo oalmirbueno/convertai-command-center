@@ -1,20 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
 
 /**
- * Referências no Estúdio: as do cliente (ativas e já lidas, com o papel
- * identidade ou técnica) e o banco da agência (referencias_globais, mais de
- * 1.300, com busca, tags e páginas de 24). A escolha vale para o conjunto ou
- * só para a lâmina selecionada (sobrepõe as do conjunto) e vai para o
- * estúdio pelo "configurar", sem custo. Id do banco da agência leva "g:".
+ * Referências no Estúdio (aba do inspetor): as do cliente (ativas e já
+ * lidas, com o papel identidade ou técnica) e o banco da agência
+ * (referencias_globais, mais de 1.300, com busca, tags e páginas de 24). A
+ * escolha vale para o conjunto ou só para a lâmina selecionada (sobrepõe as
+ * do conjunto) e vai para o estúdio pelo "configurar", sem custo. Id do banco
+ * da agência leva "g:".
+ *
+ * Clicar na imagem abre grande (Ampliar); o botão embaixo usa ou tira.
  */
 
 export type AlvoDasReferencias = "conjunto" | "lamina";
@@ -64,27 +68,45 @@ function useAtraso<T>(valor: T, ms: number): T {
   return v;
 }
 
-function Miniatura({ caminho, alt, marcada, onClick, disabled }: { caminho: string | null; alt: string; marcada: boolean; onClick: () => void; disabled?: boolean }) {
+/** Referência: a imagem abre grande; o botão embaixo usa ou tira (sem nada por cima da imagem). */
+function Miniatura({
+  caminho,
+  alt,
+  marcada,
+  onAmpliar,
+  onAlternar,
+  legenda,
+}: {
+  caminho: string | null;
+  alt: string;
+  marcada: boolean;
+  onAmpliar: () => void;
+  onAlternar: () => void;
+  legenda?: string | null;
+}) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-pressed={marcada}
-      className={`group relative block w-full overflow-hidden rounded-lg border-2 bg-secondary transition-all duration-150 ${
-        marcada ? "border-primary shadow-md" : "border-transparent hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-      }`}
-      style={{ paddingBottom: "125%" }}
-    >
-      <ImagemDaMesa caminho={caminho} alt={alt} className="absolute inset-0 h-full w-full" />
-      <span
-        className={`absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full border shadow-sm ${
-          marcada ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-transparent group-hover:text-muted-foreground"
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={onAmpliar}
+        title={legenda || "Ver grande"}
+        aria-label={`${alt}: ver grande`}
+        className={`relative block w-full cursor-zoom-in overflow-hidden rounded-md border-2 bg-secondary transition-colors ${marcada ? "border-primary" : "border-transparent hover:border-primary/40"}`}
+        style={{ paddingBottom: "125%" }}
+      >
+        <ImagemDaMesa caminho={caminho} alt={alt} className="absolute inset-0 h-full w-full" />
+      </button>
+      <button
+        type="button"
+        onClick={onAlternar}
+        aria-pressed={marcada}
+        className={`mt-1 flex h-8 w-full items-center justify-center rounded-md border text-[11.5px] font-medium transition-colors ${
+          marcada ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
         }`}
       >
-        <Check className="h-3 w-3" />
-      </span>
-    </button>
+        {marcada ? <><Check className="mr-1 h-3.5 w-3.5" /> Em uso</> : <><Plus className="mr-1 h-3.5 w-3.5" /> Usar</>}
+      </button>
+    </div>
   );
 }
 
@@ -95,8 +117,6 @@ export default function ReferenciasDoEstudio({
   onAlvo,
   aba,
   onAba,
-  aberto,
-  onAberto,
   onAtualizar,
 }: {
   trabalho: Trabalho;
@@ -105,8 +125,6 @@ export default function ReferenciasDoEstudio({
   onAlvo: (a: AlvoDasReferencias) => void;
   aba: AbaDasReferencias;
   onAba: (a: AbaDasReferencias) => void;
-  aberto: boolean;
-  onAberto: (v: boolean) => void;
   onAtualizar: () => void;
 }) {
   const { clientId } = useMesa();
@@ -115,6 +133,7 @@ export default function ReferenciasDoEstudio({
   const [pagina, setPagina] = useState(0);
   const [rascunho, setRascunho] = useState<string[] | null>(null);
   const [salvando, setSalvando] = useState(0);
+  const [ampliada, setAmpliada] = useState<{ lista: ImagemAmpliavel[]; indice: number } | null>(null);
   const fila = useRef<Promise<void>>(Promise.resolve());
   const buscaAtrasada = useAtraso(limparBusca(busca), 350);
 
@@ -134,7 +153,6 @@ export default function ReferenciasDoEstudio({
 
   const doCliente = useQuery({
     queryKey: ["mesa", "referencias", clientId, "estudio"],
-    enabled: aberto,
     queryFn: async (): Promise<RefDoCliente[]> => {
       const { data, error } = await (supabase as any)
         .from("cliente_referencias")
@@ -150,7 +168,7 @@ export default function ReferenciasDoEstudio({
 
   const tagsDoBanco = useQuery({
     queryKey: ["mesa", "refs-globais", "tags"],
-    enabled: aberto && aba === "banco",
+    enabled: aba === "banco",
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<string[]> => {
       const { data, error } = await (supabase as any).from("referencias_globais").select("tags").eq("ativa", true).limit(2000);
@@ -168,7 +186,7 @@ export default function ReferenciasDoEstudio({
 
   const banco = useQuery({
     queryKey: ["mesa", "refs-globais", "pagina", buscaAtrasada, tag || "", pagina],
-    enabled: aberto && aba === "banco",
+    enabled: aba === "banco",
     placeholderData: keepPreviousData,
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<{ lista: RefGlobal[]; total: number }> => {
@@ -249,6 +267,15 @@ export default function ReferenciasDoEstudio({
   const clientes = doCliente.data || [];
   const totalBanco = banco.data ? banco.data.total : 0;
   const paginas = Math.max(1, Math.ceil(totalBanco / POR_PAGINA));
+  const listaDoBanco = banco.data ? banco.data.lista : [];
+
+  const ampliar = (lista: { caminho: string | null; titulo?: string; legenda?: string | null }[], indice: number) => {
+    const validas = lista.filter((l) => !!l.caminho);
+    const alvoDoClique = lista[indice];
+    const i = alvoDoClique ? validas.indexOf(alvoDoClique) : -1;
+    if (i < 0) return;
+    setAmpliada({ lista: validas.map((l) => ({ caminho: l.caminho as string, titulo: l.titulo, legenda: l.legenda || undefined })), indice: i });
+  };
 
   const resumo = useMemo(() => {
     if (alvoReal === "lamina") {
@@ -262,172 +289,170 @@ export default function ReferenciasDoEstudio({
   }, [alvoReal, daLamina.length, doConjunto.length, cardSelecionado?.ordem]);
 
   return (
-    <section className="rounded-2xl border border-border bg-card">
-      <button
-        type="button"
-        onClick={() => onAberto(!aberto)}
-        aria-expanded={aberto}
-        className="flex w-full items-center rounded-2xl px-5 py-4 text-left transition-colors hover:bg-secondary"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block text-[14px] font-semibold">Referências</span>
-          <span className="mt-0.5 block text-[12px] text-muted-foreground">
-            {doConjunto.length} no conjunto
-            {cardSelecionado && daLamina.length ? ` · ${daLamina.length} só na lâmina ${cardSelecionado.ordem}` : ""}
-          </span>
-        </span>
-        {salvando > 0 && <Loader2 className="mr-2 h-4 w-4 animate-spin text-muted-foreground" />}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
-      </button>
+    <div className="min-w-0 space-y-4">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background p-1">
+        <button
+          type="button"
+          onClick={() => onAlvo("conjunto")}
+          aria-pressed={alvoReal === "conjunto"}
+          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors ${alvoReal === "conjunto" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          Conjunto ({doConjunto.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => onAlvo("lamina")}
+          disabled={!cardSelecionado}
+          aria-pressed={alvoReal === "lamina"}
+          className={`h-8 min-w-0 truncate rounded-md px-2 text-[12px] transition-colors disabled:opacity-50 ${alvoReal === "lamina" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {cardSelecionado ? `Só a lâmina ${cardSelecionado.ordem} (${daLamina.length})` : "Só uma lâmina"}
+        </button>
+      </div>
 
-      {aberto && (
-        <div className="space-y-5 border-t border-border px-5 pb-5 pt-4">
-          <div className="grid grid-cols-2 gap-1 rounded-xl border border-border bg-background p-1 sm:inline-grid">
-            <button
-              type="button"
-              onClick={() => onAlvo("conjunto")}
-              className={`min-w-0 rounded-lg px-3 py-1.5 text-[12.5px] transition-colors ${alvoReal === "conjunto" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Para o conjunto ({doConjunto.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => onAlvo("lamina")}
-              disabled={!cardSelecionado}
-              className={`min-w-0 rounded-lg px-3 py-1.5 text-[12.5px] transition-colors disabled:opacity-50 ${alvoReal === "lamina" ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {cardSelecionado ? `Só a lâmina ${cardSelecionado.ordem} (${daLamina.length})` : "Só uma lâmina"}
-            </button>
-          </div>
+      <div className="space-y-2">
+        <div className="flex min-w-0 items-start">
+          <p className="min-w-0 flex-1 text-[12px] leading-relaxed text-muted-foreground">{resumo}</p>
+          {salvando > 0 && <Loader2 className="ml-2 mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
+          {alvoReal === "lamina" && daLamina.length > 0 && (
+            <Button type="button" size="sm" variant="ghost" className="ml-1 h-7 shrink-0 px-2 text-[11.5px]" onClick={() => gravar([])}>
+              Usar as do conjunto
+            </Button>
+          )}
+        </div>
+        {escolhidas.length > 0 && (
+          <ul className="grid grid-cols-5 gap-1.5">
+            {escolhidas.map((id, i) => {
+              const m = miniaturaDe(id);
+              return (
+                <li key={id} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => ampliar(escolhidas.map((x) => { const mm = miniaturaDe(x); return { caminho: mm.caminho, titulo: mm.nome }; }), i)}
+                    className="relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-border bg-secondary"
+                    style={{ paddingBottom: "125%" }}
+                    aria-label={`${m.nome}: ver grande`}
+                  >
+                    <ImagemDaMesa caminho={m.caminho} alt={m.nome} className="absolute inset-0 h-full w-full" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alternar(id)}
+                    className="mt-1 flex h-7 w-full items-center justify-center rounded-md border border-border bg-background text-[10.5px] text-muted-foreground hover:text-destructive"
+                    aria-label="Tirar esta referência"
+                    title="Tirar"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
-          <div className="space-y-2.5 rounded-xl border border-border bg-background p-3.5">
-            <div className="flex flex-wrap items-center justify-between">
-              <p className="mr-3 text-[12px] leading-relaxed text-muted-foreground">{resumo}</p>
-              {alvoReal === "lamina" && daLamina.length > 0 && (
-                <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[12px]" onClick={() => gravar([])}>
-                  Voltar às do conjunto
-                </Button>
-              )}
-            </div>
-            {escolhidas.length > 0 && (
-              <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-8">
-                {escolhidas.map((id) => {
-                  const m = miniaturaDe(id);
-                  return (
-                    <li key={id} className="min-w-0">
-                      <div className="relative overflow-hidden rounded-md border border-border bg-secondary" style={{ paddingBottom: "125%" }}>
-                        <ImagemDaMesa caminho={m.caminho} alt={m.nome} className="absolute inset-0 h-full w-full" />
-                        <button
-                          type="button"
-                          onClick={() => alternar(id)}
-                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-sm hover:text-destructive"
-                          aria-label="Tirar esta referência"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                      <p className="mt-1 truncate text-[10px] text-muted-foreground">{id.indexOf(PREFIXO_GLOBAL) === 0 ? "agência" : "cliente"}</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
+      <div className="flex border-b border-border">
+        {([
+          { valor: "cliente", rotulo: `Do cliente (${clientes.length})` },
+          { valor: "banco", rotulo: `Agência${banco.data ? ` (${totalBanco.toLocaleString("pt-BR")})` : ""}` },
+        ] as { valor: AbaDasReferencias; rotulo: string }[]).map((a) => (
+          <button
+            key={a.valor}
+            type="button"
+            onClick={() => onAba(a.valor)}
+            className={`-mb-px mr-4 h-9 border-b-2 text-[12.5px] transition-colors ${aba === a.valor ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            {a.rotulo}
+          </button>
+        ))}
+      </div>
 
-          <div className="flex border-b border-border">
-            {([
-              { valor: "cliente", rotulo: `Do cliente (${clientes.length})` },
-              { valor: "banco", rotulo: `Banco da agência${banco.data ? ` (${totalBanco.toLocaleString("pt-BR")})` : ""}` },
-            ] as { valor: AbaDasReferencias; rotulo: string }[]).map((a) => (
-              <button
-                key={a.valor}
-                type="button"
-                onClick={() => onAba(a.valor)}
-                className={`-mb-px mr-4 border-b-2 pb-2 text-[12.5px] transition-colors ${aba === a.valor ? "border-primary font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-              >
-                {a.rotulo}
-              </button>
+      {aba === "cliente" && (
+        <div className="space-y-3">
+          {doCliente.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo as referências…</p>}
+          {doCliente.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(doCliente.error)}</p>}
+          {doCliente.data && clientes.length === 0 && (
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              Nenhuma referência do cliente com leitura. Traga e leia referências na aba Contexto, ou escolha no banco da agência.
+            </p>
+          )}
+          <ul className="grid grid-cols-3 gap-2.5">
+            {clientes.map((r, i) => (
+              <li key={r.id} className="min-w-0">
+                <Miniatura
+                  caminho={r.storage_path}
+                  alt="Referência do cliente"
+                  legenda={r.leitura}
+                  marcada={escolhidas.indexOf(r.id) >= 0}
+                  onAmpliar={() => ampliar(clientes.map((c) => ({ caminho: c.storage_path, titulo: `Cliente, ${ROTULO_DO_PAPEL[c.papel || "tecnica"] || c.papel}`, legenda: c.leitura })), i)}
+                  onAlternar={() => alternar(r.id)}
+                />
+                <span className={`mt-1 inline-block max-w-full truncate rounded-full px-2 py-0.5 text-[10px] font-medium ${r.papel === "identidade" ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
+                  {ROTULO_DO_PAPEL[r.papel || "tecnica"] || r.papel}
+                </span>
+              </li>
             ))}
-          </div>
+          </ul>
+        </div>
+      )}
 
-          {aba === "cliente" && (
-            <div className="space-y-3">
-              {doCliente.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Lendo as referências…</p>}
-              {doCliente.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(doCliente.error)}</p>}
-              {doCliente.data && clientes.length === 0 && (
-                <p className="text-[12px] leading-relaxed text-muted-foreground">
-                  Nenhuma referência do cliente com leitura. Traga e leia referências na aba Contexto, ou escolha no banco da agência.
-                </p>
-              )}
-              <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-                {clientes.map((r) => (
-                  <li key={r.id} className="min-w-0">
-                    <Miniatura caminho={r.storage_path} alt="Referência do cliente" marcada={escolhidas.indexOf(r.id) >= 0} onClick={() => alternar(r.id)} />
-                    <div className="mt-1.5 flex items-center">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${r.papel === "identidade" ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"}`}>
-                        {ROTULO_DO_PAPEL[r.papel || "tecnica"] || r.papel}
-                      </span>
-                    </div>
-                    {r.leitura && <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" title={r.leitura}>{r.leitura}</p>}
-                  </li>
-                ))}
-              </ul>
+      {aba === "banco" && (
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" className="h-9 pl-8 text-[12.5px]" />
+          </div>
+          {(tagsDoBanco.data || []).length > 0 && (
+            <div className="flex flex-wrap">
+              {(tagsDoBanco.data || []).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTag(tag === t ? null : t)}
+                  className={`mb-1.5 mr-1.5 max-w-full truncate rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
+                    tag === t ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
           )}
-
-          {aba === "banco" && (
-            <div className="space-y-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" className="h-9 pl-8 text-[12.5px]" />
-              </div>
-              {(tagsDoBanco.data || []).length > 0 && (
-                <div className="flex flex-wrap">
-                  {(tagsDoBanco.data || []).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setTag(tag === t ? null : t)}
-                      className={`mb-1.5 mr-1.5 rounded-full border px-2.5 py-1 text-[11px] transition-colors ${
-                        tag === t ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {banco.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Buscando…</p>}
-              {banco.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(banco.error)}</p>}
-              {banco.data && banco.data.lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nada encontrado com essa busca.</p>}
-              <ul className={`grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 ${banco.isFetching && !banco.isLoading ? "opacity-70" : ""}`}>
-                {(banco.data ? banco.data.lista : []).map((r) => {
-                  const id = PREFIXO_GLOBAL + r.id;
-                  return (
-                    <li key={r.id} className="min-w-0">
-                      <Miniatura caminho={r.storage_path} alt={r.titulo || "Referência do banco"} marcada={escolhidas.indexOf(id) >= 0} onClick={() => alternar(id)} />
-                      <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" title={r.leitura || r.titulo || ""}>
-                        {r.titulo || r.leitura || "Sem título"}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-              {totalBanco > POR_PAGINA && (
-                <div className="flex items-center justify-between pt-1">
-                  <Button type="button" size="sm" variant="outline" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))}>
-                    <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
-                  </Button>
-                  <span className="text-[12px] text-muted-foreground">Página {pagina + 1} de {paginas}</span>
-                  <Button type="button" size="sm" variant="outline" disabled={pagina + 1 >= paginas} onClick={() => setPagina((p) => p + 1)}>
-                    Próxima <ChevronRight className="ml-1 h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              )}
+          {banco.isLoading && <p className="text-[12px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />Buscando…</p>}
+          {banco.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(banco.error)}</p>}
+          {banco.data && listaDoBanco.length === 0 && <p className="text-[12px] text-muted-foreground">Nada encontrado com essa busca.</p>}
+          <ul className={`grid grid-cols-3 gap-2.5 ${banco.isFetching && !banco.isLoading ? "opacity-70" : ""}`}>
+            {listaDoBanco.map((r, i) => {
+              const id = PREFIXO_GLOBAL + r.id;
+              return (
+                <li key={r.id} className="min-w-0">
+                  <Miniatura
+                    caminho={r.storage_path}
+                    alt={r.titulo || "Referência do banco"}
+                    legenda={r.leitura || r.titulo}
+                    marcada={escolhidas.indexOf(id) >= 0}
+                    onAmpliar={() => ampliar(listaDoBanco.map((g) => ({ caminho: g.storage_path, titulo: g.titulo || "Banco da agência", legenda: g.leitura })), i)}
+                    onAlternar={() => alternar(id)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          {totalBanco > POR_PAGINA && (
+            <div className="flex items-center justify-between pt-1">
+              <Button type="button" size="sm" variant="outline" className="h-8 px-2" disabled={pagina === 0} onClick={() => setPagina((p) => Math.max(0, p - 1))} aria-label="Página anterior">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-[12px] text-muted-foreground">Página {pagina + 1} de {paginas}</span>
+              <Button type="button" size="sm" variant="outline" className="h-8 px-2" disabled={pagina + 1 >= paginas} onClick={() => setPagina((p) => p + 1)} aria-label="Próxima página">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
         </div>
       )}
-    </section>
+
+      <Ampliar imagens={ampliada ? ampliada.lista : []} indice={ampliada ? ampliada.indice : null} onFechar={() => setAmpliada(null)} />
+    </div>
   );
 }

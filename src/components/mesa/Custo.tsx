@@ -25,19 +25,26 @@ import { useMesa } from "./MesaContexto";
  */
 
 export function useEstimativa(partes: ParteDaEstimativa[] | null, ativo = true) {
-  const { catalogo } = useMesa();
+  const { catalogo, catalogoCarregando } = useMesa();
   const chave = JSON.stringify(partes || []);
+  const temPartes = !!partes && partes.length > 0;
   // Com o catálogo carregado a conta é local e instantânea (mesma fórmula do motor).
-  const local = partes && partes.length && catalogo.length ? estimarLocal(partes, catalogo) : null;
+  const local = temPartes && catalogo.length ? estimarLocal(partes as ParteDaEstimativa[], catalogo) : null;
+  // A função de borda só entra quando o catálogo já chegou e mesmo assim não
+  // tem o modelo: na abertura da Mesa ninguém chama o ia-gateway para estimar.
   const remota = useQuery({
     queryKey: ["mesa", "estimativa", chave],
-    enabled: ativo && !!partes && partes.length > 0 && local === null,
+    enabled: ativo && temPartes && local === null && !catalogoCarregando,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: () => estimarCusto(partes || []),
   });
   if (local !== null) {
     return { ...remota, data: local, isLoading: false, isFetching: false, isError: false, error: null } as typeof remota;
+  }
+  // Catálogo a caminho: ainda estimando (não "US$ 0,00").
+  if (ativo && temPartes && catalogoCarregando) {
+    return { ...remota, isLoading: true } as typeof remota;
   }
   return remota;
 }

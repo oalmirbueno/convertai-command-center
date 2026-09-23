@@ -19,8 +19,11 @@ import {
  * Conversa com o agente de contexto: a equipe conta o que sabe da marca e o
  * agente grava no kit (estilo, regras, paleta, contexto) e na memória do
  * estrategista e do diretor de arte.
+ *
+ * Com `preencher`, ocupa a altura toda da coluna (fixa ao lado do contexto):
+ * a conversa rola sozinha e a caixa de mensagem fica sempre embaixo.
  */
-export default function AgenteDeContexto() {
+export default function AgenteDeContexto({ preencher = false }: { preencher?: boolean } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const historico = useHistoricoDoContexto(clientId);
@@ -81,8 +84,8 @@ export default function AgenteDeContexto() {
   const nomesDoQueMudou = mudanca ? mudanca.mudou.map((m) => ROTULOS_DO_QUE_MUDOU[m] || m) : [];
 
   return (
-    <section className="flex min-w-0 flex-col space-y-3 rounded-xl border border-border bg-card p-3">
-      <div className="min-w-0">
+    <section className={`flex min-w-0 flex-col rounded-xl border border-border bg-card p-3 ${preencher ? "lg:h-full" : ""}`}>
+      <div className="mb-3 min-w-0 shrink-0">
         <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Agente de contexto
         </p>
@@ -91,11 +94,16 @@ export default function AgenteDeContexto() {
         </p>
       </div>
 
-      <div ref={lista} className="max-h-[420px] min-w-0 space-y-2 overflow-y-auto">
+      <div
+        ref={lista}
+        className={`min-w-0 space-y-2 overflow-y-auto overscroll-contain ${preencher ? "max-h-[420px] min-h-[120px] lg:max-h-none lg:min-h-0 lg:flex-1" : "max-h-[420px]"}`}
+      >
         {historico.isLoading && (
-          <p className="flex items-center text-[12px] text-muted-foreground">
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo a conversa...
-          </p>
+          <div className="space-y-2" aria-label="Lendo a conversa">
+            <div className="mr-6 h-10 animate-pulse rounded-lg bg-muted" />
+            <div className="ml-6 h-8 animate-pulse rounded-lg bg-muted" />
+            <div className="mr-6 h-12 animate-pulse rounded-lg bg-muted" />
+          </div>
         )}
         {historico.isError && <AvisoDeErro erro={historico.error} />}
         {historico.data && mensagens.length === 0 && !pendente && (
@@ -124,15 +132,16 @@ export default function AgenteDeContexto() {
       </div>
 
       {mudanca && (
-        <p className="rounded-lg border border-border px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+        <p className="mt-3 shrink-0 rounded-lg border border-border px-3 py-2 text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
           {nomesDoQueMudou.length ? `Mudou no kit: ${nomesDoQueMudou.join(", ")}.` : "Nada mudou no kit."}
           {mudanca.memorias > 0 && ` ${mudanca.memorias === 1 ? "1 memória guardada" : `${mudanca.memorias} memórias guardadas`} para os agentes.`}
         </p>
       )}
 
-      {erro && erro.clientId === clientId && <AvisoDeErro erro={erro.erro} />}
+      {erro && erro.clientId === clientId && <AvisoDeErro erro={erro.erro} className="mt-3 shrink-0" />}
 
       <Textarea
+        className="mt-3 shrink-0 resize-none"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={(e) => {
@@ -145,7 +154,7 @@ export default function AgenteDeContexto() {
         placeholder="O que o agente precisa saber?"
         disabled={!!pendente}
       />
-      <div className="flex flex-wrap items-center justify-between">
+      <div className="mt-2 flex shrink-0 flex-wrap items-center justify-between">
         <EstimativaInline partes={partes} />
         <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
           {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}

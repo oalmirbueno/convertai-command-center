@@ -1,10 +1,62 @@
 import { useEffect, useRef, useState } from "react";
+import { enviarParaAprovacao, type ResultadoDoEnvio } from "@/lib/mesa/api";
 
 /**
  * Pequenas utilidades do Estúdio: estado que sobrevive à troca de aba da Mesa
  * (sessionStorage, sempre dentro de try/catch porque o Safari em modo privado
- * recusa gravar) e cópia de texto com reserva para navegador antigo.
+ * recusa gravar), cópia de texto com reserva para navegador antigo, o corpo
+ * do "preparar" e o envio de uma arte para aprovação.
  */
+
+/** Quantidades de lâminas que a tela oferece antes da direção (Automático = o diretor decide). */
+export const QUANTIDADES_DE_LAMINAS = [3, 4, 5, 6, 7, 8];
+
+export interface EscolhasDoPreparo {
+  /** "roteiro": direção do roteiro do estrategista, sem custo. "diretor": diretor de arte, com custo. */
+  modo: "roteiro" | "diretor";
+  /** Quantidade de lâminas; null = automático (o diretor decide pelo conteúdo). */
+  laminas: number | null;
+  /** Carrossel contínuo decidido no começo (a cena atravessa as lâminas). */
+  continuo: boolean;
+  /** Pedido livre para o diretor (ex.: use fotos reais, capa centralizada). */
+  pedido: string;
+}
+
+/**
+ * Corpo da ação "preparar" do estudio-arte. Post de uma lâmina só não leva
+ * quantidade nem contínuo. Quantidade e pedido só valem para o diretor: no
+ * roteiro, as lâminas são as do estrategista (e um pedido viraria diretor, com custo).
+ */
+export function corpoDoPreparar(
+  taskId: string,
+  e: EscolhasDoPreparo,
+  extra: { postUnico: boolean; modeloImagemId?: string; qualidade?: string; trabalhoId?: string } = { postUnico: false },
+): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "preparar", task_id: taskId, modo: e.modo };
+  if (extra.modeloImagemId) corpo.modelo_imagem_id = extra.modeloImagemId;
+  if (extra.qualidade) corpo.qualidade = extra.qualidade;
+  if (extra.trabalhoId) corpo.trabalho_id = extra.trabalhoId;
+  if (!extra.postUnico) {
+    corpo.carrossel_infinito = !!e.continuo;
+    const n = Number(e.laminas);
+    if (e.modo === "diretor" && e.laminas !== null && Number.isInteger(n) && n >= 1 && n <= 10) corpo.laminas = n;
+  }
+  const pedido = (e.pedido || "").trim();
+  if (e.modo === "diretor" && pedido) corpo.instrucao = pedido.slice(0, 2000);
+  return corpo;
+}
+
+/**
+ * Envia uma arte entregue para aprovação (mesmo caminho da aba Entrega) e
+ * confere o resultado dela: a RPC responde 200 mesmo quando a arte não foi.
+ */
+export async function enviarUmParaAprovacao(trabalhoId: string): Promise<ResultadoDoEnvio> {
+  const resultados = await enviarParaAprovacao([trabalhoId]);
+  const r = resultados[0];
+  if (!r) throw new Error("O envio não voltou resposta. Confira na aba Entrega.");
+  if (!r.ok) throw new Error(r.erro || "Não foi possível enviar para aprovação.");
+  return r;
+}
 
 function lerDaSessao<T>(chave: string, inicial: T): T {
   try {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, Plus, Send, X } from "lucide-react";
+import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, Plus, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   chamarFuncao,
@@ -23,13 +24,18 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import AgendaDoMes from "./AgendaDoMes";
+import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
+import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
+import { useMidia } from "./mesaV4Api";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
- * Aba Mês. No topo, a Agenda do mês: o mesmo calendário da Agenda do painel,
+ * Aba Mês. No alto, os Hypes da semana (HypesDaSemana.tsx) e, sempre à mão,
+ * o Agente do mês (AgenteDoMes.tsx): coluna fixa à direita no computador
+ * largo, gaveta no celular e no notebook. Depois, a Agenda do mês: o mesmo calendário da Agenda do painel,
  * onde a equipe seleciona os itens, completa e melhora com o agente e abre no
  * Estúdio (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos,
  * de dois jeitos: "Planejar e preencher a agenda" faz sozinho mês a mês
@@ -571,9 +577,20 @@ function lerModo(): ModoDePlanejar {
 /**
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
+ * `onCriarCampanha` abre a aba Campanhas com o hype escolhido já preenchido.
  */
-export default function AbaMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskId: string, mes: string) => void } = {}) {
+export default function AbaMes({
+  onAbrirNoEstudio,
+  onCriarCampanha,
+}: {
+  onAbrirNoEstudio?: (taskId: string, mes: string) => void;
+  onCriarCampanha?: (hypeIndice: number) => void;
+} = {}) {
   const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
+  // Coluna fixa do agente só em tela larga; abaixo disso, gaveta.
+  const larga = useMidia("(min-width: 1280px)");
+  const [gaveta, setGaveta] = useState(false);
+  const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
   const trocarModo = (m: ModoDePlanejar) => {
     setModo(m);
     try {
@@ -582,34 +599,71 @@ export default function AbaMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskI
       /* sem armazenamento: vale só nesta visita */
     }
   };
+  const agente = <AgenteDoMes onAbrirNoEstudio={onAbrirNoEstudio} pendenteExterno={pendente} className="h-full" />;
   return (
-    <div className="space-y-8">
-      <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
-      <section className="space-y-3 border-t border-border pt-6">
-        <TituloDeSecao>Planejar novos conteúdos com o estrategista</TituloDeSecao>
-        <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-          {(
-            [
-              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
-              { valor: "proposta", rotulo: "Uma proposta por vez" },
-            ] as { valor: ModoDePlanejar; rotulo: string }[]
-          ).map((m) => (
-            <button
-              key={m.valor}
-              type="button"
-              role="tab"
-              aria-selected={modo === m.valor}
-              onClick={() => trocarModo(m.valor)}
-              className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
-                modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {m.rotulo}
-            </button>
-          ))}
-        </div>
-        {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
-      </section>
+    <div className="min-w-0 xl:grid xl:grid-cols-[minmax(0,1fr)_380px] xl:gap-6">
+      <div className="min-w-0 space-y-8">
+        <HypesDaSemana
+          onCriarCampanha={(i) => onCriarCampanha?.(i)}
+          onPedidoInicio={(p) => {
+            setPendente(p);
+            if (!larga) setGaveta(true);
+          }}
+          onPedidoFim={() => setPendente(null)}
+        />
+        <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
+        <section className="space-y-3 border-t border-border pt-6">
+          <TituloDeSecao>Planejar novos conteúdos com o estrategista</TituloDeSecao>
+          <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+            {(
+              [
+                { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+                { valor: "proposta", rotulo: "Uma proposta por vez" },
+              ] as { valor: ModoDePlanejar; rotulo: string }[]
+            ).map((m) => (
+              <button
+                key={m.valor}
+                type="button"
+                role="tab"
+                aria-selected={modo === m.valor}
+                onClick={() => trocarModo(m.valor)}
+                className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
+                  modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m.rotulo}
+              </button>
+            ))}
+          </div>
+          {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
+        </section>
+      </div>
+
+      {larga ? (
+        <aside className="min-w-0" aria-label="Agente do mês">
+          {/* Abaixo do cabeçalho fixo da Mesa (80px do painel mais a barra de custo e as etapas). */}
+          <div className="sticky top-[212px] h-[calc(100vh-228px)] min-h-[480px] overflow-hidden rounded-xl border border-border bg-card">
+            {agente}
+          </div>
+        </aside>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setGaveta(true)}
+            className="fixed bottom-[72px] right-4 z-30 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-lg md:bottom-6 md:right-6"
+          >
+            {pendente ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
+            Agente do mês
+          </button>
+          <Sheet open={gaveta} onOpenChange={setGaveta}>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
+              <SheetTitle className="sr-only">Agente do mês</SheetTitle>
+              {agente}
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
     </div>
   );
 }

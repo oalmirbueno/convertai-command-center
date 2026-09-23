@@ -244,12 +244,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[Auth] Event:", event);
 
       if (event === "SIGNED_OUT") {
+        sessaoRespondeu.current = true;
         setUser(null);
         setProfile(null);
         profileRef.current = null;
         setProfileError(false);
         setLoading(false);
       } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
+        // A sessão respondeu por aqui: daqui para frente a espera é pelo
+        // perfil. Sem isso, o relógio de segurança soltava a tela com usuário
+        // e sem papel quando a renovação da abertura passava de 8 s, e a
+        // /mesa caía no /dashboard.
+        sessaoRespondeu.current = true;
         setUser(session.user);
         const isFreshSignIn = event === "SIGNED_IN";
         // Defer profile fetch to avoid Supabase SDK deadlock

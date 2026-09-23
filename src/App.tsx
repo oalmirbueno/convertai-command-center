@@ -2,7 +2,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { lazy, Suspense, type ReactNode } from "react";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { criarQueryClient, LimpezaDoCacheAoTrocarDeUsuario, opcoesDePersistencia } from "@/lib/mesa/cachePersistido";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -65,16 +66,25 @@ const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
 const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
+// Padrões do painel e o cache da Mesa guardado no navegador: ver
+// src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
+const queryClient = criarQueryClient();
+const persistencia = opcoesDePersistencia();
+
+/** Enquanto a Mesa baixa: o menu fica, e a tela já tem o desenho dela. */
+function EsqueletoDaMesa() {
+  return (
+    <div aria-busy="true" aria-label="Abrindo a Mesa" className="space-y-5 pb-10">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="h-8 w-52 animate-pulse rounded-lg bg-muted" />
+        <div className="h-9 w-full animate-pulse rounded-lg bg-muted sm:ml-auto sm:w-[280px]" />
+      </div>
+      <div className="h-16 animate-pulse rounded-xl bg-muted" />
+      <div className="h-10 animate-pulse rounded-xl bg-muted" />
+      <div className="h-[55vh] animate-pulse rounded-xl bg-muted/70" />
+    </div>
+  );
+}
 
 function LoadingScreen() {
   return (
@@ -114,10 +124,14 @@ function LoadingScreen() {
 }
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, profile, profileError, loading } = useAuth();
   const location = useLocation();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search + location.hash)}`} replace />;
+  // Usuário já conhecido e papel ainda a caminho: espera. Decidir agora
+  // tratava a equipe como cliente (menu de cliente e a Mesa jogando para o
+  // /dashboard na carga da página). Erro de perfil tem tela própria.
+  if (!profile && !profileError) return <LoadingScreen />;
   return <>{children}</>;
 }
 
@@ -259,7 +273,9 @@ export function AppRoutes() {
       <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       {/* Mesa do cliente: calendário e estúdio de arte com IA. Só admin,
           gestor e design; tráfego e cliente voltam para o painel. */}
-      <Route path="/mesa" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <MesaDoCliente /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
+      {/* Suspense próprio: enquanto a Mesa baixa, o menu continua na tela e
+          aparece o esqueleto dela, não a tela cheia de carregando. */}
+      <Route path="/mesa" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaDoCliente /></Suspense> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
       <Route path="/novidades" element={<ProtectedRoute><AppLayout><Novidades /></AppLayout></ProtectedRoute>} />
@@ -274,12 +290,13 @@ export function AppRoutes() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider client={queryClient} persistOptions={persistencia}>
     <ThemeProvider>
       <TooltipProvider>
         <Sonner />
         <DownloadProgressOverlay />
         <AuthProvider>
+          <LimpezaDoCacheAoTrocarDeUsuario />
           <ImpersonationProvider profile={null} clientId={null}>
             <ConfirmDialogProvider>
               <BrowserRouter>
@@ -290,7 +307,7 @@ const App = () => (
         </AuthProvider>
       </TooltipProvider>
     </ThemeProvider>
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 );
 
 export default App;

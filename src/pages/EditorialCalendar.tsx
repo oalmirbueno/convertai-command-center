@@ -44,8 +44,13 @@ import {
   useEditorialMutations,
   useEditorialPostDetail,
   loadEditorialPostForMutation,
+  montarArteDoEstudio,
+  COLUNAS_DA_ARTE_DO_ESTUDIO,
+  type ArteDoEstudioNaAgenda,
+  type EditorialFileRow,
   type EditorialPostBundle,
   type EditorialRealtimeGate,
+  type TrabalhoDoEstudioNaAgenda,
 } from "@/hooks/useEditorialCalendar";
 import {
   useClients,
@@ -854,26 +859,53 @@ export default function EditorialCalendar() {
   // Mesa do cliente: itens da agenda cuja arte está sendo feita no Estúdio.
   // Quando o cliente aprova, o post entra sozinho; criar o post à mão aqui
   // duplicaria. Só a equipe que usa a Mesa consulta.
+  //
+  // Depois que o Estúdio entrega, a arte já existe em Arquivos (file_ids:
+  // capa e lâminas filhas), mas o item continua sem post até a aprovação.
+  // A agenda mostra a miniatura a partir daqui, sem criar post (criar
+  // quebraria o agendador depois da aprovação). Vale para a grade (prazo) e
+  // para o quadro (produção). Cliente não consulta nada disso.
   const usaMesa = ["admin", "manager", "design"].includes(profile?.role || "") && !isImpersonating;
-  const idsSemPost = useMemo(
-    () => deadlineTasksForGrid.map((task) => task.id).slice(0, 300),
-    [deadlineTasksForGrid],
-  );
+  const idsSemPost = useMemo(() => {
+    const ids: string[] = [];
+    for (const task of deadlineTasksForGrid.concat(productionTasks)) {
+      if (ids.indexOf(task.id) < 0) ids.push(task.id);
+    }
+    return ids.slice(0, 300);
+  }, [deadlineTasksForGrid, productionTasks]);
   const mesaPorTarefa = useQuery({
     queryKey: ["mesa", "trabalhos-por-tarefa", idsSemPost],
     enabled: usaMesa && idsSemPost.length > 0,
     staleTime: 60_000,
-    queryFn: async () => {
+    queryFn: async (): Promise<Record<string, ArteDoEstudioNaAgenda>> => {
       const { data, error } = await (supabase as any)
         .from("estudio_trabalhos")
-        .select("task_id, client_id, entrega_status")
+        .select("task_id, client_id, status, entrega_status, file_ids, atualizado_em")
         .in("task_id", idsSemPost);
       if (error) throw error;
-      const mapa = new Map<string, { clientId: string; entregaStatus: string | null }>();
-      for (const linha of (data || []) as { task_id: string; client_id: string; entrega_status: string | null }[]) {
-        mapa.set(linha.task_id, { clientId: linha.client_id, entregaStatus: linha.entrega_status });
+      const trabalhos = (data || []) as TrabalhoDoEstudioNaAgenda[];
+      const capaIds: string[] = [];
+      for (const t of trabalhos) {
+        const capa = Array.isArray(t.file_ids) ? t.file_ids[0] : null;
+        if (capa && capaIds.indexOf(capa) < 0) capaIds.push(capa);
       }
-      return mapa;
+      let capas: EditorialFileRow[] = [];
+      let filhos: EditorialFileRow[] = [];
+      if (capaIds.length > 0) {
+        // A miniatura é um extra: se a leitura dos arquivos falhar, o aviso
+        // "a arte está na Mesa" continua funcionando sem ela.
+        const [leituraCapas, leituraFilhos] = await Promise.all([
+          (supabase as any).from("staff_files_secure").select(COLUNAS_DA_ARTE_DO_ESTUDIO).in("id", capaIds),
+          (supabase as any)
+            .from("staff_files_secure")
+            .select(COLUNAS_DA_ARTE_DO_ESTUDIO)
+            .in("parent_file_id", capaIds)
+            .is("archived_at", null),
+        ]);
+        capas = leituraCapas.error ? [] : ((leituraCapas.data || []) as EditorialFileRow[]);
+        filhos = leituraFilhos.error ? [] : ((leituraFilhos.data || []) as EditorialFileRow[]);
+      }
+      return montarArteDoEstudio(trabalhos, capas, filhos);
     },
   });
   const ancoradosPorDia = useMemo(
@@ -1062,7 +1094,7 @@ export default function EditorialCalendar() {
       openDetailById(linkedPostId);
       return;
     }
-    const naMesa = mesaPorTarefa.data?.get(task.id);
+    const naMesa = mesaPorTarefa.data ? mesaPorTarefa.data[task.id] : undefined;
     if (naMesa && !targetStage) {
       toast.info("A arte deste item está na Mesa do cliente", {
         description: "Quando o cliente aprovar, o post entra sozinho na Agenda. Criar o post aqui é só para quem vai agendar à mão.",
@@ -1893,6 +1925,7 @@ export default function EditorialCalendar() {
               onCreateOnDate={openCreateOnDate}
               ancorasPorDia={ancorasResolvidas}
               idsNaGrade={idsNaGrade}
+              artesDoEstudio={usaMesa ? mesaPorTarefa.data : undefined}
               onShowBacklog={() => setParam("view", "list")}
             />
           )}

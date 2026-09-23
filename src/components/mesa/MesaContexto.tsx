@@ -41,11 +41,16 @@ export function useMesa(): MesaValor {
   return v;
 }
 
+/**
+ * Catálogo de modelos: muda pouco (o dono ativa um modelo de vez em quando e
+ * a tela de Modelos invalida esta chave). Fica 30 minutos sem reler e vai
+ * para o navegador, então a Mesa abre já com os preços.
+ */
 export function useCatalogo() {
   return useQuery({
     queryKey: ["mesa", "catalogo"],
     queryFn: lerCatalogo,
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
   });
 }
 
@@ -57,7 +62,11 @@ export function useUrlDaMesa(caminho?: string | null, bucket = "mesa") {
   return useQuery({
     queryKey: ["mesa", "url", bucket, caminho],
     enabled: !!caminho,
+    // A URL assinada vale 1 hora: relê aos 45 min e fica na memória até os
+    // 55, para voltar à tela sem assinar e baixar a imagem de novo. Não vai
+    // para o navegador (vence).
     staleTime: 45 * 60_000,
+    gcTime: 55 * 60_000,
     queryFn: async () => {
       const c = String(caminho);
       if (c.indexOf("://") > 0) return resolveFileUrl({ fileUrl: c });
