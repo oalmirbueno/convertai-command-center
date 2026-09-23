@@ -58,8 +58,8 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 export type Provedor = "openai" | "anthropic" | "openrouter";
 export type TipoModelo = "texto" | "imagem";
 export type Qualidade = "baixa" | "media" | "alta";
-export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao";
-export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev";
+export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto";
+export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto";
 
 export type ModeloIa = {
   id: string;
@@ -122,7 +122,9 @@ export type EntradaImagem = {
   prompt: string;
   referencias: ImagemEntrada[];
   qualidade: Qualidade;
-  tamanho: "1024x1536" | string;
+  tamanho: "1024x1536" | "1088x1360" | string;
+  /** Prompt a usar se o provedor recusar o 4:5 e a arte sair em 2:3 (quadro 4:5 no centro). */
+  promptSe2x3?: string;
   editar?: { bytes: Uint8Array; mascara?: Uint8Array };
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
@@ -133,6 +135,8 @@ export type EntradaImagem = {
 export type SaidaImagem = {
   png: Uint8Array;
   mime: string;
+  /** Tamanho em que a arte saiu de fato (4:5 pedido ou 2:3 de reserva). */
+  tamanho: string;
   usoId: string;
   custoUsd: number;
   saldoUsd: number;
@@ -970,28 +974,50 @@ export async function chamarTexto(e: EntradaTexto): Promise<SaidaTexto> {
 type RespostaProvedorImagem = {
   bytes: Uint8Array;
   mime: string;
+  tamanho: string;
   entrada: number;
   entradaImagem: number;
   saida: number;
   custoProvedor: number | null;
 };
 
+/** A arte sai direto no formato do feed; 2:3 fica de reserva. */
+export const TAMANHO_4X5 = "1088x1360";
+export const TAMANHO_2X3 = "1024x1536";
+
+function recusouTamanho(err: unknown): boolean {
+  return err instanceof IaMotorErro && err.codigo === "provedor_erro" &&
+    Number(err.detalhes?.status_provedor) === 400 && /size|dimension|resolution|aspect|pixel/i.test(err.message);
+}
+
 async function imagemOpenAi(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
+  const pedido = e.tamanho || TAMANHO_2X3;
+  try {
+    return await imagemOpenAiNoTamanho(m, chave, e, pedido, e.prompt);
+  } catch (err) {
+    // Provedor que ainda não aceita 4:5: a mesma chamada em 2:3, com o prompt do recorte central.
+    if (pedido !== TAMANHO_2X3 && recusouTamanho(err)) {
+      return await imagemOpenAiNoTamanho(m, chave, e, TAMANHO_2X3, e.promptSe2x3 || e.prompt);
+    }
+    throw err;
+  }
+}
+
+async function imagemOpenAiNoTamanho(m: ModeloIa, chave: string, e: EntradaImagem, tamanho: string, prompt: string): Promise<RespostaProvedorImagem> {
   const qualidade = QUALIDADE_OPENAI[e.qualidade] ?? "medium";
-  const tamanho = e.tamanho || "1024x1536";
   const usarEdicao = !!e.editar || e.referencias.length > 0;
   let res: Response;
   if (!usarEdicao) {
     res = await buscar("openai", "https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { "Authorization": `Bearer ${chave}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: m.modelo_api, prompt: e.prompt, n: 1, size: tamanho, quality: qualidade, output_format: "png" }),
+      body: JSON.stringify({ model: m.modelo_api, prompt, n: 1, size: tamanho, quality: qualidade, output_format: "png" }),
     }, TIMEOUT_IMAGEM_MS);
   } else {
     // Edicao: a imagem a editar vai primeiro; depois as referencias, na ordem.
     const form = new FormData();
     form.append("model", m.modelo_api);
-    form.append("prompt", e.prompt);
+    form.append("prompt", prompt);
     form.append("n", "1");
     form.append("size", tamanho);
     form.append("quality", qualidade);
@@ -1016,6 +1042,7 @@ async function imagemOpenAi(m: ModeloIa, chave: string, e: EntradaImagem): Promi
   return {
     bytes: deBase64(b64),
     mime: "image/png",
+    tamanho,
     entrada: num(data.usage?.input_tokens),
     entradaImagem: num(data.usage?.input_tokens_details?.image_tokens),
     saida: num(data.usage?.output_tokens),
@@ -1046,7 +1073,7 @@ async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): P
       ],
     }],
     modalities: ["image", "text"],
-    image_config: { aspect_ratio: proporcao(e.tamanho || "1024x1536") },
+    image_config: { aspect_ratio: proporcao(e.tamanho || TAMANHO_2X3) },
   };
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -1064,6 +1091,7 @@ async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): P
   return {
     bytes: deBase64(achado[2]),
     mime: achado[1],
+    tamanho: e.tamanho || TAMANHO_2X3,
     entrada: num(u.prompt_tokens),
     entradaImagem: 0,
     saida: num(u.completion_tokens),
@@ -1120,7 +1148,7 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
     criadoPor: e.criadoPor,
     chave,
   });
-  const saida: SaidaImagem = { png: r.bytes, mime: r.mime, usoId, custoUsd, saldoUsd, modeloId: m.id };
+  const saida: SaidaImagem = { png: r.bytes, mime: r.mime, tamanho: r.tamanho, usoId, custoUsd, saldoUsd, modeloId: m.id };
   if (reserva) saida.reservaUsada = reserva;
   return saida;
 }

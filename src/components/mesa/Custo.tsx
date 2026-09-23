@@ -15,6 +15,7 @@ import {
   custoDaResposta,
   ErroDaMesa,
   estimarCusto,
+  estimarLocal,
   mensagemDoCodigo,
   textoDoErro,
   usd,
@@ -32,14 +33,21 @@ import { useMesa } from "./MesaContexto";
  */
 
 export function useEstimativa(partes: ParteDaEstimativa[] | null, ativo = true) {
+  const { catalogo } = useMesa();
   const chave = JSON.stringify(partes || []);
-  return useQuery({
+  // Com o catálogo carregado a conta é local e instantânea (mesma fórmula do motor).
+  const local = partes && partes.length && catalogo.length ? estimarLocal(partes, catalogo) : null;
+  const remota = useQuery({
     queryKey: ["mesa", "estimativa", chave],
-    enabled: ativo && !!partes && partes.length > 0,
+    enabled: ativo && !!partes && partes.length > 0 && local === null,
     staleTime: 5 * 60_000,
     retry: false,
     queryFn: () => estimarCusto(partes || []),
   });
+  if (local !== null) {
+    return { ...remota, data: local, isLoading: false, isFetching: false, isError: false, error: null } as typeof remota;
+  }
+  return remota;
 }
 
 function erroDeSaldo(falta: number, saldo: number | null) {

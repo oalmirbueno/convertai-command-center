@@ -99,36 +99,34 @@ describe("rota /mesa só para a equipe que produz", () => {
   });
 });
 
-describe("Gerar todos é sequencial, um card por vez", () => {
-  it("o laço espera gerar e conferir cada card antes do próximo", () => {
-    const corpo = estudio.slice(estudio.indexOf("const gerarTodos = async"), estudio.indexOf("const salvarLegenda"));
-    expect(corpo).toContain("for (let i = 0; i < ordens.length; i++) {");
-    expect(corpo).toContain("const r = await gerarEConferir(trabalho.id, ordem,");
-    expect(corpo).toContain("if (parar.current) break;");
+describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo", () => {
+  // Pedido do dono em 2026-09-23: gerar estava lento demais um card por vez.
+  it("o limite de lâminas simultâneas é 3, e 1 no carrossel contínuo", () => {
+    expect(estudio).toContain("const EM_PARALELO = 3;");
+    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const montarDoRoteiro"));
+    expect(corpo).toContain("const limite = infinito ? 1 : EM_PARALELO;");
+    expect(corpo).toContain("Array.from({ length: Math.min(limite, ordens.length) }, trabalhador)");
+    expect(corpo).toContain("while (proximo < ordens.length && !parar.current)");
   });
 
-  it("gerar_card volta primeiro e só depois vem conferir_card do mesmo card", () => {
-    const corpo = estudio.slice(estudio.indexOf("const gerarEConferir = async"), estudio.indexOf("const cardsDaDirecao"));
-    const gerar = corpo.indexOf('acao: "gerar_card"');
-    const conferir = corpo.indexOf("await conferirDepois(trabalhoId, ordem)");
+  it("saldo, cota ou chave param tudo; a conferência roda depois de cada lâmina", () => {
+    const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const montarDoRoteiro"));
+    expect(corpo).toContain("CODIGOS_QUE_PARAM_TUDO.indexOf(e.codigo) >= 0) parar.current = true");
+    const gerar = corpo.indexOf("await gerarUma(trabalho.id, ordem)");
+    const conferir = corpo.indexOf("conferirDepois(trabalho.id, ordem)");
     expect(gerar).toBeGreaterThan(0);
-    expect(corpo.slice(0, gerar)).toContain("const g = await chamarFuncao");
     expect(conferir).toBeGreaterThan(gerar);
     expect(estudio).toContain('acao: "conferir_card", trabalho_id: trabalhoId, ordem');
   });
 
-  it("nada no estúdio dispara cards em paralelo", () => {
-    for (const fonte of [estudio, cardEstudio]) {
-      expect(fonte).not.toContain("Promise.all");
-      expect(fonte).not.toContain("allSettled");
-      expect(fonte).not.toMatch(/\.map\(async/);
-      expect(fonte).not.toMatch(/\.forEach\(async/);
-    }
+  it("a qualidade padrão do estúdio é a padrão (média)", () => {
+    expect(estudio).toContain('useState<Qualidade>("media")');
+    expect(estudio).toContain('(trabalho?.qualidade as Qualidade) || "media"');
   });
 
-  it("a qualidade padrão do estúdio é alta", () => {
-    expect(estudio).toContain('useState<Qualidade>("alta")');
-    expect(estudio).toContain('(trabalho?.qualidade as Qualidade) || "alta"');
+  it("item com roteiro monta a direção sem custo; o diretor é opcional e passa pelo botão com custo", () => {
+    expect(estudio).toContain('acao: "preparar", task_id: item.id, modo: "roteiro"');
+    expect(estudio).toContain('modo: "diretor"');
   });
 });
 
@@ -217,8 +215,9 @@ describe("estimativa antes de toda ação que gasta", () => {
     }
     expect(mesAba).toContain("<EstimativaInline partes={partes} />");
     // Estúdio
-    expect(estudio.slice(estudio.indexOf('rotulo="Preparar direção"'), estudio.indexOf('acao: "preparar"'))).toContain("partes={");
-    expect(estudio).toContain("executar={gerarTodos}");
+    const preparar = estudio.indexOf('rotulo="Preparar direção"');
+    expect(estudio.slice(preparar, estudio.indexOf('acao: "preparar"', preparar))).toContain("partes={");
+    expect(estudio).toContain("executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}");
     expect(estudio).toContain("partes={() => partesGerar(filaDeGeracao.length)}");
     expect(estudio.slice(estudio.indexOf('titulo="Escrever a legenda"'), estudio.indexOf('acao: "legenda"'))).toContain("partes={");
     expect(cardEstudio).toContain("executar={onGerar}");

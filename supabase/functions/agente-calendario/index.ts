@@ -38,6 +38,8 @@ import {
   type WriteCtx,
 } from "../_shared/mcp-write-services.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
+import { direcaoDoRoteiro } from "../_shared/direcao-arte.ts";
+import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -555,7 +557,7 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     servico.from("editorial_posts")
       .select("title, content_type, objective, production_status, editorial_publications(scheduled_at, status)")
       .eq("client_id", clientId).is("archived_at", null).order("created_at", { ascending: false }).limit(100),
-    servico.from("cliente_kit_marca").select("paleta, estilo, regras").eq("client_id", clientId).maybeSingle(),
+    servico.from("cliente_kit_marca").select("paleta, estilo, regras, contexto").eq("client_id", clientId).maybeSingle(),
     servico.from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(60),
     servico.from("agente_prompts").select("client_id, conteudo, versao").eq("agente", AGENTE).eq("ativo", true)
@@ -1366,14 +1368,16 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   });
 
   await registrarMemoriaDaEscolha(servico, p);
+  // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA).
+  const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa, chamador.userId);
 
   const conversaId = await garantirConversa(servico, atualizada, chamador.userId);
   const criados = resultado.filter((r) => r.situacao === "criado").length;
   await registrarMensagens(servico, conversaId, p.client_id, [
-    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m).` },
+    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m). ${direcoes} com direção de arte pronta no Estúdio.` },
   ]);
 
-  return json({ proposta: atualizada, itens: resultado });
+  return json({ proposta: atualizada, itens: resultado, direcoes_prontas: direcoes });
 }
 
 /** Memoria do estrategista: o que a equipe escolheu e o que descartou. Uma vez por proposta. */
@@ -1409,12 +1413,177 @@ async function registrarMemoriaDaEscolha(servico: SupabaseClient, p: Proposta) {
 
 // ------------------------------------------------------------ porta
 
+// ------------------------------------------------ direção pronta no estúdio
+
+const FORMATOS_COM_ARTE = new Set(["carousel", "static", "design"]);
+
+/**
+ * Cada item gravado com roteiro de cards vira um trabalho do estúdio já
+ * dirigido (status dirigido), montado em código a partir do roteiro, sem
+ * custo de IA. Quando a equipe abre o item no Estúdio, é só gerar.
+ * Item que já tem trabalho não ganha outro.
+ */
+async function criarDirecoesDoRoteiro(
+  servico: SupabaseClient,
+  clientId: string,
+  itens: Item[],
+  userId: string,
+): Promise<number> {
+  const comTarefa = itens.filter((i) => i.task_id && Array.isArray(i.cards) && i.cards.length);
+  if (!comTarefa.length) return 0;
+  const ids = comTarefa.map((i) => i.task_id!) as string[];
+  const [{ data: existentes }, { data: tarefas }, marca, modeloImagem] = await Promise.all([
+    servico.from("estudio_trabalhos").select("task_id").eq("client_id", clientId).in("task_id", ids),
+    servico.from("tasks").select("id, delivery_type, deleted_at").in("id", ids),
+    lerMarcaParaDirecao(servico, clientId),
+    modeloPadrao("imagem"),
+  ]);
+  if (!modeloImagem) return 0;
+  const jaTem = new Set(((existentes as { task_id: string }[] | null) ?? []).map((e) => e.task_id));
+  const formato = new Map(((tarefas as { id: string; delivery_type: string; deleted_at: string | null }[] | null) ?? [])
+    .filter((t) => !t.deleted_at)
+    .map((t) => [t.id, t.delivery_type]));
+  const linhas: Record<string, unknown>[] = [];
+  for (const item of comTarefa) {
+    const tipo = formato.get(item.task_id!);
+    if (!tipo || !FORMATOS_COM_ARTE.has(tipo) || jaTem.has(item.task_id!)) continue;
+    const direcao = direcaoDoRoteiro(item.cards, marca, {
+      postUnico: tipo !== "carousel",
+      carrosselInfinito: !!item.carrossel_infinito,
+      conceito: `${item.tema}. ${item.resumo}`.slice(0, 600),
+      levaLogo: (ordem, total) => ordem === 1 || ordem === total,
+    });
+    if (!direcao.cards.length) continue;
+    linhas.push({
+      client_id: clientId,
+      task_id: item.task_id,
+      status: "dirigido",
+      direcao,
+      modelo_imagem_id: modeloImagem.id,
+      qualidade: "media",
+      cards: [],
+      custo_usd: 0,
+      criado_por: userId,
+    });
+  }
+  if (!linhas.length) return 0;
+  const { error } = await servico.from("estudio_trabalhos").insert(linhas);
+  if (error) {
+    console.error("agente-calendario: direcoes nao criadas", { client_id: clientId, erro: error.message });
+    return 0;
+  }
+  return linhas.length;
+}
+
+// ---------------------------------------------- completar itens da agenda
+
+const MAX_ITENS_COMPLETAR = 12;
+
+/**
+ * completar_itens { client_id, task_ids }: itens que já estão na Agenda (vindos
+ * de qualquer lugar) ganham o roteiro completo do estrategista (gancho, copy e
+ * cada card) e a direção pronta no Estúdio. O roteiro fica numa proposta
+ * gravada com esses task_ids, que é onde o estúdio procura.
+ */
+async function completarItens(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  if (!UUID.test(clientId)) throw new ErroHttp(400, "cliente_invalido", "Cliente inválido.");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const pedidos = (Array.isArray(corpo.task_ids) ? corpo.task_ids : []).map(String).filter((id) => UUID.test(id));
+  if (!pedidos.length) throw new ErroHttp(400, "sem_itens", "Escolha os itens da agenda que o agente deve completar.");
+  if (pedidos.length > MAX_ITENS_COMPLETAR) throw new ErroHttp(400, "itens_demais", `Complete até ${MAX_ITENS_COMPLETAR} itens por vez.`);
+
+  const { data: tarefasBrutas } = await servico
+    .from("tasks")
+    .select("id, title, description, delivery_type, due_date, deleted_at, project_id")
+    .in("id", pedidos);
+  const tarefas = ((tarefasBrutas as { id: string; title: string; description: string | null; delivery_type: string; due_date: string | null; deleted_at: string | null; project_id: string }[] | null) ?? [])
+    .filter((t) => !t.deleted_at && FORMATOS_COM_ARTE.has(t.delivery_type));
+  if (!tarefas.length) throw new ErroHttp(409, "sem_itens_de_arte", "Nenhum dos itens escolhidos é carrossel ou post estático.");
+  const { data: projetos } = await servico.from("projects").select("id, client_id").in("id", [...new Set(tarefas.map((t) => t.project_id))]);
+  const doCliente = new Set(((projetos as { id: string; client_id: string }[] | null) ?? []).filter((p) => p.client_id === clientId).map((p) => p.id));
+  const validas = tarefas.filter((t) => doCliente.has(t.project_id));
+  if (!validas.length) throw new ErroHttp(403, "itens_de_outro_cliente", "Os itens escolhidos não são deste cliente.");
+
+  const datas = validas.map((t) => t.due_date).filter((d): d is string => !!d && DATA.test(d)).sort();
+  const inicio = datas[0] ?? new Date().toISOString().slice(0, 10);
+  const fim = datas[datas.length - 1] ?? inicio;
+  const uteis = diasUteisDoPeriodo(inicio, fim);
+  const ctx = await montarContexto(servico, clientId, inicio, fim);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
+
+TAREFA: estes itens JÁ ESTÃO na agenda do cliente. Complete cada um com todos os campos do calendário, mantendo o tema, a data e o formato de cada item (não troque o assunto). O roteiro de cada card precisa estar pronto para o diretor de arte: texto exato de cada card (curto, com hierarquia clara), ilustração concreta e estilo visual no sistema da marca.
+${validas.map((t, i) => `- tema_id i${i}: "${t.title}" | formato ${t.delivery_type === "carousel" ? "carrossel" : "estatico"} | data ${t.due_date ?? inicio} | o que já existe: ${(t.description ?? "").replace(/\s+/g, " ").slice(0, 900) || "só o título"}`).join("\n")}
+Regras dos itens:
+- formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo).
+- carrossel_infinito: true só quando o último card se liga visualmente ao primeiro e isso fizer sentido.
+- copy: a legenda completa do post.
+- data: exatamente a data do item.
+- tipo_conteudo: principal.
+- status: planejado.`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio,
+    esquemaJson: ESQUEMA_ITENS,
+    criadoPor: chamador.userId,
+  });
+  const brutos = Array.isArray((s.json as Record<string, unknown>)?.itens) ? (s.json as { itens: unknown[] }).itens : [];
+  const itens: Item[] = [];
+  validas.forEach((t, i) => {
+    const bruto = brutos.find((b) => String((b as Record<string, unknown>)?.tema_id ?? "") === `i${i}`) ?? brutos[i];
+    if (!bruto) return;
+    const item = normalizarItem(bruto, uteis.length ? uteis : [inicio], t.due_date ?? inicio);
+    item.tema_id = `i${i}`;
+    item.task_id = t.id;
+    item.data = t.due_date ?? item.data;
+    item.formato = t.delivery_type === "carousel" ? "carrossel" : "estatico";
+    if (!item.tema) item.tema = t.title;
+    itens.push(item);
+  });
+  if (!itens.length) {
+    throw new ErroHttp(502, "itens_vazios", "O estrategista não devolveu os itens. Tente de novo.", { uso_id: s.usoId });
+  }
+
+  const { data: proposta, error } = await servico
+    .from("calendario_propostas")
+    .insert({
+      client_id: clientId,
+      project_id: validas[0].project_id,
+      periodo_inicio: inicio,
+      periodo_fim: fim,
+      parametros: { origem: "completar_itens" },
+      status: "gravada",
+      diagnostico: null,
+      temas: [],
+      itens,
+      task_ids: itens.map((i) => i.task_id),
+      criado_por: chamador.userId,
+      gravada_em: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+  if (error) throw new ErroHttp(503, "proposta_nao_gravada", "O roteiro foi escrito, mas não foi gravado. Tente de novo.", { uso_id: s.usoId });
+
+  const direcoes = await criarDirecoesDoRoteiro(servico, clientId, itens, chamador.userId);
+  return json({ proposta, itens, direcoes_prontas: direcoes, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,
   conversar,
   gravar,
+  completar_itens: completarItens,
 };
 
 Deno.serve(async (req) => {

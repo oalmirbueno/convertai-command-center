@@ -85,6 +85,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.agente-calendario]
     verify_jwt = true
+  [functions.agente-contexto]
+    verify_jwt = true
   [functions.notify-admin]
     verify_jwt = true
   [functions.ops-quiz-list]

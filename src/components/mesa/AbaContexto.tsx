@@ -1,9 +1,12 @@
 import { useState } from "react";
+import AgenteDeContexto from "./AgenteDeContexto";
+import ContextoAutomatico from "./ContextoAutomatico";
 import ContextoMarca from "./ContextoMarca";
 import ContextoFontes from "./ContextoFontes";
 import ContextoReferencias from "./ContextoReferencias";
 import ContextoRosto from "./ContextoRosto";
 import { MemoriaDoAgente, PromptDoCliente } from "./ContextoAgente";
+import { TituloDeSecao } from "./Seletores";
 
 const PARTES = [
   { valor: "marca", rotulo: "Marca", dica: "Paleta, logo, estilo e regras." },
@@ -16,12 +19,13 @@ const PARTES = [
 
 type Parte = (typeof PARTES)[number]["valor"];
 
-/** Contexto do cliente: uma parte por vez, na ordem em que o agente usa. */
-export default function AbaContexto() {
+/** Os editores de cada parte do contexto, como já eram: uma parte por vez. */
+function DetalhesDoContexto() {
   const [parte, setParte] = useState<Parte>("marca");
   const atual = PARTES.find((p) => p.valor === parte)!;
   return (
-    <div className="space-y-5">
+    <section className="min-w-0 space-y-4">
+      <TituloDeSecao>Detalhes</TituloDeSecao>
       <div className="-mx-1 flex flex-wrap gap-1.5 px-1">
         {PARTES.map((p) => (
           <button
@@ -43,6 +47,27 @@ export default function AbaContexto() {
       {parte === "rosto" && <ContextoRosto />}
       {parte === "prompt" && <PromptDoCliente />}
       {parte === "memoria" && <MemoriaDoAgente />}
+    </section>
+  );
+}
+
+/**
+ * Contexto do cliente: a Mesa puxa sozinha o que o cliente já tem (documentos,
+ * dossiê, artes aprovadas, referências), monta o contexto e deixa um agente ao
+ * lado para completar e corrigir conversando. Os editores ficam em Detalhes.
+ */
+export default function AbaContexto() {
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+        <div className="min-w-0">
+          <ContextoAutomatico />
+        </div>
+        <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+          <AgenteDeContexto />
+        </div>
+      </div>
+      <DetalhesDoContexto />
     </div>
   );
 }

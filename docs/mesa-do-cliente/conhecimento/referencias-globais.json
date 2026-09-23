@@ -1,0 +1,485 @@
+{
+  "fonte": {
+    "quadro": "Referências de Composição Visual",
+    "dono": "Thiago Rodrigues (thiagorodri), designer e professor do curso DG Pro",
+    "url": "https://br.pinterest.com/thiagorodri/refer%C3%AAncias-de-composi%C3%A7%C3%A3o-visual/",
+    "pins_no_quadro": 1638,
+    "pins_lidos": 25,
+    "imagens_unicas": 24,
+    "coletado_em": "2026-09-23",
+    "metodo": "HTML público (JSON __PWS_DATA__) + RSS público do quadro; o navegador sem login mostrou os mesmos pins e abriu o muro de login ao rolar",
+    "observacao": "Amostra dos pins mais recentes; o restante do quadro exige login."
+  },
+  "referencias": [
+    {
+      "ordem": 1,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692739/",
+      "imagem_url": "https://i.pinimg.com/originals/da/ab/48/daab48e9490e98ca9aa32d4d0fcdd08f.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-01-485051822390692739.jpg",
+      "titulo": "Pôster Oakley com figura granulada",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Pôster Oakley com figura granulada",
+      "leitura": "Figura humana em silhueta preta com textura granulada (vidro jateado) ocupa quase todo o quadro sobre fundo cinza claro; a única cor é a faixa laranja dos óculos, recortada em retângulo horizontal que funciona como janela nítida dentro da forma desfocada. Logo manuscrito sobreposto no canto da faixa e bloco de texto corrido em caixa alta fina, alinhado em três colunas que atravessam a silhueta. Hierarquia por contraste de nitidez: o produto é o único ponto nítido e colorido. Força: foco seletivo e cor única guiando o olho direto ao produto.",
+      "tags": [
+        "foto-integrada",
+        "cor-unica-destaque",
+        "textura",
+        "silhueta",
+        "recorte",
+        "tipografia-pequena-colunas",
+        "minimalista"
+      ]
+    },
+    {
+      "ordem": 2,
+      "pin_url": "https://br.pinterest.com/pin/485051822390847607/",
+      "imagem_url": "https://i.pinimg.com/originals/d0/d0/c8/d0d0c83e99dadac2c4ceb1b7661d3310.png",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-02-485051822390847607.png",
+      "titulo": "Calendário de eventos Start21 sobre foto de cinema",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Calendário de eventos Start21 sobre foto de cinema",
+      "leitura": "Foto de poltronas de cinema escurecida e dessaturada como fundo; por cima, grid rígido de 5 colunas por 4 linhas de quadrados arredondados translúcidos (vidro fosco). Só as células com evento ficam opacas: brancas para eventos comuns e verde limão (cor da marca) para os destaques. Título em dois pesos e duas escalas ('august' pequeno, 'events' gigante) centralizado no topo, logo pequeno centrado no rodapé. Força: o grid vira o próprio conteúdo (calendário) e a cor da marca marca prioridade sem precisar de texto extra.",
+      "tags": [
+        "grid-rigido",
+        "foto-integrada",
+        "numero-dominante",
+        "cor-de-marca-como-sinal",
+        "glassmorphism",
+        "informativo",
+        "calendario"
+      ]
+    },
+    {
+      "ordem": 3,
+      "pin_url": "https://br.pinterest.com/pin/485051822390552833/",
+      "imagem_url": "https://i.pinimg.com/originals/a1/e2/75/a1e27512a40cfdf595d4bb9dc9473650.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-03-485051822390552833.jpg",
+      "titulo": "An expressive poster about Eyes, that gives us vision. Eyes tells what other senses can do. Eyes can also telling the truth without spoke a single word.",
+      "titulo_original_do_pin": "An expressive poster about Eyes, that gives us vision. Eyes tells what other senses can do. Eyes can also telling the truth without spoke a single word.",
+      "titulo_descritivo": "Pôster expressivo sobre olhos",
+      "leitura": "Três faixas horizontais empilhadas, cada uma com um recorte fotográfico extremo de olhos tratado em bicromia (azul, preto e creme, vermelho). A faixa central é a maior e mais contrastada; a do topo divide-se em dois painéis. Rabiscos e letras manuscritas em creme e azul preenchem os vazios como anotações, e um triângulo vermelho invade a faixa central. Força: repetição do mesmo tema (olho) em escalas e cores diferentes cria ritmo; o texto à mão dá camada emocional sem competir com a foto.",
+      "tags": [
+        "colagem",
+        "recorte",
+        "faixas-horizontais",
+        "bicromia",
+        "manuscrito",
+        "halftone",
+        "tema-repetido"
+      ]
+    },
+    {
+      "ordem": 4,
+      "pin_url": "https://br.pinterest.com/pin/485051822390947066/",
+      "imagem_url": "https://i.pinimg.com/originals/8f/26/ec/8f26ec13ddd2852db8a82f9642922a00.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-04-485051822390947066.jpg",
+      "titulo": "Pôster Porsche 24h de Daytona",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Pôster Porsche 24h de Daytona",
+      "leitura": "Vista de cima: duas pistas sinuosas (uma vermelha, uma preta) atravessam o fundo creme em curvas amplas que saem pelas bordas, e cinco carros fotografados de cima seguem as curvas com sombras reais. O título 'DAYTONA' em sans condensada branca fica dentro da faixa vermelha, integrado à forma. Rodapé com faixa de logos patrocinadores alinhada. Força: a forma gráfica (pista) é ao mesmo tempo a estrutura da composição, o caminho de leitura e a metáfora do produto; paleta de 3 cores fechada.",
+      "tags": [
+        "metafora-visual",
+        "forma-como-estrutura",
+        "vista-superior",
+        "texto-integrado",
+        "paleta-restrita",
+        "sangria",
+        "movimento"
+      ]
+    },
+    {
+      "ordem": 5,
+      "pin_url": "https://br.pinterest.com/pin/485051822390844537/",
+      "imagem_url": "https://i.pinimg.com/originals/6d/8f/ff/6d8fff66adacdb6bc36724ebe0a9ddc8.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-05-485051822390844537.jpg",
+      "titulo": "Night of the Living Dead, pôster minimalista",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Night of the Living Dead, pôster minimalista",
+      "leitura": "Fundo preto chapado; uma mão gigante em silhueta desce do topo e funciona como janela: dentro dela aparece a cena noturna (lua, árvores, zumbis em silhueta com olhos brilhando). Título em verde neon com letra irregular centralizado no rodapé, bem menor que a imagem. Força: dupla exposição por máscara (forma dentro de forma) conta a história inteira numa figura; espaço negativo preto enorme dá tensão.",
+      "tags": [
+        "dupla-exposicao",
+        "silhueta",
+        "metafora-visual",
+        "espaco-negativo",
+        "minimalista",
+        "forma-como-janela"
+      ]
+    },
+    {
+      "ordem": 6,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692173/",
+      "imagem_url": "https://i.pinimg.com/originals/38/4d/35/384d357f1fb417f17b9f30184e8c286f.png",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-06-485051822390692173.png",
+      "titulo": "Affiche",
+      "titulo_original_do_pin": "Affiche",
+      "titulo_descritivo": "Post 'Successfully placed' com grid sobre retrato",
+      "leitura": "Retrato central nítido de um homem com silhuetas desfocadas atrás (profundidade por planos: frente nítida, fundo borrado e escuro). Um grid fino de linhas brancas sobrepõe o tronco, e quadrados amarelos e um branco ocupam células soltas em ritmo assimétrico. Headline fina em caixa alta alinhada à direita dentro do grid, texto de apoio pequeno, CTA 'Join now' no canto inferior esquerdo e logo no inferior direito; marca d'água gigante e clara atrás da cabeça. Força: o grid transforma um retrato comum em peça de design e os blocos de cor conduzem o olho em zigue-zague.",
+      "tags": [
+        "grid-visivel",
+        "foto-integrada",
+        "profundidade-por-planos",
+        "blocos-de-cor",
+        "grid-assimetrico",
+        "texto-atras-do-sujeito",
+        "corporativo"
+      ]
+    },
+    {
+      "ordem": 7,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692177/",
+      "imagem_url": "https://i.pinimg.com/originals/2e/0a/74/2e0a74bd4db9a61a4f6061feb620b607.png",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-07-485051822390692177.png",
+      "titulo": "ai + human creativity",
+      "titulo_original_do_pin": "ai + human creativity",
+      "titulo_descritivo": "'How We Scale', perfil em azul",
+      "leitura": "Perfil humano em silhueta escura e desfocada ocupa a metade direita, sangrando pela borda, sobre degradê azul elétrico com listras verticais de vidro. Uma faixa horizontal translúcida corta o quadro na altura dos olhos e carrega três rótulos em colunas (as três etapas do serviço); é o único ponto nítido do rosto. Título no canto superior esquerdo mistura sans pesada ('How We') e serifa itálica ('Scale.'). Força: a faixa funciona como linha do olhar e como lista, integrando texto e foto; contraste de famílias tipográficas dá sofisticação.",
+      "tags": [
+        "foto-integrada",
+        "faixa-horizontal",
+        "silhueta",
+        "mix-serifa-sans",
+        "monocromatico",
+        "sangria",
+        "corporativo"
+      ]
+    },
+    {
+      "ordem": 8,
+      "pin_url": "https://br.pinterest.com/pin/485051822390552835/",
+      "imagem_url": "https://i.pinimg.com/originals/b5/cd/8b/b5cd8b84681a9b852017ace669055246.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-08-485051822390552835.jpg",
+      "titulo": "vans",
+      "titulo_original_do_pin": "vans",
+      "titulo_descritivo": "Vans, colagem editorial",
+      "leitura": "Palavra 'VANS' repetida em duas camadas gigantes (uma vermelha granulada, uma preta sobreposta) ocupa o terço superior e desce atrás do personagem sentado no sofá; tênis recortados em alto contraste entram pelas laterais. Metade inferior em preto e branco com textura de xerox, piso xadrez em perspectiva e pichações discretas. Detalhes de revista (logo, ano 1966, código de barras) nos cantos superiores. Força: tipografia como cenário atrás do sujeito cria profundidade; estética de fanzine e cor única vermelha amarram tudo.",
+      "tags": [
+        "tipografia-grande",
+        "texto-atras-do-sujeito",
+        "colagem",
+        "recorte",
+        "textura-xerox",
+        "cor-unica-destaque",
+        "capa-de-revista"
+      ]
+    },
+    {
+      "ordem": 9,
+      "pin_url": "https://br.pinterest.com/pin/485051822390850312/",
+      "imagem_url": "https://i.pinimg.com/originals/91/6c/6f/916c6f9b907465e65d52bd636234594e.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-09-485051822390850312.jpg",
+      "titulo": "'Starting Five', escalação de basquete (Dayton)",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'Starting Five', escalação de basquete (Dayton)",
+      "leitura": "Fundo vinho monocromático com ilustração em linha da ponte e da cidade quase invisível. Título 'STARTING FIVE' em sans condensada branca enorme no topo, com dados do jogo em bloco pequeno encaixado ao lado de 'FIVE'. Abaixo, cinco cápsulas brancas empilhadas, cada uma com o nome do jogador de um lado e o recorte do atleta saindo da cápsula do outro, alternando esquerda e direita. Força: lista vira ritmo visual (zigue-zague); recortes que estouram a moldura dão volume; paleta de duas cores. O pin 10 é a mesma imagem salva duas vezes.",
+      "tags": [
+        "lista-em-capsulas",
+        "recorte",
+        "quebra-de-moldura",
+        "tipografia-grande",
+        "monocromatico",
+        "zigue-zague",
+        "esporte"
+      ]
+    },
+    {
+      "ordem": 10,
+      "pin_url": "https://br.pinterest.com/pin/485051822390753639/",
+      "imagem_url": "https://i.pinimg.com/originals/91/6c/6f/916c6f9b907465e65d52bd636234594e.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-10-485051822390753639.jpg",
+      "titulo": "'Starting Five', escalação de basquete (Dayton)",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'Starting Five', escalação de basquete (Dayton)",
+      "leitura": "Mesma imagem do pin 9 (salva duas vezes no quadro, pins diferentes). Fundo vinho monocromático com ilustração em linha da ponte e da cidade quase invisível. Título 'STARTING FIVE' em sans condensada branca enorme no topo, com dados do jogo em bloco pequeno encaixado ao lado de 'FIVE'. Abaixo, cinco cápsulas brancas empilhadas, cada uma com o nome do jogador de um lado e o recorte do atleta saindo da cápsula do outro, alternando esquerda e direita. Força: lista vira ritmo visual (zigue-zague); recortes que estouram a moldura dão volume; paleta de duas cores.",
+      "tags": [
+        "lista-em-capsulas",
+        "recorte",
+        "quebra-de-moldura",
+        "tipografia-grande",
+        "monocromatico",
+        "zigue-zague",
+        "esporte"
+      ]
+    },
+    {
+      "ordem": 11,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692756/",
+      "imagem_url": "https://i.pinimg.com/originals/ab/84/1a/ab841ac4de80bf6b327d2bf3409caf70.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-11-485051822390692756.jpg",
+      "titulo": "(3) Instagram",
+      "titulo_original_do_pin": "(3) Instagram",
+      "titulo_descritivo": "'New supplement is here', janela sobre atleta",
+      "leitura": "Foto de atleta correndo em perfil, em preto e branco sobre fundo claro, cortada pelas bordas. Um retângulo vertical grande de vidro fosco com degradês radiais escuros (topo e base) cobre o centro, e o texto fica dentro dele: headline sans regular grande no topo, URL pequena na base. O rosto e a mão escapam da janela à direita. Força: o painel cria área limpa para texto sem esconder o movimento; o que fica fora do painel (rosto, mão) mantém a energia humana.",
+      "tags": [
+        "painel-sobre-foto",
+        "glassmorphism",
+        "foto-integrada",
+        "minimalista",
+        "recorte-pelas-bordas",
+        "produto"
+      ]
+    },
+    {
+      "ordem": 12,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692174/",
+      "imagem_url": "https://i.pinimg.com/originals/97/4c/d7/974cd7f19d214d6febc761ea4aebccc5.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-12-485051822390692174.jpg",
+      "titulo": "'Content without positioning is just noise'",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'Content without positioning is just noise'",
+      "leitura": "Retrato de perfil com luz lateral dura, silhueta escura sobre laranja saturado. Grid fino de 6 colunas visível em linhas brancas, com metadados pequenos nas interseções (série, @, ano, coordenadas) no estilo ficha técnica. Frase principal em caixa alta alternando pesos (bold nas palavras-chave, light nas de ligação) alinhada à esquerda em uma coluna do grid, sobre o corpo escuro; frase de apoio com símbolo ≠ abaixo. Força: tensão entre foto emocional e grid racional; pesos alternados fazem a frase ser lida em dois níveis.",
+      "tags": [
+        "grid-visivel",
+        "foto-integrada",
+        "alternancia-de-pesos",
+        "texto-sobre-sujeito",
+        "metadados",
+        "cor-saturada",
+        "frase-de-impacto"
+      ]
+    },
+    {
+      "ordem": 13,
+      "pin_url": "https://br.pinterest.com/pin/485051822390801613/",
+      "imagem_url": "https://i.pinimg.com/originals/ca/b2/ce/cab2cefc7358fca728cc579460baca54.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-13-485051822390801613.jpg",
+      "titulo": "Matchday Hull City x Manchester United",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Matchday Hull City x Manchester United",
+      "leitura": "Quatro recortes horizontais extremos de olhos de jogadores, empilhados como tiras, sobre fundo grafite; a faixa central escura carrega os escudos e 'MATCHDAY' com meio título em branco e meio em laranja (cor do clube), mais local e horário. Bordas das tiras com retícula de meio-tom e cantos laranja cortados nas extremidades. Textos minúsculos centrados no topo e na base. Força: recorte fechado nos olhos cria intensidade e anonimato coletivo; ritmo de tiras guia a leitura até o centro.",
+      "tags": [
+        "faixas-horizontais",
+        "recorte-extremo",
+        "olhar",
+        "halftone",
+        "centro-como-ancora",
+        "esporte",
+        "cor-de-marca-como-sinal"
+      ]
+    },
+    {
+      "ordem": 14,
+      "pin_url": "https://br.pinterest.com/pin/485051822390947071/",
+      "imagem_url": "https://i.pinimg.com/originals/0a/82/fa/0a82fa1b61c539efbeb0061dc6ad44f4.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-14-485051822390947071.jpg",
+      "titulo": "'Go slower or you might miss the details' (Vitrium Opus)",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'Go slower or you might miss the details' (Vitrium Opus)",
+      "leitura": "Frase em sans ultra condensada preta gigante preenche quase toda a largura, em quatro linhas justificadas sobre fundo lilás claro. Um carro de corrida visto de cima atravessa na diagonal e deixa um rastro de vidro 3D que refrata e distorce as letras por baixo, com aberração cromática. Metadados pequenos em três colunas no topo e navegação falsa na base. Força: a imagem interage fisicamente com o texto (distorção), então texto e foto viram um único objeto; diagonal quebra a rigidez do bloco tipográfico.",
+      "tags": [
+        "tipografia-grande",
+        "texto-integrado",
+        "diagonal",
+        "refracao-vidro",
+        "vista-superior",
+        "metadados",
+        "frase-de-impacto"
+      ]
+    },
+    {
+      "ordem": 15,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692393/",
+      "imagem_url": "https://i.pinimg.com/originals/ad/ea/e6/adeae6a728cff908937d4a57af366f68.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-15-485051822390692393.jpg",
+      "titulo": "Homem-Aranha em espiral de caligrafia",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Homem-Aranha em espiral de caligrafia",
+      "leitura": "Fundo preto total; o personagem pendurado de cabeça para baixo no centro, preso por um fio que vem do topo. Em volta dele, texto em caligrafia gótica vermelha gira em espiral, crescendo do centro para fora como um redemoinho. Paleta de duas cores (preto e vermelho). Força: o texto vira forma e movimento (vórtice) e aponta para o personagem; composição radial com ponto focal único e muito espaço negativo.",
+      "tags": [
+        "tipografia-como-forma",
+        "composicao-radial",
+        "espaco-negativo",
+        "paleta-restrita",
+        "ponto-focal-central",
+        "ilustracao"
+      ]
+    },
+    {
+      "ordem": 16,
+      "pin_url": "https://br.pinterest.com/pin/485051822390947075/",
+      "imagem_url": "https://i.pinimg.com/originals/fc/e6/6a/fce66a382270136bf5b4a77f72cf1daa.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-16-485051822390947075.jpg",
+      "titulo": "Create eye-catching typography posters with impactful quotes like 'Let It Go.' This poster design combines bold lettering and minimalist aesthetics to convey powerful messages. Perfect for inspiring spaces or social media. Visit our site to download a free selection of typography poster ideas and elevate your visual storytelling. ✨ #Typography #PosterDesign #QuoteArt",
+      "titulo_original_do_pin": "Create eye-catching typography posters with impactful quotes like 'Let It Go.' This poster design combines bold lettering and minimalist aesthetics to convey powerful messages. Perfect for inspiring spaces or social media. Visit our site to download a free selection of typography poster ideas and elevate your visual storytelling. ✨ #Typography #PosterDesign #QuoteArt",
+      "titulo_descritivo": "'Let it go', tipografia derretendo",
+      "leitura": "Fundo branco sujo com textura de papel amassado; 'LET IT GO' em sans pesada preta empilhada no centro, e a última letra escorre para baixo num fluxo líquido de preto, vermelho e laranja que sai pela borda inferior direita. Rodapé com créditos minúsculos e selo 'parental advisory'. Força: a palavra executa o próprio significado (soltar, derreter); um único gesto visual carrega a peça inteira.",
+      "tags": [
+        "tipografia-expressiva",
+        "texto-que-faz-o-que-diz",
+        "metafora-visual",
+        "textura-papel",
+        "minimalista",
+        "degrade-liquido"
+      ]
+    },
+    {
+      "ordem": 17,
+      "pin_url": "https://br.pinterest.com/pin/485051822390552825/",
+      "imagem_url": "https://i.pinimg.com/originals/b9/03/c3/b903c3d7b39603666263402820bd4a04.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-17-485051822390552825.jpg",
+      "titulo": "'EVOLVE', mão de escultura e borboleta",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'EVOLVE', mão de escultura e borboleta",
+      "leitura": "Fundo preto com palavra 'EVOLVE' em sans condensada vermelha enorme no centro. Mão de escultura rachada entra de baixo e passa na frente da palavra, enquanto uma borboleta de pedra pousa sobre as letras no topo, criando três planos (fundo, texto, objeto). Moldura de cápsula com rótulos, textos verticais nas laterais e dois blocos de texto corrido justificados em colunas espelhadas. Força: objeto na frente e atrás do título dá profundidade real; metáfora clara (fratura vira transformação).",
+      "tags": [
+        "texto-atras-do-sujeito",
+        "profundidade-por-planos",
+        "tipografia-grande",
+        "metafora-visual",
+        "layout-editorial",
+        "texto-vertical",
+        "paleta-restrita"
+      ]
+    },
+    {
+      "ordem": 18,
+      "pin_url": "https://br.pinterest.com/pin/485051822390552831/",
+      "imagem_url": "https://i.pinimg.com/originals/74/d6/37/74d637d5bdb10d9473636475caf230a6.png",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-18-485051822390552831.png",
+      "titulo": "The Renaissance was a rebirth of art, knowledge, and imagination across Europe. It was a time when painters, thinkers, and dreamers reshaped the world with beauty, innovation, and a renewed belief in human potential.",
+      "titulo_original_do_pin": "The Renaissance was a rebirth of art, knowledge, and imagination across Europe. It was a time when painters, thinkers, and dreamers reshaped the world with beauty, innovation, and a renewed belief in human potential.",
+      "titulo_descritivo": "'Renaissance', mãos da Criação em meio-tom",
+      "leitura": "Fundo off-white com mãos da Criação de Adão em gravura preto e branco entrando pelas laterais e nuvens em retícula de meio-tom embaixo. Título 'Renaissance.' em sans vermelha bold centralizado no vão entre as mãos, com palavras pequenas nas pontas. Textos em vermelho distribuídos nos quatro cantos formando moldura tipográfica. Força: o título ocupa exatamente o espaço de tensão entre as mãos; referência clássica reinterpretada com tipografia suíça e uma cor só.",
+      "tags": [
+        "referencia-classica",
+        "halftone",
+        "simetria",
+        "texto-no-espaco-de-tensao",
+        "cor-unica-destaque",
+        "molduras-de-texto",
+        "minimalista"
+      ]
+    },
+    {
+      "ordem": 19,
+      "pin_url": "https://br.pinterest.com/pin/485051822390847606/",
+      "imagem_url": "https://i.pinimg.com/originals/34/97/4b/34974b5ca330f3fd187b07bd11a75ca5.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-19-485051822390847606.jpg",
+      "titulo": "Instagram",
+      "titulo_original_do_pin": "Instagram",
+      "titulo_descritivo": "'3 days to go', contagem com rostos em tiras",
+      "leitura": "Quatro tiras horizontais com recortes fechados de rostos de jogadores (olhos e nariz), alternando lado esquerdo e direito, sobre fundo noturno de estádio. Palavras da contagem ('3', 'DAYS', 'TO', 'GO!') em itálico condensado ciano gigante ocupam o espaço vazio de cada tira, em zigue-zague. Faixa central com escudos, nomes dos times e dados do jogo. Força: a frase é distribuída pelo grid de tiras, criando leitura em Z; número e palavras funcionam como contraponto ao rosto em cada linha.",
+      "tags": [
+        "faixas-horizontais",
+        "recorte-extremo",
+        "zigue-zague",
+        "numero-dominante",
+        "tipografia-grande",
+        "esporte",
+        "contagem-regressiva"
+      ]
+    },
+    {
+      "ordem": 20,
+      "pin_url": "https://br.pinterest.com/pin/485051822390801620/",
+      "imagem_url": "https://i.pinimg.com/originals/45/19/06/4519066dd20b18f806baf6871fd26505.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-20-485051822390801620.jpg",
+      "titulo": "poster design by Andre Power",
+      "titulo_original_do_pin": "poster design by Andre Power",
+      "titulo_descritivo": "Andre Power no ADE, retrato em tabuleiro",
+      "leitura": "Retrato em monocromia amarela (duotone amarelo e preto) fatiado por um grid de quadrados de 6 colunas; algumas células mostram a foto e outras ficam pretas, formando um tabuleiro irregular que dissolve a figura na base. Terço inferior em preto com o nome do artista numa etiqueta amarela contornada e três colunas de datas com logotipos de cada noite, cidade no rodapé em amarelo. Força: o grid revela e esconde a foto, dando ritmo e mistério; paleta de duas cores com ruído de grão dá unidade.",
+      "tags": [
+        "grid-rigido",
+        "duotone",
+        "foto-fatiada",
+        "colunas-de-informacao",
+        "cor-de-marca-como-sinal",
+        "textura-grao",
+        "evento"
+      ]
+    },
+    {
+      "ordem": 21,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692722/",
+      "imagem_url": "https://i.pinimg.com/originals/0c/b0/8d/0cb08d00f68b272cbcf9abc7cc847789.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-21-485051822390692722.jpg",
+      "titulo": "'Who are you?', retrato meio escondido",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'Who are you?', retrato meio escondido",
+      "leitura": "Retrato frontal de um homem cortado ao meio por um painel vertical de vidro fosco que cobre a metade esquerda do quadro e desfoca o rosto por trás. A pergunta 'WHO ARE / YOU?' em sans pesada creme atravessa a altura dos olhos, partida pelo próprio rosto nítido no meio. Rodapé discreto com URL, marca e slogan. Força: o recorte físico (painel) reforça a pergunta de identidade; o texto é interrompido pelo sujeito, integrando os dois.",
+      "tags": [
+        "texto-partido-pelo-sujeito",
+        "painel-sobre-foto",
+        "divisao-vertical",
+        "metafora-visual",
+        "foto-integrada",
+        "minimalista",
+        "campanha"
+      ]
+    },
+    {
+      "ordem": 22,
+      "pin_url": "https://br.pinterest.com/pin/485051822390905953/",
+      "imagem_url": "https://i.pinimg.com/originals/09/29/22/092922f3ab60595c7e73cb4ac6819a84.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-22-485051822390905953.jpg",
+      "titulo": "Harry Potter e o Prisioneiro de Azkaban, raio como janela",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "Harry Potter e o Prisioneiro de Azkaban, raio como janela",
+      "leitura": "Fundo cinza escuro com o rosto do personagem em preto e branco quase apagado; um raio preto gigante (símbolo da cicatriz) corta o quadro de cima a baixo e, dentro dele, o mesmo rosto aparece em ciano e alto contraste. Título em serifa ciano minúsculo no canto inferior esquerdo, 'year three' em letras verticais espaçadas no alto à direita e créditos pequenos no canto inferior direito. Força: símbolo icônico usado como máscara (forma dentro de forma) com uma cor só; título pequeno confia na imagem.",
+      "tags": [
+        "forma-como-janela",
+        "simbolo-como-mascara",
+        "cor-unica-destaque",
+        "dupla-exposicao",
+        "texto-vertical",
+        "minimalista",
+        "pôster-de-filme"
+      ]
+    },
+    {
+      "ordem": 23,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692749/",
+      "imagem_url": "https://i.pinimg.com/originals/d8/9f/cd/d89fcd59aca70748069cd03b358ff81b.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-23-485051822390692749.jpg",
+      "titulo": "Investor kontrarian punya satu kebiasaan unik: mereka melihat peluang di tempat orang lain nggak mau lihat. 👀  Sir John Templeton, salah satu investor terbesar abad ini, dikenal berani beli saat pasar panik, dan mundur saat harga melonjak karena euforia.  Prinsip ini juga yang dipegang oleh investor value: beli aset yang undervalued, hindari yang overhyped. Butuh disiplin, pengetahuan, dan yang paling penting keberanian untuk jalan berlawanan arah dengan mayoritas.  Apa pun strategi investasi...",
+      "titulo_original_do_pin": "Investor kontrarian punya satu kebiasaan unik: mereka melihat peluang di tempat orang lain nggak mau lihat. 👀  Sir John Templeton, salah satu investor terbesar abad ini, dikenal berani beli saat pasar panik, dan mundur saat harga melonjak karena euforia.  Prinsip ini juga yang dipegang oleh investor value: beli aset yang undervalued, hindari yang overhyped. Butuh disiplin, pengetahuan, dan yang paling penting keberanian untuk jalan berlawanan arah dengan mayoritas.  Apa pun strategi investasi...",
+      "titulo_descritivo": "XTB 'Keberanian' (coragem), retrato com painel",
+      "leitura": "Retrato de mulher à direita, nítido, com metade esquerda do quadro coberta por painel de vidro fosco escuro que desfoca o rosto por trás. Linha azul da marca contorna a figura como um hexágono aberto. Texto à esquerda sobre o painel: frase de apoio fina em duas linhas e palavra-chave 'Keberanian' em bold grande; aviso legal pequeno no pé. Logo no canto superior esquerdo. Força: o painel cria área de leitura sem cortar a foto; a palavra-chave única é o título real e ancora a mensagem.",
+      "tags": [
+        "painel-sobre-foto",
+        "divisao-vertical",
+        "palavra-chave-dominante",
+        "linha-de-marca",
+        "foto-integrada",
+        "financeiro",
+        "corporativo"
+      ]
+    },
+    {
+      "ordem": 24,
+      "pin_url": "https://br.pinterest.com/pin/485051822390692719/",
+      "imagem_url": "https://i.pinimg.com/originals/3b/a7/11/3ba7113bd9c2819fc1724dbaf9e482c2.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-24-485051822390692719.jpg",
+      "titulo": "IRONWRATH. [ experimental branding series ] . IRONWRATH is forged from grit, sweat, and the relentless pursuit of power. It’s not just a boxing brand, it’s a symbol of unbreakable will. Every punch, every breath, every drop of effort defines its essence: strength in struggle, pride in pain, and wrath turned into discipline. IRONWRATH stands for those who fight not just in the ring, but in life where endurance becomes identity and every scar is proof of dominance.",
+      "titulo_original_do_pin": "IRONWRATH. [ experimental branding series ] . IRONWRATH is forged from grit, sweat, and the relentless pursuit of power. It’s not just a boxing brand, it’s a symbol of unbreakable will. Every punch, every breath, every drop of effort defines its essence: strength in struggle, pride in pain, and wrath turned into discipline. IRONWRATH stands for those who fight not just in the ring, but in life where endurance becomes identity and every scar is proof of dominance.",
+      "titulo_descritivo": "IRONWRATH, branding experimental",
+      "leitura": "Foto de lutador com luva vermelha tratada com retícula de meio-tom que se dissolve nas bordas sobre fundo bege com grão, como uma impressão. Nome da marca em sans larga amarelo neon, dividido em duas linhas com setas pequenas, cruza o peito da figura no centro; slogan espaçado entre duas cápsulas contornadas. Texto corrido justificado minúsculo no topo e no rodapé, quadradinhos amarelos marcando os quatro cantos. Força: foto borrada e texto nítido invertem a hierarquia habitual (o nome é o foco); o neon sobre bege cria vibração.",
+      "tags": [
+        "halftone",
+        "texto-sobre-sujeito",
+        "cor-neon",
+        "marcas-de-canto",
+        "textura-grao",
+        "branding",
+        "esporte"
+      ]
+    },
+    {
+      "ordem": 25,
+      "pin_url": "https://br.pinterest.com/pin/485051822390617288/",
+      "imagem_url": "https://i.pinimg.com/originals/b2/de/b0/b2deb09b3990ab6e9d861bfcfd152288.jpg",
+      "arquivo_local": "C:/Users/Usuario/AppData/Local/Temp/claude/design-videos/pinterest/pin-25-485051822390617288.jpg",
+      "titulo": "'FOCUS', repetição tipográfica em profundidade",
+      "titulo_original_do_pin": "",
+      "titulo_descritivo": "'FOCUS', repetição tipográfica em profundidade",
+      "leitura": "Fundo preto com linhas onduladas vermelhas escuras (moiré). A palavra 'FOCUS' repetida em várias camadas, da maior (vermelha, estourando as bordas) para a menor (branca e ciano, nítida no centro), criando um túnel de profundidade. Formato vertical de story. Força: a repetição com escala decrescente faz a palavra executar o sentido (foco no centro); só tipografia, sem imagem, e ainda assim com profundidade.",
+      "tags": [
+        "tipografia-repetida",
+        "profundidade-por-escala",
+        "texto-que-faz-o-que-diz",
+        "aberracao-cromatica",
+        "so-tipografia",
+        "story"
+      ]
+    }
+  ]
+}

@@ -65,6 +65,8 @@ export default function BarraDeCusto({
   onModelos: () => void;
 }) {
   const negativo = saldoUsd !== null && saldoUsd < 0;
+  // Saldo que não cobre nem um post pelo custo médio: aviso discreto na barra.
+  const baixo = saldoUsd !== null && !!previsao && previsao.custo_por_post_usd > 0 && saldoUsd < previsao.custo_por_post_usd;
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px]">
       <span className="inline-flex items-center gap-1.5 text-muted-foreground">
@@ -73,6 +75,15 @@ export default function BarraDeCusto({
         <strong className={`text-[13px] font-semibold ${negativo ? "text-destructive" : "text-foreground"}`}>
           {carregando && saldoUsd === null ? <Loader2 className="inline h-3 w-3 animate-spin" /> : saldoUsd === null ? "?" : usd(saldoUsd)}
         </strong>
+        {(baixo || negativo) && (
+          <button
+            type="button"
+            onClick={podeRecarregar ? onRecarregar : undefined}
+            className="rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-foreground"
+          >
+            {negativo ? "saldo negativo" : "saldo baixo"}{podeRecarregar ? ", recarregar" : ""}
+          </button>
+        )}
       </span>
       <Popover>
         <PopoverTrigger asChild>
@@ -151,7 +162,8 @@ export function DialogoDeRecarga({
   onOpenChange: (v: boolean) => void;
   clientId: string;
   clientName: string;
-  onRecarregado: () => void;
+  /** Recebe o saldo novo que a recarga devolveu, para a barra mudar na hora. */
+  onRecarregado: (saldoNovo?: number) => void;
   /** Quanto falta para cobrir o plano do mês (previsão menos saldo). */
   sugestaoUsd?: number | null;
 }) {
@@ -176,7 +188,7 @@ export function DialogoDeRecarga({
       toast.success("Carteira recarregada", { description: `Novo saldo: ${usd(Number(data))}.` });
       setValor("");
       setNota("");
-      onRecarregado();
+      onRecarregado(Number.isFinite(Number(data)) ? Number(data) : undefined);
       onOpenChange(false);
     } catch (e) {
       toast.error("Recarga não registrada", { description: textoDoErro(e) });
@@ -196,6 +208,18 @@ export function DialogoDeRecarga({
           <div className="space-y-1.5">
             <Label htmlFor="mesa-recarga-valor">Valor (US$)</Label>
             <Input id="mesa-recarga-valor" inputMode="decimal" placeholder="20,00" value={valor} onChange={(e) => setValor(e.target.value)} />
+            <div className="flex flex-wrap">
+              {[5, 10, 20, 50].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setValor(String(v) + ",00")}
+                  className="mb-1 mr-1.5 rounded-full border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                >
+                  US$ {v}
+                </button>
+              ))}
+            </div>
             {!!sugestaoUsd && sugestaoUsd > 0 && (
               <button
                 type="button"

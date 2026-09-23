@@ -42,21 +42,27 @@ describe("estudio-arte: a lamina inteira sai do gerador", () => {
     expect(fonte).toMatch(/Todo o texto é desenhado pela própria arte/);
   });
 
-  it("gera em 1024x1536 com a area util 4:5 e logo so na capa e no final", () => {
-    expect(fonte).toContain('const TAMANHO_GERADOR = "1024x1536";');
+  it("gera direto em 4:5 (2:3 so para direcao antiga, sem layout) e logo so na capa e no final", () => {
+    expect(fonte).toContain("const TAMANHO_GERADOR = TAMANHO_4X5;");
+    expect(corpoDe("gerarCard")).toContain("tamanho: card.layout ? TAMANHO_GERADOR : TAMANHO_2X3,");
+    expect(corpoDe("gerarCard")).toContain("promptSe2x3: card.layout ? formatoPara2x3(prompt) : undefined,");
     expect(fonte).toContain("const levaLogo = (t: Trabalho, ordem: number) => ordem === 1 || ordem === totalCards(t);");
-    expect(corpoDe("regrasDeRender")).toMatch(/4:5 \(1080 x 1350\)/);
   });
 
-  it("o prompt fixo manda todo texto para dentro da area util 4:5 central", () => {
+  it("direcao antiga (sem layout) continua com a area util 4:5 central da tela 2:3", () => {
     const regras = corpoDe("regrasDeRender");
+    expect(regras).toContain("const formatoAntigo = !card.layout;");
     expect(regras).toContain("ÁREA ÚTIL: todo o texto, a logo e os elementos importantes ficam DENTRO da área central de 1024 x 1280 (de y = 128 a y = 1408)");
-    expect(regras).toContain("Nenhuma letra pode encostar ou entrar nas faixas de 128 px do topo e da base.");
-    expect(fonte).toContain("TODO o texto e a logo ficam dentro da área útil central de 1024 x 1280");
   });
 
-  it("qualidade padrao alta", () => {
-    expect(fonte).toContain('const QUALIDADE_PADRAO: Qualidade = "alta";');
+  it("logo so vai no prompt quando o arquivo existe (sem anexo o gerador inventaria uma)", () => {
+    const gerar = corpoDe("gerarCard");
+    expect(gerar).toContain("let comLogo = false;");
+    expect(gerar).toContain("marca.temLogo = comLogo;");
+  });
+
+  it("qualidade padrao media (US$ 0,01 por lamina contra US$ 0,04 da alta)", () => {
+    expect(fonte).toContain('const QUALIDADE_PADRAO: Qualidade = "media";');
   });
 
   it("o roteiro da proposta e achado so pelo task_id do item", () => {
@@ -150,11 +156,13 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(v).toContain("criteria: NIVEIS_IDENTIDADE");
   });
 
-  it("Jev escolhe ate 4 referencias por Score", () => {
+  it("Jev escolhe por Score uma referencia de identidade e uma de tecnica (cliente ou banco global)", () => {
     const e = corpoDe("escolherReferencias");
     expect(e).toContain("await jevPerguntar(");
     expect(e).toContain('type: "score"');
-    expect(fonte).toContain("const MAX_REFERENCIAS = 4;");
+    expect(e).toContain('.from("referencias_globais")');
+    expect(e).toContain('const identidade = notas.find((x) => x.r.papel === "identidade");');
+    expect(fonte).toContain("const MAX_REFERENCIAS = 2;");
   });
 });
 

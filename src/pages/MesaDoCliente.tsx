@@ -191,7 +191,7 @@ export default function MesaDoCliente() {
         <MesaProvider valor={valor}>
           <div key={valor.clientId} className="min-w-0">
             {aba === "contexto" && <AbaContexto />}
-            {aba === "mes" && <AbaMes />}
+            {aba === "mes" && <AbaMes onAbrirNoEstudio={(taskId, mesDoItem) => mudar({ aba: "estudio", task: taskId, mes: mesDoItem })} />}
             {aba === "estudio" && (
               <AbaEstudio
                 mes={mes}
@@ -211,7 +211,11 @@ export default function MesaDoCliente() {
               onOpenChange={setRecargaAberta}
               clientId={valor.clientId}
               clientName={valor.clientName}
-              onRecarregado={atualizarCusto}
+              onRecarregado={(saldoNovo) => {
+                // A recarga devolve o saldo novo: a barra muda na hora, sem esperar a releitura.
+                if (typeof saldoNovo === "number") queryClient.setQueryData(["mesa", "saldo", clientId], saldoNovo);
+                atualizarCusto();
+              }}
               sugestaoUsd={previsao.data?.recarga_sugerida_usd ?? null}
             />
           )}

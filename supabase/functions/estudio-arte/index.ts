@@ -40,11 +40,25 @@ import {
   cobrarJev,
   IaMotorErro,
   modeloPadrao,
+  TAMANHO_2X3,
+  TAMANHO_4X5,
   type ImagemEntrada,
   type ModeloIa,
   type Qualidade,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, notaScore, type PerguntaJev } from "../_shared/jev.ts";
+import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../_shared/conhecimento-design.ts";
+import {
+  direcaoDoRoteiro,
+  formatoPara2x3,
+  normalizarLayout,
+  promptDaLamina,
+  resumoDaComposicao,
+  type BlocoTexto,
+  type CardDirecao,
+  type MarcaParaDirecao,
+} from "../_shared/direcao-arte.ts";
+import { caminhoDoArquivo, lerContextoConsolidado, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,14 +101,19 @@ const MENSAGEM_MOTOR: Record<string, string> = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const QUALIDADES: Qualidade[] = ["baixa", "media", "alta"];
-const QUALIDADE_PADRAO: Qualidade = "alta";
-const TAMANHO_GERADOR = "1024x1536";
+// Média: US$ 0,01 por lâmina contra US$ 0,04 da alta, com texto nítido no
+// recorte final. A alta fica para quando a equipe pedir (seletor na tela).
+const QUALIDADE_PADRAO: Qualidade = "media";
+// Formato de geração: 4:5 direto (2:3 de reserva no motor). Direções antigas, sem layout, seguem em 2:3.
+const TAMANHO_GERADOR = TAMANHO_4X5;
 const LARGURA_FINAL = 1080;
 const ALTURA_FINAL = 1350;
 const MAX_CARDS = 20;
-const MAX_REFERENCIAS = 4;
+// Uma referência de identidade (arte da própria marca) e uma de técnica: cada
+// imagem anexada custa tokens de entrada no gerador.
+const MAX_REFERENCIAS = 2;
 const MAX_CANDIDATAS_JEV = 16;
-const MAX_AMOSTRAS_FONTE = 3;
+const MAX_AMOSTRAS_FONTE = 2;
 const MAX_BYTES_IMAGEM = 20 * 1024 * 1024;
 const TIMEOUT_PINTEREST_MS = 20_000;
 const FORMATOS_FORA_DO_ESTUDIO = new Set(["reel", "video", "short", "story", "article"]);
@@ -237,16 +256,7 @@ function codigoMotor(e: unknown): string {
 
 // ------------------------------------------------------- tipos do trabalho
 
-type CardDirecao = {
-  ordem: number;
-  funcao: string;
-  texto_exato: string;
-  composicao: string;
-  ilustracao: string;
-  prompt_imagem: string;
-};
-
-type Direcao = { conceito: string; carrossel_infinito: boolean; cards: CardDirecao[] };
+type Direcao = { conceito: string; carrossel_infinito: boolean; cards: CardDirecao[]; origem?: "diretor" | "roteiro" };
 
 /** Conferencia ainda nao feita: gerar_card e ajustar_card gravam so isto. */
 type VerificacaoPendente = { pendente: true };
@@ -432,6 +442,9 @@ type Referencia = {
   storage_path: string | null;
   leitura: string | null;
   tags: string[] | null;
+  file_id?: string | null;
+  /** identidade: arte da própria marca; tecnica: peça que ensina composição; global: banco da agência. */
+  papel?: string | null;
 };
 
 /** Bytes da referencia: copia no bucket mesa ou o proprio arquivo do workspace. */
@@ -448,6 +461,17 @@ async function imagemDaReferencia(ref: Referencia): Promise<ImagemEntrada> {
       throw new ErroEstudio(404, "referencia_sem_arquivo", "A imagem desta referência não está mais no workspace.");
     }
     return await baixarImagem("workspace", no.storage_path, `referencia-${ref.id.slice(0, 8)}`);
+  }
+  if (ref.file_id) {
+    const { data } = await servico()
+      .from("files")
+      .select("client_id, storage_bucket, storage_path, file_url")
+      .eq("id", ref.file_id)
+      .maybeSingle();
+    const f = data as { client_id: string; storage_bucket: string | null; storage_path: string | null; file_url: string | null } | null;
+    const c = f && f.client_id === ref.client_id ? caminhoDoArquivo(f) : null;
+    if (!c) throw new ErroEstudio(404, "referencia_sem_arquivo", "A arte desta referência não está mais em Arquivos.");
+    return await baixarImagem(c.bucket, c.caminho, `arte-da-marca-${ref.id.slice(0, 8)}`);
   }
   throw new ErroEstudio(404, "referencia_sem_arquivo", "Esta referência não tem imagem guardada.");
 }
@@ -478,6 +502,27 @@ async function memoriaDoDiretor(clientId: string): Promise<{ tipo: string; texto
     .order("criado_em", { ascending: false })
     .limit(30);
   return ((data as { tipo: string; texto: string; origem: string }[] | null) ?? []).map((m) => ({ ...m, texto: texto(m.texto, 400) }));
+}
+
+/** Marca pronta para o compositor: kit, fontes, contexto consolidado e nome. */
+async function marcaDoCliente(clientId: string, kit?: Kit, fontes?: Fonte[]): Promise<MarcaParaDirecao> {
+  const [k, f, contexto, perfil] = await Promise.all([
+    kit === undefined ? lerKit(clientId) : Promise.resolve(kit),
+    fontes === undefined ? lerFontes(clientId) : Promise.resolve(fontes),
+    lerContextoConsolidado(servico(), clientId),
+    servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
+  ]);
+  const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
+  return {
+    nomeCliente: texto(p?.company_name || p?.full_name || "cliente", 120),
+    paleta: Array.isArray(k?.paleta) ? k!.paleta as MarcaParaDirecao["paleta"] : [],
+    estilo: k?.estilo ?? null,
+    regras: k?.regras ?? null,
+    fontes: f.map((x) => ({ nome: x.nome, papel: x.papel })),
+    tipografiaCitada: contexto.tipografia ?? null,
+    tomDeVoz: contexto.tom_de_voz ?? null,
+    temLogo: !!k?.logo_file_id,
+  };
 }
 
 async function modeloDoPapel(papel: "diretor_arte" | "leitura" | "imagem"): Promise<ModeloIa> {
@@ -570,6 +615,8 @@ async function lerItemDaAgenda(taskId: string): Promise<ItemDaAgenda> {
 
 // ------------------------------------------------------------- preparar
 
+const ZONAS_TEXTO = ["topo-esquerda", "topo-centro", "centro-esquerda", "centro", "base-esquerda", "base-centro", "base-direita", "coluna-esquerda", "coluna-direita"];
+
 const ESQUEMA_DIRECAO = {
   nome: "direcao_de_arte",
   schema: {
@@ -584,14 +631,39 @@ const ESQUEMA_DIRECAO = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["ordem", "funcao", "texto_exato", "composicao", "ilustracao", "prompt_imagem"],
+          required: ["ordem", "funcao", "blocos", "layout", "evitar"],
           properties: {
             ordem: { type: "integer" },
-            funcao: { type: "string" },
-            texto_exato: { type: "string" },
-            composicao: { type: "string" },
-            ilustracao: { type: "string" },
-            prompt_imagem: { type: "string" },
+            funcao: { type: "string", enum: ["capa", "conteudo", "cta"] },
+            blocos: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["papel", "texto"],
+                properties: {
+                  papel: { type: "string", enum: ["headline", "subtitulo", "apoio", "numero", "cta", "selo"] },
+                  texto: { type: "string" },
+                },
+              },
+            },
+            layout: {
+              type: "object",
+              additionalProperties: false,
+              required: ["zona_texto", "alinhamento", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "cor_texto", "cor_destaque"],
+              properties: {
+                zona_texto: { type: "string", enum: ZONAS_TEXTO },
+                alinhamento: { type: "string", enum: ["esquerda", "centro", "direita"] },
+                imagem: { type: "string" },
+                ponto_focal: { type: "string" },
+                fundo: { type: "string" },
+                tratamento: { type: "string" },
+                cor_fundo: { type: "string" },
+                cor_texto: { type: "string" },
+                cor_destaque: { type: "string" },
+              },
+            },
+            evitar: { type: "string" },
           },
         },
       },
@@ -601,26 +673,62 @@ const ESQUEMA_DIRECAO = {
 
 const INSTRUCOES_DIRECAO = `COMO ENTREGAR A DIREÇÃO (regras técnicas do estúdio)
 
-Você escreve a direção de cada lâmina para um gerador de imagem que desenha a lâmina INTEIRA numa imagem só, texto incluído. Nunca planeje texto aplicado depois em camada: o texto é parte da arte e é desenhado pelo gerador.
+Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluído. O estúdio monta o prompt final em código a partir do que você devolver, já com a área útil, as margens do grid, os tamanhos de letra, a paleta e as fontes da marca. Por isso você decide só o essencial, com precisão:
 
-Devolva:
-- conceito: a ideia visual do conjunto em até 4 frases.
+- conceito: a ideia visual do conjunto em até 3 frases.
 - carrossel_infinito: verdadeiro quando a sequência for uma composição panorâmica contínua.
-- cards: uma entrada por lâmina, ordem 1, 2, 3... seguindo o roteiro do item. Post único tem um card só.
-  - funcao: capa, conteudo ou cta.
-  - texto_exato: todo o texto que aparece escrito na lâmina, exatamente, com acentos, na ordem de leitura, blocos separados por quebra de linha. Nada além dele pode aparecer escrito (a logo não conta).
-  - composicao: grid, planos, posição da headline, escala, espaço negativo, luz.
-  - ilustracao: imagem, objeto, cenário ou recurso gráfico e por que serve ao assunto.
-  - prompt_imagem: prompt completo de direção de arte para o gerador, autossuficiente. Precisa ter:
-    1. a cena, a composição, os planos, a luz e a paleta (com os hex do kit);
-    2. cada bloco do texto exato entre aspas duplas, com posição, tamanho relativo, peso e caixa;
-    3. a tipografia descrita e casada com as amostras de fonte anexadas (nome da fonte, papel, peso, caixa, espacejamento), dizendo que as letras devem seguir a amostra correspondente;
-    4. o formato: peça final vertical 4:5 (1080 x 1350) desenhada numa tela 1024 x 1536; a peça será cortada pelo centro, então TODO o texto e a logo ficam dentro da área útil central de 1024 x 1280 (de y = 128 a y = 1408), com margem de respiro, e as faixas de 128 px no topo e na base recebem só continuação do fundo, sem texto, logo ou elemento importante;
-    5. logo: na capa e no card final, "usar a logo oficial anexada, sem redesenhar"; nos cards do meio, "sem logo";
-    6. no carrossel infinito: o que atravessa a borda direita continua no card seguinte com a mesma posição, escala, perspectiva e luz, e o card final se conecta visualmente com a capa;
-    7. o que evitar nesta lâmina (repetição das artes anteriores listadas, texto extra, letras deformadas).
+- cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só.
+  - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
+  - blocos: o texto da lâmina dividido por papel, na ordem de leitura: headline (a frase dominante, curta, quebrada por sentido com \\n), subtitulo, apoio, numero (quando um número é o protagonista), cta, selo. No máximo 3 níveis de hierarquia. Texto exatamente como vai aparecer, com acentos, sem travessão.
+  - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo; mantenha o mesmo eixo de alinhamento no carrossel.
+  - layout.alinhamento: esquerda na maioria dos casos; centro só em peça curta e simétrica de propósito.
+  - layout.imagem: a imagem concreta (foto real do nicho, objeto, cenário, recorte), com enquadramento e luz.
+  - layout.ponto_focal: o que domina a lâmina e onde fica.
+  - layout.fundo: o que ocupa o fundo e como o texto ganha área calma.
+  - layout.tratamento: técnica de composição da base de conhecimento aplicada nesta lâmina (planos, recorte, escala, espaço negativo).
+  - layout.cor_fundo, cor_texto, cor_destaque: hex da paleta da marca (string vazia se não houver paleta).
+  - evitar: o que não pode acontecer nesta lâmina (repetição de lâmina anterior, elemento genérico, cor fora da paleta).
 
-Escreva sem travessão. Use o roteiro do item como fonte do texto; corrija só ortografia evidente.`;
+Seja específico e curto: cada campo em uma ou duas frases.`;
+
+type ModoDirecao = "diretor" | "roteiro";
+
+function cardsDoDiretor(
+  bruto: unknown,
+  postUnico: boolean,
+  marca: MarcaParaDirecao,
+  conceito: string,
+  infinito: boolean,
+  levaLogoFn: (ordem: number, total: number) => boolean,
+): CardDirecao[] {
+  const lista = (Array.isArray(bruto) ? bruto : []) as Record<string, any>[];
+  const base = lista
+    .filter((c) => c && Array.isArray(c.blocos) && c.blocos.some((b: any) => texto(b?.texto)))
+    .sort((a, b) => num(a.ordem) - num(b.ordem))
+    .slice(0, postUnico ? 1 : MAX_CARDS);
+  const total = base.length;
+  return base.map((c, i) => {
+    const ordem = i + 1;
+    const funcao = ordem === 1 ? "capa" : ordem === total && total > 1 ? "cta" : (c.funcao === "cta" ? "cta" : "conteudo");
+    const blocos = (c.blocos as any[])
+      .map((b) => ({ papel: b?.papel, texto: texto(b?.texto, 600) }))
+      .filter((b) => b.texto) as BlocoTexto[];
+    const layout = normalizarLayout(c.layout, funcao, ordem, total);
+    const card: CardDirecao = {
+      ordem,
+      funcao,
+      texto_exato: blocos.map((b) => b.texto).join("\n"),
+      blocos,
+      layout,
+      evitar: texto(c.evitar, 600),
+      composicao: resumoDaComposicao(layout),
+      ilustracao: layout.imagem,
+      prompt_imagem: "",
+    };
+    card.prompt_imagem = promptDaLamina(card, marca, { total, carrosselInfinito: infinito && total > 1, levaLogo: levaLogoFn(ordem, total), conceito });
+    return card;
+  });
+}
 
 async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   const item = await lerItemDaAgenda(texto(corpo.task_id, 64));
@@ -636,110 +744,114 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   const modeloImagem = corpo.modelo_imagem_id
     ? await carregarModelo(texto(corpo.modelo_imagem_id, 120), "imagem")
     : await modeloDoPapel("imagem");
-  const modeloDiretor = await modeloDoPapel("diretor_arte");
 
   const db = servico();
-  const [kit, fontes, prompt, memoria, refsRes, artesRes] = await Promise.all([
-    lerKit(clientId),
-    lerFontes(clientId),
-    promptDoDiretor(clientId),
-    memoriaDoDiretor(clientId),
-    db.from("cliente_referencias")
-      .select("id, origem, leitura, tags")
-      .eq("client_id", clientId)
-      .eq("ativa", true)
-      .not("leitura", "is", null)
-      .order("criado_em", { ascending: false })
-      .limit(12),
-    // Artes ja entregues do cliente (anti-repeticao): so a raiz de cada entrega.
-    db.from("files")
-      .select("file_name, file_type, description, caption, created_at")
-      .eq("client_id", clientId)
-      .eq("folder", "materiais")
-      .is("parent_file_id", null)
-      .is("archived_at", null)
-      .order("created_at", { ascending: false })
-      .limit(20),
-  ]);
-  const amostras = await amostrasDasFontes(fontes);
+  // O que o cliente já tem entra sozinho: pastas de referência do workspace e artes aprovadas.
+  await sincronizarReferencias(db, clientId).catch(() => null);
+  const [kit, fontes] = await Promise.all([lerKit(clientId), lerFontes(clientId)]);
+  const marca = await marcaDoCliente(clientId, kit, fontes);
 
   const postUnico = FORMATOS_POST_UNICO.has(item.tarefa.delivery_type);
   const pedidoInfinito = item.itemProposta && typeof item.itemProposta.carrossel_infinito === "boolean"
     ? item.itemProposta.carrossel_infinito as boolean
     : null;
+  const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
 
-  const contexto = {
-    item: {
-      titulo: item.tarefa.title,
-      formato: item.tarefa.delivery_type,
-      post_unico: postUnico,
-      data: item.tarefa.due_date,
-      roteiro_e_contexto: texto(item.tarefa.description, 4000),
-      objetivo_do_post: item.post?.objective ?? null,
-      legenda_prevista: texto(item.post?.default_caption, 2000) || null,
-      detalhe_do_estrategista: item.itemProposta ?? null,
-      carrossel_infinito_pedido: pedidoInfinito,
-    },
-    marca: {
-      paleta: kit?.paleta ?? [],
-      estilo: kit?.estilo ?? null,
-      regras: kit?.regras ?? null,
-      tem_logo_oficial: !!kit?.logo_file_id,
-    },
-    fontes: fontes.map((f) => ({ nome: f.nome, papel: f.papel })),
-    amostras_anexadas: amostras.map((a, i) => `Imagem ${i + 1}: amostra da fonte ${a.fonte.nome} (papel ${a.fonte.papel})`),
-    referencias: ((refsRes.data as { id: string; origem: string; leitura: string; tags: string[] }[] | null) ?? [])
-      .map((r) => ({ origem: r.origem, tecnica: texto(r.leitura, 700), tags: r.tags })),
-    artes_anteriores: ((artesRes.data as Record<string, unknown>[] | null) ?? []).map((a) => ({
-      nome: texto(a.file_name, 160),
-      tipo: a.file_type,
-      descricao: texto(a.description, 300) || null,
-      legenda: texto(a.caption, 200) || null,
-    })),
-    memoria_do_diretor: memoria,
-  };
-
+  // Modo roteiro: o roteiro do calendário vira direção sem IA (custo zero).
+  const roteiro = Array.isArray(item.itemProposta?.cards) ? item.itemProposta!.cards as Record<string, unknown>[] : [];
+  const modoPedido: ModoDirecao = corpo.modo === "roteiro" ? "roteiro" : "diretor";
   const trabalhoId = crypto.randomUUID();
-  const r = await chamarTexto({
-    clientId,
-    tarefa: "estudio",
-    agente: "diretor_arte",
-    modeloId: modeloDiretor.id,
-    raciocinio: raciocinioPara(modeloDiretor, ["high", "medium"]),
-    sistema: `${prompt}\n\n${INSTRUCOES_DIRECAO}`,
-    mensagens: [{
-      papel: "usuario",
-      conteudo: `Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}`,
-      imagens: amostras.map((a) => a.imagem),
-    }],
-    esquemaJson: ESQUEMA_DIRECAO,
-    maxTokensSaida: 32_000,
-    referencia: { tipo: "estudio_trabalho", id: trabalhoId },
-    criadoPor: ch.userId,
-  });
+  let direcao: Direcao;
+  let custo = 0;
+  let usoId: string | null = null;
+  let saldo: number | null = null;
+  let reserva: string | null = null;
 
-  const bruto = (r.json ?? {}) as Partial<Direcao>;
-  let cards = (Array.isArray(bruto.cards) ? bruto.cards : [])
-    .filter((c) => c && texto(c.texto_exato) && texto(c.prompt_imagem))
-    .sort((a, b) => num(a.ordem) - num(b.ordem))
-    .slice(0, postUnico ? 1 : MAX_CARDS)
-    .map((c, i): CardDirecao => ({
-      ordem: i + 1,
-      funcao: texto(c.funcao, 40) || (i === 0 ? "capa" : "conteudo"),
-      texto_exato: texto(c.texto_exato, 1200),
-      composicao: texto(c.composicao, 2000),
-      ilustracao: texto(c.ilustracao, 2000),
-      prompt_imagem: texto(c.prompt_imagem, 6000),
-    }));
-  if (!cards.length) {
-    throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
+  if (modoPedido === "roteiro" && roteiro.length) {
+    direcao = direcaoDoRoteiro(roteiro as any, marca, {
+      postUnico,
+      carrosselInfinito: pedidoInfinito ?? false,
+      conceito: texto(item.itemProposta?.resumo ?? item.itemProposta?.tema, 600) || null,
+      levaLogo: levaLogoFn,
+    });
+  } else {
+    const modeloDiretor = await modeloDoPapel("diretor_arte");
+    const [prompt, memoria, refsRes, artesRes] = await Promise.all([
+      promptDoDiretor(clientId),
+      memoriaDoDiretor(clientId),
+      db.from("cliente_referencias")
+        .select("id, origem, papel, leitura, tags")
+        .eq("client_id", clientId)
+        .eq("ativa", true)
+        .not("leitura", "is", null)
+        .order("criado_em", { ascending: false })
+        .limit(12),
+      db.from("files")
+        .select("file_name, file_type, description, caption, created_at")
+        .eq("client_id", clientId)
+        .eq("folder", "materiais")
+        .is("parent_file_id", null)
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .limit(15),
+    ]);
+    const contexto = {
+      item: {
+        titulo: item.tarefa.title,
+        formato: item.tarefa.delivery_type,
+        post_unico: postUnico,
+        data: item.tarefa.due_date,
+        roteiro_e_contexto: texto(item.tarefa.description, 4000),
+        objetivo_do_post: item.post?.objective ?? null,
+        legenda_prevista: texto(item.post?.default_caption, 1500) || null,
+        detalhe_do_estrategista: item.itemProposta ?? null,
+        carrossel_infinito_pedido: pedidoInfinito,
+      },
+      marca: {
+        nome: marca.nomeCliente,
+        paleta: marca.paleta,
+        estilo: marca.estilo,
+        regras: marca.regras,
+        fontes: marca.fontes,
+        tipografia_citada: marca.tipografiaCitada,
+        tom_de_voz: marca.tomDeVoz,
+        tem_logo_oficial: marca.temLogo,
+      },
+      referencias: ((refsRes.data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
+        .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 600), tags: r.tags })),
+      artes_anteriores: ((artesRes.data as Record<string, unknown>[] | null) ?? []).map((a) => ({
+        nome: texto(a.file_name, 120),
+        descricao: texto(a.description, 200) || null,
+      })),
+      memoria_do_diretor: memoria,
+    };
+    const r = await chamarTexto({
+      clientId,
+      tarefa: "estudio",
+      agente: "diretor_arte",
+      modeloId: modeloDiretor.id,
+      raciocinio: raciocinioPara(modeloDiretor, ["low", "medium"]),
+      // Base de conhecimento primeiro: prefixo fixo, reaproveitado pelo cache do provedor.
+      sistema: `${CONHECIMENTO_DIRETOR}\n\n${prompt}\n\n${INSTRUCOES_DIRECAO}`,
+      mensagens: [{ papel: "usuario", conteudo: `Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}` }],
+      esquemaJson: ESQUEMA_DIRECAO,
+      maxTokensSaida: 12_000,
+      referencia: { tipo: "estudio_trabalho", id: trabalhoId },
+      criadoPor: ch.userId,
+    });
+    const bruto = (r.json ?? {}) as Record<string, any>;
+    const conceito = texto(bruto.conceito, 1200);
+    const infinito = pedidoInfinito ?? !!bruto.carrossel_infinito;
+    const cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn);
+    if (!cards.length) {
+      throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
+    }
+    direcao = { conceito, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
+    custo = r.custoUsd;
+    usoId = r.usoId;
+    saldo = r.saldoUsd;
+    reserva = r.reservaUsada ?? null;
   }
-  if (cards.length > 1) cards = cards.map((c, i) => (i === cards.length - 1 && c.funcao === "conteudo" ? { ...c, funcao: "cta" } : c));
-  const direcao: Direcao = {
-    conceito: texto(bruto.conceito, 2000),
-    carrossel_infinito: cards.length > 1 && (pedidoInfinito ?? !!bruto.carrossel_infinito),
-    cards,
-  };
 
   const { data: criado, error } = await db
     .from("estudio_trabalhos")
@@ -752,14 +864,14 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       modelo_imagem_id: modeloImagem.id,
       qualidade,
       cards: [],
-      custo_usd: arred(r.custoUsd),
+      custo_usd: arred(custo),
       criado_por: ch.userId,
     })
     .select("*")
     .single();
-  if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: r.usoId });
+  if (error) throw new ErroEstudio(503, "gravacao_falhou", "A direção foi escrita, mas o trabalho não foi gravado.", { uso_id: usoId });
 
-  return json({ trabalho: criado, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, reserva_usada: r.reservaUsada ?? null });
+  return json({ trabalho: criado, custo_usd: custo, saldo_usd: saldo, reserva_usada: reserva, modo: direcao.origem ?? modoPedido });
 }
 
 // ------------------------------------------------------ referencias (Jev)
@@ -782,26 +894,53 @@ async function escolherReferencias(
   kit: Kit,
   criadoPor: string,
 ): Promise<{ refs: Referencia[]; jev: string }> {
-  const { data } = await servico()
-    .from("cliente_referencias")
-    .select("id, client_id, origem, workspace_node_id, url_origem, storage_path, leitura, tags")
-    .eq("client_id", t.client_id)
-    .eq("ativa", true)
-    .not("leitura", "is", null)
-    .order("criado_em", { ascending: false })
-    .limit(MAX_CANDIDATAS_JEV);
-  const candidatas = (data as Referencia[] | null) ?? [];
+  const [doCliente, globais] = await Promise.all([
+    servico()
+      .from("cliente_referencias")
+      .select("id, client_id, origem, papel, workspace_node_id, url_origem, storage_path, file_id, leitura, tags")
+      .eq("client_id", t.client_id)
+      .eq("ativa", true)
+      .not("leitura", "is", null)
+      .order("criado_em", { ascending: false })
+      .limit(MAX_CANDIDATAS_JEV),
+    servico()
+      .from("referencias_globais")
+      .select("id, origem, storage_path, url_origem, leitura, tags")
+      .eq("ativa", true)
+      .not("leitura", "is", null)
+      .not("storage_path", "is", null)
+      .limit(24),
+  ]);
+  const candidatas: Referencia[] = [
+    ...((doCliente.data as Referencia[] | null) ?? []),
+    ...(((globais.data as { id: string; storage_path: string; url_origem: string | null; leitura: string; tags: string[] }[] | null) ?? []).map((g) => ({
+      id: g.id,
+      client_id: t.client_id,
+      origem: "global",
+      papel: "global",
+      workspace_node_id: null,
+      url_origem: g.url_origem,
+      storage_path: g.storage_path,
+      file_id: null,
+      leitura: g.leitura,
+      tags: g.tags,
+    }))),
+  ];
   if (!candidatas.length) return { refs: [], jev: "sem_referencias_lidas" };
 
-  const referencias: Record<string, { tecnica: string; tags: string[] }> = {};
+  const referencias: Record<string, { tipo: string; tecnica: string; tags: string[] }> = {};
   const questions: Record<string, PerguntaJev> = {};
   candidatas.forEach((r, i) => {
-    referencias[`r${i}`] = { tecnica: texto(r.leitura, 900), tags: r.tags ?? [] };
+    referencias[`r${i}`] = {
+      tipo: r.papel === "identidade" ? "arte já publicada pela própria marca" : "referência de técnica",
+      tecnica: texto(r.leitura, 700),
+      tags: r.tags ?? [],
+    };
     questions[`r${i}`] = {
       type: "score",
-      instructions:
-        `Quão útil é a técnica descrita em \`referencias.r${i}.tecnica\` como referência visual para executar a lâmina descrita em \`lamina\`, para a marca em \`marca\`? ` +
-        "Julgue a técnica (composição, hierarquia, tipografia, luz, integração entre imagem e texto), não o assunto da foto.",
+      instructions: r.papel === "identidade"
+        ? `Quão bem a arte descrita em \`referencias.r${i}\` mostra a identidade visual que a lâmina em \`lamina\` precisa seguir (paleta, tipografia, tratamento de foto e clima da marca em \`marca\`)?`
+        : `Quão útil é a técnica descrita em \`referencias.r${i}.tecnica\` como referência de composição para executar a lâmina descrita em \`lamina\`? Julgue composição, hierarquia, tipografia e integração entre imagem e texto, não o assunto da foto.`,
       criteria: NIVEIS_REFERENCIA,
     };
   });
@@ -822,9 +961,12 @@ async function escolherReferencias(
     const notas = candidatas
       .map((r, i) => ({ r, nota: notaScore(res.answers[`r${i}`]) }))
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
-      .sort((a, b) => (b.nota as number) - (a.nota as number))
-      .slice(0, MAX_REFERENCIAS);
-    return { refs: notas.map((x) => x.r), jev: "ok" };
+      .sort((a, b) => (b.nota as number) - (a.nota as number));
+    // Uma da identidade da marca e uma de técnica (do cliente ou do banco da agência).
+    const identidade = notas.find((x) => x.r.papel === "identidade");
+    const tecnica = notas.find((x) => x.r.papel !== "identidade");
+    const escolhidas = [identidade, tecnica].filter(Boolean).map((x) => x!.r).slice(0, MAX_REFERENCIAS);
+    return { refs: escolhidas, jev: "ok" };
   } catch (e) {
     // Sem Jev a lamina sai sem referencia, e o motivo fica gravado na versao.
     return { refs: [], jev: codigoMotor(e) };
@@ -994,13 +1136,17 @@ const REGRA_TEXTO_NA_ARTE =
   "Arte final completa numa imagem só. Todo o texto é desenhado pela própria arte, integrado à composição, nunca uma caixa de texto solta por cima da imagem.";
 
 function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLogo: boolean): string {
+  // Direção com layout é composta para 4:5; a antiga, sem layout, segue o recorte de 2:3.
+  const formatoAntigo = !card.layout;
   return [
     "REGRAS FIXAS DE RENDER",
     `- ${REGRA_TEXTO_NA_ARTE}`,
     `- Escreva exatamente este texto, com a mesma grafia e acentuação, e nenhum outro texto: "${card.texto_exato}"`,
-    "- Tela 1024 x 1536. A peça final é vertical 4:5 (1080 x 1350), cortada pelo centro.",
-    "- ÁREA ÚTIL: todo o texto, a logo e os elementos importantes ficam DENTRO da área central de 1024 x 1280 (de y = 128 a y = 1408), com margem de respiro de pelo menos 48 px até o limite dela. Nenhuma letra pode encostar ou entrar nas faixas de 128 px do topo e da base.",
-    "- As faixas de 128 px no topo e na base recebem só continuação do fundo: serão cortadas.",
+    formatoAntigo ? "- Tela 1024 x 1536. A peça final é vertical 4:5 (1080 x 1350), cortada pelo centro." : "",
+    formatoAntigo
+      ? "- ÁREA ÚTIL: todo o texto, a logo e os elementos importantes ficam DENTRO da área central de 1024 x 1280 (de y = 128 a y = 1408), com margem de respiro de pelo menos 48 px até o limite dela. Nenhuma letra pode encostar ou entrar nas faixas de 128 px do topo e da base."
+      : "",
+    formatoAntigo ? "- As faixas de 128 px no topo e na base recebem só continuação do fundo: serão cortadas." : "",
     comLogo
       ? "- Logo: use a logo oficial anexada exatamente como é, sem redesenhar, sem mudar cor nem proporção."
       : "- Sem logo nesta lâmina.",
@@ -1059,12 +1205,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   const anexos: ImagemEntrada[] = [];
   const legendas: string[] = [];
-  const comLogo = levaLogo(t, ordem);
-  if (comLogo) {
+  // Logo só quando o arquivo existe de fato: pedir "a logo anexada" sem anexo faz o gerador inventar uma.
+  let comLogo = false;
+  if (levaLogo(t, ordem)) {
     const logo = await baixarLogo(t.client_id, kit);
     if (logo) {
       anexos.push(logo);
       legendas.push(`imagem ${anexos.length}: logo oficial da marca`);
+      comLogo = true;
     }
   }
   for (const a of await amostrasDasFontes(fontes)) {
@@ -1090,20 +1238,34 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     try {
       anexos.push(await imagemDaReferencia(ref));
       idsReferencias.push(ref.id);
-      legendas.push(`imagem ${anexos.length}: referência de técnica (absorva composição e hierarquia, não copie a peça)`);
+      legendas.push(ref.papel === "identidade"
+        ? `imagem ${anexos.length}: arte já publicada da própria marca (siga a identidade: cores, tipografia, tratamento de foto; não copie o layout)`
+        : `imagem ${anexos.length}: referência de técnica (absorva composição e hierarquia, não copie a peça)`);
     } catch {
       // Referencia sem arquivo fica de fora desta lamina.
     }
   }
 
-  const prompt = `${card.prompt_imagem}\n\n${regrasDeRender(t, card, legendas, comLogo)}`;
+  // Direção com layout: o prompt é recomposto agora, com o kit atual da marca.
+  const marca = await marcaDoCliente(t.client_id, kit, fontes);
+  marca.temLogo = comLogo;
+  const base = card.layout
+    ? promptDaLamina(card, marca, {
+      total: totalCards(t),
+      carrosselInfinito: t.direcao.carrossel_infinito,
+      levaLogo: levaLogo(t, ordem),
+      conceito: t.direcao.conceito,
+    })
+    : card.prompt_imagem;
+  const prompt = `${base}\n\n${regrasDeRender(t, card, legendas, comLogo)}`;
   const img = await chamarImagem({
     clientId: t.client_id,
     modeloId: t.modelo_imagem_id!,
     prompt,
+    promptSe2x3: card.layout ? formatoPara2x3(prompt) : undefined,
     referencias: anexos,
     qualidade: (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade,
-    tamanho: TAMANHO_GERADOR,
+    tamanho: card.layout ? TAMANHO_GERADOR : TAMANHO_2X3,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
     tarefa: "estudio",
@@ -1113,7 +1275,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   return await gravarVersao(ch, t, card, img, {
     origem: "gerar",
     referencias: idsReferencias,
-    extra: { referencias_jev: escolha.jev },
+    extra: { referencias_jev: escolha.jev, tamanho: img.tamanho },
   });
 }
 
@@ -1201,18 +1363,19 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
   if (!atualVersao) throw new ErroEstudio(409, "card_sem_versao", "Gere este card antes de pedir ajuste.");
   const atual = await baixar("mesa", atualVersao.storage_path);
 
-  const [kit, prompt, diretor] = await Promise.all([
+  // O ajuste é uma tradução do pedido em instrução de edição: o modelo de
+  // leitura (com visão) resolve bem e custa uma fração do diretor.
+  const [kit, leitor] = await Promise.all([
     lerKit(t.client_id),
-    promptDoDiretor(t.client_id),
-    modeloDoPapel("diretor_arte"),
+    modeloDoPapel("leitura"),
   ]);
   const dir = await chamarTexto({
     clientId: t.client_id,
     tarefa: "estudio",
     agente: "diretor_arte",
-    modeloId: diretor.id,
-    raciocinio: raciocinioPara(diretor, ["medium", "low"]),
-    sistema: `${prompt}\n\n${INSTRUCOES_AJUSTE}`,
+    modeloId: leitor.id,
+    raciocinio: raciocinioPara(leitor, ["low", "medium"]),
+    sistema: `${INSTRUCOES_AJUSTE}\n\n${PADRAO_NA_IMAGEM}`,
     mensagens: [{
       papel: "usuario",
       conteudo: JSON.stringify({
@@ -1224,7 +1387,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
       imagens: [{ bytes: atual, mime: "image/png", nome: `card-${ordem}-v${atualVersao.versao}.png` }],
     }],
     esquemaJson: ESQUEMA_AJUSTE,
-    maxTokensSaida: 8_000,
+    maxTokensSaida: 3_000,
     referencia: { tipo: "estudio_trabalho", id: t.id },
     criadoPor: ch.userId,
   });
@@ -1268,7 +1431,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
     referencias,
     editar: { bytes: atual },
     qualidade: (QUALIDADES.includes(base.qualidade as Qualidade) ? base.qualidade : QUALIDADE_PADRAO) as Qualidade,
-    tamanho: TAMANHO_GERADOR,
+    // A edição mantém o formato da versão editada.
+    tamanho: String((atualVersao as { tamanho?: string }).tamanho || (card.layout ? TAMANHO_GERADOR : TAMANHO_2X3)),
     referencia: { tipo: "estudio_trabalho", id: base.id },
     criadoPor: ch.userId,
     tarefa: "estudio",
@@ -1292,7 +1456,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
     origem: "ajuste",
     instrucao: pedido,
     custoExtraUsd: dir.custoUsd,
-    extra: { instrucao_edicao: instrucaoEdicao, versao_editada: atualVersao.versao, uso_diretor: dir.usoId },
+    extra: { instrucao_edicao: instrucaoEdicao, versao_editada: atualVersao.versao, uso_diretor: dir.usoId, tamanho: img.tamanho },
   });
 }
 

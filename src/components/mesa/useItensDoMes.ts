@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { somarMeses } from "@/lib/mesa/api";
+import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
 
 /** Item editorial da agenda (tarefa com entrega de arte) e o trabalho do estúdio dele. */
 export interface ItemDoMes {
@@ -32,13 +33,17 @@ export interface CardDaDirecao {
   composicao?: string;
   ilustracao?: string;
   prompt_imagem?: string;
+  /** Direção estruturada (diretor ou roteiro): texto por papel e layout da lâmina. */
+  blocos?: BlocoTexto[];
+  layout?: LayoutLamina;
+  evitar?: string;
 }
 
 export interface Trabalho {
   id: string;
   task_id: string | null;
   status: "rascunho" | "dirigido" | "gerando" | "pronto" | "entregue" | "erro";
-  direcao: { conceito?: string; carrossel_infinito?: boolean; cards?: CardDaDirecao[] };
+  direcao: { conceito?: string; carrossel_infinito?: boolean; cards?: CardDaDirecao[]; origem?: "diretor" | "roteiro" };
   modelo_imagem_id: string | null;
   qualidade: string | null;
   cards: CardGerado[];
@@ -84,7 +89,7 @@ export const ROTULO_DO_TRABALHO: Record<string, string> = {
   erro: "com erro",
 };
 
-export const FORMATOS_DE_ARTE = ["carousel", "static"];
+export const FORMATOS_DE_ARTE = ["carousel", "static", "design"];
 
 /**
  * Itens da agenda do mês com arte (carrossel e estático) dos projetos do
@@ -94,7 +99,13 @@ export const FORMATOS_DE_ARTE = ["carousel", "static"];
 export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: string | null) {
   return useQuery({
     queryKey: ["mesa", "itens-do-mes", clientId, mes, tarefaExtra || ""],
-    queryFn: async (): Promise<{ itens: ItemDoMes[]; trabalhos: Map<string, Trabalho>; publicacoes: Map<string, PublicacaoDoPost> }> => {
+    queryFn: async (): Promise<{
+      itens: ItemDoMes[];
+      trabalhos: Map<string, Trabalho>;
+      publicacoes: Map<string, PublicacaoDoPost>;
+      /** Itens com roteiro do estrategista (proposta gravada): a direção sai do roteiro, sem custo. */
+      roteiros: Set<string>;
+    }> => {
       const { data: projetos, error: erroProjetos } = await (supabase as any)
         .from("projects")
         .select("id")
@@ -153,7 +164,19 @@ export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: strin
           if (!publicacoes.has(p.post_id)) publicacoes.set(p.post_id, p);
         }
       }
-      return { itens, trabalhos, publicacoes };
+      const roteiros = new Set<string>();
+      if (itens.length) {
+        const { data } = await (supabase as any)
+          .from("calendario_propostas")
+          .select("task_ids")
+          .eq("client_id", clientId)
+          .eq("status", "gravada")
+          .overlaps("task_ids", itens.map((i) => i.id));
+        for (const p of (data || []) as { task_ids: string[] | null }[]) {
+          for (const id of p.task_ids || []) roteiros.add(id);
+        }
+      }
+      return { itens, trabalhos, publicacoes, roteiros };
     },
   });
 }

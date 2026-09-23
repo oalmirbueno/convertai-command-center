@@ -22,13 +22,17 @@ import {
   textoDoErro,
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
+import AgendaDoMes from "./AgendaDoMes";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
- * Aba Mês: o estrategista propõe os temas do período, o humano escolhe, o
- * estrategista detalha cada item e a proposta é gravada na agenda pelo mesmo
+ * Aba Mês. No topo, a Agenda do mês: o mesmo calendário da Agenda do painel,
+ * onde a equipe seleciona os itens, completa com o agente e abre no Estúdio
+ * (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos: o
+ * estrategista propõe os temas do período, o humano escolhe, o estrategista
+ * detalha cada item e a proposta é gravada na agenda pelo mesmo
  * serviço do MCP (função agente-calendario, SPEC seção 4).
  */
 
@@ -252,7 +256,7 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
   );
 }
 
-export default function AbaMes() {
+function PlanejarComEstrategista() {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
   const queryClient = useQueryClient();
@@ -366,6 +370,8 @@ export default function AbaMes() {
       const n = Array.isArray(data?.task_ids) ? data.task_ids.length : null;
       toast.success("Gravado na agenda", { description: n !== null ? `${n} item(ns) no calendário.` : undefined });
       atualizar();
+      // A Agenda do mês, no topo da aba, passa a mostrar os itens gravados.
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
     } catch (e) {
       toast.error("Não foi possível gravar", { description: textoDoErro(e) });
     } finally {
@@ -540,6 +546,22 @@ export default function AbaMes() {
           </aside>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
+ * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
+ */
+export default function AbaMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskId: string, mes: string) => void } = {}) {
+  return (
+    <div className="space-y-8">
+      <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
+      <section className="space-y-3 border-t border-border pt-6">
+        <TituloDeSecao>Planejar novos conteúdos com o estrategista</TituloDeSecao>
+        <PlanejarComEstrategista />
+      </section>
     </div>
   );
 }

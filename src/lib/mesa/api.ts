@@ -10,7 +10,7 @@ import { toast } from "sonner";
  */
 import { supabase } from "@/integrations/supabase/client";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -35,6 +35,7 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "ia-gateway": "motor de IA",
   "agente-calendario": "estrategista",
   "estudio-arte": "estúdio de arte",
+  "agente-contexto": "agente de contexto",
 };
 
 const PROVEDORES: Record<string, string> = {
@@ -215,8 +216,8 @@ export interface ModeloIa {
 }
 
 export const QUALIDADES: { valor: Qualidade; rotulo: string }[] = [
-  { valor: "baixa", rotulo: "Rascunho (baixa)" },
-  { valor: "media", rotulo: "Média" },
+  { valor: "baixa", rotulo: "Rascunho" },
+  { valor: "media", rotulo: "Padrão" },
   { valor: "alta", rotulo: "Final (alta)" },
 ];
 
@@ -294,8 +295,46 @@ const SAIDA_POR_RACIOCINIO: Record<string, number> = {
 };
 export const saidaPorRaciocinio = (r?: string | null) => SAIDA_POR_RACIOCINIO[String(r || "")] || 8000;
 
+// Mesmos valores do motor (supabase/functions/_shared/ia-motor.ts).
+const CUSTO_BUSCA_WEB_USD: Record<string, number> = { openai: 0.01, anthropic: 0.01, openrouter: 0 };
+const numero = (v: unknown) => {
+  const n = typeof v === "string" ? Number(v) : (v as number);
+  return typeof n === "number" && isFinite(n) ? n : 0;
+};
+
+/**
+ * Estimativa local, pela mesma fórmula do motor e com o catálogo que a tela
+ * já carregou: aparece na hora, sem ida à rede. Devolve null se algum modelo
+ * não estiver no catálogo (aí a tela cai na estimativa pela função).
+ */
+export function estimarLocal(partes: ParteDaEstimativa[], catalogo: ModeloIa[]): number | null {
+  let total = 0;
+  for (const parte of partes) {
+    const vezes = parte.vezes === undefined ? 1 : parte.vezes;
+    if (vezes <= 0) continue;
+    const m = catalogo.find((x) => x.id === parte.modeloId);
+    if (!m) return null;
+    const pe = numero(m.preco_entrada_1m);
+    let custo = 0;
+    if (m.tipo === "imagem") {
+      const porImagem = numero(m.preco_imagem ? m.preco_imagem[parte.qualidade || "media"] : 0);
+      const pImg = m.preco_imagem && m.preco_imagem.entrada_imagem_1m != null ? numero(m.preco_imagem.entrada_imagem_1m) : pe;
+      custo = numero(parte.imagens || 1) * porImagem + (numero(parte.tokensEntrada) * pImg) / 1000000;
+    } else {
+      custo = (numero(parte.tokensEntrada) * pe + numero(parte.tokensSaida) * numero(m.preco_saida_1m)) / 1000000 +
+        numero(parte.buscasWeb) * (CUSTO_BUSCA_WEB_USD[m.provedor] || 0);
+    }
+    total += custo * vezes;
+  }
+  return Math.round(total * 1000000) / 1000000;
+}
+
 /** Soma a estimativa de cada parte pela tabela do catálogo (sem chamar provedor). */
-export async function estimarCusto(partes: ParteDaEstimativa[]): Promise<number> {
+export async function estimarCusto(partes: ParteDaEstimativa[], catalogo?: ModeloIa[]): Promise<number> {
+  if (catalogo && catalogo.length) {
+    const local = estimarLocal(partes, catalogo);
+    if (local !== null) return local;
+  }
   let total = 0;
   for (const parte of partes) {
     if (!parte.modeloId) throw new ErroDaMesa("sem_modelo", mensagemDoCodigo("sem_modelo"));
@@ -321,6 +360,10 @@ export async function estimarCusto(partes: ParteDaEstimativa[]): Promise<number>
  * aproximações declaradas como tais na tela; o custo real vem da resposta.
  */
 export const TAMANHOS = {
+  montarContexto: { entrada: 25000, saida: 2500 },
+  conversarContexto: { entrada: 8000, saida: 1200 },
+  completarItem: { entrada: 25000, saidaPorItem: 1500 },
+  imagemAnexos: { entrada: 5000 },
   proporTemas: { entrada: 40000, buscasWeb: 5 },
   detalhar: { entrada: 30000, saidaPorItem: 1500 },
   conversarMes: { entrada: 30000, saida: 4000 },
