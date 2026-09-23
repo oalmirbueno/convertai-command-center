@@ -1,16 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, Wallet } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   custoDaResposta,
   ErroDaMesa,
@@ -26,8 +18,8 @@ import { useMesa } from "./MesaContexto";
 /**
  * Regra da Mesa: toda ação que gasta mostra o preço estimado ANTES e o custo
  * real DEPOIS. Este arquivo é o único caminho para isso na tela:
- * - BotaoComCusto: abre a confirmação com a estimativa e o saldo; só depois
- *   de confirmar executa; ao terminar, avisa o custo real da resposta.
+ * - BotaoComCusto: preço estimado ao lado do rótulo, executa no clique (acima
+ *   de US$ 1 ou sem estimativa, no segundo clique); ao terminar, avisa o custo real.
  * - EstimativaInline: preço estimado ao lado de um botão rápido (conversa).
  * - AvisoDeErro: a frase do erro com o próximo passo (recarregar, cota, chave).
  */
@@ -80,7 +72,14 @@ export function AcaoDoErro({ erro, onDepois }: { erro: unknown; onDepois?: () =>
 }
 
 export function AvisoDeErro({ erro, className = "" }: { erro: unknown; className?: string }) {
+  const mesa = useMesa();
+  const versao = mesa.versaoCarteira || 0;
+  // Guarda a versão da carteira de quando este erro apareceu: depois de uma
+  // recarga, o aviso de saldo insuficiente que ficou na tela some sozinho.
+  const visto = useRef<{ erro: unknown; versao: number } | null>(null);
+  if (!visto.current || visto.current.erro !== erro) visto.current = { erro, versao };
   if (!erro) return null;
+  if (erro instanceof ErroDaMesa && erro.codigo === "saldo_insuficiente" && versao > visto.current.versao) return null;
   return (
     <div className={`flex flex-col gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 ${className}`}>
       <p className="flex items-start gap-2 text-[12.5px] leading-relaxed text-foreground">
@@ -130,12 +129,12 @@ interface BotaoComCustoProps {
   rotulo: ReactNode;
   titulo: string;
   descricao?: string;
-  /** Partes da estimativa; a confirmação mostra a soma antes de gastar. */
+  /** Partes da estimativa; o preço aparece ao lado do botão antes de gastar. */
   partes: () => ParteDaEstimativa[];
-  /** A ação que gasta. Só roda depois da confirmação. */
+  /** A ação que gasta. Roda no clique (acima de US$ 1, no segundo clique). */
   executar: () => Promise<any>;
   aoConcluir?: (data: any, custoReal: number | null) => void;
-  /** Fecha a confirmação ao confirmar (ação longa com progresso próprio). */
+  /** Ação longa com progresso próprio: não avisa o custo ao terminar (quem chamou avisa). */
   fecharAoConfirmar?: boolean;
   disabled?: boolean;
   variant?: "default" | "outline" | "secondary" | "ghost";
@@ -144,6 +143,16 @@ interface BotaoComCustoProps {
   rotuloConfirmar?: string;
 }
 
+/** Acima deste valor o botão pede um segundo clique antes de gastar. */
+const LIMITE_SEM_CONFIRMAR_USD = 1;
+
+/**
+ * Botão de ação que gasta, sem janela: o preço estimado fica ao lado do rótulo
+ * (conta local com o catálogo, instantânea), o clique executa na hora e o
+ * andamento aparece no próprio botão, sem travar o resto da tela. Saldo que
+ * não cobre a estimativa não executa: avisa e oferece a recarga. Ação acima de
+ * US$ 1 pede um segundo clique ("confirmar").
+ */
 export function BotaoComCusto({
   rotulo,
   titulo,
@@ -156,30 +165,33 @@ export function BotaoComCusto({
   variant = "default",
   size = "sm",
   className = "",
-  rotuloConfirmar = "Confirmar e gastar",
 }: BotaoComCustoProps) {
   const mesa = useMesa();
   const avisarErro = useAvisarErro();
-  const [aberto, setAberto] = useState(false);
-  const [partesAtuais, setPartesAtuais] = useState<ParteDaEstimativa[] | null>(null);
   const [rodando, setRodando] = useState(false);
-  const [erro, setErro] = useState<unknown>(null);
-  const estimativa = useEstimativa(partesAtuais, aberto);
+  const [armado, setArmado] = useState(false);
+  let partesAtuais: ParteDaEstimativa[] | null = null;
+  try {
+    partesAtuais = partes();
+  } catch {
+    partesAtuais = null;
+  }
+  const estimativa = useEstimativa(partesAtuais, !disabled);
+  const valor = estimativa.data;
 
-  const abrir = () => {
-    setErro(null);
-    try {
-      setPartesAtuais(partes());
-    } catch (e) {
-      setPartesAtuais(null);
-      setErro(e);
+  const clicar = async () => {
+    if (rodando) return;
+    if (valor !== undefined && mesa.saldoUsd !== null && mesa.saldoUsd < valor) {
+      avisarErro(erroDeSaldo(valor - mesa.saldoUsd, mesa.saldoUsd), titulo);
+      return;
     }
-    setAberto(true);
-  };
-
-  const confirmar = async () => {
-    setErro(null);
-    if (fecharAoConfirmar) setAberto(false);
+    // Caro, ou sem estimativa (não dá para saber quanto vai gastar): segundo clique.
+    if ((valor === undefined || valor > LIMITE_SEM_CONFIRMAR_USD) && !armado) {
+      setArmado(true);
+      window.setTimeout(() => setArmado(false), 6000);
+      return;
+    }
+    setArmado(false);
     setRodando(true);
     try {
       const data = await executar();
@@ -189,79 +201,32 @@ export function BotaoComCusto({
         toast.success(titulo, {
           description: custo === null ? "Custo registrado na carteira do cliente." : `Custo real: ${usd(custo)}.`,
         });
-        setAberto(false);
       }
       aoConcluir?.(data, custo);
     } catch (e) {
-      if (fecharAoConfirmar) avisarErro(e, titulo);
-      else setErro(e);
+      avisarErro(e, titulo);
     } finally {
       setRodando(false);
     }
   };
 
-  const faltaSaldo =
-    estimativa.data !== undefined && mesa.saldoUsd !== null && mesa.saldoUsd < estimativa.data;
-
   return (
-    <>
-      <Button
-        type="button"
-        variant={variant}
-        size={size}
-        disabled={disabled || rodando}
-        onClick={abrir}
-        className={className}
-      >
-        {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-        {rotulo}
-      </Button>
-      <Dialog open={aberto} onOpenChange={(v) => { if (!rodando) setAberto(v); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{titulo}</DialogTitle>
-            <DialogDescription className="text-[12.5px] leading-relaxed">{descricao || "Confira o custo estimado antes de gastar."}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-secondary/30 p-3 sm:grid-cols-2">
-              <div className="min-w-0">
-                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Custo estimado</p>
-                <p className="mt-0.5 text-[18px] font-semibold text-foreground">
-                  {estimativa.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : estimativa.data !== undefined ? usd(estimativa.data) : "sem estimativa"}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Saldo do cliente</p>
-                <p className={`mt-0.5 flex items-center gap-1.5 text-[18px] font-semibold ${faltaSaldo ? "text-destructive" : "text-foreground"}`}>
-                  <Wallet className="h-4 w-4 opacity-60" />
-                  {mesa.saldoUsd === null ? "?" : usd(mesa.saldoUsd)}
-                </p>
-              </div>
-            </div>
-            <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              A estimativa usa a tabela de preços do catálogo e um tamanho típico desta ação. O custo real aparece quando terminar.
-            </p>
-            {faltaSaldo && (
-              <AvisoDeErro erro={erroDeSaldo((estimativa.data || 0) - (mesa.saldoUsd || 0), mesa.saldoUsd)} />
-            )}
-            {estimativa.isError && <AvisoDeErro erro={estimativa.error} />}
-            {erro && <AvisoDeErro erro={erro} />}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="ghost" onClick={() => setAberto(false)} disabled={rodando}>
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void confirmar()}
-              disabled={rodando || partesAtuais === null || estimativa.isLoading || (partesAtuais.length > 0 && estimativa.data === undefined)}
-            >
-              {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              {rotuloConfirmar}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <Button
+      type="button"
+      variant={variant}
+      size={size}
+      disabled={disabled || rodando}
+      onClick={() => void clicar()}
+      className={className}
+      title={descricao || titulo}
+    >
+      {rodando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+      {armado ? (valor === undefined ? "Sem estimativa: clique de novo" : "Clique de novo para confirmar") : rotulo}
+      {!rodando && valor !== undefined && (
+        <span className="ml-1.5 rounded-full bg-black/10 px-1.5 py-px text-[10.5px] font-normal opacity-80 dark:bg-white/10">
+          ~{usd(valor)}
+        </span>
+      )}
+    </Button>
   );
 }

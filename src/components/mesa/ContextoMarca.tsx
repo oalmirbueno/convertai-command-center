@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
-import { extensao, textoDoErro } from "@/lib/mesa/api";
-import { useMesa } from "./MesaContexto";
+import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { useAvisarErro } from "./Custo";
+import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import NavegadorDePastas, { Quadrado, type ImagemEscolhida } from "./NavegadorDePastas";
 import { Campo, TituloDeSecao } from "./Seletores";
+import { useInvalidarContexto } from "./contextoDoCliente";
 
 interface Cor {
   nome: string;
@@ -27,7 +30,6 @@ const PAPEIS_DA_COR = [
 ];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
-const IMAGENS = ["png", "jpg", "jpeg", "webp", "svg", "gif"];
 
 interface ArquivoDeImagem {
   id: string;
@@ -35,8 +37,6 @@ interface ArquivoDeImagem {
   file_url: string;
   storage_bucket: string | null;
   storage_path: string | null;
-  mime_type: string | null;
-  extension: string | null;
 }
 
 function Miniatura({ arquivo, className = "" }: { arquivo: ArquivoDeImagem; className?: string }) {
@@ -46,19 +46,92 @@ function Miniatura({ arquivo, className = "" }: { arquivo: ArquivoDeImagem; clas
     storagePath: arquivo.storage_path,
     transform: { width: 240, height: 240, resize: "contain" },
   });
-  if (!url) return <div className={`animate-pulse bg-secondary/60 ${className}`} />;
+  if (!url) return <div className={`animate-pulse bg-muted ${className}`} />;
   return <img src={url} alt={arquivo.file_name} loading="lazy" className={`object-contain ${className}`} />;
+}
+
+/** Logo antiga, escolhida por id de Arquivos antes da logo de qualquer pasta. */
+function LogoAntiga({ fileId }: { fileId: string }) {
+  const arquivo = useQuery({
+    queryKey: ["mesa", "arquivo", fileId],
+    staleTime: 10 * 60_000,
+    queryFn: async (): Promise<ArquivoDeImagem | null> => {
+      const { data, error } = await (supabase as any)
+        .from("files")
+        .select("id, file_name, file_url, storage_bucket, storage_path")
+        .eq("id", fileId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as ArquivoDeImagem) || null;
+    },
+  });
+  if (!arquivo.data) return <div className={`h-full w-full bg-muted ${arquivo.isLoading ? "animate-pulse" : ""}`} />;
+  return <Miniatura arquivo={arquivo.data} className="h-full w-full p-1.5" />;
+}
+
+type QualLogo = "logo" | "alt";
+
+function CartaoDaLogo({
+  rotulo,
+  dica,
+  caminho,
+  fileIdAntigo,
+  onEscolher,
+  onTirar,
+  tirando,
+}: {
+  rotulo: string;
+  dica: string;
+  caminho: string | null;
+  fileIdAntigo: string | null;
+  onEscolher: () => void;
+  onTirar: () => void;
+  tirando: boolean;
+}) {
+  const tem = !!caminho || !!fileIdAntigo;
+  return (
+    <div className="flex min-w-0 items-center rounded-xl border border-border bg-card p-3">
+      <div className="mr-3 w-20 shrink-0">
+        <Quadrado className="border border-border">
+          {caminho ? (
+            <ImagemDaMesa caminho={caminho} alt={rotulo} className="h-full w-full !object-contain p-1.5" />
+          ) : fileIdAntigo ? (
+            <LogoAntiga fileId={fileIdAntigo} />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground">vazio</span>
+          )}
+        </Quadrado>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12.5px] font-medium">{rotulo}</p>
+        <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{tem ? "Definida. Os agentes usam esta imagem." : dica}</p>
+        <div className="mt-2 flex flex-wrap">
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={onEscolher}>
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> {tem ? "Trocar" : "Escolher"}
+          </Button>
+          {tem && (
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px]" onClick={onTirar} disabled={tirando}>
+              {tirando && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              Tirar
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ContextoMarca() {
   const { clientId, userId } = useMesa();
   const queryClient = useQueryClient();
+  const invalidar = useInvalidarContexto();
+  const avisarErro = useAvisarErro();
   const [paleta, setPaleta] = useState<Cor[]>([]);
-  const [logo, setLogo] = useState<string | null>(null);
-  const [logoAlt, setLogoAlt] = useState<string | null>(null);
   const [estilo, setEstilo] = useState("");
   const [regras, setRegras] = useState("");
-  const [escolhendo, setEscolhendo] = useState<"logo" | "alt" | null>(null);
+  const [escolhendo, setEscolhendo] = useState<QualLogo | null>(null);
+  const [gravandoLogo, setGravandoLogo] = useState(false);
+  const [tirando, setTirando] = useState<QualLogo | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const kit = useQuery({
@@ -73,35 +146,15 @@ export default function ContextoMarca() {
   useEffect(() => {
     const k = kit.data;
     setPaleta(Array.isArray(k?.paleta) ? k.paleta : []);
-    setLogo(k?.logo_file_id || null);
-    setLogoAlt(k?.logo_alt_file_id || null);
     setEstilo(k?.estilo || "");
     setRegras(k?.regras || "");
   }, [kit.data]);
 
-  const arquivos = useQuery({
-    queryKey: ["mesa", "imagens-do-cliente", clientId],
-    queryFn: async (): Promise<ArquivoDeImagem[]> => {
-      const { data, error } = await (supabase as any)
-        .from("files")
-        .select("id, file_name, file_url, storage_bucket, storage_path, mime_type, extension, created_at")
-        .eq("client_id", clientId)
-        .is("archived_at", null)
-        .order("created_at", { ascending: false })
-        .limit(300);
-      if (error) throw error;
-      return ((data || []) as ArquivoDeImagem[]).filter((f) => {
-        const ext = (f.extension || extensao(f.file_name || "")).toLowerCase();
-        return String(f.mime_type || "").indexOf("image/") === 0 || IMAGENS.indexOf(ext) >= 0;
-      });
-    },
-  });
-
-  const porId = useMemo(() => new Map((arquivos.data || []).map((a) => [a.id, a])), [arquivos.data]);
-
   const mudarCor = (i: number, campo: keyof Cor, valor: string) =>
     setPaleta((p) => p.map((c, j) => (j === i ? { ...c, [campo]: valor } : c)));
 
+  // A logo é gravada na hora pelo agente de contexto (definir_logo): o salvar
+  // abaixo cuida só de paleta, estilo e regras e não mexe na logo.
   const salvar = async () => {
     const invalida = paleta.find((c) => !HEX.test(c.hex));
     if (invalida) {
@@ -114,8 +167,6 @@ export default function ContextoMarca() {
         {
           client_id: clientId,
           paleta: paleta.map((c) => ({ nome: c.nome.trim(), hex: c.hex.toUpperCase(), papel: c.papel })),
-          logo_file_id: logo,
-          logo_alt_file_id: logoAlt,
           estilo: estilo.trim() || null,
           regras: regras.trim() || null,
           atualizado_por: userId,
@@ -124,7 +175,7 @@ export default function ContextoMarca() {
       );
       if (error) throw error;
       toast.success("Kit de marca salvo");
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+      invalidar(clientId);
     } catch (e) {
       toast.error("Kit não salvo", { description: textoDoErro(e) });
     } finally {
@@ -132,11 +183,40 @@ export default function ContextoMarca() {
     }
   };
 
-  const escolher = (id: string) => {
-    if (escolhendo === "logo") setLogo(id);
-    if (escolhendo === "alt") setLogoAlt(id);
-    setEscolhendo(null);
+  const escolherLogo = async (escolha: ImagemEscolhida) => {
+    if (!escolhendo) return;
+    const alternativa = escolhendo === "alt";
+    setGravandoLogo(true);
+    try {
+      await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem: escolha.origem, id: escolha.id, alternativa });
+      toast.success(alternativa ? "Logo alternativa definida" : "Logo definida", { description: escolha.nome });
+      setEscolhendo(null);
+      invalidar(clientId);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+    } catch (e) {
+      avisarErro(e, "Logo não definida");
+    } finally {
+      setGravandoLogo(false);
+    }
   };
+
+  const tirarLogo = async (qual: QualLogo) => {
+    setTirando(qual);
+    try {
+      const patch = qual === "logo" ? { logo_path: null, logo_file_id: null } : { logo_alt_path: null, logo_alt_file_id: null };
+      const { error } = await (supabase as any)
+        .from("cliente_kit_marca")
+        .upsert({ client_id: clientId, ...patch, atualizado_por: userId }, { onConflict: "client_id" });
+      if (error) throw error;
+      invalidar(clientId);
+    } catch (e) {
+      toast.error("Não foi possível tirar a logo", { description: textoDoErro(e) });
+    } finally {
+      setTirando(null);
+    }
+  };
+
+  const k = kit.data || {};
 
   return (
     <div className="space-y-6">
@@ -158,7 +238,7 @@ export default function ContextoMarca() {
                 type="color"
                 value={HEX.test(cor.hex) ? cor.hex : "#000000"}
                 onChange={(e) => mudarCor(i, "hex", e.target.value.toUpperCase())}
-                className="h-9 w-10 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                className="h-9 w-10 cursor-pointer rounded border border-border bg-card p-0.5"
                 aria-label="Cor"
               />
               <Input value={cor.nome} onChange={(e) => mudarCor(i, "nome", e.target.value)} placeholder="Nome (ex.: Verde folha)" className="h-9 min-w-0" />
@@ -182,49 +262,33 @@ export default function ContextoMarca() {
       <section className="space-y-3">
         <TituloDeSecao>Logo</TituloDeSecao>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {([["logo", "Logo principal", logo], ["alt", "Logo alternativa (fundo escuro ou claro)", logoAlt]] as const).map(([qual, rotulo, id]) => (
-            <div key={qual} className="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-secondary/60">
-                {id && porId.get(id) ? <Miniatura arquivo={porId.get(id)!} className="h-16 w-16" /> : <span className="text-[10px] text-muted-foreground">vazio</span>}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12.5px] font-medium">{rotulo}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{id ? porId.get(id)?.file_name || "arquivo escolhido" : "Escolha entre as imagens do cliente em Arquivos"}</p>
-                <div className="mt-1.5 flex gap-2">
-                  <Button type="button" size="sm" variant="outline" className="h-7 text-[11.5px]" onClick={() => setEscolhendo(qual)}>Escolher</Button>
-                  {id && <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" onClick={() => (qual === "logo" ? setLogo(null) : setLogoAlt(null))}>Tirar</Button>}
-                </div>
-              </div>
-            </div>
-          ))}
+          <CartaoDaLogo
+            rotulo="Logo principal"
+            dica="Escolha em qualquer pasta do Workspace, de Arquivos ou do acervo."
+            caminho={k.logo_path || null}
+            fileIdAntigo={k.logo_path ? null : k.logo_file_id || null}
+            onEscolher={() => setEscolhendo("logo")}
+            onTirar={() => void tirarLogo("logo")}
+            tirando={tirando === "logo"}
+          />
+          <CartaoDaLogo
+            rotulo="Logo alternativa"
+            dica="Versão para fundo escuro ou claro, de qualquer pasta."
+            caminho={k.logo_alt_path || null}
+            fileIdAntigo={k.logo_alt_path ? null : k.logo_alt_file_id || null}
+            onEscolher={() => setEscolhendo("alt")}
+            onTirar={() => void tirarLogo("alt")}
+            tirando={tirando === "alt"}
+          />
         </div>
-        {escolhendo && (
-          <div className="rounded-xl border border-border bg-card p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-[12.5px] font-medium">Escolha a {escolhendo === "logo" ? "logo principal" : "logo alternativa"}</p>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setEscolhendo(null)}>Fechar</Button>
-            </div>
-            {arquivos.isLoading && <p className="text-[12px] text-muted-foreground">Lendo os arquivos do cliente…</p>}
-            {arquivos.data && arquivos.data.length === 0 && <p className="text-[12px] text-muted-foreground">Este cliente ainda não tem imagens em Arquivos. Envie a logo por lá e volte aqui.</p>}
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-              {(arquivos.data || []).slice(0, 60).map((a) => {
-                const marcado = a.id === (escolhendo === "logo" ? logo : logoAlt);
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => escolher(a.id)}
-                    className={`relative min-w-0 overflow-hidden rounded-lg border bg-secondary/40 p-1 text-left ${marcado ? "border-primary" : "border-border hover:border-primary/50"}`}
-                  >
-                    <Miniatura arquivo={a} className="aspect-square w-full" />
-                    <span className="mt-1 block truncate text-[10px] text-muted-foreground">{a.file_name}</span>
-                    {marcado && <Check className="absolute right-1 top-1 h-4 w-4 rounded-full bg-primary p-0.5 text-primary-foreground" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <NavegadorDePastas
+          aberto={!!escolhendo}
+          onOpenChange={(v) => { if (!v && !gravandoLogo) setEscolhendo(null); }}
+          titulo={escolhendo === "alt" ? "Escolher a logo alternativa" : "Escolher a logo principal"}
+          descricao="Só aparecem imagens. Ao clicar, a imagem é copiada para a marca do cliente e passa a valer para os agentes."
+          onEscolher={(e) => void escolherLogo(e)}
+          ocupado={gravandoLogo}
+        />
       </section>
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">

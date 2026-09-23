@@ -48,6 +48,10 @@ export type CardDirecao = {
   blocos?: BlocoTexto[];
   layout?: LayoutLamina;
   evitar?: string;
+  /** Fotos reais do acervo (cliente_imagens) usadas como base desta lâmina. */
+  imagens_ids?: string[];
+  /** Referências escolhidas na tela para esta lâmina (sobrepõem as do conjunto; prefixo g: = banco global). */
+  referencias_ids?: string[];
 };
 
 export type MarcaParaDirecao = {
@@ -268,7 +272,16 @@ function descreverPosicao(c: Caixa): string {
 export function promptDaLamina(
   card: Pick<CardDirecao, "ordem" | "funcao" | "texto_exato" | "blocos" | "layout" | "evitar" | "ilustracao">,
   marca: MarcaParaDirecao,
-  opcoes: { total: number; carrosselInfinito: boolean; levaLogo: boolean; conceito?: string | null },
+  opcoes: {
+    total: number;
+    carrosselInfinito: boolean;
+    levaLogo: boolean;
+    conceito?: string | null;
+    /** Imagens já usadas nas lâminas anteriores: esta lâmina não repete cena, pose nem enquadramento. */
+    anteriores?: string[];
+    /** Descrição da foto real anexada como base: o gerador não redesenha a foto. */
+    fotoReal?: string | null;
+  },
 ): string {
   const capa = card.funcao === "capa" || card.ordem === 1;
   const layout = normalizarLayout(card.layout, card.funcao, card.ordem, opcoes.total);
@@ -299,11 +312,19 @@ export function promptDaLamina(
     : "paleta coerente com as artes da marca anexadas";
 
   return [
-    `ARTE FINAL de ${opcoes.total > 1 ? `carrossel, lâmina ${card.ordem} de ${opcoes.total}` : "post único"} para o Instagram da marca ${marca.nomeCliente}. Função desta lâmina: ${capa ? "capa (parar a rolagem com um gancho forte)" : card.funcao === "cta" ? "fechamento com chamada para ação" : "conteúdo (uma ideia só)"}.`,
+    `ARTE FINAL de ${opcoes.total > 1 ? `carrossel, lâmina ${card.ordem} de ${opcoes.total}` : "post único"} para o Instagram da marca. Função desta lâmina: ${capa ? "capa (parar a rolagem com um gancho forte)" : card.funcao === "cta" ? "fechamento com chamada para ação" : "conteúdo (uma ideia só)"}.`,
     opcoes.conceito ? `Conceito do conjunto: ${opcoes.conceito}` : "",
     "",
     "IMAGEM E COMPOSIÇÃO",
-    `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
+    opcoes.fotoReal
+      ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz e cores ficam exatamente como estão. Desenhe só o texto e, se precisar para a leitura, um painel ou véu suave dentro da área do texto.`
+      : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
+    capa
+      ? "- CAPA COM DESTAQUE A MAIS: fundo escuro e travado (foto escurecida de 45 a 65% ou o tom mais escuro da paleta), headline em peso black, a maior do carrossel, com a palavra-chave na cor de destaque; contraste máximo, texto claro sobre escuro, um gesto visual forte e nada competindo com a headline."
+      : "",
+    opcoes.anteriores && opcoes.anteriores.length
+      ? `- Imagens já usadas nas lâminas anteriores (não repita cena, pose, pessoa na mesma posição nem enquadramento; mude o plano e o assunto): ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}.`
+      : "",
     `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
     `- Ponto focal: ${layout.ponto_focal}.`,
     `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
@@ -328,6 +349,7 @@ export function promptDaLamina(
         ? "- A logo oficial ainda não foi enviada em imagem: NÃO desenhe nem invente logo, símbolo ou marca; deixe só um respiro no canto onde ela entraria."
         : "- Sem logo nesta lâmina.",
     marca.regras ? `- Regras da marca: ${marca.regras.replace(/\n+/g, " ")}` : "",
+    "- Não escreva o nome da marca nem da empresa em lugar nenhum da arte: a marca aparece só pela logo oficial anexada.",
     "",
     "FORMATO",
     "- Arte vertical 4:5 (1080 x 1350), usando o quadro inteiro, sem bordas vazias.",
@@ -346,6 +368,20 @@ export function promptDaLamina(
  * Quando o provedor não aceita 4:5, a arte sai em 1024 x 1536 e o quadro
  * 4:5 é o recorte central. O prompt ganha a instrução das faixas.
  */
+/**
+ * Área da logo (percentual do quadro) no mesmo canto que o prompt descreve:
+ * superior esquerdo quando o texto está na base, inferior esquerdo nos demais.
+ */
+export function caixaDaLogo(zona: ZonaTexto, capa: boolean): Caixa {
+  const esq = AREA.x0 + MARGEM_X + (capa ? CAPA_LATERAL_EXTRA : 0);
+  const alturaLogo = 6; // 72 px de 1350, com folga
+  if (zona === "base-esquerda" || zona === "base-centro") {
+    return { x0: esq, x1: esq + 22, y0: MARGEM_TOPO, y1: MARGEM_TOPO + alturaLogo };
+  }
+  const base = AREA.y1 - MARGEM_BASE;
+  return { x0: esq, x1: esq + 22, y0: base - alturaLogo, y1: base };
+}
+
 export function formatoPara2x3(prompt: string): string {
   return `${prompt}\n\nFORMATO DESTA GERAÇÃO: a tela é 1024 x 1536. O quadro 4:5 descrito acima é o recorte central de y=128 a y=1408: componha tudo dentro dele. As faixas de 128 px no topo e na base serão cortadas e recebem só continuação do fundo, sem texto nem logo.`;
 }

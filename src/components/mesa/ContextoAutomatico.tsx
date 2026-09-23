@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Circle, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Circle, CircleDashed, FileText, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
-import { chamarFuncao, dataEHora, padraoPara, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
+import { chamarFuncao, dataEHora, padraoDoContexto, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal, useAvisarErro } from "./Custo";
-import { useMesa } from "./MesaContexto";
+import { ImagemDaMesa, useMesa } from "./MesaContexto";
+import type { ParteDoContexto } from "./AbaContexto";
 import { TituloDeSecao } from "./Seletores";
 import {
   temTexto,
+  useAcervo,
   useInvalidarContexto,
   useLeituraDoContexto,
   type CorDoKit,
@@ -52,7 +54,7 @@ function ImagemDoArquivo({ arquivo, className = "" }: { arquivo: ArquivoDoPainel
     storagePath: arquivo.storage_path,
     transform: { width: 160, height: 160, resize: "contain" },
   });
-  if (!url) return <div className={`animate-pulse bg-secondary/60 ${className}`} />;
+  if (!url) return <div className={`animate-pulse bg-muted ${className}`} />;
   return <img src={url} alt={arquivo.file_name} loading="lazy" className={`object-contain ${className}`} />;
 }
 
@@ -60,7 +62,7 @@ function ImagemDoArquivo({ arquivo, className = "" }: { arquivo: ArquivoDoPainel
 function MiniaturaDoArquivo({ fileId, className = "" }: { fileId: string; className?: string }) {
   const arquivo = useArquivo(fileId);
   if (!arquivo.data) {
-    return <div className={`bg-secondary/60 ${arquivo.isLoading ? "animate-pulse" : ""} ${className}`} />;
+    return <div className={`bg-muted ${arquivo.isLoading ? "animate-pulse" : ""} ${className}`} />;
   }
   return <ImagemDoArquivo arquivo={arquivo.data} className={className} />;
 }
@@ -68,8 +70,8 @@ function MiniaturaDoArquivo({ fileId, className = "" }: { fileId: string; classN
 function Bloco({ titulo, children, acao }: { titulo: string; children: ReactNode; acao?: ReactNode }) {
   return (
     <div className="min-w-0 space-y-1.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</p>
+      <div className="flex flex-wrap items-center justify-between">
+        <p className="mr-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</p>
         {acao}
       </div>
       {children}
@@ -79,7 +81,7 @@ function Bloco({ titulo, children, acao }: { titulo: string; children: ReactNode
 
 function Numero({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; detalhe?: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-lg bg-secondary/40 px-3 py-2">
+    <div className="min-w-0 rounded-lg border border-border bg-muted px-3 py-2">
       <p className="text-[11px] text-muted-foreground">{rotulo}</p>
       <p className="text-[15px] font-semibold text-foreground">{valor}</p>
       {detalhe && <p className="text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{detalhe}</p>}
@@ -89,12 +91,12 @@ function Numero({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; 
 
 function Bolinhas({ paleta }: { paleta: CorDoKit[] }) {
   return (
-    <ul className="flex flex-wrap gap-2">
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
       {paleta.map((c, i) => (
-        <li key={`${c.hex}-${i}`} className="flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-background py-0.5 pl-0.5 pr-2">
-          <span className="h-5 w-5 shrink-0 rounded-full border border-border" style={{ backgroundColor: c.hex }} title={c.nome || c.hex} />
+        <li key={`${c.hex}-${i}`} className="flex min-w-0 items-center rounded-full border border-border bg-card py-0.5 pl-0.5 pr-2">
+          <span className="mr-1.5 h-5 w-5 shrink-0 rounded-full border border-border" style={{ backgroundColor: c.hex }} title={c.nome || c.hex} />
           <span className="font-mono text-[11px] text-foreground">{c.hex}</span>
-          {temTexto(c.nome) && <span className="truncate text-[11px] text-muted-foreground">{c.nome}</span>}
+          {temTexto(c.nome) && <span className="ml-1.5 truncate text-[11px] text-muted-foreground">{c.nome}</span>}
         </li>
       ))}
     </ul>
@@ -103,6 +105,155 @@ function Bolinhas({ paleta }: { paleta: CorDoKit[] }) {
 
 const ROTULO_PAPEL_DA_FONTE: Record<string, string> = { titulo: "Título", texto: "Texto" };
 
+type SituacaoDoItem = "feito" | "parcial" | "falta";
+
+interface ItemDoChecklist {
+  chave: string;
+  rotulo: string;
+  situacao: SituacaoDoItem;
+  detalhe: string;
+  parte: ParteDoContexto | null;
+}
+
+/**
+ * O que o contexto do cliente já tem e o que falta. Recalcula a cada leitura
+ * (a aba relê depois de cada mudança), então os itens vão sendo marcados
+ * conforme a equipe e o agente preenchem.
+ */
+function montarChecklist(dados: LeituraDoContexto, acervo: { ativas: number; semDescricao: number } | null): ItemDoChecklist[] {
+  const kit = dados.kit;
+  const paleta = Array.isArray(kit?.paleta) ? kit!.paleta! : [];
+  const refs = dados.encontrado.referencias;
+  const docs = dados.encontrado.documentos;
+  const temLogo = !!(kit && (kit.logo_path || kit.logo_file_id));
+  const itens: ItemDoChecklist[] = [
+    {
+      chave: "logo",
+      rotulo: "Logo",
+      situacao: temLogo ? (kit && (kit.logo_alt_path || kit.logo_alt_file_id) ? "feito" : "parcial") : "falta",
+      detalhe: temLogo ? (kit && (kit.logo_alt_path || kit.logo_alt_file_id) ? "Principal e alternativa definidas." : "Falta a logo alternativa.") : "Escolha a logo em qualquer pasta.",
+      parte: "marca",
+    },
+    {
+      chave: "paleta",
+      rotulo: "Paleta",
+      situacao: paleta.length >= 2 ? "feito" : paleta.length === 1 ? "parcial" : "falta",
+      detalhe: paleta.length ? `${paleta.length} ${paleta.length === 1 ? "cor" : "cores"}.` : "Nenhuma cor definida.",
+      parte: "marca",
+    },
+    {
+      chave: "fontes",
+      rotulo: "Fontes",
+      situacao: dados.fontes.length >= 2 ? "feito" : dados.fontes.length === 1 ? "parcial" : "falta",
+      detalhe: dados.fontes.length ? dados.fontes.map((f) => f.nome).join(", ") : "Sem fonte de título e de texto.",
+      parte: "fontes",
+    },
+    {
+      chave: "estilo",
+      rotulo: "Estilo visual",
+      situacao: temTexto(kit?.estilo) ? "feito" : "falta",
+      detalhe: temTexto(kit?.estilo) ? "Descrito." : "Como a marca se parece.",
+      parte: "marca",
+    },
+    {
+      chave: "regras",
+      rotulo: "Regras",
+      situacao: temTexto(kit?.regras) ? "feito" : "falta",
+      detalhe: temTexto(kit?.regras) ? "Definidas." : "O que fazer e o que nunca fazer.",
+      parte: "marca",
+    },
+    {
+      chave: "referencias",
+      rotulo: "Referências lidas",
+      situacao: refs.total === 0 ? "falta" : refs.sem_leitura === 0 ? "feito" : "parcial",
+      detalhe: refs.total === 0 ? "Nenhuma referência ativa." : `${refs.total - refs.sem_leitura} de ${refs.total} lidas.`,
+      parte: "referencias",
+    },
+    {
+      chave: "imagens",
+      rotulo: "Imagens do acervo",
+      situacao: !acervo || acervo.ativas === 0 ? "falta" : acervo.semDescricao === 0 ? "feito" : "parcial",
+      detalhe: !acervo
+        ? "Lendo o acervo..."
+        : acervo.ativas === 0
+          ? "Traga as fotos reais do cliente."
+          : acervo.semDescricao
+            ? `${acervo.ativas} fotos, ${acervo.semDescricao} sem organizar.`
+            : `${acervo.ativas} fotos organizadas.`,
+      parte: "imagens",
+    },
+    {
+      chave: "documentos",
+      rotulo: "Documentos",
+      situacao: docs.length === 0 ? "falta" : docs.some((d) => d.prioridade) ? "feito" : "parcial",
+      detalhe: docs.length === 0 ? "Envie a identidade em Arquivos." : `${docs.length} lido(s), ${docs.filter((d) => d.prioridade).length} de identidade.`,
+      parte: null,
+    },
+  ];
+  return itens;
+}
+
+function Checklist({ itens, onIrPara }: { itens: ItemDoChecklist[]; onIrPara?: (p: ParteDoContexto) => void }) {
+  const pontos = itens.reduce((t, i) => t + (i.situacao === "feito" ? 1 : i.situacao === "parcial" ? 0.5 : 0), 0);
+  const pct = itens.length ? Math.round((pontos / itens.length) * 100) : 0;
+  const feitos = itens.filter((i) => i.situacao === "feito").length;
+  return (
+    <div className="min-w-0 space-y-3">
+      <div className="min-w-0">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[13px] font-medium">Completude do contexto</p>
+          <p className="text-[13px] font-semibold tabular-nums">{pct}%</p>
+        </div>
+        <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+          <div className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-success" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+        </div>
+        <p className="mt-1 text-[11.5px] text-muted-foreground">{feitos} de {itens.length} completos. A lista se atualiza conforme o contexto é preenchido.</p>
+      </div>
+      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {itens.map((i) => {
+          const clicavel = !!(i.parte && onIrPara && i.situacao !== "feito");
+          const conteudo = (
+            <>
+              <span
+                className={`mr-2.5 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                  i.situacao === "feito"
+                    ? "bg-success text-white"
+                    : i.situacao === "parcial"
+                      ? "border border-primary text-primary"
+                      : "border border-border text-muted-foreground"
+                }`}
+              >
+                {i.situacao === "feito" ? <Check className="h-3 w-3" /> : i.situacao === "parcial" ? <CircleDashed className="h-3 w-3" /> : <Circle className="h-2 w-2" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={`block text-[12.5px] font-medium ${i.situacao === "feito" ? "text-muted-foreground" : "text-foreground"}`}>
+                  {i.rotulo}
+                </span>
+                <span className="block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{i.detalhe}</span>
+              </span>
+              {clicavel && <ArrowRight className="ml-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+            </>
+          );
+          const classe = `flex w-full min-w-0 items-start rounded-lg border px-2.5 py-2 text-left ${
+            i.situacao === "feito" ? "border-border bg-muted" : "border-border bg-card"
+          }`;
+          return (
+            <li key={i.chave} className="min-w-0">
+              {clicavel ? (
+                <button type="button" onClick={() => onIrPara!(i.parte!)} className={`${classe} hover:border-primary/60`}>
+                  {conteudo}
+                </button>
+              ) : (
+                <div className={classe}>{conteudo}</div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /** Painel do que o painel já tem deste cliente, sem custo de IA. */
 function PainelEncontrado({
   dados,
@@ -110,23 +261,36 @@ function PainelEncontrado({
   gravandoLogo,
   onFontesDaBiblioteca,
   escolhendoFontes,
+  onIrPara,
 }: {
   dados: LeituraDoContexto;
-  onUsarLogo: (id: string) => void;
+  onUsarLogo: (origem: "arquivo" | "workspace", id: string) => void;
   gravandoLogo: string | null;
   onFontesDaBiblioteca: () => void;
   escolhendoFontes: boolean;
+  onIrPara?: (p: ParteDoContexto) => void;
 }) {
   const { kit, encontrado, fontes, candidatos_a_logo } = dados;
+  const { clientId } = useMesa();
+  const acervo = useAcervo(clientId);
   const paleta = Array.isArray(kit?.paleta) ? kit!.paleta! : [];
   const docs = encontrado.documentos;
   const refs = encontrado.referencias;
-  const logoId = kit?.logo_file_id || null;
+  const logoPath = kit?.logo_path || null;
+  const logoId = logoPath ? null : kit?.logo_file_id || null;
   const logo = useArquivo(logoId);
-  const candidatosArquivo = candidatos_a_logo.filter((c) => c.origem === "arquivo");
-  const candidatosWorkspace = candidatos_a_logo.filter((c) => c.origem === "workspace");
   const [verTodosDocs, setVerTodosDocs] = useState(false);
   const docsVisiveis = verTodosDocs ? docs : docs.slice(0, 6);
+
+  const resumoAcervo = acervo.data
+    ? {
+        ativas: acervo.data.filter((i) => i.ativa).length,
+        semDescricao: acervo.data.filter((i) => i.ativa && !(i.descricao && i.descricao.trim())).length,
+      }
+    : acervo.isError
+      ? { ativas: 0, semDescricao: 0 }
+      : null;
+  const checklist = montarChecklist(dados, resumoAcervo);
 
   const lacunas: string[] = [];
   for (const l of dados.lacunas.concat(Array.isArray(kit?.contexto?.lacunas) ? kit!.contexto!.lacunas! : [])) {
@@ -135,7 +299,9 @@ function PainelEncontrado({
 
   return (
     <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-3.5">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <Checklist itens={checklist} onIrPara={onIrPara} />
+
+      <div className="grid grid-cols-2 gap-2 border-t border-border pt-4 sm:grid-cols-4">
         <Numero rotulo="Documentos" valor={docs.length} detalhe={docs.length ? `${docs.filter((d) => d.prioridade).length} de identidade` : "nenhum em Arquivos"} />
         <Numero rotulo="Dossiê" valor={encontrado.tem_dossie ? "Sim" : "Não"} />
         <Numero rotulo="Artes aprovadas" valor={encontrado.artes_aprovadas} />
@@ -159,10 +325,10 @@ function PainelEncontrado({
         <Bloco titulo="Documentos lidos">
           <ul className="space-y-1">
             {docsVisiveis.map((d) => (
-              <li key={d.file_id} className="flex min-w-0 items-center gap-2 text-[12.5px]">
-                <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <li key={d.file_id} className="flex min-w-0 items-center text-[12.5px]">
+                <FileText className="mr-2 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 flex-1 truncate" title={d.nome}>{d.nome}</span>
-                {d.prioridade && <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] text-primary">identidade</span>}
+                {d.prioridade && <span className="ml-2 shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">identidade</span>}
               </li>
             ))}
           </ul>
@@ -191,9 +357,9 @@ function PainelEncontrado({
           }
         >
           {fontes.length ? (
-            <ul className="flex flex-wrap gap-1.5">
+            <ul className="flex flex-wrap">
               {fontes.map((f, i) => (
-                <li key={`${f.nome}-${i}`} className="min-w-0 rounded-full border border-border px-2.5 py-0.5 text-[12px] [overflow-wrap:anywhere]">
+                <li key={`${f.nome}-${i}`} className="mb-1.5 mr-1.5 min-w-0 rounded-full border border-border bg-card px-2.5 py-0.5 text-[12px] [overflow-wrap:anywhere]">
                   <span className="text-muted-foreground">{ROTULO_PAPEL_DA_FONTE[f.papel] || f.papel}: </span>
                   {f.nome}
                   {f.origem === "biblioteca" && <span className="text-muted-foreground"> (biblioteca)</span>}
@@ -206,24 +372,52 @@ function PainelEncontrado({
         </Bloco>
       </div>
 
-      <Bloco titulo="Logo">
-        {logoId ? (
-          <div className="flex min-w-0 items-center gap-3">
-            <MiniaturaDoArquivo fileId={logoId} className="h-12 w-12 shrink-0 rounded-lg border border-border" />
+      <Bloco
+        titulo="Logo"
+        acao={
+          onIrPara ? (
+            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-[11.5px]" onClick={() => onIrPara("marca")}>
+              {logoPath || logoId ? "Trocar" : "Escolher de qualquer pasta"}
+            </Button>
+          ) : undefined
+        }
+      >
+        {logoPath || logoId ? (
+          <div className="flex min-w-0 items-center">
+            <div className="mr-3 h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+              {logoPath ? (
+                <ImagemDaMesa caminho={logoPath} alt="Logo" className="h-12 w-12 !object-contain p-1" />
+              ) : (
+                <MiniaturaDoArquivo fileId={logoId!} className="h-12 w-12" />
+              )}
+            </div>
             <div className="min-w-0">
-              <p className="flex items-center gap-1 text-[12.5px] font-medium">
-                <Check className="h-3.5 w-3.5 text-primary" /> Logo definida
+              <p className="flex items-center text-[12.5px] font-medium">
+                <Check className="mr-1 h-3.5 w-3.5 text-primary" /> Logo definida
               </p>
-              <p className="truncate text-[11.5px] text-muted-foreground">{logo.data?.file_name || (logo.isLoading ? "carregando…" : "arquivo escolhido")}</p>
+              <p className="truncate text-[11.5px] text-muted-foreground">
+                {logoPath ? "Guardada na marca do cliente." : logo.data?.file_name || (logo.isLoading ? "carregando..." : "arquivo escolhido")}
+              </p>
             </div>
           </div>
-        ) : candidatosArquivo.length ? (
+        ) : candidatos_a_logo.length ? (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {candidatosArquivo.slice(0, 6).map((c) => (
-              <li key={c.id} className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border p-2">
-                <MiniaturaDoArquivo fileId={c.id} className="h-10 w-10 shrink-0 rounded-md" />
+            {candidatos_a_logo.slice(0, 6).map((c) => (
+              <li key={`${c.origem}-${c.id}`} className="flex min-w-0 items-center rounded-lg border border-border bg-card p-2">
+                {c.origem === "arquivo" ? (
+                  <MiniaturaDoArquivo fileId={c.id} className="mr-2.5 h-10 w-10 shrink-0 rounded-md" />
+                ) : (
+                  <span className="mr-2.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-[9.5px] text-muted-foreground">Workspace</span>
+                )}
                 <span className="min-w-0 flex-1 truncate text-[12px]" title={c.nome}>{c.nome}</span>
-                <Button type="button" size="sm" variant="outline" className="h-7 shrink-0 px-2 text-[11.5px]" onClick={() => onUsarLogo(c.id)} disabled={!!gravandoLogo}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="ml-2 h-7 shrink-0 px-2 text-[11.5px]"
+                  onClick={() => onUsarLogo(c.origem, c.id)}
+                  disabled={!!gravandoLogo}
+                >
                   {gravandoLogo === c.id && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                   Usar como logo
                 </Button>
@@ -231,22 +425,16 @@ function PainelEncontrado({
             ))}
           </ul>
         ) : (
-          <p className="text-[12px] text-muted-foreground">Nenhum arquivo com "logo" no nome em Arquivos.</p>
-        )}
-        {!logoId && candidatosWorkspace.length > 0 && (
-          <p className="text-[11.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
-            No Workspace: {candidatosWorkspace.slice(0, 4).map((c) => c.nome).join(", ")}
-            {candidatosWorkspace.length > 4 ? ` e mais ${candidatosWorkspace.length - 4}` : ""}. Para virar a logo, o arquivo precisa estar em Arquivos.
-          </p>
+          <p className="text-[12px] text-muted-foreground">Nenhum arquivo com "logo" no nome. Escolha a logo em qualquer pasta pela Marca.</p>
         )}
       </Bloco>
 
       {lacunas.length > 0 && (
-        <Bloco titulo="O que ainda falta">
+        <Bloco titulo="O agente ainda aponta">
           <ul className="space-y-1">
             {lacunas.map((l) => (
-              <li key={l} className="flex min-w-0 items-start gap-2 text-[12.5px] leading-relaxed">
-                <Circle className="mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
+              <li key={l} className="flex min-w-0 items-start text-[12.5px] leading-relaxed">
+                <Circle className="mr-2 mt-1 h-3 w-3 shrink-0 text-muted-foreground" />
                 <span className="min-w-0 [overflow-wrap:anywhere]">{l}</span>
               </li>
             ))}
@@ -284,8 +472,8 @@ function ContextoConsolidadoCard({ kit }: { kit: KitDoContexto | null }) {
 
   return (
     <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Contexto consolidado</p>
+      <div className="flex flex-wrap items-center justify-between">
+        <p className="mr-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Contexto consolidado</p>
         {kit?.contexto_atualizado_em && <p className="text-[11px] text-muted-foreground">montado {dataEHora(kit.contexto_atualizado_em)}</p>}
       </div>
       {!algum ? (
@@ -321,10 +509,10 @@ function ContextoConsolidadoCard({ kit }: { kit: KitDoContexto | null }) {
         </div>
       )}
       {fontesLidas.length > 0 && (
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 border-t border-border pt-2.5">
-          <span className="text-[11px] text-muted-foreground">Lido de:</span>
+        <div className="flex min-w-0 flex-wrap items-center border-t border-border pt-2.5">
+          <span className="mb-1 mr-1.5 text-[11px] text-muted-foreground">Lido de:</span>
           {fontesLidas.map((f) => (
-            <span key={f} className="min-w-0 rounded-full bg-secondary/60 px-2 py-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{f}</span>
+            <span key={f} className="mb-1 mr-1.5 min-w-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{f}</span>
           ))}
         </div>
       )}
@@ -350,14 +538,14 @@ function SugestoesPendentes({
   if (!campos.length) return null;
   const rotulos: Record<string, string> = { paleta: "Paleta", estilo: "Estilo visual", regras: "Regras" };
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-3.5">
+    <section className="min-w-0 space-y-3 rounded-xl border border-primary/50 bg-card p-3.5">
       <div>
-        <p className="flex items-center gap-1.5 text-[12.5px] font-medium"><Sparkles className="h-3.5 w-3.5 text-primary" /> Sugestões do agente</p>
+        <p className="flex items-center text-[12.5px] font-medium"><Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" /> Sugestões do agente</p>
         <p className="text-[11.5px] text-muted-foreground">A equipe já tinha preenchido estes campos, então o agente não trocou nada. Aplique o que fizer sentido.</p>
       </div>
       <ul className="space-y-2.5">
         {campos.map((campo) => (
-          <li key={campo} className="min-w-0 space-y-2 rounded-lg border border-border bg-card p-2.5">
+          <li key={campo} className="min-w-0 space-y-2 rounded-lg border border-border bg-muted p-2.5">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{rotulos[campo]}</p>
             {campo === "paleta" ? (
               <div className="space-y-1.5">
@@ -376,8 +564,8 @@ function SugestoesPendentes({
                 )}
               </div>
             )}
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" onClick={() => onIgnorar(campo)} disabled={aplicando === campo}>
+            <div className="flex flex-wrap justify-end">
+              <Button type="button" size="sm" variant="ghost" className="mr-2 h-7 text-[11.5px]" onClick={() => onIgnorar(campo)} disabled={aplicando === campo}>
                 Ignorar
               </Button>
               <Button type="button" size="sm" className="h-7 text-[11.5px]" onClick={() => onAplicar(campo)} disabled={!!aplicando}>
@@ -396,7 +584,7 @@ function SugestoesPendentes({
  * Coluna principal da aba Contexto: lê sozinha o que o cliente já tem,
  * monta o contexto uma vez quando nunca foi montado e mostra o resultado.
  */
-export default function ContextoAutomatico() {
+export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: ParteDoContexto) => void } = {}) {
   const { clientId, clientName, catalogo, atualizarCusto, userId } = useMesa();
   const queryClient = useQueryClient();
   const leitura = useLeituraDoContexto(clientId);
@@ -471,14 +659,16 @@ export default function ContextoAutomatico() {
     if (error) throw error;
   };
 
-  const usarComoLogo = async (fileId: string) => {
-    setGravandoLogo(fileId);
+  // A logo vai para a marca do cliente pelo agente de contexto (sem custo),
+  // venha de Arquivos ou do Workspace.
+  const usarComoLogo = async (origem: "arquivo" | "workspace", id: string) => {
+    setGravandoLogo(id);
     try {
-      await gravarNoKit({ logo_file_id: fileId });
+      await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem, id, alternativa: false });
       toast.success("Logo definida");
       invalidar(clientId);
     } catch (e) {
-      toast.error("Logo não salva", { description: textoDoErro(e) });
+      avisarErro(e, "Logo não definida");
     } finally {
       setGravandoLogo(null);
     }
@@ -520,18 +710,18 @@ export default function ContextoAutomatico() {
     }
   };
 
-  const leitor = padraoPara(catalogo, "leitura");
+  const modeloDoContexto = padraoDoContexto(catalogo);
 
   return (
     <div className="min-w-0 space-y-4">
       <TituloDeSecao
         acao={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center">
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className="mr-1.5 h-8 w-8 p-0"
               onClick={() => void leitura.refetch()}
               disabled={leitura.isFetching}
               aria-label="Ler de novo"
@@ -542,12 +732,12 @@ export default function ContextoAutomatico() {
             <BotaoComCusto
               rotulo={kit?.contexto_atualizado_em ? "Atualizar contexto" : "Montar contexto"}
               titulo={kit?.contexto_atualizado_em ? "Atualizar o contexto" : "Montar o contexto"}
-              descricao="O agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
+              descricao="A montagem automática roda só na primeira vez. Aqui o agente lê de novo os documentos, o dossiê, as artes aprovadas e as referências sem leitura. O que a equipe já preencheu não é trocado: vira sugestão."
               variant="outline"
               className="h-8 text-[12px]"
               disabled={!dados || montando}
               partes={() => [
-                { modeloId: leitor?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
+                { modeloId: modeloDoContexto?.id, tipo: "texto", tokensEntrada: TAMANHOS.montarContexto.entrada, tokensSaida: TAMANHOS.montarContexto.saida },
               ]}
               executar={() => chamarFuncao<RespostaDoMontar>("agente-contexto", { acao: "montar", client_id: clientId })}
               aoConcluir={(data) => depoisDeMontar(clientId, data)}
@@ -559,16 +749,16 @@ export default function ContextoAutomatico() {
       </TituloDeSecao>
 
       {montando && (
-        <p className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+        <p className="flex items-center rounded-xl border border-border bg-card px-3 py-2 text-[12px] text-muted-foreground">
+          <Loader2 className="mr-2 h-3.5 w-3.5 shrink-0 animate-spin" />
           Montando o contexto a partir do que o cliente já tem...
         </p>
       )}
       {erroDoMontar && erroDoMontar.clientId === clientId && <AvisoDeErro erro={erroDoMontar.erro} />}
 
       {leitura.isLoading && (
-        <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-[12px] text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <div className="flex items-center rounded-xl border border-border bg-card px-3 py-3 text-[12px] text-muted-foreground">
+          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
           Lendo o que o painel já tem deste cliente...
         </div>
       )}
@@ -585,10 +775,11 @@ export default function ContextoAutomatico() {
         <>
           <PainelEncontrado
             dados={dados}
-            onUsarLogo={(id) => void usarComoLogo(id)}
+            onUsarLogo={(origem, id) => void usarComoLogo(origem, id)}
             gravandoLogo={gravandoLogo}
             onFontesDaBiblioteca={() => void fontesDaBiblioteca()}
             escolhendoFontes={escolhendoFontes}
+            onIrPara={onIrPara}
           />
           {!temMaterial && !kit?.contexto_atualizado_em && (
             <p className="text-[12px] leading-relaxed text-muted-foreground">

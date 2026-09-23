@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, MessageSquare, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { chamarFuncao, padraoPara, TAMANHOS, type ParteDaEstimativa } from "@/lib/mesa/api";
+import { chamarFuncao, padraoDoContexto, TAMANHOS, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { AvisoDeErro, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import {
@@ -35,7 +35,8 @@ export default function AgenteDeContexto() {
     setTexto("");
   }, [clientId]);
 
-  const modelo = padraoPara(catalogo, "estrategista");
+  // Papel próprio no catálogo (contexto); sem padrão, vale o do estrategista.
+  const modelo = padraoDoContexto(catalogo);
   const partes: ParteDaEstimativa[] = [
     { modeloId: modelo?.id, tipo: "texto", tokensEntrada: TAMANHOS.conversarContexto.entrada, tokensSaida: TAMANHOS.conversarContexto.saida },
   ];
@@ -80,10 +81,10 @@ export default function AgenteDeContexto() {
   const nomesDoQueMudou = mudanca ? mudanca.mudou.map((m) => ROTULOS_DO_QUE_MUDOU[m] || m) : [];
 
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-3">
+    <section className="flex min-w-0 flex-col space-y-3 rounded-xl border border-border bg-card p-3">
       <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          <MessageSquare className="h-3.5 w-3.5" /> Agente de contexto
+        <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Agente de contexto
         </p>
         <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
           Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte.
@@ -92,8 +93,8 @@ export default function AgenteDeContexto() {
 
       <div ref={lista} className="max-h-[420px] min-w-0 space-y-2 overflow-y-auto">
         {historico.isLoading && (
-          <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Lendo a conversa...
+          <p className="flex items-center text-[12px] text-muted-foreground">
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo a conversa...
           </p>
         )}
         {historico.isError && <AvisoDeErro erro={historico.error} />}
@@ -115,8 +116,8 @@ export default function AgenteDeContexto() {
             <div className="ml-6 rounded-lg bg-primary/10 px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
               <p className="whitespace-pre-wrap">{pendente}</p>
             </div>
-            <p className="mr-6 flex items-center gap-2 px-1 text-[12px] text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> O agente está lendo o contexto...
+            <p className="mr-6 flex items-center px-1 text-[12px] text-muted-foreground">
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> O agente está lendo o contexto...
             </p>
           </>
         )}
@@ -144,9 +145,9 @@ export default function AgenteDeContexto() {
         placeholder="O que o agente precisa saber?"
         disabled={!!pendente}
       />
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between">
         <EstimativaInline partes={partes} />
-        <Button type="button" size="sm" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
+        <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={!!enviando || !texto.trim()}>
           {pendente ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
           Enviar
         </Button>

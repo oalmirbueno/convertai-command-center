@@ -17,7 +17,6 @@ import {
   precoDoModelo,
   textoDoErro,
   type ModeloIa,
-  type Papel,
 } from "@/lib/mesa/api";
 
 /**
@@ -28,6 +27,21 @@ import {
  */
 
 const POR_PAGINA = 40;
+
+/**
+ * Os papéis na ordem em que a Mesa trabalha. "contexto" é o agente que monta
+ * e conversa sobre o contexto do cliente (papel novo no banco em 23/09).
+ */
+const PAPEIS_DA_TELA: { valor: string; rotulo: string; dica: string; tipo: "texto" | "imagem" }[] = [
+  { valor: "estrategista", rotulo: "Estratégia", dica: "Propõe temas, detalha e completa a agenda.", tipo: "texto" },
+  { valor: "diretor_arte", rotulo: "Diretor de arte", dica: "Dirige cada lâmina e confere a arte.", tipo: "texto" },
+  { valor: "imagem", rotulo: "Gerador de imagem", dica: "Pinta as lâminas.", tipo: "imagem" },
+  { valor: "leitura", rotulo: "Leitura de imagem", dica: "Lê referências e organiza o acervo.", tipo: "texto" },
+  { valor: "contexto", rotulo: "Agente de contexto", dica: "Monta o contexto e conversa sobre a marca.", tipo: "texto" },
+];
+
+const rotuloDoPapel = (p: string) =>
+  (PAPEIS_DA_TELA.find((x) => x.valor === p) || PAPEIS.find((x) => x.valor === p) || { rotulo: p }).rotulo;
 
 export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean; onOpenChange: (v: boolean) => void }) {
   const queryClient = useQueryClient();
@@ -101,7 +115,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
   };
 
   /** Um padrão por papel: tira o papel dos outros e põe no escolhido. */
-  const definirPadrao = async (papel: Papel, modeloId: string) => {
+  const definirPadrao = async (papel: string, modeloId: string) => {
     setSalvando(`padrao-${papel}`);
     try {
       const antigos = modelos.filter((m) => m.id !== modeloId && (m.padrao_para || []).indexOf(papel) >= 0);
@@ -129,40 +143,64 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
     <Sheet open={aberto} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader className="text-left">
-          <SheetTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4" /> Modelos de IA</SheetTitle>
+          <SheetTitle className="flex items-center"><Sparkles className="mr-2 h-4 w-4" /> Modelos de IA</SheetTitle>
           <SheetDescription>O catálogo chega sozinho dos provedores. Ligue o que a equipe pode usar e escolha o padrão de cada papel.</SheetDescription>
         </SheetHeader>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => void sincronizar()} disabled={sincronizando}>
+        <div className="mt-4 flex flex-wrap items-center">
+          <Button type="button" size="sm" variant="outline" className="mr-2" onClick={() => void sincronizar()} disabled={sincronizando}>
             {sincronizando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
             Buscar modelos novos agora
           </Button>
           <span className="text-[11.5px] text-muted-foreground">{modelos.filter((m) => m.ativo).length} ativos de {modelos.length}</span>
         </div>
 
-        <section className="mt-4 space-y-2 rounded-xl border border-border bg-card p-3.5">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Padrão por papel</p>
-          {PAPEIS.map((papel) => {
-            const opcoes = modelos.filter((m) => m.ativo && m.tipo === papel.tipo);
-            const atual = modelos.find((m) => (m.padrao_para || []).indexOf(papel.valor) >= 0);
-            return (
-              <div key={papel.valor} className="grid grid-cols-1 items-center gap-1.5 sm:grid-cols-[140px_minmax(0,1fr)]">
-                <span className="text-[12.5px]">{papel.rotulo}</span>
-                <Select value={atual?.id || ""} onValueChange={(v) => void definirPadrao(papel.valor, v)} disabled={salvando === `padrao-${papel.valor}` || opcoes.length === 0}>
-                  <SelectTrigger className="h-9 min-w-0 text-[12.5px]"><SelectValue placeholder={opcoes.length ? "Escolher" : "Nenhum modelo ativo deste tipo"} /></SelectTrigger>
-                  <SelectContent>
-                    {opcoes.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{nomeDoModelo(m)} · {precoDoModelo(m)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            );
-          })}
+        <section className="mt-4 rounded-xl border border-border bg-card">
+          <div className="border-b border-border px-3.5 py-2.5">
+            <p className="text-[13px] font-medium">Padrão por papel</p>
+            <p className="text-[11.5px] text-muted-foreground">O modelo que cada agente usa quando a tela não pede outro.</p>
+          </div>
+          <ul className="divide-y divide-border">
+            {PAPEIS_DA_TELA.map((papel) => {
+              const opcoes = modelos.filter((m) => m.ativo && m.tipo === papel.tipo);
+              const atual = modelos.find((m) => (m.padrao_para || []).indexOf(papel.valor) >= 0) || null;
+              return (
+                <li key={papel.valor} className="grid grid-cols-1 items-center gap-2 px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-medium">{papel.rotulo}</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">{papel.dica}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug [overflow-wrap:anywhere]">
+                      {atual ? (
+                        <span className={atual.ativo ? "text-foreground" : "text-destructive"}>
+                          Atual: {nomeDoModelo(atual)}{atual.ativo ? "" : " (desligado)"}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Sem padrão: {papel.valor === "contexto" ? "usa o da estratégia" : "usa o primeiro modelo ativo"}</span>
+                      )}
+                    </p>
+                  </div>
+                  <Select
+                    value={atual?.id || ""}
+                    onValueChange={(v) => void definirPadrao(papel.valor, v)}
+                    disabled={salvando === `padrao-${papel.valor}` || opcoes.length === 0}
+                  >
+                    <SelectTrigger className="h-9 min-w-0 text-[12.5px]">
+                      <SelectValue placeholder={opcoes.length ? "Trocar o modelo" : "Nenhum modelo ativo deste tipo"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcoes.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>{nomeDoModelo(m)} · {precoDoModelo(m)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </li>
+              );
+            })}
+          </ul>
         </section>
 
-        <div className="mt-4 space-y-2">
+        <p className="mb-1 mt-6 text-[13px] font-medium">Todos os modelos</p>
+        <div className="space-y-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input value={busca} onChange={(e) => { setBusca(e.target.value); setLimite(POR_PAGINA); }} placeholder="Buscar por nome" className="h-9 pl-8" />
@@ -197,18 +235,26 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
         {catalogo.isLoading && <p className="mt-4 text-sm text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo catálogo…</p>}
         {catalogo.isError && <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-[12.5px]">{textoDoErro(catalogo.error)}</p>}
 
-        <ul className="mt-3 divide-y divide-border rounded-xl border border-border">
-          {filtrados.slice(0, limite).map((m) => {
+        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+          {filtrados.slice(0, limite).map((m, i, lista) => {
             const novo = modeloNovo(m);
+            const grupo = m.ativo ? "Ligados para a equipe" : "Desligados";
+            const grupoAnterior = i > 0 ? (lista[i - 1].ativo ? "Ligados para a equipe" : "Desligados") : null;
             return (
-              <li key={m.id} className="flex items-start gap-3 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="min-w-0 text-[13px] font-medium [overflow-wrap:anywhere]">{nomeDoModelo(m)}</span>
-                    {novo && <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">novo</span>}
+              <li key={m.id} className="min-w-0">
+                {grupo !== grupoAnterior && (
+                  <p className="bg-muted px-3 py-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">
+                    {grupo} ({m.ativo ? filtrados.filter((x) => x.ativo).length : filtrados.filter((x) => !x.ativo).length})
+                  </p>
+                )}
+                <div className="flex items-start px-3 py-2.5">
+                <div className="mr-3 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center">
+                    <span className="mr-1.5 min-w-0 text-[13px] font-medium [overflow-wrap:anywhere]">{nomeDoModelo(m)}</span>
+                    {novo && <span className="mr-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">novo</span>}
                     {(m.padrao_para || []).map((p) => (
-                      <span key={p} className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        padrão: {PAPEIS.find((x) => x.valor === p)?.rotulo || p}
+                      <span key={p} className="mr-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        padrão: {rotuloDoPapel(p)}
                       </span>
                     ))}
                   </div>
@@ -217,6 +263,7 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
                   </p>
                 </div>
                 <Switch checked={m.ativo} disabled={salvando === m.id} onCheckedChange={(v) => void alternarAtivo(m, v)} aria-label={`Ativar ${nomeDoModelo(m)}`} />
+                </div>
               </li>
             );
           })}

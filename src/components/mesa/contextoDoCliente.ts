@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
 
 /**
@@ -29,6 +30,10 @@ export interface KitDoContexto {
   client_id: string;
   paleta: CorDoKit[] | null;
   logo_file_id: string | null;
+  /** Logo copiada para o bucket mesa (definir_logo), de qualquer pasta. */
+  logo_path?: string | null;
+  logo_alt_path?: string | null;
+  logo_alt_file_id?: string | null;
   estilo: string | null;
   regras: string | null;
   contexto: ContextoConsolidado | null;
@@ -166,6 +171,7 @@ export function useInvalidarContexto() {
       ["mesa", "referencias", clientId],
       ["mesa", "memoria", clientId],
       ["mesa", "prompts", clientId],
+      ["mesa", "acervo", clientId],
     ];
     if (opcoes.historico) chaves.push(chaveDoHistorico(clientId));
     for (const queryKey of chaves) void queryClient.invalidateQueries({ queryKey });
@@ -183,3 +189,48 @@ export const ROTULOS_DO_QUE_MUDOU: Record<string, string> = {
 };
 
 export const temTexto = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
+
+// ------------------------------------------------------------------ acervo
+
+/** Foto real do cliente (tabela cliente_imagens). */
+export interface ImagemDoAcervo {
+  id: string;
+  client_id: string;
+  origem: "workspace" | "arquivo" | "upload";
+  workspace_node_id: string | null;
+  file_id: string | null;
+  storage_bucket: string;
+  storage_path: string;
+  nome: string;
+  pasta: string | null;
+  categoria: string | null;
+  tags: string[] | null;
+  descricao: string | null;
+  ativa: boolean;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export const chaveDoAcervo = (clientId: string) => ["mesa", "acervo", clientId];
+
+/** Acervo de imagens reais do cliente (leitura direta, RLS da equipe). */
+export function useAcervo(clientId: string) {
+  return useQuery({
+    queryKey: chaveDoAcervo(clientId),
+    enabled: !!clientId,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async (): Promise<ImagemDoAcervo[]> => {
+      const { data, error } = await (supabase as any)
+        .from("cliente_imagens")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("pasta", { ascending: true, nullsFirst: false })
+        .order("nome", { ascending: true })
+        .limit(3000);
+      if (error) throw error;
+      return ((data || []) as ImagemDoAcervo[]).map((i) => ({ ...i, tags: Array.isArray(i.tags) ? i.tags : [] }));
+    },
+  });
+}

@@ -162,7 +162,7 @@ describe("base de conhecimento do diretor", () => {
   it("regras com números da base e sem travessão", () => {
     expect(CONHECIMENTO_DIRETOR).toContain("90 px");
     expect(CONHECIMENTO_DIRETOR).toContain("60-30-10");
-    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(6200);
+    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(6400);
     expect(PADRAO_NA_IMAGEM.split("\n").length).toBeLessThanOrEqual(14);
     for (const t of [CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM]) {
       expect(t).not.toContain("—");

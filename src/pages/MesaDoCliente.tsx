@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,6 +35,43 @@ type Aba = (typeof ABAS)[number]["valor"];
 
 const MES_VALIDO = /^\d{4}-\d{2}-01$/;
 
+/**
+ * Onde a pessoa parou em cada cliente (aba, mês e item), para "continuar de
+ * onde parou" ao trocar de cliente e voltar. Fica no navegador; se o
+ * armazenamento estiver bloqueado, a Mesa só abre no começo.
+ */
+interface OndeParou {
+  aba?: string | null;
+  mes?: string | null;
+  task?: string | null;
+}
+
+const chaveOnde = (clientId: string) => `mesa:onde:${clientId}`;
+
+function lerOnde(clientId: string): OndeParou | null {
+  try {
+    const bruto = window.localStorage.getItem(chaveOnde(clientId));
+    if (!bruto) return null;
+    const v = JSON.parse(bruto);
+    if (!v || typeof v !== "object") return null;
+    return {
+      aba: ABAS.some((a) => a.valor === v.aba) ? String(v.aba) : null,
+      mes: typeof v.mes === "string" && MES_VALIDO.test(v.mes) ? v.mes : null,
+      task: typeof v.task === "string" && v.task ? v.task : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function gravarOnde(clientId: string, onde: OndeParou) {
+  try {
+    window.localStorage.setItem(chaveOnde(clientId), JSON.stringify(onde));
+  } catch {
+    /* armazenamento indisponível: segue sem lembrar */
+  }
+}
+
 export default function MesaDoCliente() {
   const { profile, user } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -52,6 +89,7 @@ export default function MesaDoCliente() {
   const [recargaAberta, setRecargaAberta] = useState(false);
   const [chavesAbertas, setChavesAbertas] = useState(false);
   const [modelosAbertos, setModelosAbertos] = useState(false);
+  const [versaoCarteira, setVersaoCarteira] = useState(0);
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -66,15 +104,35 @@ export default function MesaDoCliente() {
   );
   const cliente = clientes.find((c) => c.id === clientId) || null;
 
-  const mudar = (mudancas: Record<string, string | null>) => {
+  const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
     const next = new URLSearchParams(params);
     Object.keys(mudancas).forEach((k) => {
       const v = mudancas[k];
       if (v) next.set(k, v);
       else next.delete(k);
     });
-    setParams(next, { replace: false });
+    setParams(next, { replace: substituir });
   };
+
+  // Trocar de cliente volta para a aba, o mês e o item em que parou nele.
+  const trocarCliente = (id: string) => {
+    const onde = lerOnde(id);
+    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null });
+  };
+
+  // Endereço só com o cliente (sem aba): abre onde parou da última vez.
+  useEffect(() => {
+    if (!clientId || params.get("aba")) return;
+    const onde = lerOnde(clientId);
+    if (onde && onde.aba) mudar({ aba: onde.aba, mes: onde.mes || null, task: onde.task || null }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  // Guarda onde parou sempre que a aba, o mês ou o item mudam.
+  useEffect(() => {
+    if (!clientId || !abaUrl) return;
+    gravarOnde(clientId, { aba, mes: MES_VALIDO.test(mesUrl) ? mesUrl : null, task: tarefaId || null });
+  }, [clientId, abaUrl, aba, mesUrl, tarefaId]);
 
   const saldo = useQuery({
     queryKey: ["mesa", "saldo", clientId],
@@ -125,16 +183,19 @@ export default function MesaDoCliente() {
         abrirRecarga: () => setRecargaAberta(true),
         abrirChaves: () => setChavesAbertas(true),
         abrirModelos: () => setModelosAbertos(true),
+        versaoCarteira,
       }
     : null;
 
   return (
-    <div className="space-y-5 pb-10">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="min-w-0 flex-1">
+    // Fundo sólido próprio: a grade do fundo do painel não aparece através das
+    // superfícies semitransparentes da Mesa (pedido do dono em 23/09).
+    <div className="relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6">
+      <div className="flex flex-col sm:flex-row sm:items-center">
+        <div className="mb-3 min-w-0 flex-1 sm:mb-0 sm:mr-3">
           <h1 className="heading-page">Mesa do cliente</h1>
         </div>
-        <Select value={cliente ? cliente.id : ""} onValueChange={(v) => mudar({ client: v, task: null })}>
+        <Select value={cliente ? cliente.id : ""} onValueChange={trocarCliente}>
           <SelectTrigger className="h-9 w-full min-w-0 text-[13px] sm:w-[280px]">
             <SelectValue placeholder={clientesQuery.isLoading ? "Carregando clientes…" : "Escolha o cliente"} />
           </SelectTrigger>
@@ -147,7 +208,7 @@ export default function MesaDoCliente() {
       {/* Barra fixa de custo e etapas. No celular a página rola dentro do
           main (top-0); no computador rola a janela, abaixo do cabeçalho de 80px. */}
       {cliente && (
-        <header className="sticky top-0 z-20 -mx-4 space-y-2.5 border-b border-border bg-background/95 px-4 pb-2.5 pt-2.5 backdrop-blur md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
+        <header className="sticky top-0 z-20 -mx-4 space-y-2.5 border-b border-border bg-background px-4 pb-2.5 pt-2.5 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
           <BarraDeCusto
             saldoUsd={saldoUsd}
             consumo={consumo.data || null}
@@ -159,7 +220,7 @@ export default function MesaDoCliente() {
             onChaves={() => setChavesAbertas(true)}
             onModelos={() => setModelosAbertos(true)}
           />
-          <nav aria-label="Etapas da Mesa" className="grid grid-cols-4 gap-1 rounded-xl bg-secondary/50 p-1">
+          <nav aria-label="Etapas da Mesa" className="grid grid-cols-4 gap-1 rounded-xl bg-muted p-1">
             {ABAS.map((a, i) => (
               <button
                 key={a.valor}
@@ -167,7 +228,7 @@ export default function MesaDoCliente() {
                 onClick={() => mudar({ aba: a.valor })}
                 aria-current={aba === a.valor ? "page" : undefined}
                 className={`min-w-0 rounded-lg px-1 py-2 text-[12.5px] font-medium transition-colors ${
-                  aba === a.valor ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  aba === a.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <span className="mr-1 hidden text-[11px] text-muted-foreground sm:inline">{i + 1}</span>
@@ -215,6 +276,8 @@ export default function MesaDoCliente() {
                 // A recarga devolve o saldo novo: a barra muda na hora, sem esperar a releitura.
                 if (typeof saldoNovo === "number") queryClient.setQueryData(["mesa", "saldo", clientId], saldoNovo);
                 atualizarCusto();
+                // Avisos de saldo insuficiente que estavam na tela somem.
+                setVersaoCarteira((v) => v + 1);
               }}
               sugestaoUsd={previsao.data?.recarga_sugerida_usd ?? null}
             />

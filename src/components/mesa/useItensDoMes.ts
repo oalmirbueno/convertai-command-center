@@ -13,16 +13,26 @@ export interface ItemDoMes {
   project_id: string;
 }
 
+export interface Verificacao {
+  pendente?: boolean;
+  texto_lido?: string | null;
+  ortografia_ok?: boolean | null;
+  faltando?: string[];
+  sobrando?: string[];
+  logo_presente?: boolean | null;
+  logo_ok?: boolean | null;
+  identidade?: number | { score?: number; nota?: number | null; escala_max?: number; nivel?: string | null; motivo?: string } | { erro: string } | null;
+  erro?: string;
+  conferido_em?: string;
+}
+
 export interface CardGerado {
   ordem: number;
   versao: number;
   storage_path: string;
-  verificacao?: {
-    pendente?: boolean;
-    texto_lido?: string | null;
-    ortografia_ok?: boolean | null;
-    identidade?: number | { score?: number; nota?: number; motivo?: string } | null;
-  } | null;
+  origem?: "gerar" | "ajuste";
+  instrucao?: string | null;
+  verificacao?: Verificacao | null;
   criado_em?: string;
 }
 
@@ -37,17 +47,31 @@ export interface CardDaDirecao {
   blocos?: BlocoTexto[];
   layout?: LayoutLamina;
   evitar?: string;
+  /** Fotos reais do acervo (cliente_imagens) usadas como base desta lâmina. */
+  imagens_ids?: string[];
+  /** Referências só desta lâmina: sobrepõem as do conjunto ("g:" = banco da agência). */
+  referencias_ids?: string[];
+  /** Descrição da imagem da lâmina anterior (carrossel contínuo). */
+  imagem_anterior?: string;
 }
 
 export interface Trabalho {
   id: string;
   task_id: string | null;
   status: "rascunho" | "dirigido" | "gerando" | "pronto" | "entregue" | "erro";
-  direcao: { conceito?: string; carrossel_infinito?: boolean; cards?: CardDaDirecao[]; origem?: "diretor" | "roteiro" };
+  direcao: {
+    conceito?: string;
+    carrossel_infinito?: boolean;
+    cards?: CardDaDirecao[];
+    origem?: "diretor" | "roteiro";
+    /** Referências escolhidas para o conjunto (ids de cliente_referencias; "g:" + id para o banco da agência). */
+    referencias_ids?: string[];
+  };
   modelo_imagem_id: string | null;
   qualidade: string | null;
   cards: CardGerado[];
   legenda: string | null;
+  hashtags?: string[] | null;
   file_ids: string[];
   custo_usd: number;
   conversa_id: string | null;
@@ -91,10 +115,35 @@ export const ROTULO_DO_TRABALHO: Record<string, string> = {
 
 export const FORMATOS_DE_ARTE = ["carousel", "static", "design"];
 
+/** Modo da lista do Estúdio: de hoje até 60 dias para frente, sem olhar o mês. */
+export const PROXIMOS_DIAS = "proximos";
+export const DIAS_A_FRENTE = 60;
+
+const dois = (n: number) => (n < 10 ? `0${n}` : String(n));
+
+/** Data local em AAAA-MM-DD (sem passar por UTC). */
+export function dataLocal(d: Date): string {
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
+}
+
 /**
- * Itens da agenda do mês com arte (carrossel e estático) dos projetos do
- * cliente, mais o trabalho mais recente do estúdio de cada um. Um item pedido
- * pela URL entra na lista mesmo se for de outro mês.
+ * Janela de datas da lista: um mês (início incluído, fim excluído) ou, no modo
+ * "proximos", de hoje até hoje + 60 dias (fim excluído, então o 60º dia entra).
+ */
+export function janelaDaLista(mes: string, agora = new Date()): { inicio: string; fimExclusivo: string } {
+  if (mes === PROXIMOS_DIAS) {
+    const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + DIAS_A_FRENTE + 1);
+    return { inicio: dataLocal(hoje), fimExclusivo: dataLocal(fim) };
+  }
+  return { inicio: mes, fimExclusivo: somarMeses(mes, 1) };
+}
+
+/**
+ * Itens da agenda com arte (carrossel e estático) dos projetos do cliente,
+ * mais o trabalho mais recente do estúdio de cada um. `mes` é o primeiro dia
+ * do mês (AAAA-MM-01) ou "proximos" (hoje até 60 dias). Um item pedido pela
+ * URL entra na lista mesmo se estiver fora da janela.
  */
 export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: string | null) {
   return useQuery({
@@ -114,6 +163,7 @@ export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: strin
       if (erroProjetos) throw erroProjetos;
       const ids = ((projetos || []) as { id: string }[]).map((p) => p.id);
       let itens: ItemDoMes[] = [];
+      const janela = janelaDaLista(mes);
       if (ids.length) {
         const { data, error } = await (supabase as any)
           .from("tasks")
@@ -121,8 +171,8 @@ export function useItensDoMes(clientId: string, mes: string, tarefaExtra?: strin
           .in("project_id", ids)
           .in("delivery_type", FORMATOS_DE_ARTE)
           .is("deleted_at", null)
-          .gte("due_date", mes)
-          .lt("due_date", somarMeses(mes, 1))
+          .gte("due_date", janela.inicio)
+          .lt("due_date", janela.fimExclusivo)
           .order("due_date", { ascending: true });
         if (error) throw error;
         itens = data || [];

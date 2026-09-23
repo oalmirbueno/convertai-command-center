@@ -22,6 +22,11 @@ export interface MesaValor {
   abrirRecarga: () => void;
   abrirChaves: () => void;
   abrirModelos: () => void;
+  /**
+   * Sobe a cada recarga da carteira concluída. Avisos de saldo insuficiente
+   * mostrados antes da recarga somem quando ela muda (AvisoDeErro).
+   */
+  versaoCarteira?: number;
 }
 
 const Contexto = createContext<MesaValor | null>(null);

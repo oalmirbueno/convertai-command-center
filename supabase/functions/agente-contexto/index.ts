@@ -18,6 +18,14 @@
  *   ele aplica as mudanças pedidas no kit e na memória dos agentes.
  * - fontes_da_biblioteca { client_id }: escolhe (Jev) um par de fontes da
  *   biblioteca global da agência quando o cliente ainda não tem fonte.
+ * - acervo_sincronizar { client_id }: sem IA. Traz as imagens reais do cliente
+ *   (todas as pastas do workspace e Arquivos, fora referências e materiais
+ *   entregues) para o acervo, com a pasta e uma categoria provável.
+ * - acervo_classificar { client_id, ids? }: centavos. Lê em lote (modelo de
+ *   leitura, imagens reduzidas) e preenche descrição, categoria e tags.
+ * - definir_logo { client_id, origem, id, alternativa? }: sem IA. Copia a
+ *   imagem escolhida (Arquivos, workspace ou acervo) para mesa/<cliente>/marca
+ *   e grava logo_path (ou logo_alt_path) no kit.
  *
  * Custos: toda IA passa pelo motor (carteira do cliente). O Jev é cobrado
  * pelo cobrarJev.
@@ -40,6 +48,7 @@ import {
   lerContextoConsolidado,
   lerDocumentosDeMarca,
   lerDossie,
+  sincronizarAcervo,
   sincronizarReferencias,
   type ContextoConsolidado,
 } from "../_shared/contexto-cliente.ts";
@@ -180,6 +189,11 @@ async function modeloDoPapel(papel: string): Promise<ModeloIa> {
   return m;
 }
 
+/** Modelo do agente de contexto (papel próprio no catálogo); sem ele, o de leitura. */
+async function modeloDoContexto(): Promise<ModeloIa> {
+  return (await modeloPadrao("contexto")) ?? await modeloDoPapel("leitura");
+}
+
 function raciocinioPara(m: ModeloIa, preferidos: string[]): string | undefined {
   const aceitos = m.raciocinio ?? [];
   return preferidos.find((r) => aceitos.includes(r));
@@ -189,6 +203,8 @@ type Kit = {
   client_id: string;
   paleta: { nome?: string; hex?: string; papel?: string }[] | null;
   logo_file_id: string | null;
+  logo_path?: string | null;
+  logo_alt_path?: string | null;
   estilo: string | null;
   regras: string | null;
   contexto: ContextoConsolidado | null;
@@ -198,7 +214,7 @@ type Kit = {
 async function lerKit(clientId: string): Promise<Kit> {
   const { data } = await servico()
     .from("cliente_kit_marca")
-    .select("client_id, paleta, logo_file_id, estilo, regras, contexto, contexto_atualizado_em")
+    .select("client_id, paleta, logo_file_id, logo_path, logo_alt_path, estilo, regras, contexto, contexto_atualizado_em")
     .eq("client_id", clientId)
     .maybeSingle();
   return (data as Kit) ?? null;
@@ -230,7 +246,7 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
   const listaFontes = (fontes.data as { nome: string; papel: string; origem: string }[] | null) ?? [];
 
   const lacunas: string[] = [];
-  if (!kit?.logo_file_id) lacunas.push(logos.length ? "Escolha qual arquivo é a logo oficial." : "Envie a logo oficial em imagem (PNG com fundo transparente de preferência).");
+  if (!kit?.logo_file_id && !kit?.logo_path) lacunas.push(logos.length ? "Escolha qual arquivo é a logo oficial." : "Envie a logo oficial em imagem (PNG com fundo transparente de preferência).");
   if (!Array.isArray(kit?.paleta) || !kit!.paleta!.length) lacunas.push("Paleta ainda não definida: o agente pode ler dos documentos e das artes.");
   if (!listaFontes.length) lacunas.push("Sem fonte definida: o agente escolhe um par da biblioteca da agência.");
   if (!kit?.contexto_atualizado_em) lacunas.push("Contexto ainda não montado pelo agente.");
@@ -399,12 +415,7 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   const forcar = corpo.forcar === true;
   const db = servico();
 
-  await sincronizarReferencias(db, clientId);
-  const leitura = await lerReferenciasPendentes(ch, clientId).catch((e) => {
-    if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
-    return { lidas: 0, custo: 0 };
-  });
-
+  await Promise.all([sincronizarReferencias(db, clientId), sincronizarAcervo(db, clientId).catch(() => null)]);
   const [kit, docs, dossie, artes, nome] = await Promise.all([
     lerKit(clientId),
     lerDocumentosDeMarca(db, clientId, 20_000),
@@ -412,17 +423,36 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     artesAprovadas(db, clientId, MAX_ARTES_NO_MONTAR),
     nomeDoCliente(clientId),
   ]);
-  const imagens: ImagemEntrada[] = [];
-  for (const a of artes) {
-    const c = caminhoDoArquivo(a);
-    const img = c ? await baixarImagem(c.bucket, c.caminho, `arte-publicada-${imagens.length + 1}`) : null;
-    if (img) imagens.push(img);
+
+  // Roda uma vez: sem fonte nova desde a última montagem, devolve o que já tem, sem gastar.
+  const fontesAgora = [
+    ...docs.map((d) => d.nome),
+    ...(dossie ? ["Dossiê atual"] : []),
+    ...(artes.length ? [`${Math.min(artes.length, MAX_ARTES_NO_MONTAR)} artes publicadas`] : []),
+  ];
+  const fontesAntes = kit?.contexto?.fontes_lidas ?? [];
+  const semNovidade = !!kit?.contexto_atualizado_em && fontesAgora.length === fontesAntes.length &&
+    fontesAgora.every((f) => fontesAntes.includes(f));
+  if (!forcar && corpo.atualizar !== true && semNovidade) {
+    return json({ kit, sugestoes: {}, fontes_escolhidas: null, referencias_lidas: 0, custo_usd: 0, saldo_usd: null, ja_atualizado: true });
   }
+
+  // Leitura das referências pendentes corre junto com a montagem, não antes.
+  const leituraEmCurso = lerReferenciasPendentes(ch, clientId).catch((e) => {
+    if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
+    return { lidas: 0, custo: 0 };
+  });
+  const baixadas = await Promise.all(artes.map((a, i) => {
+    const c = caminhoDoArquivo(a);
+    return c ? baixarImagem(c.bucket, c.caminho, `arte-publicada-${i + 1}`) : Promise.resolve(null);
+  }));
+  const imagens = baixadas.filter(Boolean) as ImagemEntrada[];
   if (!docs.length && !dossie && !imagens.length) {
+    await leituraEmCurso;
     throw new ErroContexto(409, "sem_fontes", "Ainda não há documentos, dossiê nem artes deste cliente no painel para ler.");
   }
 
-  const leitor = await modeloDoPapel("leitura");
+  const leitor = await modeloDoContexto();
   const r = await chamarTexto({
     clientId,
     tarefa: "contexto",
@@ -445,6 +475,7 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     referencia: { tipo: REF_TIPO, id: clientId },
     criadoPor: ch.userId,
   });
+  const leitura = await leituraEmCurso;
 
   const c = (r.json ?? {}) as Record<string, any>;
   const paleta = (Array.isArray(c.paleta) ? c.paleta : [])
@@ -705,10 +736,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   ]);
   const anteriores = ((historico.data as { papel: string; conteudo: string }[] | null) ?? []).reverse();
 
-  const estrategista = await modeloDoPapel("estrategista");
+  // Papel próprio do agente de contexto no catálogo (padrão barato); sem ele, o de leitura.
+  const estrategista = await modeloDoContexto();
   const estado = {
     cliente: nome,
-    kit: { paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null, tem_logo: !!kit?.logo_file_id },
+    kit: { paleta: kit?.paleta ?? [], estilo: kit?.estilo ?? null, regras: kit?.regras ?? null, tem_logo: !!(kit?.logo_file_id || kit?.logo_path) },
     contexto: kit?.contexto ?? {},
     fontes: fontes.data ?? [],
     memoria_dos_agentes: memoria.data ?? [],
@@ -795,11 +827,183 @@ async function historico(ch: Chamador, corpo: Record<string, unknown>) {
 
 // ------------------------------------------------------------------ roteamento
 
+// ------------------------------------------------------------------ acervo
+
+async function acervoSincronizar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  const r = await sincronizarAcervo(servico(), clientId);
+  return json(r);
+}
+
+const CATEGORIAS_ACERVO = ["ambiente", "produto", "pessoa", "antes_depois", "equipe", "detalhe", "fachada", "logo", "arte", "outro"];
+const MAX_CLASSIFICAR_POR_VEZ = 12;
+
+const ESQUEMA_ACERVO = {
+  nome: "acervo",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["itens"],
+    properties: {
+      itens: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["imagem", "nome", "descricao", "categoria", "tags"],
+          properties: {
+            imagem: { type: "integer" },
+            nome: { type: "string" },
+            descricao: { type: "string" },
+            categoria: { type: "string", enum: CATEGORIAS_ACERVO },
+            tags: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    },
+  },
+};
+
+const SISTEMA_ACERVO = `Você organiza o acervo de fotos reais de um cliente de agência. Para cada imagem anexada (na ordem), devolva:
+- nome: nome curto e descritivo em português (ex.: "Quarto casal com luz natural", "Antes e depois do sofá").
+- descricao: 1 a 2 frases objetivas do que aparece (ambiente, objeto, pessoas, luz, enquadramento) e onde há área calma para texto (céu, parede lisa, fundo desfocado).
+- categoria: ambiente, produto, pessoa, antes_depois, equipe, detalhe, fachada, logo, arte (peça gráfica já pronta) ou outro.
+- tags: 3 a 6 palavras curtas em minúsculas.
+Não invente o que não aparece. Sem travessão.`;
+
+/** Imagem reduzida pela transformação do Storage (menos tokens); sem ela, a original. */
+async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada | null> {
+  try {
+    const { data, error } = await servico().storage.from(bucket).download(caminho, {
+      transform: { width: 640, height: 640, resize: "contain", format: "origin" },
+    });
+    if (!error && data) {
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      const mime = mimeDe(bytes);
+      if (mime && bytes.byteLength <= MAX_BYTES) return { bytes, mime, nome };
+    }
+  } catch {
+    // cai na original
+  }
+  return await baixarImagem(bucket, caminho, nome);
+}
+
+async function acervoClassificar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  const ids = Array.isArray(corpo.ids) ? (corpo.ids as unknown[]).map((x) => texto(x, 64)).filter((x) => UUID.test(x)) : [];
+  let q = servico().from("cliente_imagens").select("id, storage_bucket, storage_path, nome").eq("client_id", clientId).eq("ativa", true);
+  q = ids.length ? q.in("id", ids.slice(0, MAX_CLASSIFICAR_POR_VEZ)) : q.is("descricao", null).order("criado_em", { ascending: true });
+  const { data } = await q.limit(MAX_CLASSIFICAR_POR_VEZ);
+  const linhas = (data as { id: string; storage_bucket: string; storage_path: string; nome: string }[] | null) ?? [];
+  if (!linhas.length) return json({ classificadas: 0, custo_usd: 0, restantes: 0 });
+
+  const baixadas = await Promise.all(linhas.map((l, i) => imagemReduzida(l.storage_bucket, l.storage_path, `foto-${i + 1}`)));
+  const comImagem = linhas.map((l, i) => ({ linha: l, imagem: baixadas[i] })).filter((x) => x.imagem) as { linha: typeof linhas[number]; imagem: ImagemEntrada }[];
+  if (!comImagem.length) return json({ classificadas: 0, custo_usd: 0, restantes: 0 });
+
+  const leitor = await modeloDoPapel("leitura");
+  const r = await chamarTexto({
+    clientId,
+    tarefa: "contexto",
+    agente: "contexto",
+    modeloId: leitor.id,
+    raciocinio: raciocinioPara(leitor, ["minimal", "low"]),
+    sistema: SISTEMA_ACERVO,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `Organize as ${comImagem.length} fotos anexadas, na ordem. Nome atual do arquivo de cada uma: ` +
+        comImagem.map((c, i) => `${i + 1}) ${c.linha.nome}`).join("; "),
+      imagens: comImagem.map((c) => c.imagem),
+    }],
+    esquemaJson: ESQUEMA_ACERVO,
+    maxTokensSaida: 4000,
+    referencia: { tipo: REF_TIPO, id: clientId },
+    criadoPor: ch.userId,
+  });
+  const itens = ((r.json as { itens?: { imagem: number; nome: string; descricao: string; categoria: string; tags: string[] }[] } | undefined)?.itens) ?? [];
+  let classificadas = 0;
+  await Promise.all(itens.map(async (it) => {
+    const alvo = comImagem[Math.round(it.imagem) - 1];
+    if (!alvo || !texto(it.descricao)) return;
+    const tags = Array.from(new Set((Array.isArray(it.tags) ? it.tags : []).map((t) => texto(t, 40).toLowerCase()).filter(Boolean))).slice(0, 8);
+    const { error } = await servico().from("cliente_imagens").update({
+      nome: texto(it.nome, 120) || alvo.linha.nome,
+      descricao: texto(it.descricao, 600),
+      categoria: CATEGORIAS_ACERVO.includes(it.categoria) ? it.categoria : "outro",
+      tags,
+    }).eq("id", alvo.linha.id).eq("client_id", clientId);
+    if (!error) classificadas++;
+  }));
+  const { count } = await servico().from("cliente_imagens").select("id", { count: "exact", head: true })
+    .eq("client_id", clientId).eq("ativa", true).is("descricao", null);
+  return json({ classificadas, custo_usd: r.custoUsd, saldo_usd: r.saldoUsd, restantes: count ?? 0, reserva_usada: r.reservaUsada ?? null });
+}
+
+// ------------------------------------------------------------------- logo
+
+const EXTENSAO: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+
+/** Onde mora a imagem escolhida, sempre conferindo que é do mesmo cliente. */
+async function origemDaImagem(clientId: string, origem: string, id: string): Promise<{ bucket: string; caminho: string } | null> {
+  if (origem === "arquivo") {
+    const { data } = await servico().from("files").select("client_id, storage_bucket, storage_path, file_url").eq("id", id).maybeSingle();
+    const f = data as { client_id: string; storage_bucket: string | null; storage_path: string | null; file_url: string | null } | null;
+    return f && f.client_id === clientId ? caminhoDoArquivo(f) : null;
+  }
+  if (origem === "workspace") {
+    const { data } = await servico().from("workspace_nodes").select("client_id, storage_path").eq("id", id).maybeSingle();
+    const n = data as { client_id: string | null; storage_path: string | null } | null;
+    return n && n.client_id === clientId && n.storage_path ? { bucket: "workspace", caminho: n.storage_path } : null;
+  }
+  if (origem === "acervo") {
+    const { data } = await servico().from("cliente_imagens").select("client_id, storage_bucket, storage_path").eq("id", id).maybeSingle();
+    const a = data as { client_id: string; storage_bucket: string; storage_path: string } | null;
+    return a && a.client_id === clientId ? { bucket: a.storage_bucket, caminho: a.storage_path } : null;
+  }
+  return null;
+}
+
+async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = texto(corpo.client_id, 64);
+  await garantirAcesso(ch, clientId);
+  const origem = texto(corpo.origem, 20);
+  const id = texto(corpo.id, 64);
+  if (!["arquivo", "workspace", "acervo"].includes(origem) || !UUID.test(id)) {
+    throw new ErroContexto(400, "logo_invalida", "Escolha uma imagem de Arquivos, do workspace ou do acervo.");
+  }
+  const alternativa = corpo.alternativa === true;
+  const onde = await origemDaImagem(clientId, origem, id);
+  if (!onde) throw new ErroContexto(404, "logo_inexistente", "Esta imagem não foi encontrada entre as do cliente.");
+  const img = await baixarImagem(onde.bucket, onde.caminho, "logo");
+  if (!img) throw new ErroContexto(415, "logo_nao_e_imagem", "A logo precisa ser PNG, JPG ou WEBP (PNG com fundo transparente de preferência).");
+
+  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}.${EXTENSAO[img.mime] ?? "png"}`;
+  const { error: erroUpload } = await servico().storage.from("mesa").upload(destino, new Blob([new Uint8Array(img.bytes)], { type: img.mime }), {
+    contentType: img.mime,
+    upsert: true,
+  });
+  if (erroUpload) throw new ErroContexto(503, "logo_nao_copiada", "Não foi possível guardar a logo. Tente de novo.");
+  const agora = new Date().toISOString();
+  const { error } = await servico().from("cliente_kit_marca").upsert({
+    client_id: clientId,
+    [alternativa ? "logo_alt_path" : "logo_path"]: destino,
+    atualizado_em: agora,
+    atualizado_por: ch.userId,
+  }, { onConflict: "client_id" });
+  if (error) throw new ErroContexto(503, "kit_nao_gravado", "A logo foi copiada, mas o kit não foi atualizado.");
+  return json({ kit: await lerKit(clientId), caminho: destino });
+}
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   ler,
   montar,
   conversar,
   historico,
+  acervo_sincronizar: acervoSincronizar,
+  acervo_classificar: acervoClassificar,
+  definir_logo: definirLogo,
   fontes_da_biblioteca: fontesDaBiblioteca,
 };
 

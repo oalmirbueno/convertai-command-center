@@ -16,7 +16,7 @@
  * de cada prompt de imagem e no sistema do ajuste de lâmina.
  */
 
-export const VERSAO_CONHECIMENTO = "2026-09-23.2";
+export const VERSAO_CONHECIMENTO = "2026-09-23.3";
 
 export const CONHECIMENTO_DIRETOR = `BASE DE CONHECIMENTO DO DIRETOR DE ARTE (versão ${VERSAO_CONHECIMENTO})
 
@@ -197,7 +197,22 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px. O gerador de imag
 - Foto: plano e corte intencionais? Texto em área calma, painel ou gradiente local? Olhares e linhas apontam para o texto ou para a próxima lâmina? Luz e sombra coerentes, pele e mãos naturais?
 - Equilíbrio: nenhum quadrante com mais de 50% do peso sem compensação?
 - Carrossel: mesmo sistema (grid, margens, fontes, paleta, marcadores, foto)? Zona da headline ou enquadramento diferente da lâmina anterior? Com a logo coberta, ainda é a mesma marca? Logo só na capa e no final, no mesmo canto e tamanho? No contínuo, emenda na mesma altura e nenhum texto na divisa?
-- Genérico: nada da seção 10 aparece?`;
+- Genérico: nada da seção 10 aparece?
+
+12. CAPA QUE PARA A ROLAGEM (pedido do dono, 23/09)
+- A capa sempre tem um destaque a mais que as lâminas do miolo: fundo escuro e travado (foto escurecida de 45 a 65% ou fundo sólido no tom mais escuro da paleta), headline em peso extra negrito ou black, a maior do carrossel, com uma palavra-chave na cor de destaque.
+- Contraste máximo: texto claro sobre escuro, nada de capa clara e lavada. A capa precisa se destacar na grade do perfil ao lado das outras.
+- Um gesto visual forte (escala, recorte, objeto cortado na borda direita) e nada mais competindo com a headline.
+
+13. NARRATIVA DO CARROSSEL (storytelling, nunca picotado)
+- O carrossel é uma história só, com começo, meio e fim: a capa abre uma pergunta ou tensão, cada lâmina do miolo avança um passo e puxa a próxima (a última frase de uma lâmina prepara a seguinte), o final resolve e chama para a ação.
+- Texto corrido entre as lâminas: conectivos e continuidade de sentido ("e é aí que", "o segundo erro", "resultado:"), nunca frases soltas que poderiam estar em qualquer ordem.
+- Imagem sem repetição: cada lâmina mostra um assunto, plano ou enquadramento diferente (ambiente amplo, detalhe, mão em ação, antes e depois, objeto, pessoa de frente). Nunca a mesma cena ou a mesma pose em duas lâminas (por exemplo, mulher de costas em todas).
+- Carrossel contínuo (panorâmico): o fundo é uma faixa única que atravessa as lâminas; cada lâmina nasce da borda direita da anterior, com o mesmo horizonte, luz e escala.
+- Foto real do cliente, quando escolhida, é usada como está: o gerador só desenha o texto e o acabamento na área reservada, sem refazer a foto.
+
+14. NOME DA MARCA
+- Nunca escreva o nome da marca ou da empresa como texto na arte. A marca aparece só pela logo oficial anexada (quando houver) ou pela própria identidade visual. Só entra por escrito se estiver no texto exato da lâmina.`;
 
 /** Regras curtas que acompanham todo prompt de imagem (o gerador lê isso por último). */
 export const PADRAO_NA_IMAGEM = [
@@ -212,5 +227,6 @@ export const PADRAO_NA_IMAGEM = [
   "- Paleta da marca em 60-30-10 com uma única cor de destaque (até 10% da área), só na palavra-chave, no número ou no CTA.",
   "- Foto e texto na mesma cena: planos de profundidade (fundo, texto, sujeito), recorte intencional, uma luz coerente e cores da foto puxadas para a paleta.",
   "- Acabamento de agência premium: foto real do nicho, pele, mãos e rostos naturais, sombras coerentes, grão sutil só se o estilo pedir.",
+  "- Nunca escreva o nome da marca ou da empresa na arte (ela aparece só pela logo anexada); nenhum texto além do pedido.",
   "- Evite: tudo centralizado e do mesmo tamanho, texto sobre área carregada, faixa preta genérica, gradiente roxo-azul, neon, brilho, 3D plástico, ícones de banco, logo redesenhada.",
 ].join("\n");

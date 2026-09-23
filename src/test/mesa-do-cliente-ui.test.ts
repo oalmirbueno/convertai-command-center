@@ -31,6 +31,8 @@ import { BotaoComCusto } from "@/components/mesa/Custo";
 import { MesaProvider, type MesaValor } from "@/components/mesa/MesaContexto";
 import ChavesECotas from "@/components/mesa/ChavesECotas";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
+import { legendaParaCopiar, normalizarArea, normalizarHashtags } from "@/components/mesa/estudioUtil";
+import { janelaDaLista, PROXIMOS_DIAS } from "@/components/mesa/useItensDoMes";
 import {
   custoDaResposta,
   ErroDaMesa,
@@ -46,6 +48,9 @@ const ler = (rel: string) => readFileSync(resolve(raiz, rel), "utf8");
 const app = ler("src/App.tsx");
 const estudio = ler("src/components/mesa/AbaEstudio.tsx");
 const cardEstudio = ler("src/components/mesa/CardDoEstudio.tsx");
+const prancheta = ler("src/components/mesa/PranchetaDoEstudio.tsx");
+const seletorDeAreas = ler("src/components/mesa/SeletorDeAreas.tsx");
+const referenciasDoEstudio = ler("src/components/mesa/ReferenciasDoEstudio.tsx");
 const mesAba = ler("src/components/mesa/AbaMes.tsx");
 const referencias = ler("src/components/mesa/ContextoReferencias.tsx");
 const custo = ler("src/components/mesa/Custo.tsx");
@@ -163,7 +168,7 @@ describe("a chave de IA nunca volta para a tela", () => {
 });
 
 describe("estimativa antes de toda ação que gasta", () => {
-  it("o botão com custo só executa depois de mostrar a estimativa e ser confirmado", async () => {
+  it("o preço estimado aparece ao lado do botão antes de gastar e o clique executa, sem janela", async () => {
     mock.invoke.mockResolvedValue({ data: { custo_usd: 0.25 }, error: null });
     const executar = vi.fn().mockResolvedValue({ custo_usd: 0.31 });
     montar(
@@ -174,34 +179,42 @@ describe("estimativa antes de toda ação que gasta", () => {
         executar,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Gerar card" }));
-    expect(executar).not.toHaveBeenCalled();
-    await screen.findByText("Custo estimado");
-    await screen.findByText("US$ 0,25");
+    await screen.findByText("~US$ 0,25");
     expect(mock.invoke).toHaveBeenCalledWith("ia-gateway", { body: expect.objectContaining({ acao: "estimar", modelo_id: "openai:gpt-image-2", tipo: "imagem", qualidade: "alta" }) });
     expect(executar).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar e gastar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Gerar card/ }));
     await waitFor(() => expect(executar).toHaveBeenCalledTimes(1));
   });
 
-  it("sem estimativa não há como confirmar", async () => {
-    mock.invoke.mockResolvedValue({ data: null, error: { name: "FunctionsFetchError" } });
-    const executar = vi.fn();
-    montar(h(BotaoComCusto, { rotulo: "Ler", titulo: "Ler", partes: () => [{ modeloId: "x", tipo: "texto" }], executar }));
-    fireEvent.click(screen.getByRole("button", { name: "Ler" }));
-    await screen.findByText("sem estimativa");
-    expect(screen.getByRole("button", { name: "Confirmar e gastar" })).toBeDisabled();
+  it("acima de US$ 1 pede um segundo clique antes de gastar", async () => {
+    mock.invoke.mockResolvedValue({ data: { custo_usd: 1.5 }, error: null });
+    const executar = vi.fn().mockResolvedValue({ custo_usd: 1.4 });
+    montar(h(BotaoComCusto, { rotulo: "Gerar tudo", titulo: "Gerar tudo", partes: () => [{ modeloId: "x", tipo: "imagem", imagens: 40 }], executar }));
+    await screen.findByText("~US$ 1,50");
+    fireEvent.click(screen.getByRole("button", { name: /Gerar tudo/ }));
     expect(executar).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: /Clique de novo para confirmar/ }));
+    await waitFor(() => expect(executar).toHaveBeenCalledTimes(1));
   });
 
-  it("abrir a confirmação não chama a ação; só o confirmar chama", () => {
-    const abrir = custo.slice(custo.indexOf("const abrir = () => {"), custo.indexOf("const confirmar = async"));
-    expect(abrir).not.toContain("executar(");
-    const confirmar = custo.slice(custo.indexOf("const confirmar = async"), custo.indexOf("const faltaSaldo"));
-    expect(confirmar).toContain("await executar()");
-    expect(confirmar).toContain("custoDaResposta(data)");
+  it("sem estimativa também pede um segundo clique", async () => {
+    mock.invoke.mockResolvedValue({ data: null, error: { name: "FunctionsFetchError" } });
+    const executar = vi.fn().mockResolvedValue({});
+    montar(h(BotaoComCusto, { rotulo: "Ler", titulo: "Ler", partes: () => [{ modeloId: "x", tipo: "texto" }], executar }));
+    await waitFor(() => expect(mock.invoke).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Ler/ }));
+    expect(executar).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: /Sem estimativa: clique de novo/ }));
+    await waitFor(() => expect(executar).toHaveBeenCalledTimes(1));
   });
 
+  it("saldo que não cobre a estimativa não executa", () => {
+    const clicar = custo.slice(custo.indexOf("const clicar = async"), custo.indexOf("<Button", custo.indexOf("const clicar = async")));
+    expect(clicar.indexOf("mesa.saldoUsd < valor")).toBeGreaterThan(0);
+    expect(clicar.indexOf("mesa.saldoUsd < valor")).toBeLessThan(clicar.indexOf("await executar()"));
+    expect(clicar).toContain("custoDaResposta(data)");
+  });
   it("cada ação que gasta passa pelo botão com custo ou mostra o preço ao lado", () => {
     // Mês
     for (const acao of ['acao: "propor_temas"', 'acao: "detalhar"']) {
@@ -252,7 +265,8 @@ describe("recusas da IA viram frase com o próximo passo", () => {
 
 describe("o estúdio nunca põe texto por cima da arte", () => {
   it("nenhum canvas, fillText ou camada de texto sobre a imagem do card", () => {
-    for (const fonte of [estudio, cardEstudio]) {
+    // Estúdio v3: a prancheta e o desenho de áreas também não pintam nada na arte.
+    for (const fonte of [estudio, cardEstudio, prancheta, seletorDeAreas]) {
       expect(fonte).not.toContain("fillText");
       expect(fonte).not.toContain("getContext");
       expect(fonte).not.toContain("<canvas");
@@ -283,5 +297,59 @@ describe("catálogo de modelos", () => {
     expect(modeloNovo({ ...base, novo: false, criado_em: "2026-09-21T00:00:00Z" }, agora)).toBe(false);
     expect(modeloNovo({ ...base, criado_em: "2026-09-20T00:00:00Z" }, agora)).toBe(true);
     expect(modeloNovo({ ...base, conferido_em: "2026-07-01T00:00:00Z" }, agora)).toBe(false);
+  });
+});
+
+describe("Estúdio versão 3 (pedido do dono em 23/09)", () => {
+  it("a lista abre nos próximos 60 dias, de hoje em diante; o mês continua escolhível", () => {
+    expect(janelaDaLista(PROXIMOS_DIAS, new Date(2026, 8, 23, 15, 0))).toEqual({ inicio: "2026-09-23", fimExclusivo: "2026-11-23" });
+    expect(janelaDaLista("2026-09-01")).toEqual({ inicio: "2026-09-01", fimExclusivo: "2026-10-01" });
+    expect(estudio).toContain('useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos")');
+    expect(estudio).toContain("<SelectItem value={PROXIMOS_DIAS}>Próximos 60 dias</SelectItem>");
+    expect(estudio).toContain('useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer")');
+  });
+
+  it("ajuste pontual: áreas em frações de 0 a 1 desenhadas com divs e eventos de ponteiro, sem canvas", () => {
+    expect(normalizarArea({ x0: 0.8, y0: 1.4, x1: -0.2, y1: 0.25 })).toEqual({ x0: 0, y0: 0.25, x1: 0.8, y1: 1 });
+    expect(seletorDeAreas).toContain("onPointerDown");
+    expect(seletorDeAreas).toContain("setPointerCapture");
+    expect(seletorDeAreas).toContain('className="absolute rounded-sm border-2 border-primary');
+    expect(cardEstudio).toContain("executar={() => onAjustar(instrucao.trim(), { areas })}");
+    expect(cardEstudio).toContain('{ tipo: "fundo", imagem_id: fundoId || undefined }');
+    const ajuste = estudio.slice(estudio.indexOf('acao: "ajustar_card"'), estudio.indexOf("atualizar();", estudio.indexOf('acao: "ajustar_card"')));
+    expect(ajuste).toContain("areas: opcoes.areas && opcoes.areas.length ? opcoes.areas : undefined");
+    expect(ajuste).toContain("tipo: opcoes.tipo");
+    expect(ajuste).toContain("imagem_id: opcoes.imagem_id");
+  });
+
+  it("referências e foto real vão pelo configurar, sem custo; id do banco da agência leva g:", () => {
+    expect(referenciasDoEstudio).toContain('const PREFIXO_GLOBAL = "g:";');
+    expect(referenciasDoEstudio).toContain('acao: "configurar"');
+    expect(referenciasDoEstudio).toContain("{ card: { ordem, referencias_ids: lista } }");
+    expect(referenciasDoEstudio).toContain("{ conjunto: { referencias_ids: lista } }");
+    expect(referenciasDoEstudio).toContain("const POR_PAGINA = 24;");
+    expect(cardEstudio).toContain("onConfigurar({ imagens_ids: i ? [i.id] : [] })");
+    expect(estudio).toContain("onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}");
+  });
+
+  it("pedir ao diretor refaz a direção do mesmo trabalho pelo pedido, com o preço ao lado", () => {
+    const i = estudio.indexOf("instrucao: pedidoAoDiretor.trim() || undefined");
+    expect(i).toBeGreaterThan(0);
+    const botao = estudio.lastIndexOf("<BotaoComCusto", i);
+    expect(estudio.slice(botao, i)).toContain("partes={partesDiretor}");
+    expect(estudio.slice(botao, i + 200)).toContain("trabalho_id: trabalho.id");
+  });
+
+  it("legenda e hashtags separadas; copiar junta com uma linha em branco", () => {
+    expect(normalizarHashtags(["##praia", "sol", "#praia", " "])).toEqual(["#praia", "#sol"]);
+    expect(legendaParaCopiar("Bom dia", ["#a", "#b"])).toBe(["Bom dia", "", "#a #b"].join(String.fromCharCode(10)));
+    expect(legendaParaCopiar("", ["#a"])).toBe("#a");
+    expect(estudio).toContain("Copiar legenda");
+    expect(estudio).toContain("Copiar hashtags");
+  });
+
+  it("a lâmina e o painel abertos ficam guardados na sessão por item", () => {
+    expect(estudio).toContain("useEstadoGuardado<number | null>(`${chave}:lamina`, null)");
+    expect(estudio).toContain('useEstadoGuardado<PainelDaLamina>(`${chave}:painel`, "direcao")');
   });
 });

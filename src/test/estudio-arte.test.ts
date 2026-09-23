@@ -80,9 +80,13 @@ describe("estudio-arte: uma lamina por chamada", () => {
     expect(corpoDe("gerarCard")).toContain("const ordem = lerOrdem(corpo);");
   });
 
-  it("so existem duas chamadas ao gerador (gerar e ajustar), fora de laco", () => {
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(2);
-    expect(corpoDe("gerarCard").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
+  it("o gerador so e chamado em gerar (foto real, continuo ou normal, um por vez) e em ajustar, fora de laco", () => {
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
+    const g = corpoDe("gerarCard");
+    expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(3);
+    // Cada modo termina a chamada: foto real e continuo retornam antes do normal.
+    expect(g.indexOf("if (baseFoto) {")).toBeLessThan(g.indexOf("if (continuar) {"));
+    expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(3);
     expect(corpoDe("ajustarCard").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     // Nenhum laco envolve a chamada ao gerador.
     const gerar = corpoDe("gerarCard");
@@ -102,8 +106,14 @@ describe("estudio-arte: ajuste e edicao dentro do gerador sobre a versao atual",
   const ajuste = corpoDe("ajustarCard");
   it("baixa a versao atual e edita com editar", () => {
     expect(ajuste).toContain("const atualVersao = versaoAtual(t, ordem);");
-    expect(ajuste).toContain('const atual = await baixar("mesa", atualVersao.storage_path);');
-    expect(ajuste).toContain("editar: { bytes: atual },");
+    expect(ajuste).toContain('baixar("mesa", atualVersao.storage_path)');
+    expect(ajuste).toContain("editar: { bytes: atual, mascara: comMascara ?");
+  });
+
+  it("ajuste por area: mascara so nas areas e os pixels de fora voltam da versao anterior", () => {
+    expect(ajuste).toContain("normalizarAreas(corpo.areas)");
+    expect(ajuste).toContain("devolverOriginalForaDasAreas(atual, gerado.png, abertas");
+    expect(ajuste).toContain('tipo === "fundo"');
   });
 
   it("o diretor escreve a instrucao antes e o pedido vai para a memoria", () => {
@@ -160,8 +170,12 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     const e = corpoDe("escolherReferencias");
     expect(e).toContain("await jevPerguntar(");
     expect(e).toContain('type: "score"');
-    expect(e).toContain('.from("referencias_globais")');
+    expect(e).toContain("globaisParaALamina(card)");
+    expect(corpoDe("globaisParaALamina")).toContain('.from("referencias_globais")');
+    expect(corpoDe("globaisParaALamina")).toContain('textSearch("leitura"');
     expect(e).toContain('const identidade = notas.find((x) => x.r.papel === "identidade");');
+    // Escolha da equipe na tela vale antes do Jev.
+    expect(e.indexOf("escolhidasNaTela")).toBeLessThan(e.indexOf("await jevPerguntar("));
     expect(fonte).toContain("const MAX_REFERENCIAS = 2;");
   });
 });

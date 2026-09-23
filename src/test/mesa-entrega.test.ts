@@ -98,9 +98,10 @@ describe("custo do Jev na carteira", () => {
 
   it("toda pergunta ao Jev da Mesa é cobrada do cliente", () => {
     expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(1);
-    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(2);
+    // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
+    expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(3);
     expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(1);
-    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(2);
+    expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(3);
   });
 });
 

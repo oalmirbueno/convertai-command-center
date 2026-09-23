@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck, ChevronLeft, ChevronRight, Loader2, Pencil, Send } from "lucide-react";
+import { CalendarCheck, ChevronLeft, ChevronRight, Clock, Loader2, Pencil, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,12 @@ import {
   dataCurta,
   dataEHora,
   enviarParaAprovacao,
+  lerHorarioAutomatico,
+  lerMelhoresHorarios,
   lerPrevisao,
   rotuloDoMes,
   salvarAjustesDaEntrega,
+  salvarHorarioAutomatico,
   somarMeses,
   textoDoErro,
   usd,
@@ -35,6 +38,14 @@ import { ultimasVersoes, useItensDoMes, type ItemDoMes, type PublicacaoDoPost, t
  */
 
 type Tom = "neutro" | "andamento" | "ok" | "alerta" | "erro";
+
+const ROTULO_DO_TIPO: Record<string, string> = {
+  carousel: "Carrossel",
+  static: "Estático",
+  design: "Design",
+  reel: "Reels",
+};
+const ORDEM_DOS_TIPOS = ["carousel", "static", "design", "reel"];
 
 interface Estado {
   rotulo: string;
@@ -210,64 +221,79 @@ export default function AbaEntrega({ mes, onMes, onAbrir }: { mes: string; onMes
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onMes(somarMeses(mes, -1))} aria-label="Mês anterior">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <p className="text-[13px] font-medium capitalize">{rotuloDoMes(mes)}</p>
-        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <span className="min-w-0 text-[12px] text-muted-foreground">{resumo || `${itens.length} ${itens.length === 1 ? "item" : "itens"} com arte`}</span>
-        <div className="flex w-full flex-col items-stretch gap-1 sm:ml-auto sm:w-auto sm:items-end">
+      <div className="flex flex-col rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-center">
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, -1))} aria-label="Mês anterior">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <p className="mx-1 min-w-[120px] text-center text-[13.5px] font-medium capitalize">{rotuloDoMes(mes)}</p>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onMes(somarMeses(mes, 1))} aria-label="Próximo mês">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <span className="ml-2 min-w-0 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+            {resumo || `${itens.length} ${itens.length === 1 ? "item" : "itens"} com arte`}
+          </span>
+        </div>
+        <div className="mt-2 flex w-full flex-col items-stretch sm:ml-3 sm:mt-0 sm:w-auto sm:items-end">
           <Button type="button" onClick={() => void enviarTudo()} disabled={!total || !!progresso}>
             {progresso ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
             {total ? `Enviar ${total} para aprovação` : "Nada para enviar"}
           </Button>
-          {progresso && <span className="text-center text-[11px] text-muted-foreground sm:text-right">{progresso}</span>}
+          {progresso && <span className="mt-1 text-center text-[11px] text-muted-foreground sm:text-right">{progresso}</span>}
         </div>
       </div>
 
       <AjustesDaEntrega podeEditar={podeRecarregar} />
 
-      {dados.isLoading && <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda…</p>}
-      {dados.isError && <p className="rounded-lg bg-destructive/10 p-3 text-[12.5px]">{textoDoErro(dados.error)}</p>}
-      {dados.data && itens.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhum item com arte na agenda deste mês.</p>}
+      <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border px-3.5 py-2.5">
+          <p className="text-[12.5px] font-medium">Artes do mês</p>
+          <span className="text-[11.5px] text-muted-foreground">{itens.length} {itens.length === 1 ? "item" : "itens"}</span>
+        </div>
+        {dados.isLoading && (
+          <p className="px-3.5 py-4 text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo a agenda...</p>
+        )}
+        {dados.isError && <p className="m-3 rounded-lg border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">{textoDoErro(dados.error)}</p>}
+        {dados.data && itens.length === 0 && <p className="px-3.5 py-6 text-center text-[12.5px] text-muted-foreground">Nenhum item com arte na agenda deste mês.</p>}
 
-      <ul className="divide-y divide-border rounded-xl border border-border">
-        {itens.map((i) => {
-          const t = trabalhoDe(i);
-          const pub = publicacaoDe(t);
-          const versoes = t ? ultimasVersoes(t.cards) : new Map();
-          const capa = versoes.get(1) || Array.from(versoes.values())[0] || null;
-          const totalCards = t?.direcao?.cards?.length || 0;
-          const estado = estadoDoItem(t, pub);
-          const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
-          return (
-            <li key={i.id} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
-              <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
-                <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="h-14 w-11 shrink-0 rounded-md" />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
-                  <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                    {dataCurta(i.due_date)} · {TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type}
-                    {totalCards ? ` · ${versoes.size}/${totalCards} cards` : ""}
+        {/* Rolagem própria: a lista longa não arrasta a página inteira. */}
+        {itens.length > 0 && (
+          <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto overscroll-contain">
+            {itens.map((i) => {
+              const t = trabalhoDe(i);
+              const pub = publicacaoDe(t);
+              const versoes = t ? ultimasVersoes(t.cards) : new Map();
+              const capa = versoes.get(1) || Array.from(versoes.values())[0] || null;
+              const totalCards = t?.direcao?.cards?.length || 0;
+              const estado = estadoDoItem(t, pub);
+              const agenda = t ? linkDaAgenda(clientId, t, pub) : null;
+              return (
+                <li key={i.id} className="flex min-w-0 items-center px-3 py-2.5 hover:bg-muted">
+                  <button type="button" onClick={() => onAbrir(i.id)} className="flex min-w-0 flex-1 items-center text-left" aria-label={`Abrir ${i.title} no Estúdio`}>
+                    <ImagemDaMesa caminho={capa?.storage_path} alt={i.title} className="mr-3 h-16 w-12 shrink-0 rounded-md border border-border" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{i.title}</span>
+                      <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+                        {dataCurta(i.due_date)} · {TASK_DELIVERY_TYPE_LABELS[i.delivery_type as TaskDeliveryType] || i.delivery_type}
+                        {totalCards ? ` · ${versoes.size}/${totalCards} cards` : ""}
+                      </span>
+                      {estado.detalhe && <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{estado.detalhe}</span>}
+                    </span>
+                  </button>
+                  <span className="ml-3 flex shrink-0 flex-col items-end">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] ${TOM[estado.tom]}`}>{estado.rotulo}</span>
+                    {agenda && (
+                      <Link to={agenda} className="mt-1 inline-flex items-center text-[11px] text-primary underline-offset-2 hover:underline">
+                        <CalendarCheck className="mr-1 h-3 w-3" /> Agenda
+                      </Link>
+                    )}
                   </span>
-                  {estado.detalhe && <span className="mt-0.5 block text-[11px] text-muted-foreground [overflow-wrap:anywhere]">{estado.detalhe}</span>}
-                </span>
-              </button>
-              <span className="flex shrink-0 flex-col items-end gap-1">
-                <span className={`rounded-full px-2 py-0.5 text-[10.5px] ${TOM[estado.tom]}`}>{estado.rotulo}</span>
-                {agenda && (
-                  <Link to={agenda} className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-2 hover:underline">
-                    <CalendarCheck className="h-3 w-3" /> Agenda
-                  </Link>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
@@ -289,6 +315,39 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   const [posts, setPosts] = useState("");
   const [laminas, setLaminas] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [trocandoAutomatico, setTrocandoAutomatico] = useState(false);
+
+  const melhores = useQuery({
+    queryKey: ["mesa", "melhores-horarios", clientId],
+    staleTime: 10 * 60_000,
+    retry: false,
+    queryFn: () => lerMelhoresHorarios(clientId),
+  });
+  const automatico = useQuery({
+    queryKey: ["mesa", "horario-automatico", clientId],
+    retry: false,
+    queryFn: () => lerHorarioAutomatico(clientId),
+  });
+  const horarioAutomatico = automatico.data !== false;
+
+  const trocarAutomatico = async (ligado: boolean) => {
+    const chave = ["mesa", "horario-automatico", clientId];
+    const antes = automatico.data;
+    queryClient.setQueryData(chave, ligado);
+    setTrocandoAutomatico(true);
+    try {
+      await salvarHorarioAutomatico(clientId, ligado);
+      toast.success(ligado ? "Horário automático ligado" : "Horário automático desligado", {
+        description: ligado ? "Cada post sai no melhor horário do seu tipo." : "Os posts saem no horário fixo.",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "previsao", clientId] });
+    } catch (e) {
+      queryClient.setQueryData(chave, antes);
+      toast.error("Não foi possível mudar o horário automático", { description: textoDoErro(e) });
+    } finally {
+      setTrocandoAutomatico(false);
+    }
+  };
 
   const p = previsao.data;
   useEffect(() => {
@@ -326,39 +385,86 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
   };
 
   if (previsao.isLoading) return null;
-  if (previsao.isError) return <p className="rounded-lg bg-destructive/10 p-3 text-[12.5px]">{textoDoErro(previsao.error)}</p>;
+  if (previsao.isError) return <p className="rounded-lg border border-destructive/40 bg-card p-3 text-[12.5px] text-destructive">{textoDoErro(previsao.error)}</p>;
+
+  const tipos = melhores.data ? Object.keys(melhores.data.por_tipo).filter((k) => !!melhores.data!.por_tipo[k]) : [];
+  tipos.sort((a, b) => ORDEM_DOS_TIPOS.indexOf(a) - ORDEM_DOS_TIPOS.indexOf(b));
+  const blocoDeHorarios = (
+    <div className="min-w-0 space-y-2 rounded-lg border border-border bg-muted p-3">
+      <div className="flex items-start">
+        <Clock className="mr-2 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[12.5px] font-medium">Melhores horários por tipo</p>
+          <p className="text-[11.5px] leading-snug text-muted-foreground">
+            {melhores.isLoading
+              ? "Calculando..."
+              : melhores.isError
+                ? "Ainda indisponível. Os posts saem no horário fixo."
+                : melhores.data && melhores.data.fonte === "historico"
+                  ? `Pelo alcance de ${melhores.data.amostra} ${melhores.data.amostra === 1 ? "post publicado" : "posts publicados"} nos últimos 6 meses.`
+                  : "Horário padrão do nicho: ainda não há histórico suficiente deste cliente."}
+          </p>
+        </div>
+      </div>
+      {tipos.length > 0 && (
+        <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          {tipos.map((t) => (
+            <li key={t} className="min-w-0 rounded-md border border-border bg-card px-2.5 py-1.5">
+              <p className="truncate text-[11px] text-muted-foreground">{ROTULO_DO_TIPO[t] || t}</p>
+              <p className="text-[14px] font-semibold tabular-nums">{melhores.data!.por_tipo[t]}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className={`flex items-center text-[12.5px] ${podeEditar ? "" : "opacity-70"}`}>
+        <Switch
+          checked={horarioAutomatico}
+          onCheckedChange={(v) => void trocarAutomatico(v)}
+          disabled={!podeEditar || trocandoAutomatico || automatico.isLoading}
+          className="mr-2 shrink-0"
+        />
+        <span className="min-w-0">Horário automático pelos melhores horários</span>
+      </label>
+    </div>
+  );
 
   return (
-    <section className="rounded-xl border border-border bg-card p-3.5 text-[12.5px]">
+    <section className="space-y-3 rounded-xl border border-border bg-card p-3.5 text-[12.5px]">
       {!editando ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-          <div className="min-w-0 flex-1 space-y-1">
-            <p>
-              <span className="font-medium">Publicação:</span> {p?.hora_publicacao || "09:00"}, de segunda a sexta.{" "}
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-1.5">
+            <div className="flex items-start">
+              <p className="min-w-0 flex-1 text-[13px] font-medium">Publicação e plano</p>
+              {podeEditar && (
+                <Button type="button" size="sm" variant="ghost" className="-mt-1 h-8 shrink-0 text-[12px]" onClick={() => setEditando(true)}>
+                  <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar
+                </Button>
+              )}
+            </div>
+            <p className="leading-relaxed">
+              {horarioAutomatico
+                ? `Cada post sai no melhor horário do seu tipo, de segunda a sexta. Horário fixo de reserva: ${p?.hora_publicacao || "09:00"}.`
+                : `Horário fixo: ${p?.hora_publicacao || "09:00"}, de segunda a sexta.`}{" "}
               {p?.agendar_ao_aprovar
                 ? "Quando o cliente aprova, o post entra sozinho na Agenda."
                 : "O agendamento automático está desligado: a equipe agenda pela Agenda."}
             </p>
-            <p className="text-muted-foreground">
+            <p className="leading-relaxed text-muted-foreground">
               <span className="font-medium text-foreground">Plano:</span>{" "}
               {p?.posts_por_mes ? `${p.posts_por_mes} posts por mês` : "posts por mês não definidos"}
               {p?.laminas_por_post ? `, ${p.laminas_por_post} lâminas em média` : ""}
               {p ? ` · cerca de ${usd(p.custo_por_post_usd)} por post (${p.fonte === "historico" ? `média de ${p.amostra} ${p.amostra === 1 ? "arte" : "artes"}` : "pela tabela de preços"})` : ""}
-              {p?.previsao_mes_usd != null ? ` · mês ≈ ${usd(p.previsao_mes_usd)}` : ""}
+              {p?.previsao_mes_usd != null ? ` · mês perto de ${usd(p.previsao_mes_usd)}` : ""}
               {p?.posts_que_o_saldo_cobre != null ? ` · o saldo cobre ${p.posts_que_o_saldo_cobre} ${p.posts_que_o_saldo_cobre === 1 ? "post" : "posts"}` : ""}
             </p>
           </div>
-          {podeEditar && (
-            <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 self-start text-[12px]" onClick={() => setEditando(true)}>
-              <Pencil className="mr-1 h-3.5 w-3.5" /> Ajustar
-            </Button>
-          )}
+          {blocoDeHorarios}
         </div>
       ) : (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="min-w-0 space-y-1.5">
-              <Label htmlFor="mesa-hora">Horário de publicação</Label>
+              <Label htmlFor="mesa-hora">{horarioAutomatico ? "Horário fixo (reserva)" : "Horário fixo de publicação"}</Label>
               <Input id="mesa-hora" type="time" value={hora} onChange={(e) => setHora(e.target.value)} />
             </div>
             <div className="min-w-0 space-y-1.5">
@@ -370,12 +476,13 @@ function AjustesDaEntrega({ podeEditar }: { podeEditar: boolean }) {
               <Input id="mesa-laminas" inputMode="numeric" placeholder="Ex.: 4" value={laminas} onChange={(e) => setLaminas(e.target.value)} />
             </div>
           </div>
-          <label className="flex items-center gap-2">
-            <Switch checked={agendar} onCheckedChange={setAgendar} />
-            <span>Agendar sozinho na Agenda quando o cliente aprovar (segunda a sexta)</span>
+          <label className="flex items-center">
+            <Switch checked={agendar} onCheckedChange={setAgendar} className="mr-2 shrink-0" />
+            <span className="min-w-0">Agendar sozinho na Agenda quando o cliente aprovar (segunda a sexta)</span>
           </label>
-          <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={() => setEditando(false)} disabled={salvando}>Cancelar</Button>
+          {blocoDeHorarios}
+          <div className="flex justify-end">
+            <Button type="button" size="sm" variant="ghost" className="mr-2" onClick={() => setEditando(false)} disabled={salvando}>Cancelar</Button>
             <Button type="button" size="sm" onClick={() => void salvar()} disabled={salvando}>
               {salvando && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Salvar

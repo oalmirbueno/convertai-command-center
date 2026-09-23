@@ -175,6 +175,11 @@ export function ehDiaUtil(data: string): boolean {
   return d >= 1 && d <= 5;
 }
 
+/** Dias corridos entre duas datas AAAA-MM-DD (fim incluído). */
+export function diasEntre(inicio: string, fim: string): number {
+  return Math.round((Date.parse(`${fim}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
 function somarDias(data: string, n: number): string {
   const d = new Date(`${data}T12:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -799,6 +804,11 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
   if (!DATA.test(inicio) || !DATA.test(fim) || fim < inicio) {
     throw new ErroHttp(400, "periodo_invalido", "Informe periodo_inicio e periodo_fim (AAAA-MM-DD), com o fim depois do início.");
   }
+  // Um mês por chamada: período longo com pesquisa na web estoura o tempo do
+  // provedor. Para vários meses, a tela chama mês a mês.
+  if (diasEntre(inicio, fim) > 31) {
+    throw new ErroHttp(400, "periodo_longo", "Planeje até 31 dias por vez. Para vários meses, use Planejar vários meses: o estrategista faz um mês de cada vez.");
+  }
   const uteis = diasUteisDoPeriodo(inicio, fim);
   if (uteis.length === 0) throw new ErroHttp(400, "periodo_sem_dia_util", "O período não tem nenhum dia de segunda a sexta.");
   const frequencia = Number(corpo.frequencia);
@@ -1005,8 +1015,8 @@ TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do c
 ${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato sugerido ${t.formato_sugerido} | data ${dataDoTema.get(t.id)} | por que: ${t.por_que}`).join("\n")}
 Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca).
-- carrossel_infinito: true só quando o último card se liga visualmente ao primeiro e isso fizer sentido para o tema.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão (gancho escuro e forte), cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. Cada card tem ilustracao diferente (outro assunto, plano ou enquadramento; nunca a mesma cena ou pose, como pessoa de costas em todos) e prefere foto real do cliente quando o contexto tiver. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido para o tema.
 - copy: a legenda completa do post.
 - data: use exatamente a data indicada para o tema.
 - tipo_conteudo: extra_sazonal só para conteúdo de data sazonal marcado como extra; senão principal.
@@ -1518,8 +1528,8 @@ TAREFA: estes itens JÁ ESTÃO na agenda do cliente. Complete cada um com todos 
 ${validas.map((t, i) => `- tema_id i${i}: "${t.title}" | formato ${t.delivery_type === "carousel" ? "carrossel" : "estatico"} | data ${t.due_date ?? inicio} | o que já existe: ${(t.description ?? "").replace(/\s+/g, " ").slice(0, 900) || "só o título"}`).join("\n")}
 Regras dos itens:
 - formato: carrossel ou estatico, igual ao do item. Estático tem exatamente 1 card.
-- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo).
-- carrossel_infinito: true só quando o último card se liga visualmente ao primeiro e isso fizer sentido.
+- cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao, estilo). A história é uma só: a capa abre uma tensão (gancho escuro e forte), cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. Cada card tem ilustracao diferente (outro assunto, plano ou enquadramento; nunca a mesma cena ou pose, como pessoa de costas em todos) e prefere foto real do cliente quando o contexto tiver. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido.
 - copy: a legenda completa do post.
 - data: exatamente a data do item.
 - tipo_conteudo: principal.

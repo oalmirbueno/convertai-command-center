@@ -23,17 +23,20 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import AgendaDoMes from "./AgendaDoMes";
+import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
  * Aba Mês. No topo, a Agenda do mês: o mesmo calendário da Agenda do painel,
- * onde a equipe seleciona os itens, completa com o agente e abre no Estúdio
- * (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos: o
- * estrategista propõe os temas do período, o humano escolhe, o estrategista
- * detalha cada item e a proposta é gravada na agenda pelo mesmo
- * serviço do MCP (função agente-calendario, SPEC seção 4).
+ * onde a equipe seleciona os itens, completa e melhora com o agente e abre no
+ * Estúdio (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos,
+ * de dois jeitos: "Planejar e preencher a agenda" faz sozinho mês a mês
+ * (PlanejamentoAutomatico.tsx); "Uma proposta por vez" é o caminho manual,
+ * em que o estrategista propõe os temas do período, o humano escolhe, o
+ * estrategista detalha e a proposta é gravada na agenda pelo mesmo serviço
+ * do MCP (função agente-calendario, SPEC seção 4).
  */
 
 interface Tema {
@@ -119,8 +122,8 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       type="button"
       onClick={onToggle}
       aria-pressed={marcado}
-      className={`relative flex min-w-0 flex-col gap-2 rounded-xl border p-3.5 text-left transition-colors ${
-        marcado ? "border-primary/60 bg-primary/[0.06]" : "border-border bg-card hover:border-primary/30"
+      className={`relative flex min-w-0 flex-col space-y-2 rounded-xl border p-3.5 text-left transition-colors ${
+        marcado ? "border-primary bg-card ring-1 ring-primary" : "border-border bg-card hover:border-primary/50"
       }`}
     >
       <span className={`absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full border ${marcado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>
@@ -132,9 +135,9 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       </p>
       {tema.por_que && <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{tema.por_que}</p>}
       {(aderencia !== null || potencial !== null) && (
-        <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
-          {aderencia !== null && <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px]">Aderência {aderencia}%</span>}
-          {potencial !== null && <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px]">Salvar e compartilhar {potencial}%</span>}
+        <div className="mt-auto flex flex-wrap pt-1">
+          {aderencia !== null && <span className="mb-1 mr-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px]">Aderência {aderencia}%</span>}
+          {potencial !== null && <span className="mb-1 rounded-full bg-muted px-2 py-0.5 text-[11px]">Salvar e compartilhar {potencial}%</span>}
         </div>
       )}
     </button>
@@ -145,8 +148,8 @@ function LinhaDoItem({ item }: { item: Item }) {
   const texto = item.copy || item.legenda || item.resumo;
   return (
     <Collapsible className="rounded-xl border border-border bg-card">
-      <CollapsibleTrigger className="flex w-full items-start gap-3 px-3.5 py-3 text-left">
-        <div className="w-16 shrink-0 text-[11.5px] text-muted-foreground">
+      <CollapsibleTrigger className="flex w-full items-start px-3.5 py-3 text-left">
+        <div className="mr-3 w-16 shrink-0 text-[11.5px] text-muted-foreground">
           <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
           <p>{item.formato || "formato?"}</p>
         </div>
@@ -154,7 +157,7 @@ function LinhaDoItem({ item }: { item: Item }) {
           <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
           {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
         </div>
-        <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
         {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
@@ -164,7 +167,7 @@ function LinhaDoItem({ item }: { item: Item }) {
         {(item.cards || []).length > 0 && (
           <ol className="space-y-2">
             {(item.cards || []).slice().sort((a, b) => a.ordem - b.ordem).map((c) => (
-              <li key={c.ordem} className="rounded-lg bg-secondary/40 p-2.5">
+              <li key={c.ordem} className="rounded-lg border border-border bg-muted p-2.5">
                 <p className="text-[11px] font-medium text-muted-foreground">Card {c.ordem}{c.funcao ? ` · ${c.funcao}` : ""}</p>
                 {c.texto && <p className="mt-0.5 text-[12.5px] [overflow-wrap:anywhere]">{c.texto}</p>}
                 {(c.ilustracao || c.estilo) && (
@@ -233,21 +236,21 @@ function ConversaDoMes({ proposta, modeloId, onAtualizou }: { proposta: Proposta
   const lista = (mensagens.data && mensagens.data.length ? mensagens.data : locais).filter((m) => m.papel !== "sistema");
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-3">
+    <div className="flex min-w-0 flex-col space-y-3 rounded-xl border border-border bg-card p-3">
       <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Conversa com o estrategista</p>
       <div className="space-y-2 sm:max-h-[420px] sm:overflow-y-auto">
         {lista.length === 0 && <p className="text-[12px] text-muted-foreground">Peça ajustes em português: "troque o tema 3 por algo sobre entrega", "menos carrossel na primeira semana".</p>}
         {lista.map((m) => (
-          <div key={m.id} className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary/10" : "mr-6 bg-secondary/60"}`}>
+          <div key={m.id} className={`rounded-lg px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "ml-6 bg-primary text-primary-foreground" : "mr-6 bg-muted"}`}>
             <p className="whitespace-pre-wrap">{m.conteudo}</p>
           </div>
         ))}
       </div>
       {erro && <AvisoDeErro erro={erro} />}
       <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={3} placeholder="O que você quer mudar?" />
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <EstimativaInline partes={partes} />
-        <Button type="button" size="sm" onClick={() => void enviar()} disabled={enviando || !texto.trim()}>
+        <Button type="button" size="sm" className="ml-2" onClick={() => void enviar()} disabled={enviando || !texto.trim()}>
           {enviando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
           Enviar
         </Button>
@@ -324,7 +327,9 @@ function PlanejarComEstrategista() {
     if (proposta) {
       setInicio(proposta.periodo_inicio);
       setFim(proposta.periodo_fim);
-      setFrequencia(String(p.frequencia ?? "3"));
+      // A proposta guarda as publicações do período; o campo mostra por semana.
+      const total = Number(p.frequencia);
+      setFrequencia(Number.isFinite(total) && total > 0 ? String(Math.max(1, Math.round(total / semanas(proposta.periodo_inicio, proposta.periodo_fim)))) : "3");
       setObjetivo(String(p.objetivo || ""));
       setOferta(String(p.oferta || ""));
       setEscolhidos(new Set((proposta.temas || []).filter((t) => t.escolhido).map((t) => t.id)));
@@ -379,7 +384,8 @@ function PlanejarComEstrategista() {
     }
   };
 
-  const parametros = { frequencia: Number(frequencia) || frequencia, objetivo: objetivo.trim() || undefined, oferta: oferta.trim() || undefined, modelo_id: modeloId, raciocinio: raciocinio || undefined };
+  // O estrategista recebe quantas publicações cabem no período (por semana vezes as semanas).
+  const parametros = { frequencia: itensPrevistos, objetivo: objetivo.trim() || undefined, oferta: oferta.trim() || undefined, modelo_id: modeloId, raciocinio: raciocinio || undefined };
 
   // ------------------------------------------------------------ formulário
   const formulario = (
@@ -398,9 +404,9 @@ function PlanejarComEstrategista() {
         <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end">
         {nova && (propostas.data || []).length > 0 && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => setNova(false)}>Voltar à proposta</Button>
+          <Button type="button" variant="ghost" size="sm" className="mr-2" onClick={() => setNova(false)}>Voltar à proposta</Button>
         )}
         <BotaoComCusto
           rotulo="Propor temas"
@@ -441,8 +447,8 @@ function PlanejarComEstrategista() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[12px]">
-        <span className="min-w-0 flex-1 text-muted-foreground">
+      <div className="flex flex-wrap items-center rounded-xl border border-border bg-card px-3.5 py-2.5 text-[12px]">
+        <span className="mr-2 min-w-0 flex-1 text-muted-foreground">
           <strong className="font-medium text-foreground">{dataCurta(proposta.periodo_inicio)} a {dataCurta(proposta.periodo_fim)}</strong>
           {" · "}
           {({ temas: "escolha os temas", detalhando: "detalhando", pronta: "pronta para gravar", gravada: "gravada na agenda" } as Record<string, string>)[proposta.status] || proposta.status}
@@ -516,8 +522,8 @@ function PlanejarComEstrategista() {
           )}
 
           {itens.length > 0 && proposta.status !== "gravada" && (
-            <section className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-end">
-              <Campo rotulo="Projeto do cliente" className="flex-1">
+            <section className="flex flex-col rounded-xl border border-border bg-card p-3.5 sm:flex-row sm:items-end">
+              <Campo rotulo="Projeto do cliente" className="mb-3 flex-1 sm:mb-0 sm:mr-3">
                 <Select value={projetoId} onValueChange={setProjetoId}>
                   <SelectTrigger className="h-9 text-[12.5px]"><SelectValue placeholder={projetos.data?.length ? "Escolha o projeto" : "Cliente sem projeto ativo"} /></SelectTrigger>
                   <SelectContent>
@@ -533,7 +539,7 @@ function PlanejarComEstrategista() {
           )}
 
           {proposta.status === "gravada" && (
-            <p className="rounded-xl bg-success/10 px-3.5 py-3 text-[12.5px] text-foreground">
+            <p className="rounded-xl border border-success/50 bg-card px-3.5 py-3 text-[12.5px] text-foreground">
               Gravada na agenda{proposta.gravada_em ? ` em ${new Date(proposta.gravada_em).toLocaleDateString("pt-BR")}` : ""} com {proposta.task_ids?.length || 0} item(ns).{" "}
               <Link to={`/calendario?client=${clientId}`} className="text-primary underline-offset-2 hover:underline">Abrir o calendário</Link>
             </p>
@@ -550,17 +556,59 @@ function PlanejarComEstrategista() {
   );
 }
 
+type ModoDePlanejar = "automatico" | "proposta";
+
+const chaveDoModo = "mesa:modo-de-planejar";
+
+function lerModo(): ModoDePlanejar {
+  try {
+    return window.localStorage.getItem(chaveDoModo) === "proposta" ? "proposta" : "automatico";
+  } catch {
+    return "automatico";
+  }
+}
+
 /**
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
  */
 export default function AbaMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (taskId: string, mes: string) => void } = {}) {
+  const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
+  const trocarModo = (m: ModoDePlanejar) => {
+    setModo(m);
+    try {
+      window.localStorage.setItem(chaveDoModo, m);
+    } catch {
+      /* sem armazenamento: vale só nesta visita */
+    }
+  };
   return (
     <div className="space-y-8">
       <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
       <section className="space-y-3 border-t border-border pt-6">
         <TituloDeSecao>Planejar novos conteúdos com o estrategista</TituloDeSecao>
-        <PlanejarComEstrategista />
+        <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+          {(
+            [
+              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+              { valor: "proposta", rotulo: "Uma proposta por vez" },
+            ] as { valor: ModoDePlanejar; rotulo: string }[]
+          ).map((m) => (
+            <button
+              key={m.valor}
+              type="button"
+              role="tab"
+              aria-selected={modo === m.valor}
+              onClick={() => trocarModo(m.valor)}
+              className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
+                modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+        {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
       </section>
     </div>
   );

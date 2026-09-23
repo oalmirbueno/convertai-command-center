@@ -125,6 +125,8 @@ export type EntradaImagem = {
   tamanho: "1024x1536" | "1088x1360" | string;
   /** Prompt a usar se o provedor recusar o 4:5 e a arte sair em 2:3 (quadro 4:5 no centro). */
   promptSe2x3?: string;
+  /** Sem reserva em 2:3: a tela dupla do carrossel contínuo só serve no tamanho pedido. */
+  tamanhoFixo?: boolean;
   editar?: { bytes: Uint8Array; mascara?: Uint8Array };
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
@@ -483,7 +485,18 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
       status_provedor: res.status,
     });
   }
-  return res;
+  // O corpo também corre contra o mesmo tempo limite: lido aqui, o estouro vira
+  // provedor_timeout (antes escapava como TimeoutError e virava "falha inesperada").
+  try {
+    const corpo = await res.arrayBuffer();
+    return new Response(corpo, { status: res.status, headers: res.headers });
+  } catch (err) {
+    const nome = err instanceof Error ? err.name : "";
+    if (nome === "TimeoutError" || nome === "AbortError") {
+      throw new IaMotorErro("provedor_timeout", `O provedor ${provedor} nao terminou a resposta em ${Math.round(timeoutMs / 1000)} s.`, { provedor });
+    }
+    throw new IaMotorErro("provedor_erro", `Falha de rede ao ler a resposta de ${provedor}.`, { provedor });
+  }
 }
 
 function nomeEsquema(e: EsquemaJson): { nome: string; schema: Record<string, unknown> } {
@@ -985,7 +998,7 @@ type RespostaProvedorImagem = {
 export const TAMANHO_4X5 = "1088x1360";
 export const TAMANHO_2X3 = "1024x1536";
 
-function recusouTamanho(err: unknown): boolean {
+export function recusouTamanho(err: unknown): boolean {
   return err instanceof IaMotorErro && err.codigo === "provedor_erro" &&
     Number(err.detalhes?.status_provedor) === 400 && /size|dimension|resolution|aspect|pixel/i.test(err.message);
 }
@@ -996,7 +1009,7 @@ async function imagemOpenAi(m: ModeloIa, chave: string, e: EntradaImagem): Promi
     return await imagemOpenAiNoTamanho(m, chave, e, pedido, e.prompt);
   } catch (err) {
     // Provedor que ainda não aceita 4:5: a mesma chamada em 2:3, com o prompt do recorte central.
-    if (pedido !== TAMANHO_2X3 && recusouTamanho(err)) {
+    if (!e.tamanhoFixo && pedido !== TAMANHO_2X3 && recusouTamanho(err)) {
       return await imagemOpenAiNoTamanho(m, chave, e, TAMANHO_2X3, e.promptSe2x3 || e.prompt);
     }
     throw err;

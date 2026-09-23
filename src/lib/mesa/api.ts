@@ -479,3 +479,80 @@ export async function salvarAjustesDaEntrega(a: {
   });
   if (error) throw error;
 }
+
+// ------------------------------------------------------------------ versão 3 (23/09)
+
+/** Modelo padrão do agente de contexto; sem padrão próprio, o do estrategista. */
+export function padraoDoContexto(catalogo: ModeloIa[]): ModeloIa | null {
+  const ativos = modelosAtivos(catalogo, "texto");
+  return ativos.find((m) => (m.padrao_para || []).indexOf("contexto") >= 0) || padraoPara(catalogo, "estrategista");
+}
+
+export interface MelhoresHorarios {
+  por_tipo: Record<string, string>;
+  fonte: "historico" | "padrao";
+  amostra: number;
+}
+
+/** Melhores horários de publicação por tipo de post (histórico de alcance ou padrão). */
+export async function lerMelhoresHorarios(clientId: string): Promise<MelhoresHorarios> {
+  const { data, error } = await (supabase as any).rpc("mesa_melhores_horarios", { _client_id: clientId });
+  if (error) throw error;
+  const d = (data || {}) as Partial<MelhoresHorarios>;
+  return {
+    por_tipo: d.por_tipo && typeof d.por_tipo === "object" ? (d.por_tipo as Record<string, string>) : {},
+    fonte: d.fonte === "historico" ? "historico" : "padrao",
+    amostra: Number(d.amostra || 0),
+  };
+}
+
+/** Liga ou desliga o horário automático (admin e gestor; a RPC confere). */
+export async function salvarHorarioAutomatico(clientId: string, ligado: boolean): Promise<void> {
+  const { error } = await (supabase as any).rpc("mesa_config_horario_automatico", { _client_id: clientId, _ligado: ligado });
+  if (error) {
+    const msg = String(error.message || "");
+    if (error.code === "PGRST202" || msg.indexOf("Could not find the function") >= 0) {
+      throw new Error("O ajuste de horário automático ainda não foi publicado no banco. Tente de novo mais tarde.");
+    }
+    throw error;
+  }
+}
+
+/** Horário automático do cliente; sem linha de configuração, vale ligado. */
+export async function lerHorarioAutomatico(clientId: string): Promise<boolean> {
+  const { data, error } = await (supabase as any)
+    .from("mesa_cliente_config")
+    .select("horario_automatico")
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    // Coluna ainda não publicada: vale o padrão do banco (ligado).
+    if (String(error.message || "").indexOf("horario_automatico") >= 0) return true;
+    throw error;
+  }
+  return data && typeof data.horario_automatico === "boolean" ? data.horario_automatico : true;
+}
+
+export const CATEGORIAS_DO_ACERVO: { valor: string; rotulo: string }[] = [
+  { valor: "ambiente", rotulo: "Ambiente" },
+  { valor: "produto", rotulo: "Produto" },
+  { valor: "pessoa", rotulo: "Pessoa" },
+  { valor: "antes_depois", rotulo: "Antes e depois" },
+  { valor: "equipe", rotulo: "Equipe" },
+  { valor: "detalhe", rotulo: "Detalhe" },
+  { valor: "fachada", rotulo: "Fachada" },
+  { valor: "logo", rotulo: "Logo" },
+  { valor: "arte", rotulo: "Arte" },
+  { valor: "outro", rotulo: "Outro" },
+];
+
+export const rotuloDaCategoria = (c?: string | null) =>
+  (CATEGORIAS_DO_ACERVO.find((x) => x.valor === c) || { rotulo: c ? String(c) : "Sem categoria" }).rotulo;
+
+const EXTENSOES_DE_IMAGEM = ["png", "jpg", "jpeg", "webp", "gif", "svg", "avif", "heic"];
+
+/** É imagem pelo tipo ou pela extensão do nome. */
+export function ehImagem(mime?: string | null, nome?: string | null): boolean {
+  if (mime && String(mime).indexOf("image/") === 0) return true;
+  return EXTENSOES_DE_IMAGEM.indexOf(extensao(String(nome || ""))) >= 0;
+}

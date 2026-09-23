@@ -270,3 +270,111 @@ export async function lerMarcaParaDirecao(db: SupabaseClient, clientId: string):
     temLogo: !!k?.logo_file_id,
   };
 }
+
+// ------------------------------------------------------ acervo de imagens
+
+/** Categoria pelo nome da pasta e do arquivo, sem IA (a leitura refina depois). */
+export function categoriaPeloNome(pasta: string | null, nome: string): string | null {
+  const s = `${pasta ?? ""} ${nome}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/logo|logotipo|marca d.?agua/.test(s)) return "logo";
+  if (/antes|depois|before|after/.test(s)) return "antes_depois";
+  if (/equipe|time|colaborador|funcionari|staff/.test(s)) return "equipe";
+  if (/fachada|entrada|predio|loja fisica/.test(s)) return "fachada";
+  if (/produto|embalagem|catalogo/.test(s)) return "produto";
+  if (/cliente|pessoa|retrato|modelo/.test(s)) return "pessoa";
+  if (/quarto|sala|cozinha|banheiro|ambiente|espaco|interior|area/.test(s)) return "ambiente";
+  if (/detalhe|close|textura/.test(s)) return "detalhe";
+  if (/arte|post|carrossel|criativo|feed/.test(s)) return "arte";
+  return null;
+}
+
+const nomeLimpo = (nome: string) => nome.replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) || "imagem";
+
+export type ResultadoAcervo = { novas: number; total: number };
+
+/**
+ * Traz para o acervo (cliente_imagens) as imagens reais do cliente: todas as
+ * pastas do workspace (fora as de referência, que são peças de outras marcas)
+ * e Arquivos (fora os materiais entregues pela agência). Guarda o nome da
+ * pasta e uma categoria provável pelo nome. Sem IA e sem duplicar.
+ */
+export async function sincronizarAcervo(db: SupabaseClient, clientId: string): Promise<ResultadoAcervo> {
+  const [existentes, nos, arquivos] = await Promise.all([
+    db.from("cliente_imagens").select("workspace_node_id, file_id").eq("client_id", clientId),
+    db.from("workspace_nodes").select("id, parent_id, kind, name, mime, storage_path").eq("client_id", clientId).limit(5000),
+    db.from("files")
+      .select("id, file_name, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
+      .eq("client_id", clientId)
+      .is("archived_at", null)
+      .neq("folder", "materiais")
+      .order("created_at", { ascending: false })
+      .limit(2000),
+  ]);
+  const jaNos = new Set<string>();
+  const jaArquivos = new Set<string>();
+  for (const r of (existentes.data as { workspace_node_id: string | null; file_id: string | null }[] | null) ?? []) {
+    if (r.workspace_node_id) jaNos.add(r.workspace_node_id);
+    if (r.file_id) jaArquivos.add(r.file_id);
+  }
+
+  type No = { id: string; parent_id: string | null; kind: string; name: string; mime: string | null; storage_path: string | null };
+  const todos = (nos.data as No[] | null) ?? [];
+  const porId = new Map(todos.map((n) => [n.id, n]));
+  // Caminho legível da pasta ("Fotos / Quartos") e se está dentro de uma pasta de referência.
+  const caminho = (n: No): { pasta: string | null; referencia: boolean } => {
+    const partes: string[] = [];
+    let referencia = false;
+    let atual = n.parent_id ? porId.get(n.parent_id) : undefined;
+    for (let passo = 0; atual && passo < 12; passo++) {
+      partes.unshift(atual.name);
+      if (/(refer|inspira|moodboard|mood board)/i.test(atual.name)) referencia = true;
+      atual = atual.parent_id ? porId.get(atual.parent_id) : undefined;
+    }
+    return { pasta: partes.length ? partes.join(" / ").slice(0, 200) : null, referencia };
+  };
+
+  const linhas: Record<string, unknown>[] = [];
+  for (const n of todos) {
+    if (n.kind !== "file" || !n.storage_path || jaNos.has(n.id)) continue;
+    if (!(MIME_IMAGEM.test(n.mime || "") || NOME_IMAGEM.test(n.name))) continue;
+    const c = caminho(n);
+    if (c.referencia) continue;
+    linhas.push({
+      client_id: clientId,
+      origem: "workspace",
+      workspace_node_id: n.id,
+      storage_bucket: "workspace",
+      storage_path: n.storage_path,
+      nome: nomeLimpo(n.name),
+      pasta: c.pasta,
+      categoria: categoriaPeloNome(c.pasta, n.name),
+    });
+  }
+  type Arq = { id: string; file_name: string; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
+  for (const a of (arquivos.data as Arq[] | null) ?? []) {
+    if (jaArquivos.has(a.id)) continue;
+    if (!(MIME_IMAGEM.test(a.mime_type || "") || NOME_IMAGEM.test(a.file_name || ""))) continue;
+    const c = caminhoDoArquivo(a);
+    if (!c) continue;
+    const pasta = a.folder ? `Arquivos / ${a.folder}` : "Arquivos";
+    linhas.push({
+      client_id: clientId,
+      origem: "arquivo",
+      file_id: a.id,
+      storage_bucket: c.bucket,
+      storage_path: c.caminho,
+      nome: nomeLimpo(a.file_name || "imagem"),
+      pasta,
+      categoria: categoriaPeloNome(pasta, a.file_name || ""),
+    });
+  }
+  let novas = 0;
+  for (let i = 0; i < linhas.length; i += 200) {
+    const lote = linhas.slice(i, i + 200);
+    const { error } = await db.from("cliente_imagens").insert(lote);
+    if (error) console.error("contexto-cliente: acervo nao sincronizado", { client_id: clientId, erro: error.message });
+    else novas += lote.length;
+  }
+  const { count } = await db.from("cliente_imagens").select("id", { count: "exact", head: true }).eq("client_id", clientId).eq("ativa", true);
+  return { novas, total: count ?? 0 };
+}
