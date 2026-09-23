@@ -323,9 +323,15 @@ async function lerReferenciasPendentes(ch: Chamador, clientId: string): Promise<
   if (!pendentes.length) return { lidas: 0, custo: 0 };
 
   const comImagem: { ref: Referencia; imagem: ImagemEntrada }[] = [];
+  const semArquivo: string[] = [];
   for (const r of pendentes) {
     const imagem = await imagemDaReferencia(clientId, r);
     if (imagem) comImagem.push({ ref: r, imagem });
+    else semArquivo.push(r.id);
+  }
+  // Referência cujo arquivo não abre sai da fila (fica inativa e marcada), senão travava a leitura para sempre.
+  if (semArquivo.length) {
+    await servico().from("cliente_referencias").update({ ativa: false, tags: ["arquivo_indisponivel"] }).in("id", semArquivo).eq("client_id", clientId);
   }
   if (!comImagem.length) return { lidas: 0, custo: 0 };
 
@@ -526,7 +532,7 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     fontes_lidas: [
       ...docs.map((d) => d.nome),
       ...(dossie ? ["Dossiê atual"] : []),
-      ...(imagens.length ? [`${imagens.length} artes publicadas`] : []),
+      ...(artes.length ? [`${Math.min(artes.length, MAX_ARTES_NO_MONTAR)} artes publicadas`] : []),
     ],
   };
 
@@ -974,6 +980,11 @@ async function acervoClassificar(ch: Chamador, corpo: Record<string, unknown>) {
 
   const baixadas = await Promise.all(linhas.map((l, i) => imagemReduzida(l.storage_bucket, l.storage_path, `foto-${i + 1}`)));
   const comImagem = linhas.map((l, i) => ({ linha: l, imagem: baixadas[i] })).filter((x) => x.imagem) as { linha: typeof linhas[number]; imagem: ImagemEntrada }[];
+  // Foto cujo arquivo não abre sai da fila (inativa), senão as mesmas 12 voltavam sempre.
+  const semArquivo = linhas.filter((_, i) => !baixadas[i]).map((l) => l.id);
+  if (semArquivo.length) {
+    await servico().from("cliente_imagens").update({ ativa: false, descricao: "Arquivo indisponível: não foi possível abrir a imagem." }).in("id", semArquivo).eq("client_id", clientId);
+  }
   if (!comImagem.length) return json({ classificadas: 0, custo_usd: 0, restantes: 0 });
 
   const leitor = await modeloDoPapel("leitura");

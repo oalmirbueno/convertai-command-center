@@ -788,6 +788,7 @@ async function lerItemDaAgenda(taskId: string): Promise<ItemDaAgenda> {
     .select("itens")
     .eq("client_id", projeto.client_id)
     .contains("task_ids", [taskId])
+    .eq("status", "gravada")
     .order("criado_em", { ascending: false })
     .limit(1);
   const proposta = ((propostas as { itens: unknown }[] | null) ?? [])[0];
@@ -1013,6 +1014,10 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   // Modo roteiro: o roteiro do calendário vira direção sem IA (custo zero).
   const roteiro = Array.isArray(item.itemProposta?.cards) ? item.itemProposta!.cards as Record<string, unknown>[] : [];
   const modoPedido: ModoDirecao = corpo.modo === "roteiro" && !instrucao ? "roteiro" : "diretor";
+  // Montar do roteiro é grátis: sem roteiro, avisa em vez de chamar o diretor (pago) calado.
+  if (modoPedido === "roteiro" && !roteiro.length) {
+    throw new ErroEstudio(409, "sem_roteiro", "Este item não tem roteiro do estrategista. Use o diretor de arte para montar a direção.");
+  }
   const trabalhoId = existente?.id ?? crypto.randomUUID();
   let direcao: Direcao;
   let custo = 0;

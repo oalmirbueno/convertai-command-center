@@ -169,3 +169,39 @@ describe("auditoria do servidor (23/09 noite)", () => {
     expect(corpoDe(calendario, "conversaDaCampanha")).toContain('.order("criado_em", { ascending: false })');
   });
 });
+
+describe("restante da auditoria (23/09 noite)", () => {
+  const contexto = ler("supabase/functions/agente-contexto/index.ts");
+  it("montar do roteiro sem roteiro avisa em vez de chamar o diretor pago; roteiro só de proposta gravada", () => {
+    expect(estudio).toContain('throw new ErroEstudio(409, "sem_roteiro"');
+    expect(estudio).toContain('.contains("task_ids", [taskId])\n    .eq("status", "gravada")');
+  });
+  it("o custo do Jev entra no custo mostrado dos temas", () => {
+    expect(calendario).toContain("custo_usd: Math.round((saida.custoUsd + jev.custo) * 1e6) / 1e6");
+    expect(calendario).toContain("custo_usd: Math.round((saida.custoUsd + custoJev) * 1e6) / 1e6");
+  });
+  it("temas acompanham a frequência pedida (até 30)", () => {
+    expect(calendario).toContain("Math.min(30, Math.max(15, Math.round(Number(parametros.frequencia) || 0)))");
+    expect(calendario).toContain("temasBrutos.slice(0, maxTemas)");
+  });
+  it("pedido livre ajusta a data dentro de hoje a +30 dias", () => {
+    expect(corpoDe(calendario, "diasUteisDaProposta")).toContain("somarDias(fimBase, 30)");
+    expect(corpoDe(calendario, "conversar")).toContain("const uteis = diasUteisDaProposta(p);");
+    expect(corpoDe(calendario, "gravar")).toContain("const uteis = diasUteisDaProposta(p);");
+  });
+  it("mensagens em ordem e custo da campanha somado sem perder parcela", () => {
+    expect(corpoDe(calendario, "registrarMensagens")).toContain("criado_em: new Date(base + i).toISOString()");
+    expect(corpoDe(calendario, "somarCustoDaCampanha")).toContain('.eq("custo_usd", (data as { custo_usd: number | string }).custo_usd)');
+  });
+  it("criação da campanha: uso ligado à campanha, sem proposta órfã e primeira conversa guardada", () => {
+    const c = corpoDe(calendario, "campanhaCriar");
+    expect(c).toContain('referencia: { tipo: "mesa_campanha", id: campanhaId }');
+    expect(c).toContain('update({ status: "descartada" })');
+    expect(c).toContain("await conversaDaCampanha(servico, campanha as Campanha, chamador.userId)");
+  });
+  it("filas do contexto não travam em arquivo que não abre; contagem de artes igual", () => {
+    expect(contexto).toContain('update({ ativa: false, tags: ["arquivo_indisponivel"] })');
+    expect(contexto).toContain('descricao: "Arquivo indisponível: não foi possível abrir a imagem."');
+    expect(contexto).not.toContain("...(imagens.length ? [`${imagens.length} artes publicadas`] : [])");
+  });
+});

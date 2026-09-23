@@ -430,6 +430,20 @@ async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
   if (data !== true) throw new ErroHttp(403, "sem_acesso_ao_cliente", "Você não tem acesso a este cliente.");
 }
 
+/**
+ * Dias úteis que valem para a proposta. Pedido livre e campanha nascem com o
+ * período dos próprios itens (às vezes um dia só); ajustar a data precisa da
+ * janela inteira: de hoje (ou do início, se antes) até 30 dias depois do fim.
+ */
+function diasUteisDaProposta(p: Proposta): string[] {
+  const origem = String((p.parametros ?? {}).origem ?? "");
+  if (origem !== "pedido_livre") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
+  const hoje = hojeSaoPaulo();
+  const inicio = p.periodo_inicio < hoje ? p.periodo_inicio : hoje;
+  const fimBase = p.periodo_fim > hoje ? p.periodo_fim : hoje;
+  return diasUteisDoPeriodo(inicio, somarDias(fimBase, 30));
+}
+
 async function carregarProposta(servico: SupabaseClient, id: unknown): Promise<Proposta> {
   const pid = String(id ?? "");
   if (!UUID.test(pid)) throw new ErroHttp(400, "proposta_id_invalido", "proposta_id precisa ser um UUID.");
@@ -476,11 +490,13 @@ async function registrarMensagens(
   clientId: string,
   msgs: Array<{ papel: "usuario" | "agente" | "sistema"; conteudo: string; uso_id?: string | null; anexos?: unknown[] }>,
 ) {
+  const base = Date.now();
   const linhas = msgs
     .filter((m) => m.conteudo.trim())
-    .map((m) => ({
+    .map((m, i) => ({
       conversa_id: conversaId,
       client_id: clientId,
+      criado_em: new Date(base + i).toISOString(),
       papel: m.papel,
       conteudo: m.conteudo.slice(0, 20000),
       anexos: m.anexos ?? [],
@@ -749,8 +765,8 @@ async function pontuarTemasComJev(
   temas: Tema[],
   base: { cliente: string; objetivo: unknown; oferta: unknown; regiao: unknown; diagnostico: string | null },
   cobranca: { clientId: string; propostaId: string; criadoPor: string },
-): Promise<{ temas: Tema[]; jev_erro: string | null }> {
-  if (temas.length === 0) return { temas, jev_erro: null };
+): Promise<{ temas: Tema[]; jev_erro: string | null; custo: number }> {
+  if (temas.length === 0) return { temas, jev_erro: null, custo: 0 };
   const state = {
     cliente: base.cliente,
     objetivo_principal: base.objetivo ?? "não informado",
@@ -774,13 +790,14 @@ async function pontuarTemasComJev(
   });
   try {
     const r = await jevPerguntar({ state, questions });
-    await cobrarJev(r, {
+    const cobrado = await cobrarJev(r, {
       clientId: cobranca.clientId,
       tarefa: "calendario",
       referencia: { tipo: REF_TIPO, id: cobranca.propostaId },
       criadoPor: cobranca.criadoPor,
     });
     return {
+      custo: cobrado?.custoUsd ?? 0,
       temas: temas.map((t, i) => ({
         ...t,
         jev: {
@@ -793,7 +810,7 @@ async function pontuarTemasComJev(
   } catch (err) {
     const codigo = err instanceof JevErro ? err.codigo : "jev_falhou";
     console.error("[agente-calendario] jev falhou", { codigo });
-    return { temas, jev_erro: codigo };
+    return { temas, jev_erro: codigo, custo: 0 };
   }
 }
 
@@ -850,7 +867,9 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     .single();
   if (erroConversa || !conversa) throw new ErroHttp(500, "conversa_nao_criada", "Não foi possível abrir a conversa do agente.");
 
-  const pedido = `Proponha de 8 a 15 temas para o período de ${inicio} a ${fim}, com ${parametros.frequencia} publicações no período.`
+  // Temas pela frequência pedida: meta de mais de 15 posts no mês não cabia em 15 temas.
+  const maxTemas = Math.min(30, Math.max(15, Math.round(Number(parametros.frequencia) || 0)));
+  const pedido = `Proponha de 8 a ${maxTemas} temas para o período de ${inicio} a ${fim}, com ${parametros.frequencia} publicações no período.`
     + (parametros.objetivo ? ` Objetivo principal: ${parametros.objetivo}.` : "")
     + (parametros.oferta ? ` Oferta principal: ${parametros.oferta}.` : "")
     + (parametros.regiao ? ` Região: ${parametros.regiao}.` : "");
@@ -864,7 +883,7 @@ Devolva:
 - publicos_prioritarios e pilares.
 - pesquisa: o que a pesquisa na web trouxe de útil, com as fontes (links) usadas.
 - hipoteses: o que precisou ser suposto por falta de dado.
-- temas: de 8 a 15, cada um com id (t1, t2, ...), tema, pilar, fase (1, 2 ou 3), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel ou estatico), sazonal e data_sazonal (AAAA-MM-DD ou null).`;
+- temas: de 8 a ${maxTemas}, cada um com id (t1, t2, ...), tema, pilar, fase (1, 2 ou 3), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel ou estatico), sazonal e data_sazonal (AAAA-MM-DD ou null).`;
 
   let saida;
   try {
@@ -889,7 +908,7 @@ Devolva:
 
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const temasBrutos = Array.isArray(r.temas) ? r.temas : [];
-  let temas = temasBrutos.slice(0, 15).map((t, i) => normalizarTema(t, `t${i + 1}`)).filter((t) => t.tema);
+  let temas = temasBrutos.slice(0, maxTemas).map((t, i) => normalizarTema(t, `t${i + 1}`)).filter((t) => t.tema);
   const diagnostico = [
     texto(r.diagnostico, 6000),
     Array.isArray(r.publicos_prioritarios) && r.publicos_prioritarios.length ? `Públicos prioritários: ${r.publicos_prioritarios.map(String).join("; ")}.` : "",
@@ -907,7 +926,7 @@ Devolva:
   }, { clientId, propostaId, criadoPor: chamador.userId });
   temas = jev.temas;
   if (jev.jev_erro) parametros.jev_erro = jev.jev_erro;
-  if (temas.length < 8) parametros.aviso = `O modelo devolveu ${temas.length} temas (o pedido era de 8 a 15).`;
+  if (temas.length < 8) parametros.aviso = `O modelo devolveu ${temas.length} temas (o pedido era de 8 a ${maxTemas}).`;
 
   const { data: proposta, error } = await servico
     .from("calendario_propostas")
@@ -938,7 +957,7 @@ Devolva:
     },
   ]);
 
-  return json({ proposta, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, jev_erro: jev.jev_erro, reserva_usada: saida.reservaUsada ?? null });
+  return json({ proposta, custo_usd: Math.round((saida.custoUsd + jev.custo) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, jev_erro: jev.jev_erro, reserva_usada: saida.reservaUsada ?? null });
 }
 
 async function escolherTemas(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -1103,7 +1122,7 @@ async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Rec
   const mensagem = texto(corpo.mensagem, 4000);
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o ajuste que você quer na proposta.");
 
-  const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
+  const uteis = diasUteisDaProposta(p);
   const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id ?? p.parametros.modelo, corpo.raciocinio ?? p.parametros.raciocinio);
   const conversaId = await garantirConversa(servico, p, chamador.userId);
@@ -1150,6 +1169,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const campos: Record<string, unknown> = {};
   const ajustes: string[] = [];
+  let custoJev = 0;
 
   if (typeof r.diagnostico === "string" && r.diagnostico.trim()) campos.diagnostico = r.diagnostico.trim().slice(0, 12000);
 
@@ -1173,6 +1193,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
         regiao: p.parametros.regiao,
         diagnostico: (campos.diagnostico as string) ?? p.diagnostico,
       }, { clientId: p.client_id, propostaId: p.id, criadoPor: chamador.userId });
+      custoJev += j.custo;
       const notas = new Map(j.temas.map((t) => [t.id, t.jev]));
       temas = temas.map((t) => (notas.has(t.id) ? { ...t, jev: notas.get(t.id) ?? null } : t));
     }
@@ -1192,6 +1213,11 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
       return item;
     }).filter((i) => i.tema);
     campos.itens = itens.sort((a, b) => a.data.localeCompare(b.data));
+    // Pedido livre: o período acompanha as datas dos itens (a data pode ter mudado).
+    if (String(p.parametros.origem ?? "") === "pedido_livre" && itens.length) {
+      campos.periodo_inicio = (campos.itens as Item[])[0].data;
+      campos.periodo_fim = (campos.itens as Item[])[(campos.itens as Item[]).length - 1].data;
+    }
   }
 
   const atualizada = Object.keys(campos).length ? await salvarProposta(servico, p, campos) : p;
@@ -1200,7 +1226,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
     { papel: "usuario", conteudo: mensagem },
     { papel: "agente", conteudo: resposta, uso_id: saida.usoId },
   ]);
-  return json({ proposta: atualizada, resposta, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
+  return json({ proposta: atualizada, resposta, custo_usd: Math.round((saida.custoUsd + custoJev) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
 }
 
 // ------------------------------------------------------------ gravar
@@ -1269,7 +1295,7 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   await exigirProjetoDoCliente(servico, projectId, p.client_id);
   if (p.itens.length === 0) throw new ErroHttp(409, "proposta_sem_itens", "A proposta não tem itens para gravar.");
 
-  const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
+  const uteis = diasUteisDaProposta(p);
 
   // Itens que ja existem na agenda do cliente (mesmo titulo na mesma data) nao
   // sao recriados: preserva o que existe.
@@ -1710,6 +1736,21 @@ async function carregarCampanha(servico: SupabaseClient, id: unknown): Promise<C
   return data as Campanha;
 }
 
+/** Soma no custo da campanha sem perder parcela quando duas ações terminam juntas (compara e troca). */
+async function somarCustoDaCampanha(servico: SupabaseClient, id: string, clientId: string, valor: number) {
+  if (!(valor > 0)) return;
+  for (let tentativa = 0; tentativa < 6; tentativa++) {
+    const { data } = await servico.from("mesa_campanhas").select("custo_usd").eq("id", id).eq("client_id", clientId).maybeSingle();
+    if (!data) return;
+    const atual = Number((data as { custo_usd: number | string }).custo_usd) || 0;
+    const novo = Math.round((atual + valor) * 1e6) / 1e6;
+    const { data: feito } = await servico.from("mesa_campanhas").update({ custo_usd: novo })
+      .eq("id", id).eq("client_id", clientId).eq("custo_usd", (data as { custo_usd: number | string }).custo_usd).select("id").maybeSingle();
+    if (feito) return;
+  }
+  console.error("[agente-calendario] custo da campanha nao somado", { campanha_id: id, valor });
+}
+
 const resumoDaCampanha = (c: Campanha) => ({
   nome: c.nome,
   objetivo: c.objetivo,
@@ -2018,6 +2059,8 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
+  // O id nasce antes: o uso de IA fica ligado à campanha, não ao cliente.
+  const campanhaId = crypto.randomUUID();
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
@@ -2040,11 +2083,10 @@ ${REGRAS_DOS_ITENS}`;
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CAMPANHA,
-    referencia: { tipo: "mesa_campanha", id: clientId },
+    referencia: { tipo: "mesa_campanha", id: campanhaId },
     criadoPor: chamador.userId,
   });
   const r = (s.json ?? {}) as Record<string, unknown>;
-  const campanhaId = crypto.randomUUID();
   const itens = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
     const item = normalizarItem(bruto, uteis);
     item.tema_id = `c${i + 1}`;
@@ -2092,7 +2134,22 @@ ${REGRAS_DOS_ITENS}`;
     })
     .select("*")
     .single();
-  if (error || !campanha) throw new ErroHttp(503, "campanha_nao_gravada", "A campanha foi escrita, mas não foi guardada. Tente de novo.", { uso_id: s.usoId });
+  if (error || !campanha) {
+    // Sem campanha, a proposta não fica órfã na lista.
+    await servico.from("calendario_propostas").update({ status: "descartada" }).eq("id", proposta.id).eq("client_id", clientId);
+    throw new ErroHttp(503, "campanha_nao_gravada", "A campanha foi escrita, mas não foi guardada. Tente de novo.", { uso_id: s.usoId });
+  }
+
+  // O pedido e o resumo viram a primeira conversa da campanha (a resposta paga não se perde).
+  try {
+    const conversaId = await conversaDaCampanha(servico, campanha as Campanha, chamador.userId);
+    await registrarMensagens(servico, conversaId, clientId, [
+      { papel: "usuario", conteudo: pedidoTexto },
+      { papel: "agente", conteudo: texto(r.resposta, 2000) || "Campanha criada.", uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
+    ]);
+  } catch (e) {
+    console.error("[agente-calendario] conversa inicial da campanha nao gravada", { campanha_id: campanhaId, erro: String(e) });
+  }
 
   return json({ campanha, proposta, resposta: texto(r.resposta, 2000), project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
@@ -2135,13 +2192,14 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
       objetivo: texto(r.objetivo, 600) || c.objetivo,
       conceito: texto(r.conceito, 2000) || c.conceito,
       identidade: r.identidade ? normalizarIdentidade(r.identidade) : c.identidade,
-      custo_usd: Math.round((Number(c.custo_usd) + s.custoUsd) * 1e6) / 1e6,
     })
     .eq("id", c.id)
     .eq("client_id", c.client_id)
     .select("*")
     .single();
   if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "O ajuste foi feito, mas não foi salvo.", { uso_id: s.usoId });
+  await somarCustoDaCampanha(servico, c.id, c.client_id, s.custoUsd);
+  (data as Campanha).custo_usd = Math.round((Number((data as Campanha).custo_usd) + s.custoUsd) * 1e6) / 1e6;
   return json({ campanha: data, resposta: texto(r.resposta, 2000) || "Campanha ajustada.", custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
 }
 
@@ -2191,12 +2249,14 @@ async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: 
   if (erroUpload) throw new ErroHttp(503, "selo_nao_guardado", "O selo foi desenhado, mas não foi guardado.", { uso_id: img.usoId });
   const { data, error } = await servico
     .from("mesa_campanhas")
-    .update({ selo_path: caminho, custo_usd: Math.round((Number(c.custo_usd) + img.custoUsd) * 1e6) / 1e6 })
+    .update({ selo_path: caminho })
     .eq("id", c.id)
     .eq("client_id", c.client_id)
     .select("*")
     .single();
   if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "O selo foi guardado, mas a campanha não foi atualizada.");
+  await somarCustoDaCampanha(servico, c.id, c.client_id, img.custoUsd);
+  (data as Campanha).custo_usd = Math.round((Number((data as Campanha).custo_usd) + img.custoUsd) * 1e6) / 1e6;
   return json({ campanha: data, selo_path: caminho, custo_usd: img.custoUsd, saldo_usd: img.saldoUsd });
 }
 
@@ -2310,7 +2370,7 @@ ${REGRAS_DOS_ITENS}`;
 
   let campanha: Campanha = c;
   const nova = r.campanha && typeof r.campanha === "object" ? (r.campanha as Record<string, unknown>) : null;
-  const campos: Record<string, unknown> = { custo_usd: Math.round((Number(c.custo_usd) + s.custoUsd) * 1e6) / 1e6 };
+  const campos: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
   if (nova) {
     campos.nome = texto(nova.nome, 120) || c.nome;
     campos.objetivo = texto(nova.objetivo, 600) || c.objetivo;
@@ -2326,6 +2386,8 @@ ${REGRAS_DOS_ITENS}`;
     .single();
   if (error || !gravada) throw new ErroHttp(503, "campanha_nao_salva", "O agente respondeu, mas a campanha não foi salva.", { uso_id: s.usoId });
   campanha = gravada as Campanha;
+  await somarCustoDaCampanha(servico, c.id, c.client_id, s.custoUsd);
+  campanha.custo_usd = Math.round((Number(campanha.custo_usd) + s.custoUsd) * 1e6) / 1e6;
 
   let propostaFinal = proposta;
   if (podeMudarItens && proposta && Array.isArray(r.itens) && uteis.length) {
