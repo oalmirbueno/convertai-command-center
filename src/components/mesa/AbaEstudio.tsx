@@ -1370,6 +1370,7 @@ export default function AbaEstudio({
   const colunas = emColunas(faixa);
   const altura = useAlturaDaEsteira(colunas);
   const raiz = useRef<HTMLDivElement>(null);
+  const areaDoEstudio = useRef<HTMLDivElement>(null);
   // A lista abre nos próximos 60 dias; escolher um mês muda para aquele mês (e a URL acompanha).
   const [modoDaLista, setModoDaLista] = useEstadoGuardado<"proximos" | "mes">(`mesa:estudio:lista:${clientId}`, "proximos");
   const [filtroGuardado, setFiltro] = useEstadoGuardado<Filtro>(`mesa:estudio:filtro:${clientId}`, "a_fazer");
@@ -1425,8 +1426,8 @@ export default function AbaEstudio({
   const escolher = (id: string) => {
     gravarUltimo(clientId, id);
     onTarefa(id);
-    // No computador, o estúdio encaixa na janela (o cabeçalho da Mesa gruda no topo).
-    if (colunas) encaixarNaJanela(raiz.current);
+    // No computador, a página desce até o estúdio ocupar a tela abaixo da barra da Mesa.
+    if (colunas) encaixarNaJanela(areaDoEstudio.current);
   };
 
   const faixaDasPautas = (
@@ -1467,9 +1468,14 @@ export default function AbaEstudio({
 
   if (colunas) {
     return (
-      <div ref={raiz} className="flex min-w-0 flex-col" style={altura ? { height: altura } : undefined}>
+      <div ref={raiz} className="flex min-w-0 flex-col">
+        {/* A faixa de pautas fica fora da conta de altura: o estúdio sozinho
+            ocupa uma tela inteira abaixo da barra da Mesa e a página rola
+            entre os dois (antes os dois dividiam uma tela e a lâmina cortava). */}
         <div className="shrink-0">{faixaDasPautas}</div>
-        <div className="mt-3 flex min-h-0 min-w-0 flex-1 flex-col">{detalhe || vazio}</div>
+        <div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined}>
+          {detalhe || vazio}
+        </div>
       </div>
     );
   }

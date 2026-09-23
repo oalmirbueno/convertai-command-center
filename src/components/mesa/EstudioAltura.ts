@@ -45,7 +45,9 @@ export function useFaixa(): Faixa {
 /** Espaço entre o cabeçalho fixo da Mesa e o conteúdo da aba (space-y-5 da página). */
 const ESPACO_ABAIXO_DO_CABECALHO = 20;
 const MARGEM_DE_BAIXO = 12;
-const ALTURA_MINIMA = 460;
+// O estúdio (sem a faixa de pautas) tem sempre a altura de uma tela: abaixo
+// disso a lâmina grande ficava pequena e cortada (dono, 23/09 noite).
+const ALTURA_MINIMA = 620;
 
 function cabecalhoDaMesa(): HTMLElement | null {
   try {

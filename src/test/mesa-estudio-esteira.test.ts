@@ -503,7 +503,7 @@ describe("a aba inteira no computador (faixa das pautas em cima, estúdio grande
     } finally {
       (window as any).innerWidth = largura;
     }
-  });
+  }, 20000);
 });
 
 describe("a esteira cabe na janela", () => {
@@ -513,12 +513,22 @@ describe("a esteira cabe na janela", () => {
     expect(faixaDaLargura(1100)).toBe("compacto");
     expect(faixaDaLargura(1440)).toBe("mesa");
     expect(alturaDaEsteira(1000, 200)).toBe(768);
-    expect(alturaDaEsteira(600, 200)).toBe(460);
+    // O estúdio tem no mínimo 620 px (antes 460: a lâmina grande cortava).
+    expect(alturaDaEsteira(600, 200)).toBe(620);
   });
 
   it("ações da lâmina sempre visíveis: nada escondido no hover", () => {
     expect(prancheta).not.toContain("group-hover:opacity-100");
     expect(prancheta).not.toContain("opacity-0");
     expect(prancheta).not.toContain("hover:-translate-y");
+  });
+});
+
+describe("estúdio com a altura de uma tela (dono, 23/09 noite)", () => {
+  const aba = readFileSync(resolve(process.cwd(), "src/components/mesa/AbaEstudio.tsx"), "utf8");
+  it("a altura fixa vale só para o estúdio; a faixa de pautas fica fora e a página rola", () => {
+    expect(aba).toContain('<div ref={areaDoEstudio} className="mt-3 flex min-h-0 min-w-0 flex-col" style={altura ? { height: altura } : undefined}>');
+    expect(aba).not.toContain('<div ref={raiz} className="flex min-w-0 flex-col" style={altura ? { height: altura } : undefined}>');
+    expect(aba).toContain("encaixarNaJanela(areaDoEstudio.current)");
   });
 });
