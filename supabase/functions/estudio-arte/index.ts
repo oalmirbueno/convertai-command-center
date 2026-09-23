@@ -607,7 +607,8 @@ async function lerAcervo(clientId: string, limite = 60): Promise<ImagemAcervo[]>
     .select(CAMPOS_ACERVO)
     .eq("client_id", clientId)
     .eq("ativa", true)
-    .neq("categoria", "logo")
+    // neq sozinho descartava as fotos ainda sem categoria (NULL); arte pronta e logo não servem de base.
+    .or("categoria.is.null,categoria.not.in.(logo,arte)")
     .order("atualizado_em", { ascending: false })
     .limit(limite);
   return (data as ImagemAcervo[] | null) ?? [];
@@ -799,7 +800,7 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
 - conceito: a ideia visual do conjunto em até 3 frases.
 - fio_visual: o que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 4 frases concretas: a protagonista (quem é, idade aproximada, cabelo, roupa) ou o objeto protagonista, o cenário (lugar, cores, objetos fixos), a luz (hora, direção, temperatura) e o tratamento de foto. Se as artes já publicadas da marca têm uma protagonista e um cenário, siga os mesmos.
 - carrossel_infinito: siga \`item.carrossel_infinito_pedido\` quando vier (a equipe decidiu no começo). Verdadeiro: o conjunto é UMA cena panorâmica que atravessa as lâminas (o fundo de uma continua na outra); escreva cada layout.imagem como o trecho seguinte da mesma cena, da esquerda para a direita.
-- cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos.
+- cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos. Se \`item.quantidade_de_laminas_pedida\` vier, use exatamente essa quantidade.
   - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
   - blocos: o texto da lâmina dividido por papel, na ordem de leitura: headline (a frase dominante, curta, quebrada por sentido com \\n), subtitulo, apoio, numero (quando um número é o protagonista), cta, selo. No máximo 3 níveis de hierarquia. Texto exatamente como vai aparecer, com acentos, sem travessão.
   - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo; mantenha o mesmo eixo de alinhamento no carrossel.
@@ -938,6 +939,9 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         ? item.itemProposta.carrossel_infinito as boolean
         : null;
   const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
+  const laminasPedidas = Number.isInteger(Number(corpo.laminas)) && Number(corpo.laminas) >= 1 && Number(corpo.laminas) <= 10
+    ? Number(corpo.laminas)
+    : null;
   // Modo roteiro: o roteiro do calendário vira direção sem IA (custo zero).
   const roteiro = Array.isArray(item.itemProposta?.cards) ? item.itemProposta!.cards as Record<string, unknown>[] : [];
   const modoPedido: ModoDirecao = corpo.modo === "roteiro" && !instrucao ? "roteiro" : "diretor";
@@ -988,6 +992,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         legenda_prevista: texto(item.post?.default_caption, 1500) || null,
         detalhe_do_estrategista: item.itemProposta ?? null,
         carrossel_infinito_pedido: pedidoInfinito,
+        // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
+        quantidade_de_laminas_pedida: laminasPedidas,
       },
       marca: {
         nome: marca.nomeCliente,

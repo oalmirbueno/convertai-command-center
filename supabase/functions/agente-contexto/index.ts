@@ -584,17 +584,32 @@ type FonteBiblioteca = {
   pareamentos: { com?: string; papel_desta?: string; papel_da_outra?: string; porque?: string }[];
   amostra_path: string | null;
   suporta_portugues: boolean;
+  arquivos?: { peso: number; estilo?: string; arquivo: string; italico?: boolean }[] | null;
 };
 
 /**
  * Par título + texto escolhido pelo Jev entre os pareamentos da biblioteca,
  * pelo contexto da marca. Grava em cliente_fontes com origem biblioteca.
  */
+/** Arquivo da família para o papel: título pega o peso mais forte até 800, texto o regular; nunca itálico. */
+function arquivoDaFamilia(f: FonteBiblioteca, papel: "titulo" | "texto"): string {
+  const retos = (f.arquivos ?? []).filter((a) => a && a.arquivo && !a.italico);
+  const lista = retos.length ? retos : (f.arquivos ?? []).filter((a) => a && a.arquivo);
+  if (!lista.length) return f.amostra_path || `biblioteca/fontes/${f.familia}`;
+  const alvo = papel === "titulo" ? 800 : 400;
+  const melhor = lista.reduce((a, b) => {
+    const da = papel === "titulo" && a.peso > alvo ? 1000 : Math.abs(a.peso - alvo);
+    const db = papel === "titulo" && b.peso > alvo ? 1000 : Math.abs(b.peso - alvo);
+    return db < da ? b : a;
+  });
+  return melhor.arquivo;
+}
+
 async function escolherFontesDaBiblioteca(ch: Chamador, clientId: string) {
   const db = servico();
   const { data } = await db
     .from("fontes_biblioteca")
-    .select("id, familia, categoria, personalidade, usos, nichos, pareamentos, amostra_path, suporta_portugues")
+    .select("id, familia, categoria, personalidade, usos, nichos, pareamentos, amostra_path, suporta_portugues, arquivos")
     .eq("ativa", true)
     .eq("suporta_portugues", true)
     .limit(200);
@@ -654,12 +669,17 @@ async function escolherFontesDaBiblioteca(ch: Chamador, clientId: string) {
   const par = lista[Number.isFinite(indice) ? indice : -1]?.[1];
   if (!par) return null;
 
+  // storage_path é obrigatório em cliente_fontes: o arquivo da própria biblioteca
+  // (peso forte para título, regular para texto). Sem ele o insert falhava calado.
   const linhas = [
-    { client_id: clientId, nome: par.titulo.familia, papel: "titulo", amostra_path: par.titulo.amostra_path, biblioteca_id: par.titulo.id, origem: "biblioteca" },
-    { client_id: clientId, nome: par.texto.familia, papel: "texto", amostra_path: par.texto.amostra_path, biblioteca_id: par.texto.id, origem: "biblioteca" },
+    { client_id: clientId, nome: par.titulo.familia, papel: "titulo", storage_path: arquivoDaFamilia(par.titulo, "titulo"), amostra_path: par.titulo.amostra_path, biblioteca_id: par.titulo.id, origem: "biblioteca" },
+    { client_id: clientId, nome: par.texto.familia, papel: "texto", storage_path: arquivoDaFamilia(par.texto, "texto"), amostra_path: par.texto.amostra_path, biblioteca_id: par.texto.id, origem: "biblioteca" },
   ];
   const { error } = await db.from("cliente_fontes").insert(linhas);
-  if (error) return null;
+  if (error) {
+    console.error("agente-contexto: fontes da biblioteca nao gravadas", { client_id: clientId, erro: error.message });
+    return null;
+  }
   return { titulo: par.titulo.familia, texto: par.texto.familia, porque: par.porque, confianca: res.answers.par?.confidence ?? null };
 }
 

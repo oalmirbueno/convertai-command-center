@@ -302,11 +302,14 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
   const [existentes, nos, arquivos] = await Promise.all([
     db.from("cliente_imagens").select("workspace_node_id, file_id").eq("client_id", clientId),
     db.from("workspace_nodes").select("id, parent_id, kind, name, mime, storage_path").eq("client_id", clientId).limit(5000),
+    // Todas as pastas de Arquivos, inclusive materiais (muitos clientes guardam
+    // as fotos reais ali, misturadas com artes). Lâmina filha de carrossel fica
+    // de fora; arte pronta entra marcada como "arte" e a leitura separa o resto.
     db.from("files")
-      .select("id, file_name, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
+      .select("id, file_name, file_type, mime_type, folder, storage_bucket, storage_path, file_url, parent_file_id")
       .eq("client_id", clientId)
       .is("archived_at", null)
-      .neq("folder", "materiais")
+      .is("parent_file_id", null)
       .order("created_at", { ascending: false })
       .limit(2000),
   ]);
@@ -350,13 +353,15 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
       categoria: categoriaPeloNome(c.pasta, n.name),
     });
   }
-  type Arq = { id: string; file_name: string; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
+  type Arq = { id: string; file_name: string; file_type: string | null; mime_type: string | null; folder: string | null; storage_bucket: string | null; storage_path: string | null; file_url: string | null };
+  const TIPO_DE_ARTE = /^(carrossel|carousel|creative|criativo|post|design|story|stories|arte)$/i;
   for (const a of (arquivos.data as Arq[] | null) ?? []) {
     if (jaArquivos.has(a.id)) continue;
     if (!(MIME_IMAGEM.test(a.mime_type || "") || NOME_IMAGEM.test(a.file_name || ""))) continue;
     const c = caminhoDoArquivo(a);
     if (!c) continue;
     const pasta = a.folder ? `Arquivos / ${a.folder}` : "Arquivos";
+    const ehArte = TIPO_DE_ARTE.test(a.file_type || "") || /(1080x1350|1080x1080|feed|stories|carrossel)/i.test(a.file_name || "");
     linhas.push({
       client_id: clientId,
       origem: "arquivo",
@@ -365,7 +370,7 @@ export async function sincronizarAcervo(db: SupabaseClient, clientId: string): P
       storage_path: c.caminho,
       nome: nomeLimpo(a.file_name || "imagem"),
       pasta,
-      categoria: categoriaPeloNome(pasta, a.file_name || ""),
+      categoria: ehArte ? "arte" : categoriaPeloNome(pasta, a.file_name || ""),
     });
   }
   let novas = 0;
