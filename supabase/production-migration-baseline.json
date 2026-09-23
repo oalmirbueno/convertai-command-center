@@ -937,6 +937,14 @@
       "remote_name": "mesa_contexto_e_biblioteca",
       "remote_statements_sha256": "0a598afdd0d9ddafffea83d96860d0ef3c0ad721b8cc67b4e19508aeb2fdbdeb",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260923140000",
+      "path": "supabase/migrations/20260923140000_mesa_acervo_e_horarios.sql",
+      "local_sha256": "83964af589d9da3af695f3b060b6d363f179f55ca94504add3c1f460da874bd7",
+      "remote_name": "mesa_acervo_e_horarios",
+      "remote_statements_sha256": "1413b742bd8840327c4b45e330c43d9ca8aa8ce5d9374c7fc54bebf134ddd08f",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
