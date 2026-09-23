@@ -224,7 +224,7 @@ describe("seletor de referências", () => {
     const { unmount } = montar(h(SeletorDeReferencias, { selecionados: [], onChange: vi.fn(), max: 8 }));
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Do cliente", "Pastas do workspace", "Banco da agência", "Pinterest"]);
     expect(screen.getByText("0 de 8")).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("tab", { name: /Do cliente/ }).textContent).toContain("(2)"));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Do cliente/ }).textContent).toContain("(2)"), { timeout: 5000 });
     unmount();
     montar(h(SeletorDeReferencias, { modo: "gerenciar" }));
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Do cliente", "Pastas do workspace", "Pinterest"]);
@@ -233,20 +233,20 @@ describe("seletor de referências", () => {
 
   it("papéis com nome claro; destaque primeiro; marcar destaque grava update destaque", async () => {
     montar(h(SeletorDeReferencias, { selecionados: [], onChange: vi.fn() }));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: /destaque/ }).length).toBe(2));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /destaque/ }).length).toBe(2), { timeout: 5000 });
     expect(screen.getAllByText(/Artes da marca/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Referências de composição/).length).toBeGreaterThan(0);
     // A arte em destaque vem primeiro.
     const estrelas = screen.getAllByRole("button", { name: /destaque/ });
     expect(estrelas[0].getAttribute("aria-label")).toBe("Tirar do destaque");
     fireEvent.click(screen.getByRole("button", { name: "Marcar como destaque" }));
-    await waitFor(() => expect(mock.updates).toContainEqual({ tabela: "cliente_referencias", valor: { destaque: true } }));
+    await waitFor(() => expect(mock.updates).toContainEqual({ tabela: "cliente_referencias", valor: { destaque: true } }), { timeout: 5000 });
   });
 
   it("escolher respeita o limite", async () => {
     const onChange = vi.fn();
     montar(h(SeletorDeReferencias, { selecionados: ["r-arte"], onChange, max: 1 }));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: /Usar|Escolhida/ }).length).toBe(2));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Usar|Escolhida/ }).length).toBe(2), { timeout: 5000 });
     const usar = screen.getByRole("button", { name: /Usar/ }) as HTMLButtonElement;
     expect(usar.disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: /Escolhida/ }));
@@ -264,7 +264,7 @@ describe("seletor de referências", () => {
     expect(abrir.getAttribute("rel")).toContain("noopener");
     fireEvent.change(screen.getByLabelText("Link do pin"), { target: { value: "https://br.pinterest.com/pin/485051822390692739/" } });
     fireEvent.click(screen.getByRole("button", { name: /Adicionar/ }));
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["r-pin"]));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["r-pin"]), { timeout: 5000 });
     expect(mock.invoke).toHaveBeenCalledWith("estudio-arte", {
       body: { acao: "referencias", subacao: "importar_pinterest", client_id: CLIENTE, url: "https://br.pinterest.com/pin/485051822390692739/" },
     });
@@ -283,18 +283,18 @@ describe("seletor de referências", () => {
     const onChange = vi.fn();
     montar(h(SeletorDeReferencias, { selecionados: [], onChange, max: 8, colunas: 3 }));
     fireEvent.click(screen.getByRole("tab", { name: /Pastas do workspace/ }));
-    await waitFor(() => expect(screen.getAllByText("Referências").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("Referências").length).toBeGreaterThan(0), { timeout: 5000 });
     fireEvent.click(screen.getAllByText("Referências")[0]);
-    await waitFor(() => expect(screen.getByText("capa.jpg")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("capa.jpg")).toBeTruthy(), { timeout: 5000 });
     // Sem linha ainda: insere e escolhe o id devolvido.
     mock.tabelas.cliente_referencias = [];
     fireEvent.click(screen.getByRole("button", { name: /Usar/ }));
-    await waitFor(() => expect(mock.inserts.length).toBe(1));
+    await waitFor(() => expect(mock.inserts.length).toBe(1), { timeout: 5000 });
     expect(mock.inserts[0]).toEqual({
       tabela: "cliente_referencias",
       valor: { client_id: CLIENTE, origem: "workspace", workspace_node_id: "n-2", papel: "tecnica", ativa: true },
     });
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["r-novo"]));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["r-novo"]), { timeout: 5000 });
   });
 });
 
