@@ -277,8 +277,12 @@ export function promptDaLamina(
     carrosselInfinito: boolean;
     levaLogo: boolean;
     conceito?: string | null;
-    /** Imagens já usadas nas lâminas anteriores: esta lâmina não repete cena, pose nem enquadramento. */
+    /** O que as lâminas anteriores mostram: a lâmina mantém protagonista, cenário e luz e muda só pose e enquadramento. */
     anteriores?: string[];
+    /** Fio visual do conjunto (protagonista, cenário, luz, tratamento), definido uma vez pelo diretor. */
+    fioVisual?: string | null;
+    /** Logo medida em código: tom dominante e se é clara (define o fundo atrás dela). */
+    logo?: { tom: string | null; clara: boolean } | null;
     /** Descrição da foto real anexada como base: o gerador não redesenha a foto. */
     fotoReal?: string | null;
   },
@@ -319,11 +323,14 @@ export function promptDaLamina(
     opcoes.fotoReal
       ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz e cores ficam exatamente como estão. Desenhe só o texto e, se precisar para a leitura, um painel ou véu suave dentro da área do texto.`
       : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
-    capa
-      ? "- CAPA COM DESTAQUE A MAIS: fundo escuro e travado (foto escurecida de 45 a 65% ou o tom mais escuro da paleta), headline em peso black, a maior do carrossel, com a palavra-chave na cor de destaque; contraste máximo, texto claro sobre escuro, um gesto visual forte e nada competindo com a headline."
+    opcoes.fioVisual && opcoes.total > 1
+      ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").slice(0, 600)} Mesma pessoa, mesmo cenário, mesma luz e paleta em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
       : "",
-    opcoes.anteriores && opcoes.anteriores.length
-      ? `- Imagens já usadas nas lâminas anteriores (não repita cena, pose, pessoa na mesma posição nem enquadramento; mude o plano e o assunto): ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}.`
+    capa
+      ? "- CAPA COM DESTAQUE A MAIS, dentro do sistema da marca: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, o maior contraste entre texto e fundo e um gesto visual forte; mesma luz, cenário e paleta das lâminas seguintes. Nada competindo com a headline."
+      : "",
+    opcoes.anteriores && opcoes.anteriores.length && opcoes.total > 1
+      ? `- Lâminas anteriores desta série mostraram: ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}. Mantenha a mesma protagonista, cenário e luz; mude só a pose e o enquadramento (não repita a pose da lâmina anterior).`
       : "",
     `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
     `- Ponto focal: ${layout.ponto_focal}.`,
@@ -344,7 +351,12 @@ export function promptDaLamina(
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
     marca.tipografiaCitada?.observacao ? `- Observação da marca sobre tipografia: ${marca.tipografiaCitada.observacao}` : "",
     opcoes.levaLogo && marca.temLogo
-      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo"} dentro das margens, sem redesenhar, nunca no canto superior direito.`
+      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo"} dentro das margens, sem redesenhar, nunca no canto superior direito.` +
+        (opcoes.logo
+          ? opcoes.logo.clara
+            ? " A logo é clara: o fundo atrás dela é escuro o bastante para ela aparecer inteira."
+            : ` A logo é escura ou colorida${opcoes.logo.tom ? ` (tom dominante ${opcoes.logo.tom})` : ""}: o fundo atrás dela é claro e liso, nunca da mesma cor nem do mesmo valor da logo.`
+          : " Nunca ponha a logo sobre fundo da mesma cor dela.")
       : opcoes.levaLogo
         ? "- A logo oficial ainda não foi enviada em imagem: NÃO desenhe nem invente logo, símbolo ou marca; deixe só um respiro no canto onde ela entraria."
         : "- Sem logo nesta lâmina.",

@@ -16,7 +16,7 @@
  * de cada prompt de imagem e no sistema do ajuste de lâmina.
  */
 
-export const VERSAO_CONHECIMENTO = "2026-09-23.3";
+export const VERSAO_CONHECIMENTO = "2026-09-23.4";
 
 export const CONHECIMENTO_DIRETOR = `BASE DE CONHECIMENTO DO DIRETOR DE ARTE (versão ${VERSAO_CONHECIMENTO})
 
@@ -200,14 +200,16 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px. O gerador de imag
 - Genérico: nada da seção 10 aparece?
 
 12. CAPA QUE PARA A ROLAGEM (pedido do dono, 23/09)
-- A capa sempre tem um destaque a mais que as lâminas do miolo: fundo escuro e travado (foto escurecida de 45 a 65% ou fundo sólido no tom mais escuro da paleta), headline em peso extra negrito ou black, a maior do carrossel, com uma palavra-chave na cor de destaque.
-- Contraste máximo: texto claro sobre escuro, nada de capa clara e lavada. A capa precisa se destacar na grade do perfil ao lado das outras.
-- Um gesto visual forte (escala, recorte, objeto cortado na borda direita) e nada mais competindo com a headline.
+- A capa tem um destaque a mais que as lâminas do miolo, DENTRO do sistema da marca: a maior headline do conjunto, em peso extra negrito ou black, o maior contraste entre texto e fundo, uma palavra-chave na cor de destaque e um gesto visual forte (escala, recorte, objeto cortado na borda). Nada competindo com a headline.
+- A capa usa a mesma luz, cenário e paleta das lâminas seguintes: ela abre a série, não é uma peça de outra marca. Fundo escuro só quando a própria marca é escura ou quando a logo é clara; marca clara e arejada ganha destaque pelo tamanho e pelo contraste da headline, não por escurecer tudo.
+- Logo sempre legível: nunca sobre fundo da mesma cor ou do mesmo valor (logo azul em fundo azul, logo escura em fundo escuro). Atrás da logo vai um fundo de valor oposto ao dela.
+- Composição da capa escolhida pela foto: headline à esquerda quando o sujeito está à direita; centralizada (topo ou centro) quando o sujeito está no centro ou embaixo. Não use sempre a esquerda.
 
 13. NARRATIVA DO CARROSSEL (storytelling, nunca picotado)
 - O carrossel é uma história só, com começo, meio e fim: a capa abre uma pergunta ou tensão, cada lâmina do miolo avança um passo e puxa a próxima (a última frase de uma lâmina prepara a seguinte), o final resolve e chama para a ação.
 - Texto corrido entre as lâminas: conectivos e continuidade de sentido ("e é aí que", "o segundo erro", "resultado:"), nunca frases soltas que poderiam estar em qualquer ordem.
-- Imagem sem repetição: cada lâmina mostra um assunto, plano ou enquadramento diferente (ambiente amplo, detalhe, mão em ação, antes e depois, objeto, pessoa de frente). Nunca a mesma cena ou a mesma pose em duas lâminas (por exemplo, mulher de costas em todas).
+- Continuidade com variação (o que o dono aprovou): o carrossel é UMA série. Mesma protagonista (mesma pessoa, roupa e cabelo), mesmo cenário, mesma luz, mesma paleta e o mesmo sistema tipográfico da capa até o final, como fotos de um mesmo ensaio. O que varia de uma lâmina para a outra é só a pose, o gesto, o plano e o enquadramento (costas, de frente, pensativa, sorrindo, detalhe das mãos). Nunca a mesma pose em duas lâminas seguidas; nunca trocar de pessoa, de cenário ou de clima no meio da série.
+- Quantidade de lâminas pelo conteúdo: o mínimo que conta a história inteira. Em geral 4 a 6; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos.
 - Carrossel contínuo (panorâmico): o fundo é uma faixa única que atravessa as lâminas; cada lâmina nasce da borda direita da anterior, com o mesmo horizonte, luz e escala.
 - Foto real do cliente, quando escolhida, é usada como está: o gerador só desenha o texto e o acabamento na área reservada, sem refazer a foto.
 

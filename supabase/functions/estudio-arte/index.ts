@@ -62,12 +62,14 @@ import {
   type CardDirecao,
   type MarcaParaDirecao,
 } from "../_shared/direcao-arte.ts";
-import { caminhoDoArquivo, lerContextoConsolidado, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
+import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
 import {
   ampliar,
   type Area,
   devolverOriginalForaDasAreas,
+  analisarLogo,
   fotoNaLamina,
+  logoLimpa,
   mascara,
   metadeDireita,
   normalizarAreas,
@@ -280,6 +282,8 @@ type Direcao = {
   referencias_ids?: string[];
   /** Último pedido feito ao diretor sobre o conjunto (conversa com o diretor). */
   pedido?: string | null;
+  /** Protagonista, cenário, luz e tratamento que se repetem em todas as lâminas (a série). */
+  fio_visual?: string | null;
 };
 
 /** Conferencia ainda nao feita: gerar_card e ajustar_card gravam so isto. */
@@ -447,6 +451,18 @@ async function amostrasDasFontes(fontes: Fonte[]): Promise<{ imagem: ImagemEntra
  * sempre sob a pasta do cliente) e, sem ela, o arquivo do kit.
  */
 async function baixarLogo(clientId: string, kit: Kit): Promise<ImagemEntrada | null> {
+  const bruta = await baixarLogoBruta(clientId, kit);
+  if (!bruta) return null;
+  // Sem o fundo falso (xadrez de transparência ou branco): o gerador copiava como uma caixa.
+  try {
+    const limpa = await logoLimpa(bruta.bytes);
+    return limpa === bruta.bytes ? bruta : { bytes: limpa, mime: "image/png", nome: "logo-oficial.png" };
+  } catch {
+    return bruta;
+  }
+}
+
+async function baixarLogoBruta(clientId: string, kit: Kit): Promise<ImagemEntrada | null> {
   if (kit?.logo_path && kit.logo_path.startsWith(`${clientId}/`)) {
     try {
       return await baixarImagem("mesa", kit.logo_path, "logo-oficial");
@@ -725,9 +741,10 @@ const ESQUEMA_DIRECAO = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["conceito", "carrossel_infinito", "cards"],
+    required: ["conceito", "fio_visual", "carrossel_infinito", "cards"],
     properties: {
       conceito: { type: "string" },
+      fio_visual: { type: "string" },
       carrossel_infinito: { type: "boolean" },
       cards: {
         type: "array",
@@ -780,8 +797,9 @@ const INSTRUCOES_DIRECAO = `COMO ENTREGAR A DIREÇÃO (regras técnicas do estú
 Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluído. O estúdio monta o prompt final em código a partir do que você devolver, já com a área útil, as margens do grid, os tamanhos de letra, a paleta e as fontes da marca. Por isso você decide só o essencial, com precisão:
 
 - conceito: a ideia visual do conjunto em até 3 frases.
-- carrossel_infinito: verdadeiro quando a sequência for uma composição panorâmica contínua.
-- cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só.
+- fio_visual: o que se repete em TODAS as lâminas para o carrossel ser uma série só, em 2 a 4 frases concretas: a protagonista (quem é, idade aproximada, cabelo, roupa) ou o objeto protagonista, o cenário (lugar, cores, objetos fixos), a luz (hora, direção, temperatura) e o tratamento de foto. Se as artes já publicadas da marca têm uma protagonista e um cenário, siga os mesmos.
+- carrossel_infinito: siga \`item.carrossel_infinito_pedido\` quando vier (a equipe decidiu no começo). Verdadeiro: o conjunto é UMA cena panorâmica que atravessa as lâminas (o fundo de uma continua na outra); escreva cada layout.imagem como o trecho seguinte da mesma cena, da esquerda para a direita.
+- cards: uma entrada por lâmina, na ordem do roteiro. Post único tem um card só. Quantidade pelo conteúdo: o mínimo que conta a história inteira, em geral 4 a 6 lâminas; 7 ou mais só quando o conteúdo pede (lista longa, passo a passo). Menos lâminas custa menos.
   - funcao: capa, conteudo ou cta (o último card de carrossel é cta).
   - blocos: o texto da lâmina dividido por papel, na ordem de leitura: headline (a frase dominante, curta, quebrada por sentido com \\n), subtitulo, apoio, numero (quando um número é o protagonista), cta, selo. No máximo 3 níveis de hierarquia. Texto exatamente como vai aparecer, com acentos, sem travessão.
   - layout.zona_texto: onde fica o bloco de texto (topo-esquerda, topo-centro, centro-esquerda, centro, base-esquerda, base-centro, base-direita, coluna-esquerda, coluna-direita). Varie entre as lâminas do miolo; mantenha o mesmo eixo de alinhamento no carrossel.
@@ -794,10 +812,10 @@ Um gerador de imagem desenha cada lâmina INTEIRA numa imagem só, texto incluí
   - evitar: o que não pode acontecer nesta lâmina (repetição de lâmina anterior, elemento genérico, cor fora da paleta).
   - imagem_acervo: o id de uma foto REAL do cliente em \`acervo\` que serve de base para esta lâmina (ambiente, antes e depois, equipe, produto), ou string vazia. A foto é usada como está, sem ser refeita: escolha só quando ela combina com o texto e tem área calma para o texto na zona escolhida. Nunca a mesma foto em duas lâminas. Prefira foto real a imagem inventada sempre que houver uma boa.
 
-NARRATIVA E VARIEDADE (obrigatório)
+NARRATIVA E CONTINUIDADE (obrigatório)
 - Carrossel é uma história só, nunca frases picotadas: a capa abre uma tensão, cada lâmina avança um passo e prepara a seguinte (conectivos, continuidade de sentido), o final resolve e chama para a ação.
-- Cada lâmina tem imagem diferente: outro assunto, plano ou enquadramento (ambiente amplo, detalhe, mão em ação, antes e depois, objeto, pessoa de frente). Nunca a mesma cena ou pose em duas lâminas.
-- A capa tem destaque a mais: fundo escuro e travado, headline black, a maior do carrossel, palavra-chave na cor de destaque.
+- Série contínua com variação: a mesma protagonista, o mesmo cenário, a mesma luz e a mesma paleta do começo ao fim (o fio_visual), como fotos de um mesmo ensaio. Em cada lâmina varie só a pose, o gesto, o plano e o enquadramento (de costas, de frente, pensativa, sorrindo, detalhe das mãos); nunca a mesma pose em duas lâminas seguidas e nunca trocar de pessoa, de cenário ou de clima no meio.
+- A capa tem destaque a mais dentro do sistema da marca: a maior headline, peso black, palavra-chave na cor de destaque, o maior contraste de texto, com a mesma luz e cenário da série. Não escureça a capa se a marca é clara, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo.
 - Se \`pedido_da_equipe\` vier preenchido, refaça a direção atendendo o pedido e mantenha o que ele não manda mudar da \`direcao_atual\`.
 
@@ -813,6 +831,7 @@ function cardsDoDiretor(
   infinito: boolean,
   levaLogoFn: (ordem: number, total: number) => boolean,
   acervoValido: Set<string> = new Set(),
+  fioVisual: string | null = null,
 ): CardDirecao[] {
   const lista = (Array.isArray(bruto) ? bruto : []) as Record<string, any>[];
   const base = lista
@@ -854,6 +873,7 @@ function cardsDoDiretor(
       levaLogo: levaLogoFn(card.ordem, total),
       conceito,
       anteriores: imagensAnteriores(cards, card.ordem),
+      fioVisual,
     });
   }
   return cards;
@@ -884,17 +904,6 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     : await modeloDoPapel("imagem");
 
   const db = servico();
-  // O que o cliente já tem entra sozinho: pastas de referência do workspace e artes aprovadas.
-  await sincronizarReferencias(db, clientId).catch(() => null);
-  const [kit, fontes] = await Promise.all([lerKit(clientId), lerFontes(clientId)]);
-  const marca = await marcaDoCliente(clientId, kit, fontes);
-
-  const postUnico = FORMATOS_POST_UNICO.has(item.tarefa.delivery_type);
-  const pedidoInfinito = item.itemProposta && typeof item.itemProposta.carrossel_infinito === "boolean"
-    ? item.itemProposta.carrossel_infinito as boolean
-    : null;
-  const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
-
   // Conversa com o diretor: com instrução e trabalho, a direção do mesmo
   // trabalho é refeita a partir do pedido (as versões geradas ficam).
   const instrucao = texto(corpo.instrucao, 2000);
@@ -909,6 +918,26 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     }
   }
 
+  // O que o cliente já tem entra sozinho (pastas de referência, artes aprovadas
+  // e fotos reais para o acervo), em paralelo com a leitura do kit.
+  const [, , kit, fontes] = await Promise.all([
+    sincronizarReferencias(db, clientId).catch(() => null),
+    sincronizarAcervo(db, clientId).catch(() => null),
+    lerKit(clientId),
+    lerFontes(clientId),
+  ]);
+  const marca = await marcaDoCliente(clientId, kit, fontes);
+
+  const postUnico = FORMATOS_POST_UNICO.has(item.tarefa.delivery_type);
+  // Contínuo decidido no começo: o pedido da tela vale; senão o que o trabalho já tinha; senão o do estrategista.
+  const pedidoInfinito = typeof corpo.carrossel_infinito === "boolean"
+    ? corpo.carrossel_infinito
+    : existente?.direcao.carrossel_infinito === true
+      ? true
+      : item.itemProposta && typeof item.itemProposta.carrossel_infinito === "boolean"
+        ? item.itemProposta.carrossel_infinito as boolean
+        : null;
+  const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
   // Modo roteiro: o roteiro do calendário vira direção sem IA (custo zero).
   const roteiro = Array.isArray(item.itemProposta?.cards) ? item.itemProposta!.cards as Record<string, unknown>[] : [];
   const modoPedido: ModoDirecao = corpo.modo === "roteiro" && !instrucao ? "roteiro" : "diretor";
@@ -1003,12 +1032,13 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     });
     const bruto = (r.json ?? {}) as Record<string, any>;
     const conceito = texto(bruto.conceito, 1200);
+    const fioVisual = texto(bruto.fio_visual, 800) || null;
     const infinito = pedidoInfinito ?? !!bruto.carrossel_infinito;
-    const cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn, new Set(acervo.map((a) => a.id)));
+    const cards = cardsDoDiretor(bruto.cards, postUnico, marca, conceito, infinito, levaLogoFn, new Set(acervo.map((a) => a.id)), fioVisual);
     if (!cards.length) {
       throw new ErroEstudio(502, "direcao_vazia", "O diretor de arte não devolveu nenhum card utilizável. Tente de novo.", { uso_id: r.usoId });
     }
-    direcao = { conceito, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
+    direcao = { conceito, fio_visual: fioVisual, carrossel_infinito: cards.length > 1 && infinito, cards, origem: "diretor" };
     custo = r.custoUsd;
     usoId = r.usoId;
     saldo = r.saldoUsd;
@@ -1159,7 +1189,10 @@ async function escolherReferencias(
     ...((doCliente.data as Referencia[] | null) ?? []),
     ...globais.map((g) => globalComoReferencia(g, t.client_id)),
   ];
-  if (!candidatas.length) return { refs: [], jev: "sem_referencias_lidas" };
+  if (!candidatas.length) {
+    const identidade = await artePublicadaMaisRecente(t.client_id);
+    return { refs: identidade ? [identidade] : [], jev: "sem_referencias_lidas" };
+  }
 
   const referencias: Record<string, { tipo: string; tecnica: string; tags: string[] }> = {};
   const questions: Record<string, PerguntaJev> = {};
@@ -1196,14 +1229,31 @@ async function escolherReferencias(
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
       .sort((a, b) => (b.nota as number) - (a.nota as number));
     // Uma da identidade da marca e uma de técnica (do cliente ou do banco da agência).
-    const identidade = notas.find((x) => x.r.papel === "identidade");
-    const tecnica = notas.find((x) => x.r.papel !== "identidade");
-    const escolhidas = [identidade, tecnica].filter(Boolean).map((x) => x!.r).slice(0, MAX_REFERENCIAS);
+    const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id);
+    const tecnica = notas.find((x) => x.r.papel !== "identidade")?.r;
+    const escolhidas = [identidade, tecnica].filter(Boolean).slice(0, MAX_REFERENCIAS) as Referencia[];
     return { refs: escolhidas, jev: "ok" };
   } catch (e) {
-    // Sem Jev a lamina sai sem referencia, e o motivo fica gravado na versao.
-    return { refs: [], jev: codigoMotor(e) };
+    // Sem Jev, ao menos a arte publicada mais recente da marca vai junto.
+    const identidade = await artePublicadaMaisRecente(t.client_id);
+    return { refs: identidade ? [identidade] : [], jev: codigoMotor(e) };
   }
+}
+
+/**
+ * Arte já publicada mais recente da marca (referência de identidade), mesmo
+ * ainda sem leitura: a série nova precisa continuar o estilo do que foi ao ar.
+ */
+async function artePublicadaMaisRecente(clientId: string): Promise<Referencia | null> {
+  const { data } = await servico()
+    .from("cliente_referencias")
+    .select(CAMPOS_REF_CLIENTE)
+    .eq("client_id", clientId)
+    .eq("ativa", true)
+    .eq("papel", "identidade")
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  return ((data as Referencia[] | null) ?? [])[0] ?? null;
 }
 
 // ---------------------------------------------------------- conferencia
@@ -1482,12 +1532,15 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // Logo só quando o arquivo existe de fato: pedir "a logo anexada" sem anexo faz o gerador inventar uma.
   let comLogo = false;
+  let tomDaLogo: { tom: string | null; clara: boolean } | null = null;
   if (levaLogo(t, ordem)) {
     const logo = await baixarLogo(t.client_id, kit);
     if (logo) {
       anexos.push(logo);
       legendar("logo oficial da marca");
       comLogo = true;
+      // Medida em código: o prompt põe atrás da logo um fundo de valor oposto.
+      tomDaLogo = await analisarLogo(logo.bytes).catch(() => null);
     }
   }
   for (const a of await amostrasDasFontes(fontes)) {
@@ -1497,7 +1550,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Sem tela dupla, a anterior vai como referência; no contínuo o final também vê a capa.
   if (anterior && !continuar) {
     anexos.push({ bytes: await baixar("mesa", anterior.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
-    legendar(`card ${ordem - 1} já aprovado, esta lâmina continua a sequência (mesmo sistema, imagem diferente)`);
+    legendar(`card ${ordem - 1} já aprovado desta mesma série: mantenha a mesma protagonista, cenário, luz, paleta, tipografia e posição da marca; mude só a pose, o enquadramento e o texto`);
   }
   if (t.direcao.carrossel_infinito && ordem === total && ordem > 2) {
     const capa = versaoAtual(t, 1);
@@ -1507,15 +1560,23 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }
   }
   // Foto real dispensa referência de técnica: a imagem já está decidida.
-  const escolha = baseFoto ? { refs: [] as Referencia[], jev: "foto_real" } : await escolherReferencias(t, card, kit, ch.userId);
+  const escolhida = baseFoto ? { refs: [] as Referencia[], jev: "foto_real" } : await escolherReferencias(t, card, kit, ch.userId);
+  const daEquipe = escolhida.jev === "escolha_da_equipe";
+  // Do miolo em diante, a lâmina anterior da série é o guia de estilo: só a
+  // identidade da marca continua junto (técnica solta puxava cada lâmina para um lado).
+  const escolha = !daEquipe && anterior
+    ? { ...escolhida, refs: escolhida.refs.filter((r) => r.papel === "identidade") }
+    : escolhida;
   const idsReferencias: string[] = [];
   for (const ref of escolha.refs) {
     try {
       anexos.push(await imagemDaReferencia(ref));
       idsReferencias.push(ref.id);
-      legendar(ref.papel === "identidade"
-        ? "arte já publicada da própria marca (siga a identidade: cores, tipografia, tratamento de foto; não copie o layout)"
-        : "referência de técnica (absorva composição e hierarquia, não copie a peça)");
+      legendar(daEquipe
+        ? "referência escolhida pela equipe: siga de perto a composição, a tipografia, a hierarquia e o tratamento desta peça, com o texto e a marca deste post"
+        : ref.papel === "identidade"
+          ? "arte já publicada da própria marca: siga a mesma identidade (cores, tipografia, tratamento de foto, estilo das pessoas); não copie o layout"
+          : "referência de técnica (absorva composição e hierarquia, não copie a peça)");
     } catch {
       // Referencia sem arquivo fica de fora desta lamina.
     }
@@ -1532,6 +1593,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       conceito: t.direcao.conceito,
       anteriores: imagensAnteriores(t.direcao.cards, ordem),
       fotoReal: foto ? resumoDaFoto(foto) : null,
+      fioVisual: t.direcao.fio_visual ?? null,
+      logo: tomDaLogo,
     })
     : card.prompt_imagem;
   const comum = {
@@ -1573,7 +1636,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     try {
       const dupla = await telaDupla(await baixar("mesa", anterior!.storage_path));
       const prompt = [
-        `TELA DUPLA ${TAMANHO_TELA_DUPLA.replace("x", " x ")}: a metade esquerda (imagem 1) é a lâmina ${ordem - 1}, já pronta, e não pode mudar. Pinte SÓ a metade direita como a lâmina ${ordem} de ${total}, continuação direta da mesma cena: o fundo, o horizonte, a luz, a escala e os elementos que chegam à borda direita da esquerda continuam na mesma altura, sem emenda visível. O quadro 1080 x 1350 descrito abaixo é a metade direita. Nenhum texto cruza a divisa e todo texto fica a pelo menos 90 px dela.`,
+        `TELA DUPLA ${TAMANHO_TELA_DUPLA.replace("x", " x ")}: a metade esquerda (imagem 1) é a lâmina ${ordem - 1}, já pronta, e não pode mudar. Pinte SÓ a metade direita como a lâmina ${ordem} de ${total}, continuação direta da mesma cena: o fundo, o horizonte, a luz, a escala e os elementos que chegam à borda direita da esquerda continuam na mesma altura, sem emenda visível. O quadro 1080 x 1350 descrito abaixo é a metade direita. Nenhum texto cruza a divisa e todo texto fica a pelo menos 90 px dela. O fundo da metade direita é a continuação da cena da esquerda: ignore qualquer cor de fundo sugerida abaixo que quebre essa continuidade.`,
         base,
         regrasDeRender(t, card, legendas(1), comLogo),
       ].join("\n\n");

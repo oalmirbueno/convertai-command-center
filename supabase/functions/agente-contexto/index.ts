@@ -91,7 +91,7 @@ const MENSAGEM_MOTOR: Record<string, string> = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HEX = /^#[0-9a-f]{6}$/i;
-const MAX_LEITURAS_POR_VEZ = 8;
+const MAX_LEITURAS_POR_VEZ = 12;
 const MAX_ARTES_NO_MONTAR = 4;
 const MAX_BYTES = 8 * 1024 * 1024;
 const REF_TIPO = "cliente_contexto";
@@ -232,7 +232,17 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
   const db = servico();
-  const sinc = await sincronizarReferencias(db, clientId);
+  // Sincronizar (referências e acervo) não segura a tela: espera no máximo
+  // 1,5 s e o resto termina em segundo plano; a próxima leitura já vem completa.
+  const sincronizar = Promise.all([
+    sincronizarReferencias(db, clientId),
+    sincronizarAcervo(db, clientId).catch(() => null),
+  ]);
+  (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(sincronizar.catch(() => null));
+  const sinc = await Promise.race([
+    sincronizar.then(([r]) => r).catch(() => null),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
+  ]);
   const [kit, docs, dossie, artes, logos, refs, fontes] = await Promise.all([
     lerKit(clientId),
     lerDocumentosDeMarca(db, clientId, 60_000),
@@ -264,7 +274,7 @@ async function ler(ch: Chamador, corpo: Record<string, unknown>) {
         tecnica: listaRefs.filter((r) => r.papel !== "identidade").length,
         sem_leitura: listaRefs.filter((r) => !r.leitura).length,
       },
-      sincronizadas_agora: sinc.workspace_novas + sinc.arquivos_novas,
+      sincronizadas_agora: sinc ? sinc.workspace_novas + sinc.arquivos_novas : 0,
     },
     candidatos_a_logo: logos,
     lacunas,
@@ -434,7 +444,25 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   const semNovidade = !!kit?.contexto_atualizado_em && fontesAgora.length === fontesAntes.length &&
     fontesAgora.every((f) => fontesAntes.includes(f));
   if (!forcar && corpo.atualizar !== true && semNovidade) {
-    return json({ kit, sugestoes: {}, fontes_escolhidas: null, referencias_lidas: 0, custo_usd: 0, saldo_usd: null, ja_atualizado: true });
+    // Contexto já montado: só completa o que falta (referências sem leitura e
+    // fonte, se o cliente ainda não tem), sem refazer a montagem.
+    const [leitura, qtdFontes] = await Promise.all([
+      lerReferenciasPendentes(ch, clientId).catch((e) => {
+        if (e instanceof IaMotorErro && STATUS_MOTOR[e.codigo]) throw e;
+        return { lidas: 0, custo: 0 };
+      }),
+      db.from("cliente_fontes").select("id", { count: "exact", head: true }).eq("client_id", clientId),
+    ]);
+    const fontesEscolhidas = qtdFontes.count ? null : await escolherFontesDaBiblioteca(ch, clientId).catch(() => null);
+    return json({
+      kit: await lerKit(clientId),
+      sugestoes: {},
+      fontes_escolhidas: fontesEscolhidas,
+      referencias_lidas: leitura.lidas,
+      custo_usd: leitura.custo,
+      saldo_usd: null,
+      ja_atualizado: true,
+    });
   }
 
   // Leitura das referências pendentes corre junto com a montagem, não antes.

@@ -173,7 +173,7 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(e).toContain("globaisParaALamina(card)");
     expect(corpoDe("globaisParaALamina")).toContain('.from("referencias_globais")');
     expect(corpoDe("globaisParaALamina")).toContain('textSearch("leitura"');
-    expect(e).toContain('const identidade = notas.find((x) => x.r.papel === "identidade");');
+    expect(e).toContain('notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id)');
     // Escolha da equipe na tela vale antes do Jev.
     expect(e.indexOf("escolhidasNaTela")).toBeLessThan(e.indexOf("await jevPerguntar("));
     expect(fonte).toContain("const MAX_REFERENCIAS = 2;");

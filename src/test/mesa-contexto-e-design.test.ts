@@ -162,7 +162,7 @@ describe("base de conhecimento do diretor", () => {
   it("regras com números da base e sem travessão", () => {
     expect(CONHECIMENTO_DIRETOR).toContain("90 px");
     expect(CONHECIMENTO_DIRETOR).toContain("60-30-10");
-    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(6400);
+    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(6500);
     expect(PADRAO_NA_IMAGEM.split("\n").length).toBeLessThanOrEqual(14);
     for (const t of [CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM]) {
       expect(t).not.toContain("—");
@@ -203,5 +203,44 @@ describe("contexto automático do cliente", () => {
   it("o estúdio e o calendário usam o contexto consolidado", () => {
     expect(ler("supabase/functions/estudio-arte/index.ts")).toContain("lerContextoConsolidado(servico(), clientId)");
     expect(ler("supabase/functions/agente-calendario/index.ts")).toContain('select("paleta, estilo, regras, contexto")');
+  });
+});
+
+describe("regressão de 23/09: série contínua, capa da marca e logo legível", () => {
+  const capa = { ordem: 1, funcao: "capa", texto_exato: "Roupa acumulada?", ilustracao: "mulher com cesto" };
+  const miolo = { ordem: 2, funcao: "conteudo", texto_exato: "Separe antes", ilustracao: "mesma mulher de frente" };
+
+  it("o fio visual mantém protagonista, cenário e luz em todas as lâminas; muda só a pose", () => {
+    const p = promptDaLamina(miolo, marca(), {
+      total: 5, carrosselInfinito: false, levaLogo: false,
+      fioVisual: "Mulher de 30 anos, cabelo preso, camiseta branca, lavanderia clara com máquinas verdes, luz da manhã.",
+      anteriores: ["mulher de costas carregando o cesto"],
+    });
+    expect(p).toContain("CONTINUIDADE DA SÉRIE");
+    expect(p).toContain("Mantenha a mesma protagonista, cenário e luz");
+    expect(p).not.toContain("mude o plano e o assunto");
+    expect(p).not.toContain("não repita cena");
+  });
+
+  it("a capa ganha destaque dentro do sistema da marca, sem escurecer à força", () => {
+    const p = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true });
+    expect(p).toContain("dentro do sistema da marca");
+    expect(p).not.toContain("fundo escuro e travado");
+  });
+
+  it("logo escura ou colorida pede fundo claro atrás dela; logo clara pede fundo escuro", () => {
+    const escura = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true, logo: { tom: "#1E5AA8", clara: false } });
+    expect(escura).toContain("tom dominante #1E5AA8");
+    expect(escura).toContain("nunca da mesma cor nem do mesmo valor da logo");
+    const clara = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true, logo: { tom: "#FFFFFF", clara: true } });
+    expect(clara).toContain("A logo é clara");
+  });
+
+  it("a base e o estrategista pedem série contínua com variação e quantidade de lâminas pelo conteúdo", () => {
+    expect(CONHECIMENTO_DIRETOR).toContain("Continuidade com variação");
+    expect(CONHECIMENTO_DIRETOR).toContain("Em geral 4 a 6");
+    const calendario = ler("supabase/functions/agente-calendario/index.ts");
+    expect(calendario).toContain("As ilustracoes formam UMA série");
+    expect(calendario).not.toContain("Cada card tem ilustracao diferente (outro assunto");
   });
 });

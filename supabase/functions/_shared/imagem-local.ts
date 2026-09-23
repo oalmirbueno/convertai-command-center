@@ -138,6 +138,75 @@ export async function devolverOriginalForaDasAreas(
   return await g.encode(1);
 }
 
+/**
+ * Tom dominante e claridade da logo, para o prompt pôr atrás dela um fundo de
+ * valor oposto (logo azul nunca sobre fundo azul). Ignora pixels transparentes
+ * e, em logo sem transparência, o fundo quase branco.
+ */
+export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | null; clara: boolean }> {
+  const img = await decodificar(bytes);
+  const pequena = img.width > 200 ? img.clone().resize(200, Image.RESIZE_AUTO) : img;
+  const b = pequena.bitmap;
+  let r = 0, g = 0, bl = 0, n = 0, opacos = 0;
+  for (let i = 0; i < b.length; i += 4) {
+    if (b[i + 3] < 128) continue;
+    opacos++;
+    const claro = b[i] > 235 && b[i + 1] > 235 && b[i + 2] > 235;
+    if (claro) continue;
+    r += b[i]; g += b[i + 1]; bl += b[i + 2]; n++;
+  }
+  // Quase tudo branco: logo branca (versão para fundo escuro).
+  if (!opacos || n < opacos * 0.08) return { tom: "#FFFFFF", clara: true };
+  r = Math.round(r / n); g = Math.round(g / n); bl = Math.round(bl / n);
+  const lin = (v: number) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  const luminancia = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl);
+  const hex = `#${[r, g, bl].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  return { tom: hex, clara: luminancia > 0.45 };
+}
+
+/**
+ * Logo pronta para anexar ao gerador: no máximo 512 px e sem fundo falso.
+ * Muita logo chega com o "xadrez" de transparência desenhado na própria imagem
+ * (ou com fundo branco); o gerador copia isso como uma caixa. Aqui o fundo
+ * claro e sem cor ligado à borda vira transparente (preenchimento a partir das
+ * bordas, então o branco de dentro da logo fica).
+ */
+export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
+  const img = await decodificar(bytes);
+  const l = img.width > 512 || img.height > 512 ? img.clone().contain(512, 512) : img.clone();
+  const W = l.width, H = l.height, b = l.bitmap;
+  const fundo = (i: number) => {
+    if (b[i + 3] < 16) return true;
+    const r = b[i], g = b[i + 1], bl = b[i + 2];
+    const max = Math.max(r, g, bl), min = Math.min(r, g, bl);
+    return min >= 200 && max - min <= 18;
+  };
+  const visto = new Uint8Array(W * H);
+  const pilha: number[] = [];
+  for (let x = 0; x < W; x++) pilha.push(x, (H - 1) * W + x);
+  for (let y = 0; y < H; y++) pilha.push(y * W, y * W + W - 1);
+  let limpos = 0;
+  while (pilha.length) {
+    const p = pilha.pop()!;
+    if (visto[p]) continue;
+    visto[p] = 1;
+    if (!fundo(p * 4)) continue;
+    b[p * 4 + 3] = 0;
+    limpos++;
+    const x = p % W, y = (p - x) / W;
+    if (x > 0) pilha.push(p - 1);
+    if (x < W - 1) pilha.push(p + 1);
+    if (y > 0) pilha.push(p - W);
+    if (y < H - 1) pilha.push(p + W);
+  }
+  // Nada ou quase tudo limpo: a logo não tinha fundo falso (ou é branca); vai como veio.
+  if (limpos < W * H * 0.05 || limpos > W * H * 0.97) return bytes;
+  return await l.encode(1);
+}
+
 /** Amplia a área em volta (margem relativa), para o gerador ter espaço de fundir a borda. */
 export function ampliar(a: Area, margem = 0.03): Area {
   return { x0: limitar(a.x0 - margem), y0: limitar(a.y0 - margem), x1: limitar(a.x1 + margem), y1: limitar(a.y1 + margem) };
