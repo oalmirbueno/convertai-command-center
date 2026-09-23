@@ -361,6 +361,10 @@ function DetalheDoItem({
     void queryClient.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
     void queryClient.invalidateQueries({ queryKey: ["mesa", "item-avulso", clientId] });
     void queryClient.invalidateQueries({ queryKey: ["mesa", "ajustes"] });
+    // A aba Mês lê os mesmos trabalhos (agenda e artes do mês): sem isto ela
+    // mostrava o estado de antes por até 2 minutos.
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
+    void queryClient.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
     mesa.atualizarCusto();
   };
 
@@ -427,8 +431,13 @@ function DetalheDoItem({
       // (cabe no tempo da função); a lâmina depois só recebe o texto por cima.
       let custoFundo = 0;
       if (infinito) {
-        const f = await chamarFuncao<any>("estudio-arte", { acao: "preparar_fundo", trabalho_id: trabalhoId, ordem });
-        custoFundo = custoDaResposta(f) || 0;
+        // Um panorama por chamada: com trecho anterior faltando, o servidor faz ele
+        // primeiro e devolve pendente; a tela chama de novo (no máximo 4 vezes).
+        for (let vez = 0; vez < 4; vez++) {
+          const f = await chamarFuncao<any>("estudio-arte", { acao: "preparar_fundo", trabalho_id: trabalhoId, ordem });
+          custoFundo += custoDaResposta(f) || 0;
+          if (!f || !f.pendente) break;
+        }
       }
       const g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
       atualizar();
@@ -439,24 +448,43 @@ function DetalheDoItem({
     }
   };
 
+  /**
+   * Conferência depois de a lâmina já estar gerada (e cobrada): se ela falha,
+   * avisa sem derrubar a ação, que deu certo. Antes a geração inteira
+   * aparecia como falha e a pessoa tendia a pagar de novo.
+   */
+  const conferirSemDerrubar = async (trabalhoId: string, ordem: number): Promise<number> => {
+    try {
+      return await conferirDepois(trabalhoId, ordem);
+    } catch (e) {
+      avisarErro(e, `Lâmina ${ordem} pronta, mas a conferência falhou`);
+      return 0;
+    }
+  };
+
   /** Uma lâmina só (ferramenta Lâmina ou barrinha da prancheta): gera e confere em seguida. */
   const gerarEConferir = async (ordem: number) => {
     if (!trabalho) return { custo_usd: 0 };
     const custo = await gerarUma(trabalho.id, ordem);
-    const custoConferencia = await conferirDepois(trabalho.id, ordem);
+    const custoConferencia = await conferirSemDerrubar(trabalho.id, ordem);
     return { custo_usd: custo + custoConferencia };
   };
 
   const cardsDaDirecao = (trabalho?.direcao?.cards || []).slice().sort((a, b) => a.ordem - b.ordem);
   const ultimas = ultimasVersoes(trabalho?.cards || []);
   const semImagem = cardsDaDirecao.filter((c) => !ultimas.has(c.ordem));
+  // Lâminas da direção ATUAL com arte. ultimas.size contava também versões de
+  // ordens que saíram (nova direção com menos lâminas): "7 de 5 com arte".
+  const laminasComArte = cardsDaDirecao.length - semImagem.length;
   const filaDeGeracao = semImagem.length ? semImagem : cardsDaDirecao;
   const todosComImagem = cardsDaDirecao.length > 0 && semImagem.length === 0;
   const algoGerando = emLote || Object.keys(andamento).length > 0;
   const ocupado = algoGerando || entregando;
   const infinito = !!trabalho?.direcao?.carrossel_infinito;
-  const laminaOcupada = (ordem: number) => !!andamento[ordem] || entregando;
-  const progresso = cardsDaDirecao.length ? Math.round((ultimas.size / cardsDaDirecao.length) * 100) : 0;
+  // No contínuo, as lâminas dividem o mesmo panorama: enquanto uma gera,
+  // refazer outra pediria o mesmo trecho de fundo duas vezes (cobra dobrado).
+  const laminaOcupada = (ordem: number) => !!andamento[ordem] || entregando || (infinito && algoGerando);
+  const progresso = cardsDaDirecao.length ? Math.round((laminasComArte / cardsDaDirecao.length) * 100) : 0;
   const entregue = !!trabalho && (trabalho.status === "entregue" || trabalho.entrega_status === "agendado");
   const estado: EstadoDoItem = cardsDaDirecao.length > 0 ? "producao" : arte && !refazendo ? "agenda" : "preparar";
 
@@ -496,8 +524,11 @@ function DetalheDoItem({
       while (proximo < ordens.length && !parar.current) {
         const ordem = ordens[proximo++];
         try {
-          total += await gerarUma(trabalho.id, ordem);
-          conferencias.push(conferirDepois(trabalho.id, ordem).catch(() => 0));
+          // Soma só depois do await: somar com o await na mesma linha lia o valor de
+          // antes e os trabalhadores em paralelo apagavam o custo um do outro.
+          const custo = await gerarUma(trabalho.id, ordem);
+          total += custo;
+          conferencias.push(conferirSemDerrubar(trabalho.id, ordem));
         } catch (e) {
           falhas.push(e);
           if (e instanceof ErroDaMesa && CODIGOS_QUE_PARAM_TUDO.indexOf(e.codigo) >= 0) parar.current = true;
@@ -561,7 +592,7 @@ function DetalheDoItem({
       soltar(ordem);
       throw e;
     }
-    const custoConferencia = await conferirDepois(trabalho.id, ordem);
+    const custoConferencia = await conferirSemDerrubar(trabalho.id, ordem);
     return { custo_usd: custo + custoConferencia };
   };
 
@@ -618,13 +649,18 @@ function DetalheDoItem({
       })
       .sort((a, b) => a.ordem - b.ordem);
     const versoes = (trabalho.cards || []).map((v) => ({ ...v, ordem: mapa[v.ordem] || v.ordem }));
-    const { error } = await (supabase as any)
+    const { data: gravadas, error } = await (supabase as any)
       .from("estudio_trabalhos")
       .update({ direcao: { ...trabalho.direcao, cards }, cards: versoes })
       .eq("id", trabalho.id)
-      .eq("atualizado_em", trabalho.atualizado_em);
+      .eq("atualizado_em", trabalho.atualizado_em)
+      .select("id");
     if (error) toast.error("Ordem não salva", { description: textoDoErro(error) });
-    else {
+    else if (!Array.isArray(gravadas) || gravadas.length === 0) {
+      // O trabalho mudou desde que a tela leu (outra ação, outra aba): nada foi gravado.
+      toast.error("Ordem não salva", { description: "O trabalho mudou enquanto isso. A tela foi relida; mude a ordem de novo." });
+      atualizar();
+    } else {
       if (selecionado !== null && mapa[selecionado]) setSelecionado(mapa[selecionado]);
       atualizar();
     }
@@ -634,20 +670,22 @@ function DetalheDoItem({
   const hashtagsSalvas = normalizarHashtags(trabalho?.hashtags || []);
   const legendaMudou = legenda !== (trabalho?.legenda || "") || hashtags.join(" ") !== hashtagsSalvas.join(" ");
 
-  /** Grava legenda e hashtags. Ao sair do campo grava sozinha, sem aviso. */
-  const salvarLegenda = async (silencioso = false) => {
-    if (!trabalho) return;
+  /** Grava legenda e hashtags. Ao sair do campo grava sozinha, sem aviso. Devolve se gravou. */
+  const salvarLegenda = async (silencioso = false): Promise<boolean> => {
+    if (!trabalho) return false;
     setSalvandoLegenda(true);
     const { error } = await (supabase as any)
       .from("estudio_trabalhos")
       .update({ legenda: legenda.trim() || null, hashtags })
       .eq("id", trabalho.id);
     setSalvandoLegenda(false);
-    if (error) toast.error("Legenda não salva", { description: textoDoErro(error) });
-    else {
-      if (!silencioso) toast.success("Legenda salva");
-      atualizar();
+    if (error) {
+      toast.error("Legenda não salva", { description: textoDoErro(error) });
+      return false;
     }
+    if (!silencioso) toast.success("Legenda salva");
+    atualizar();
+    return true;
   };
   const salvarAoSair = () => {
     if (legendaMudou && !salvandoLegenda && !entregue) void salvarLegenda(true);
@@ -669,7 +707,8 @@ function DetalheDoItem({
     setEntregando(true);
     setErroDoEnvio(null);
     try {
-      if (legendaMudou) await salvarLegenda(true);
+      // Legenda que não gravou: não entrega com a legenda antiga do banco.
+      if (legendaMudou && !(await salvarLegenda(true))) return;
       await chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: trabalho.id });
       if (tambemEnviar) {
         try {
@@ -938,7 +977,7 @@ function DetalheDoItem({
 
   const resumoDaPrancheta = (
     <span className="min-w-0 truncate">
-      {trabalho?.direcao?.origem === "roteiro" ? "do roteiro" : "do diretor"} · {ultimas.size} de {cardsDaDirecao.length} com arte
+      {trabalho?.direcao?.origem === "roteiro" ? "do roteiro" : "do diretor"} · {laminasComArte} de {cardsDaDirecao.length} com arte
       {infinito ? " · contínuo" : ""}
     </span>
   );
@@ -1162,6 +1201,9 @@ function DetalheDoItem({
                 trabalho_id: trabalho.id,
                 modelo_imagem_id: modeloImagem || undefined,
                 qualidade,
+                // Mantém o contínuo como está no trabalho: sem o campo, o
+                // servidor caía na sugestão do estrategista e religava.
+                carrossel_infinito: postUnico ? undefined : infinito,
               })
             }
             aoConcluir={() => {
@@ -1238,7 +1280,7 @@ function DetalheDoItem({
   const ferramentaEntrega = trabalho ? (
     <EstudioEntrega
       trabalho={trabalho}
-      laminasFeitas={ultimas.size}
+      laminasFeitas={laminasComArte}
       laminasTotal={cardsDaDirecao.length}
       legendaEscrita={!!legenda.trim()}
       ehDesign={ehDesign}

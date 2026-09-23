@@ -39,6 +39,8 @@ import { pastaDaFoto, pastasDoAcervo, useArvoreDoWorkspace } from "@/lib/mesa/pa
 const POR_GRUPO = 24;
 const TOKENS_ENTRADA_POR_IMAGEM = 1500;
 const TOKENS_SAIDA_POR_IMAGEM = 150;
+/** O servidor organiza no máximo 12 imagens por chamada (agente-contexto, MAX_CLASSIFICAR_POR_VEZ). */
+export const MAX_ORGANIZAR_POR_VEZ = 12;
 const SEM_CATEGORIA = "";
 
 type Agrupar = "categoria" | "pasta";
@@ -274,13 +276,18 @@ export default function ContextoImagens() {
                   tipo: "texto",
                   tokensEntrada: TOKENS_ENTRADA_POR_IMAGEM,
                   tokensSaida: TOKENS_SAIDA_POR_IMAGEM,
-                  vezes: semDescricao.length,
+                  vezes: Math.min(semDescricao.length, MAX_ORGANIZAR_POR_VEZ),
                 },
               ]}
               executar={() => chamarFuncao("agente-contexto", { acao: "acervo_classificar", client_id: clientId })}
               aoConcluir={(data) => {
                 const n = Number(data?.classificadas || 0);
-                avisarCustoReal(`${n} ${n === 1 ? "imagem organizada" : "imagens organizadas"}`, data, atualizarCusto);
+                const restantes = Number(data?.restantes || 0);
+                avisarCustoReal(
+                  `${n} ${n === 1 ? "imagem organizada" : "imagens organizadas"}${restantes > 0 ? `. Faltam ${restantes}: clique de novo para seguir` : ""}`,
+                  data,
+                  atualizarCusto,
+                );
                 invalidarAcervo(queryClient, clientId);
               }}
             />

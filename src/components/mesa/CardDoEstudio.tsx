@@ -262,6 +262,15 @@ export default function CardDoEstudio({
     },
   });
 
+  // O estúdio não grava conversa por trabalho (conversa_id fica vazio); o
+  // pedido de cada ajuste mora na própria versão (origem "ajuste",
+  // instrucao). Sem conversa, é de lá que saem os pedidos anteriores.
+  const pedidosDasVersoes = ordenadas
+    .filter((v) => v.origem === "ajuste" && !!(v.instrucao && v.instrucao.trim()))
+    .map((v) => ({ id: `v${v.versao}`, papel: "usuario", conteudo: `v${v.versao}: ${String(v.instrucao).trim()}` }));
+  const pedidosAnteriores: { id: string; papel: string; conteudo: string }[] =
+    pedidos.data && pedidos.data.length ? pedidos.data : pedidosDasVersoes;
+
   const salvarTexto = async () => {
     setSalvandoTexto(true);
     try {
@@ -363,6 +372,16 @@ export default function CardDoEstudio({
       {ultima && (
         <section ref={blocoDeAjuste} className="scroll-mt-2">
           <Rotulo>Ajustar esta lâmina</Rotulo>
+          {vista && vista.versao !== ultima.versao && (
+            // O servidor sempre ajusta a versão mais recente: quem olha uma
+            // anterior achava que o ajuste partiria da que está na tela.
+            <p className="mb-2 text-[11.5px] leading-snug text-muted-foreground" data-aviso="ajuste-parte-da-atual">
+              O ajuste parte da versão atual (v{ultima.versao}), não da v{vista.versao} que está na tela.{" "}
+              <button type="button" className="text-primary underline-offset-2 hover:underline" onClick={() => onVersaoVista(ultima.versao)}>
+                Ver a atual
+              </button>
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-background p-1" role="tablist" aria-label="Tipo de ajuste">
             {MODOS_DE_AJUSTE.map((m) => (
               <button
@@ -469,15 +488,15 @@ export default function CardDoEstudio({
             </div>
           )}
 
-          {(pedidos.data || []).length > 0 && (
+          {pedidosAnteriores.length > 0 && (
             <div className="mt-2">
               <button type="button" onClick={() => setPedidosAbertos((a) => !a)} aria-expanded={pedidosAbertos} className="flex h-7 items-center text-[11.5px] text-muted-foreground hover:text-foreground">
                 <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${pedidosAbertos ? "rotate-180" : ""}`} />
-                Pedidos anteriores ({(pedidos.data || []).length})
+                Pedidos anteriores ({pedidosAnteriores.length})
               </button>
               {pedidosAbertos && (
                 <ul className="mt-1 space-y-1.5">
-                  {(pedidos.data || []).slice(-6).map((m: any) => (
+                  {pedidosAnteriores.slice(-6).map((m) => (
                     <li
                       key={m.id}
                       className={`rounded-lg px-2.5 py-1.5 text-[12px] leading-relaxed [overflow-wrap:anywhere] ${m.papel === "usuario" ? "bg-primary/10 text-foreground" : "bg-secondary text-muted-foreground"}`}

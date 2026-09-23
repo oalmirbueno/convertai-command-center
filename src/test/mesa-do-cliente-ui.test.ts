@@ -127,7 +127,8 @@ describe("Gerar todas: até 3 ao mesmo tempo, uma por vez no carrossel contínuo
     const corpo = estudio.slice(estudio.indexOf("const gerarVarias = async"), estudio.indexOf("const preparar = async"));
     expect(corpo).toContain("CODIGOS_QUE_PARAM_TUDO.indexOf(e.codigo) >= 0) parar.current = true");
     const gerar = corpo.indexOf("await gerarUma(trabalho.id, ordem)");
-    const conferir = corpo.indexOf("conferirDepois(trabalho.id, ordem)");
+    // A conferência do lote passa por conferirSemDerrubar (avisa a falha sem derrubar a lâmina já gerada).
+    const conferir = corpo.indexOf("conferirSemDerrubar(trabalho.id, ordem)");
     expect(gerar).toBeGreaterThan(0);
     expect(conferir).toBeGreaterThan(gerar);
     expect(estudio).toContain('acao: "conferir_card", trabalho_id: trabalhoId, ordem');

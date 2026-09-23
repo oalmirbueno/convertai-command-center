@@ -1000,8 +1000,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
   // Contínuo decidido no começo: o pedido da tela vale; senão o que o trabalho já tinha; senão o do estrategista.
   const pedidoInfinito = typeof corpo.carrossel_infinito === "boolean"
     ? corpo.carrossel_infinito
-    : existente?.direcao.carrossel_infinito === true
-      ? true
+    : existente
+      ? existente.direcao.carrossel_infinito === true
       : item.itemProposta && typeof item.itemProposta.carrossel_infinito === "boolean"
         ? item.itemProposta.carrossel_infinito as boolean
         : null;
@@ -1604,7 +1604,13 @@ function usaPanorama(t: Trabalho, card: CardDirecao, provedor: string): boolean 
  * a cena, sem texto) e guarda as fatias em direcao.panorama.fundos. Um trecho
  * por vez; o trecho seguinte continua a partir do fundo da lâmina de ligação.
  */
-async function garantirFundoContinuo(ch: Chamador, t: Trabalho, ordem: number, kit: Kit): Promise<{ t: Trabalho; caminho: string; custo: number }> {
+async function garantirFundoContinuo(
+  ch: Chamador,
+  t: Trabalho,
+  ordem: number,
+  kit: Kit,
+  umPorVez = true,
+): Promise<{ t: Trabalho; caminho: string; custo: number; pendente?: boolean }> {
   const pronto = t.direcao.panorama?.fundos?.[String(ordem)];
   if (pronto) return { t, caminho: pronto, custo: 0 };
   const total = totalCards(t);
@@ -1612,10 +1618,17 @@ async function garantirFundoContinuo(ch: Chamador, t: Trabalho, ordem: number, k
   let atual = t;
   let custo = 0;
   // O trecho seguinte precisa do fundo da lâmina de ligação (do trecho anterior).
+  // Um panorama por chamada (cada um leva até ~2 min): o anterior sai primeiro e
+  // a tela chama de novo (preparar_fundo devolve pendente).
   if (inicio > 1 && !atual.direcao.panorama?.fundos?.[String(inicio)]) {
-    const antes = await garantirFundoContinuo(ch, atual, inicio, kit);
-    atual = antes.t;
-    custo += antes.custo;
+    if (!umPorVez) {
+      const antes = await garantirFundoContinuo(ch, atual, inicio, kit, false);
+      atual = antes.t;
+      custo += antes.custo;
+    } else {
+      const antes = await garantirFundoContinuo(ch, atual, inicio, kit, true);
+      return { ...antes, caminho: "", pendente: true };
+    }
   }
   const ligacao = inicio > 1 ? atual.direcao.panorama?.fundos?.[String(inicio)] ?? null : null;
   const k = fim - inicio + 1;
@@ -1671,7 +1684,8 @@ async function garantirFundoContinuo(ch: Chamador, t: Trabalho, ordem: number, k
     novos[String(o)] = caminho;
   }
   const gravado = await mutarTrabalho(atual.id, (x) => ({
-    direcao: { ...x.direcao, panorama: { fundos: { ...(x.direcao.panorama?.fundos ?? {}), ...novos } } },
+    // Fatia já gravada vence: outra lâmina pode já estar usando.
+    direcao: { ...x.direcao, panorama: { fundos: { ...novos, ...(x.direcao.panorama?.fundos ?? {}) } } },
     custo_usd: arred(num(x.custo_usd) + img.custoUsd),
   }));
   const caminho = gravado.direcao.panorama?.fundos?.[String(ordem)];
@@ -1689,7 +1703,7 @@ async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
   const temFotoPropria = !!card.imagens_ids?.length || !!(card.fotos_livres ?? []).length;
   if (!usaPanorama(t, card, modelo.provedor) || temFotoPropria) return json({ trabalho: t, custo_usd: 0, fundo: null });
   const r = await garantirFundoContinuo(ch, t, ordem, await lerKit(t.client_id));
-  return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.caminho });
+  return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.pendente ? null : r.caminho, pendente: !!r.pendente });
 }
 
 /**
@@ -1735,6 +1749,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   let custoFundo = 0;
   if (panorama) {
     const f = await garantirFundoContinuo(ch, t, ordem, kit);
+    if (f.pendente) {
+      throw new ErroEstudio(409, "fundo_pendente", "O fundo contínuo das lâminas anteriores ainda está sendo feito. Gere de novo em seguida.", { custo_usd: f.custo });
+    }
     custoFundo = f.custo;
     baseFoto = await baixar("mesa", f.caminho);
     resumoDoFundo = "fundo panorâmico contínuo do carrossel, já pronto: o texto e a logo entram por cima, sem mudar a cena";
@@ -1980,7 +1997,7 @@ async function gravarVersao(
     url: await urlAssinada(caminho),
     verificacao: nova.verificacao,
     proximo_passo: "conferir_card",
-    custo_usd: custo,
+    custo_usd: arred(custo + num(meta.custoExtraUsd)),
     saldo_usd: img.saldoUsd,
     status: gravado.status,
   });
@@ -2638,7 +2655,7 @@ async function lerReferencia(ch: Chamador, corpo: Record<string, unknown>) {
   if (!UUID.test(id)) throw new ErroEstudio(400, "referencia_invalida", "Referência inválida.");
   const { data } = await servico()
     .from("cliente_referencias")
-    .select("id, client_id, origem, workspace_node_id, url_origem, storage_path, leitura, tags")
+    .select("id, client_id, origem, workspace_node_id, url_origem, storage_path, file_id, papel, leitura, tags")
     .eq("id", id)
     .maybeSingle();
   const ref = data as Referencia | null;

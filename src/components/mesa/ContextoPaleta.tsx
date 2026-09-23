@@ -44,8 +44,11 @@ export function textoSobre(hex: string): "#111111" | "#FFFFFF" {
   return 1.05 / (l + 0.05) >= (l + 0.05) / 0.05 ? "#FFFFFF" : "#111111";
 }
 
-const ROTULO_DO_PAPEL: Record<string, string> = {
+export const ROTULO_DO_PAPEL: Record<string, string> = {
   principal: "Principal",
+  // Grafia que o agente de contexto grava (agente-contexto, montar).
+  primaria: "Principal",
+  "primária": "Principal",
   secundaria: "Secundária",
   destaque: "Destaque",
   fundo: "Fundo",

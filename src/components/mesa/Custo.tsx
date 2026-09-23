@@ -211,6 +211,9 @@ export function BotaoComCusto({
       }
       aoConcluir?.(data, custo);
     } catch (e) {
+      // Falha depois de a IA responder também é cobrada (ex.: detalhar
+      // parcial, proposta não gravada): o saldo da barra é relido igual.
+      mesa.atualizarCusto();
       avisarErro(e, titulo);
     } finally {
       setRodando(false);

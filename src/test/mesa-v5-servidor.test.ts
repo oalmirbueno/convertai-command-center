@@ -136,3 +136,36 @@ describe("refazer que refaz (dono, 23/09 noite)", () => {
     expect(ler("src/components/AppLayout.tsx")).toContain('location.pathname.indexOf("/mesa") === 0');
   });
 });
+
+describe("auditoria do servidor (23/09 noite)", () => {
+  const contexto = ler("supabase/functions/agente-contexto/index.ts");
+  const compartilhado = ler("supabase/functions/_shared/contexto-cliente.ts");
+  it("conversa do agente de contexto grava com client_id e confere o erro", () => {
+    expect(contexto).toContain('{ conversa_id: conversaId, client_id: clientId, papel: "usuario"');
+    expect(contexto).toContain('console.error("agente-contexto: conversa nao gravada"');
+  });
+  it("atualizar o contexto não apaga o que a equipe ensinou (a menos que venha forcar)", () => {
+    expect(contexto).toContain("const mesclado: ContextoConsolidado = forcar || !antigo ? contexto : {");
+    expect(contexto).toContain("contexto: mesclado,");
+  });
+  it("logo gravada por caminho conta e SVG não é oferecido", () => {
+    expect(compartilhado).toContain("temLogo: !!(k?.logo_path || k?.logo_file_id)");
+    expect(compartilhado).toContain('!/svg/i.test(f.mime_type || "")');
+  });
+  it("estúdio: ler referência de Arquivos traz file_id; contínuo desligado não religa; custo inteiro", () => {
+    expect(corpoDe(estudio, "lerReferencia")).toContain("file_id, papel, leitura");
+    expect(estudio).toContain("? existente.direcao.carrossel_infinito === true");
+    expect(corpoDe(estudio, "gravarVersao")).toContain("custo_usd: arred(custo + num(meta.custoExtraUsd))");
+  });
+  it("panorama: fatia gravada vence e um trecho por chamada", () => {
+    const f = corpoDe(estudio, "garantirFundoContinuo");
+    expect(f).toContain("{ ...novos, ...(x.direcao.panorama?.fundos ?? {}) }");
+    expect(f).toContain('return { ...antes, caminho: "", pendente: true };');
+    expect(ler("src/components/mesa/AbaEstudio.tsx")).toContain("if (!f || !f.pendente) break;");
+  });
+  it("campanha: tema_id não repete e a conversa mais recente é a usada", () => {
+    const c = corpoDe(calendario, "campanhaConversar");
+    expect(c).toContain('do item.tema_id = `c${++seq}`; while (usados.has(item.tema_id));');
+    expect(corpoDe(calendario, "conversaDaCampanha")).toContain('.order("criado_em", { ascending: false })');
+  });
+});

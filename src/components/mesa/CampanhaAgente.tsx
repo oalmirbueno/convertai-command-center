@@ -13,7 +13,9 @@ import {
   campanhaConversar,
   chavesDaCampanha,
   lerConversaDaCampanha,
+  marcarPedidoDaCampanha,
   partesDaConversaDaCampanha,
+  usePedidoDaCampanha,
 } from "./campanhasApi";
 
 /**
@@ -75,10 +77,13 @@ export default function CampanhaAgente({
   const queryClient = useQueryClient();
   const anexos = useAnexos(clientId);
   const [texto, setTexto] = useState("");
-  const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
+  // Fora do componente: remontar (gaveta fechada, outra campanha e volta) não
+  // libera um segundo pedido pago enquanto o primeiro trabalha.
+  const envio = usePedidoDaCampanha(campanha.id);
   const campoRef = useRef<HTMLTextAreaElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
   const botaoRef = useRef<HTMLSpanElement>(null);
+  const enviados = useRef<string[]>([]);
   const chave = chavesDaCampanha.conversa(clientId, campanha.id);
 
   const conversa = useQuery({ queryKey: chave, queryFn: () => lerConversaDaCampanha(campanha.id) });
@@ -110,7 +115,9 @@ export default function CampanhaAgente({
   const enviar = async () => {
     const mensagem = texto.trim();
     const caminhos = anexos.caminhos.slice();
-    setEnvio({ mensagem, desde: Date.now() });
+    enviados.current = caminhos;
+    const campanhaId = campanha.id;
+    marcarPedidoDaCampanha(campanhaId, { mensagem, desde: Date.now() });
     if (onAndamento) onAndamento(true);
     setTexto("");
     try {
@@ -123,13 +130,13 @@ export default function CampanhaAgente({
       setTexto((t) => t || mensagem);
       throw e;
     } finally {
-      setEnvio(null);
+      marcarPedidoDaCampanha(campanhaId, null);
       if (onAndamento) onAndamento(false);
     }
   };
 
   const concluir = () => {
-    anexos.limpar();
+    anexos.tirarEnviados(enviados.current);
   };
 
   const podeEnviar = !!texto.trim() && !anexos.subindo && !envio;

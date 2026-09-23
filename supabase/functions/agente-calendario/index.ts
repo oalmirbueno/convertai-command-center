@@ -2229,6 +2229,7 @@ async function conversaDaCampanha(servico: SupabaseClient, c: Campanha, userId: 
     .eq("agente", AGENTE)
     .eq("referencia_tipo", REF_CAMPANHA)
     .eq("referencia_id", c.id)
+    .order("criado_em", { ascending: false })
     .limit(1);
   const existente = ((data as { id: string }[] | null) ?? [])[0]?.id;
   if (existente) return existente;
@@ -2329,11 +2330,14 @@ ${REGRAS_DOS_ITENS}`;
   let propostaFinal = proposta;
   if (podeMudarItens && proposta && Array.isArray(r.itens) && uteis.length) {
     const tarefaDoTema = new Map(proposta.itens.filter((i) => i.task_id).map((i) => [i.tema_id, i.task_id]));
-    let seq = proposta.itens.length;
+    // Próximo id a partir do maior cN que já existiu (tirar um conteúdo não reaproveita id).
+    let seq = Math.max(proposta.itens.length, ...proposta.itens.map((i) => Number(String(i.tema_id).replace(/^c/, "")) || 0));
     const usados = new Set<string>();
     const itens = r.itens.slice(0, 12).map((bruto) => {
       const item = normalizarItem(bruto, uteis);
-      if (!item.tema_id || usados.has(item.tema_id)) item.tema_id = `c${++seq}`;
+      if (!item.tema_id || usados.has(item.tema_id)) {
+        do item.tema_id = `c${++seq}`; while (usados.has(item.tema_id));
+      }
       usados.add(item.tema_id);
       item.campanha_id = c.id;
       if (tarefaDoTema.has(item.tema_id)) item.task_id = tarefaDoTema.get(item.tema_id) ?? null;
@@ -2345,7 +2349,7 @@ ${REGRAS_DOS_ITENS}`;
   const resposta = texto(r.resposta, 2000) || "Campanha atualizada.";
   await registrarMensagens(servico, conversaId, c.client_id, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.caminhos.map((x) => ({ caminho: x })) },
-    { papel: "agente", conteudo: resposta, uso_id: s.usoId },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: propostaFinal && propostaFinal !== proposta ? [{ proposta_id: propostaFinal.id }] : [] },
   ]);
   return json({ campanha, proposta: propostaFinal, resposta, conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }

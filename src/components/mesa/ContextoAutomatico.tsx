@@ -557,7 +557,10 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
     if (Array.isArray(s.paleta) && s.paleta.length) limpas.paleta = s.paleta;
     if (temTexto(s.estilo)) limpas.estilo = s.estilo;
     if (temTexto(s.regras)) limpas.regras = s.regras;
-    setSugestoesPorCliente((p) => ({ ...p, [alvo]: limpas }));
+    // Sem montagem nova (só leu as referências pendentes): as sugestões que
+    // ainda estão na tela continuam.
+    const semMontagem = !!(data && data.ja_atualizado);
+    if (!semMontagem) setSugestoesPorCliente((p) => ({ ...p, [alvo]: limpas }));
     const f = data && data.fontes_escolhidas;
     if (f && temTexto(f.titulo)) {
       toast.success("Fontes escolhidas da biblioteca", {
@@ -600,9 +603,12 @@ export default function ContextoAutomatico({ onIrPara }: { onIrPara?: (parte: Pa
       void queryClient.invalidateQueries({ queryKey: chaveDasReferencias(clientId) });
     }
     if (relidos.current[clientId]) return;
-    relidos.current[clientId] = true;
     const alvo = clientId;
+    // A marca entra só quando a releitura roda: os dados chegam primeiro do
+    // cache do navegador e de novo do banco logo depois, e cada chegada
+    // cancela o relógio anterior. Marcando antes, a releitura nunca rodava.
     const t = window.setTimeout(() => {
+      relidos.current[alvo] = true;
       void queryClient.invalidateQueries({ queryKey: chaveDasReferencias(alvo) });
       void queryClient.invalidateQueries({ queryKey: chaveDoAcervo(alvo) });
     }, 6000);

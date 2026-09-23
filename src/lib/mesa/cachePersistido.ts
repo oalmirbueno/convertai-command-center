@@ -31,8 +31,11 @@ const VERSAO = typeof __APP_BUILD_ID__ !== "undefined" && __APP_BUILD_ID__ ? __A
 
 /** Raízes de chave que vão para o navegador. */
 const RAIZES = ["mesa", "clients"];
-/** Dentro da Mesa, nunca: URL assinada (vence) e estimativa (conta de tela). */
-const NUNCA_NA_MESA = ["url", "estimativa"];
+/**
+ * Dentro da Mesa, nunca: URL assinada (vence), em uma ("url") ou em lote
+ * ("urls", useUrlsAssinadas), e estimativa (conta de tela).
+ */
+const NUNCA_NA_MESA = ["url", "urls", "estimativa"];
 const NIVEIS = 3;
 
 /**

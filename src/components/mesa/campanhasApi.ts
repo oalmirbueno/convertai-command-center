@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, padraoPara, saidaPorRaciocinio, TAMANHOS, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
@@ -17,6 +18,46 @@ export const chavesDaCampanha = {
   conversa: (clientId: string, campanhaId: string) => ["mesa", "campanha-conversa", clientId, campanhaId] as const,
   contagem: (clientId: string, ids: string[]) => ["mesa", "campanhas-contagem", clientId, ids.join(",")] as const,
 };
+
+// ------------------------------------------------------------------ pedido em curso
+
+/** Pedido ao agente da campanha que ainda não voltou. */
+export interface PedidoDaCampanha {
+  mensagem: string;
+  desde: number;
+}
+
+/**
+ * Pedido em curso por campanha, fora do componente. Fechar a gaveta, trocar
+ * de campanha e voltar, ou mudar a largura da tela remonta a conversa: com o
+ * andamento só no componente, o "Trabalhando" sumia, o Enviar voltava a valer
+ * e um segundo pedido pago saía na mesma campanha.
+ */
+const pedidosEmCurso: Record<string, PedidoDaCampanha | undefined> = {};
+const ouvintesDosPedidos: (() => void)[] = [];
+
+export function marcarPedidoDaCampanha(campanhaId: string, pedido: PedidoDaCampanha | null) {
+  if (pedido) pedidosEmCurso[campanhaId] = pedido;
+  else delete pedidosEmCurso[campanhaId];
+  ouvintesDosPedidos.slice().forEach((f) => f());
+}
+
+export function pedidoDaCampanha(campanhaId: string | null | undefined): PedidoDaCampanha | null {
+  return campanhaId ? pedidosEmCurso[campanhaId] || null : null;
+}
+
+function ouvirPedidos(f: () => void) {
+  ouvintesDosPedidos.push(f);
+  return () => {
+    const i = ouvintesDosPedidos.indexOf(f);
+    if (i >= 0) ouvintesDosPedidos.splice(i, 1);
+  };
+}
+
+/** O pedido em curso desta campanha (null: nenhum). Sobrevive a remontar a tela. */
+export function usePedidoDaCampanha(campanhaId: string | null | undefined): PedidoDaCampanha | null {
+  return useSyncExternalStore(ouvirPedidos, () => pedidoDaCampanha(campanhaId));
+}
 
 export interface ConversaDaCampanha {
   conversaId: string | null;

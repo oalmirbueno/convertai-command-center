@@ -60,8 +60,38 @@ export function Ditado({
   const finais = useRef("");
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  /** Último texto que o ditado escreveu no campo (null: não está ouvindo). */
+  const emitido = useRef<string | null>(null);
+  const escrever = (texto: string) => {
+    emitido.current = texto;
+    onChangeRef.current(texto);
+  };
 
-  useEffect(() => () => rec.current?.abort(), []);
+  /** Solta o reconhecedor sem deixar nenhum retorno dele escrever no campo. */
+  const soltar = () => {
+    const r = rec.current;
+    rec.current = null;
+    emitido.current = null;
+    if (!r) return;
+    r.onresult = null;
+    r.onerror = null;
+    r.onend = null;
+    try {
+      r.abort();
+    } catch {
+      /* já parado */
+    }
+  };
+
+  useEffect(() => soltar, []);
+
+  // O campo mudou por fora enquanto ouvia (a mensagem foi enviada e o campo
+  // limpo, ou a pessoa digitou): o ditado para e não devolve o texto antigo.
+  useEffect(() => {
+    if (!rec.current || emitido.current === null || valor === emitido.current) return;
+    soltar();
+    setOuvindo(false);
+  }, [valor]);
 
   const Construtor = construtor();
   if (!Construtor) return null;
@@ -78,6 +108,7 @@ export function Ditado({
     r.interimResults = true;
     base.current = valor;
     finais.current = "";
+    emitido.current = valor;
     r.onresult = (e) => {
       let parcial = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -85,17 +116,19 @@ export function Ditado({
         if (e.results[i].isFinal) finais.current = `${finais.current} ${trecho}`;
         else parcial += ` ${trecho}`;
       }
-      onChangeRef.current(juntarDitado(base.current, `${finais.current} ${parcial}`));
+      escrever(juntarDitado(base.current, `${finais.current} ${parcial}`));
     };
     r.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") setErro("Libere o microfone para este site nas permissões do navegador.");
       else if (e.error && e.error !== "no-speech" && e.error !== "aborted") setErro("O ditado parou. Toque no microfone de novo.");
     };
     r.onend = () => {
+      if (rec.current !== r) return;
       setOuvindo(false);
       rec.current = null;
       // Texto final limpo, sem o trecho parcial que ficou no meio.
-      onChangeRef.current(juntarDitado(base.current, finais.current));
+      escrever(juntarDitado(base.current, finais.current));
+      emitido.current = null;
     };
     rec.current = r;
     try {
@@ -104,6 +137,7 @@ export function Ditado({
     } catch {
       setErro("Não foi possível abrir o microfone.");
       rec.current = null;
+      emitido.current = null;
     }
   };
 

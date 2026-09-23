@@ -99,9 +99,23 @@ export function PromptDoCliente() {
       return;
     }
     setSalvando(true);
+    const anterior = ativo ? ativo.id : null;
+    let desligou = false;
     try {
-      const proxima = (prompts.data?.versoes[0]?.versao || 0) + 1;
+      // Número da versão lido do banco agora: a lista da tela pode estar
+      // velha (outra aba salvou) e a versão repetida esbarra no índice único.
+      const { data: ultima, error: erroUltima } = await (supabase as any)
+        .from("agente_prompts")
+        .select("versao")
+        .eq("agente", agente)
+        .eq("client_id", clientId)
+        .order("versao", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (erroUltima) throw erroUltima;
+      const proxima = Math.max(Number(ultima?.versao) || 0, prompts.data?.versoes[0]?.versao || 0) + 1;
       await desligarAtual();
+      desligou = true;
       const { error } = await (supabase as any).from("agente_prompts").insert({
         agente,
         client_id: clientId,
@@ -114,6 +128,10 @@ export function PromptDoCliente() {
       toast.success(`Versão ${proxima} salva e em uso`);
       atualizar();
     } catch (e) {
+      // A nova não entrou: a versão que estava em uso volta a valer.
+      if (desligou && anterior) {
+        await (supabase as any).from("agente_prompts").update({ ativo: true }).eq("id", anterior);
+      }
       toast.error("Complemento não salvo", { description: textoDoErro(e) });
       atualizar();
     } finally {
@@ -123,12 +141,18 @@ export function PromptDoCliente() {
 
   const usarVersao = async (p: Prompt) => {
     setSalvando(true);
+    const anterior = ativo ? ativo.id : null;
+    let desligou = false;
     try {
       await desligarAtual();
+      desligou = true;
       const { error } = await (supabase as any).from("agente_prompts").update({ ativo: true }).eq("id", p.id);
       if (error) throw error;
       toast.success(`Versão ${p.versao} em uso`);
     } catch (e) {
+      if (desligou && anterior) {
+        await (supabase as any).from("agente_prompts").update({ ativo: true }).eq("id", anterior);
+      }
       toast.error("Não foi possível trocar a versão", { description: textoDoErro(e) });
     } finally {
       setSalvando(false);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,23 +27,48 @@ const PAPEIS_DA_COR = [
   { valor: "texto", rotulo: "Texto" },
 ];
 
+/**
+ * O agente de contexto grava a cor principal como "primaria" (é o nome que o
+ * diretor de arte procura). Na tela, as duas grafias são a mesma opção.
+ */
+export function papelNaTela(papel: string): string {
+  const p = String(papel || "").toLowerCase();
+  return p === "primaria" || p === "primária" ? "principal" : papel;
+}
+
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
 export default function ContextoMarca() {
   const { clientId, userId } = useMesa();
   const invalidar = useInvalidarContexto();
-  const [paleta, setPaleta] = useState<Cor[]>([]);
-  const [estilo, setEstilo] = useState("");
-  const [regras, setRegras] = useState("");
+  const [paleta, setPaletaBruta] = useState<Cor[]>([]);
+  const [estilo, setEstiloBruto] = useState("");
+  const [regras, setRegrasBrutas] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // Editou e ainda não salvou: o kit relido (agente ao lado, sugestão
+  // aplicada) não apaga o que está sendo digitado.
+  const sujo = useRef(false);
+  const setPaleta: typeof setPaletaBruta = (v) => {
+    sujo.current = true;
+    setPaletaBruta(v);
+  };
+  const setEstilo = (v: string) => {
+    sujo.current = true;
+    setEstiloBruto(v);
+  };
+  const setRegras = (v: string) => {
+    sujo.current = true;
+    setRegrasBrutas(v);
+  };
 
   const kit = useKitDoCliente(clientId);
 
   useEffect(() => {
+    if (sujo.current) return;
     const k = kit.data;
-    setPaleta(Array.isArray(k?.paleta) ? (k!.paleta as Cor[]) : []);
-    setEstilo(k?.estilo || "");
-    setRegras(k?.regras || "");
+    setPaletaBruta(Array.isArray(k?.paleta) ? (k!.paleta as Cor[]) : []);
+    setEstiloBruto(k?.estilo || "");
+    setRegrasBrutas(k?.regras || "");
   }, [kit.data]);
 
   const mudarCor = (i: number, campo: keyof Cor, valor: string) =>
@@ -70,6 +95,7 @@ export default function ContextoMarca() {
         { onConflict: "client_id" },
       );
       if (error) throw error;
+      sujo.current = false;
       toast.success("Kit de marca salvo");
       invalidar(clientId);
     } catch (e) {
@@ -112,7 +138,7 @@ export default function ContextoMarca() {
               </Button>
               <Input value={cor.hex} onChange={(e) => mudarCor(i, "hex", e.target.value)} className="col-span-3 h-9 font-mono text-xs sm:col-span-1" />
               <div className="col-span-3 min-w-0 sm:col-span-1">
-                <Select value={cor.papel} onValueChange={(v) => mudarCor(i, "papel", v)}>
+                <Select value={papelNaTela(cor.papel)} onValueChange={(v) => mudarCor(i, "papel", v)}>
                   <SelectTrigger className="h-9 text-[12.5px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAPEIS_DA_COR.map((p) => <SelectItem key={p.valor} value={p.valor}>{p.rotulo}</SelectItem>)}

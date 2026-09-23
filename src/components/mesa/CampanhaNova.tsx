@@ -109,7 +109,9 @@ export default function CampanhaNova({
             </p>
           </div>
           {onCancelar && (
-            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 shrink-0" onClick={onCancelar}>
+            // Criando: a chamada já foi paga e segue no servidor; cancelar aqui
+            // não a pararia e, ao voltar, puxaria a tela para a campanha nova.
+            <Button type="button" size="sm" variant="ghost" className="ml-2 h-8 shrink-0" onClick={onCancelar} disabled={desde !== null}>
               Cancelar
             </Button>
           )}

@@ -62,9 +62,13 @@ const TOM: Record<Tom, string> = {
 };
 
 /** A arte tem todos os cards da direção gerados? */
-function artePronta(t: Trabalho): boolean {
-  const total = t.direcao?.cards?.length || 0;
-  return total > 0 && ultimasVersoes(t.cards).size >= total;
+export function artePronta(t: Pick<Trabalho, "direcao" | "cards">): boolean {
+  const cards = t.direcao?.cards || [];
+  if (!cards.length) return false;
+  // Conta só as lâminas da direção atual: versão de uma ordem que saiu (nova
+  // direção com menos lâminas) não completa a arte.
+  const ultimas = ultimasVersoes(t.cards);
+  return cards.every((c) => ultimas.has(c.ordem));
 }
 
 /** Entregue em Arquivos e ainda não enviada (ou reentregue depois de um ajuste). */

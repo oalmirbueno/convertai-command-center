@@ -43,6 +43,29 @@ const PAPEIS_DA_TELA: { valor: string; rotulo: string; dica: string; tipo: "text
 const rotuloDoPapel = (p: string) =>
   (PAPEIS_DA_TELA.find((x) => x.valor === p) || PAPEIS.find((x) => x.valor === p) || { rotulo: p }).rotulo;
 
+
+/**
+ * O ia-gateway devolve { ok, openrouter: { novos, ... } | { erro }, openai,
+ * anthropic }: a contagem mora em cada provedor, não na raiz. Lida só na raiz,
+ * a contagem nunca aparecia e ok:false virava "Catálogo conferido".
+ */
+export function resumoDaSincronizacao(data: any): { falhou: boolean; erro: string | null; novos: number | null } {
+  const d = data && typeof data === "object" ? data : {};
+  const erroDoOpenRouter = d.openrouter && typeof d.openrouter.erro === "string" ? String(d.openrouter.erro) : null;
+  if (d.ok === false) return { falhou: true, erro: erroDoOpenRouter, novos: null };
+  let novos: number | null = null;
+  const somar = (v: unknown) => {
+    const n = Number(v);
+    if (v !== undefined && v !== null && v !== "" && isFinite(n)) novos = (novos || 0) + n;
+  };
+  somar(d.novos ?? d.inseridos);
+  for (const p of ["openrouter", "openai", "anthropic"]) {
+    const x = d[p];
+    if (x && typeof x === "object") somar(x.novos);
+  }
+  return { falhou: false, erro: null, novos };
+}
+
 export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean; onOpenChange: (v: boolean) => void }) {
   const queryClient = useQueryClient();
   const [busca, setBusca] = useState("");
@@ -86,10 +109,14 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
     setSincronizando(true);
     try {
       const data = await chamarFuncao<any>("ia-gateway", { acao: "sincronizar_catalogo" });
-      const novos = Number(data?.novos ?? data?.inseridos ?? NaN);
-      toast.success("Catálogo conferido", {
-        description: Number.isFinite(novos) ? `${novos} modelo(s) novo(s) chegaram.` : "Os modelos dos provedores foram conferidos.",
-      });
+      const r = resumoDaSincronizacao(data);
+      if (r.falhou) {
+        toast.error("O catálogo não foi conferido", { description: r.erro || "O OpenRouter não respondeu. Tente de novo em instantes." });
+      } else {
+        toast.success("Catálogo conferido", {
+          description: r.novos !== null ? `${r.novos} modelo(s) novo(s) chegaram.` : "Os modelos dos provedores foram conferidos.",
+        });
+      }
       atualizar();
     } catch (e) {
       toast.error("Não foi possível buscar modelos", { description: textoDoErro(e) });
@@ -118,18 +145,20 @@ export default function ModelosDeIa({ aberto, onOpenChange }: { aberto: boolean;
   const definirPadrao = async (papel: string, modeloId: string) => {
     setSalvando(`padrao-${papel}`);
     try {
-      const antigos = modelos.filter((m) => m.id !== modeloId && (m.padrao_para || []).indexOf(papel) >= 0);
-      for (const m of antigos) {
-        const { error } = await (supabase as any)
-          .from("ia_modelos")
-          .update({ padrao_para: (m.padrao_para || []).filter((p) => p !== papel) })
-          .eq("id", m.id);
-        if (error) throw error;
-      }
+      // Primeiro o novo padrão, depois tira dos antigos: se algo falhar no
+      // meio, o papel fica com dois padrões por um instante, nunca sem nenhum.
       const alvo = modelos.find((m) => m.id === modeloId);
       const lista = (alvo?.padrao_para || []).filter((p) => p !== papel).concat([papel]);
       const { error } = await (supabase as any).from("ia_modelos").update({ padrao_para: lista }).eq("id", modeloId);
       if (error) throw error;
+      const antigos = modelos.filter((m) => m.id !== modeloId && (m.padrao_para || []).indexOf(papel) >= 0);
+      for (const m of antigos) {
+        const { error: erroAntigo } = await (supabase as any)
+          .from("ia_modelos")
+          .update({ padrao_para: (m.padrao_para || []).filter((p) => p !== papel) })
+          .eq("id", m.id);
+        if (erroAntigo) throw erroAntigo;
+      }
       toast.success("Padrão salvo");
       atualizar();
     } catch (e) {

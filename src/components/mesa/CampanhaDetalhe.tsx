@@ -20,7 +20,7 @@ import {
   salvarReferenciasDaCampanha,
   type Campanha,
 } from "./mesaV4Api";
-import { aplicarRespostaDaCampanha, trocarCampanhaNoCache } from "./campanhasApi";
+import { aplicarRespostaDaCampanha, marcarPedidoDaCampanha, trocarCampanhaNoCache, usePedidoDaCampanha } from "./campanhasApi";
 
 /**
  * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
@@ -121,16 +121,23 @@ export default function CampanhaDetalhe({
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
-  const [seloDesde, setSeloDesde] = useState<number | null>(null);
+  // Selo em desenho guardado fora do componente (chave "selo:<id>"): trocar de
+  // campanha e voltar não libera um segundo desenho pago no meio do primeiro.
+  const seloEmCurso = usePedidoDaCampanha(`selo:${campanha.id}`);
+  const seloDesde = seloEmCurso ? seloEmCurso.desde : null;
   const [seloAberto, setSeloAberto] = useState(false);
   const [galeria, setGaleria] = useState(false);
   const [fechadas, setFechadas] = useState<IdDaSecao[]>(lerFechadas);
   const [referencias, setReferencias] = useState<string[]>(campanha.referencias_ids || []);
   const [salvandoRefs, setSalvandoRefs] = useState(0);
   const fila = useRef<Promise<void>>(Promise.resolve());
+  /** Última lista gravada no banco e a última pedida (a última vence). */
+  const refsSalvas = useRef<string[]>(campanha.referencias_ids || []);
+  const refsPedidas = useRef<string[] | null>(null);
 
   useEffect(() => {
     setReferencias(campanha.referencias_ids || []);
+    refsSalvas.current = campanha.referencias_ids || [];
     setGaleria(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campanha.id]);
@@ -160,13 +167,21 @@ export default function CampanhaDetalhe({
   /** Grava a lista inteira; as gravações seguem em fila, a última vence. */
   const gravarReferencias = (lista: string[]) => {
     setReferencias(lista);
+    refsPedidas.current = lista;
     trocarCampanhaNoCache(queryClient, clientId, { ...campanha, referencias_ids: lista });
     setSalvandoRefs((n) => n + 1);
     fila.current = fila.current.then(async () => {
       try {
         await salvarReferenciasDaCampanha(campanha.id, lista);
+        refsSalvas.current = lista;
       } catch (e) {
         toast.error("Referências não salvas", { description: textoDoErro(e) });
+        // A tela volta ao que está gravado (se não veio outra escolha depois,
+        // que ainda vai tentar gravar): antes ficava mostrando a lista que falhou.
+        if (refsPedidas.current === lista) {
+          setReferencias(refsSalvas.current);
+          trocarCampanhaNoCache(queryClient, clientId, { ...campanha, referencias_ids: refsSalvas.current });
+        }
         void queryClient.invalidateQueries({ queryKey: chaves.campanhas(clientId) });
       } finally {
         setSalvandoRefs((n) => n - 1);
@@ -175,11 +190,12 @@ export default function CampanhaDetalhe({
   };
 
   const desenharSelo = async () => {
-    setSeloDesde(Date.now());
+    const chaveDoSelo = `selo:${campanha.id}`;
+    marcarPedidoDaCampanha(chaveDoSelo, { mensagem: "selo", desde: Date.now() });
     try {
       return await campanhaSelo(campanha.id);
     } finally {
-      setSeloDesde(null);
+      marcarPedidoDaCampanha(chaveDoSelo, null);
     }
   };
 

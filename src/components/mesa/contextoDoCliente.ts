@@ -87,6 +87,8 @@ export interface RespostaDoMontar {
   custo_usd: number | null;
   saldo_usd: number | null;
   reserva_usada: string | null;
+  /** Sem fonte nova: não montou de novo, só leu as referências pendentes. */
+  ja_atualizado?: boolean;
 }
 
 export interface RespostaDaConversa {

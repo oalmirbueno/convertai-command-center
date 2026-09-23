@@ -150,7 +150,8 @@ export async function candidatosALogo(db: SupabaseClient, clientId: string): Pro
   ]);
   const saida: CandidatoLogo[] = [];
   for (const f of (arquivos.data as { id: string; file_name: string; mime_type: string | null }[] | null) ?? []) {
-    if (MIME_IMAGEM.test(f.mime_type || "") || NOME_IMAGEM.test(f.file_name) || /svg/i.test(f.mime_type || "")) {
+    // SVG fica de fora: definir_logo recusa (415) e o gerador não lê vetor.
+    if ((MIME_IMAGEM.test(f.mime_type || "") || NOME_IMAGEM.test(f.file_name)) && !/svg/i.test(f.mime_type || "") && !/\.svg$/i.test(f.file_name)) {
       saida.push({ origem: "arquivo", id: f.id, nome: f.file_name });
     }
   }
@@ -253,11 +254,11 @@ export async function lerMarcaParaDirecao(db: SupabaseClient, clientId: string):
   temLogo: boolean;
 }> {
   const [kit, fontes, perfil] = await Promise.all([
-    db.from("cliente_kit_marca").select("paleta, logo_file_id, estilo, regras, contexto").eq("client_id", clientId).maybeSingle(),
+    db.from("cliente_kit_marca").select("paleta, logo_file_id, logo_path, estilo, regras, contexto").eq("client_id", clientId).maybeSingle(),
     db.from("cliente_fontes").select("nome, papel").eq("client_id", clientId),
     db.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
   ]);
-  const k = kit.data as { paleta: unknown; logo_file_id: string | null; estilo: string | null; regras: string | null; contexto: ContextoConsolidado | null } | null;
+  const k = kit.data as { paleta: unknown; logo_file_id: string | null; logo_path: string | null; estilo: string | null; regras: string | null; contexto: ContextoConsolidado | null } | null;
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
   return {
     nomeCliente: txt(p?.company_name || p?.full_name || "cliente", 120),
@@ -267,7 +268,8 @@ export async function lerMarcaParaDirecao(db: SupabaseClient, clientId: string):
     fontes: ((fontes.data as { nome: string; papel: string }[] | null) ?? []),
     tipografiaCitada: k?.contexto?.tipografia ?? null,
     tomDeVoz: k?.contexto?.tom_de_voz ?? null,
-    temLogo: !!k?.logo_file_id,
+    // definir_logo grava logo_path; logo_file_id é o caminho antigo.
+    temLogo: !!(k?.logo_path || k?.logo_file_id),
   };
 }
 

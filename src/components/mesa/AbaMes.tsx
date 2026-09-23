@@ -27,7 +27,7 @@ import AgendaDoMes from "./AgendaDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
-import { useMidia } from "./mesaV4Api";
+import { atualizarAgenda, useMidia } from "./mesaV4Api";
 import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
@@ -298,6 +298,9 @@ function PlanejarComEstrategista() {
         .select("*")
         .eq("client_id", clientId)
         .neq("status", "descartada")
+        // Só as propostas do estrategista: pedido livre do agente do mês,
+        // Completar e campanha também moram nesta tabela (parametros.origem).
+        .is("parametros->>origem", null)
         .order("criado_em", { ascending: false })
         .limit(12);
       if (error) throw error;
@@ -382,15 +385,20 @@ function PlanejarComEstrategista() {
     setGravando(true);
     try {
       const data = await chamarFuncao<any>("agente-calendario", { acao: "gravar", proposta_id: proposta.id, project_id: projetoId });
-      const n = Array.isArray(data?.task_ids) ? data.task_ids.length : null;
+      // O gravar devolve { proposta, itens, direcoes_prontas }.
+      const n = Array.isArray(data?.itens)
+        ? data.itens.length
+        : Array.isArray(data?.proposta?.task_ids)
+          ? data.proposta.task_ids.length
+          : null;
       toast.success("Gravado na agenda", { description: n !== null ? `${n} item(ns) no calendário.` : undefined });
-      atualizar();
-      // A Agenda do mês, no topo da aba, passa a mostrar os itens gravados.
-      void queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
     } catch (e) {
       toast.error("Não foi possível gravar", { description: textoDoErro(e) });
     } finally {
       setGravando(false);
+      // Relê mesmo na falha: a gravação parcial (409) já criou parte dos
+      // itens. A Agenda do mês, o Estúdio e a proposta passam a mostrar.
+      atualizarAgenda(queryClient, clientId);
     }
   };
 
@@ -453,7 +461,10 @@ function PlanejarComEstrategista() {
 
   const temas = proposta.temas || [];
   const itens = (proposta.itens || []).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
-  const podeDetalhar = escolhidos.size > 0 && (proposta.status === "temas" || proposta.status === "pronta");
+  // "detalhando" também: detalhar parcial ou que caiu no meio deixa a
+  // proposta assim, e o servidor refaz só os temas que faltam.
+  const podeDetalhar =
+    escolhidos.size > 0 && (proposta.status === "temas" || proposta.status === "pronta" || proposta.status === "detalhando");
 
   return (
     <div className="space-y-5">
@@ -502,7 +513,7 @@ function PlanejarComEstrategista() {
             </section>
           )}
 
-          {podeDetalhar && (proposta.status === "temas" || itens.length === 0) && (
+          {podeDetalhar && (proposta.status === "temas" || proposta.status === "detalhando" || itens.length === 0) && (
             <div className="flex justify-end">
               <BotaoComCusto
                 rotulo={`Detalhar escolhidos (${escolhidos.size})`}
@@ -510,8 +521,13 @@ function PlanejarComEstrategista() {
                 descricao="O estrategista escreve cada publicação: data, formato, gancho, copy e o roteiro de cada card."
                 partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.detalhar.entrada, tokensSaida: itensPrevistos * TAMANHOS.detalhar.saidaPorItem + saidaPorRaciocinio(raciocinio) }]}
                 executar={async () => {
-                  await chamarFuncao("agente-calendario", { acao: "escolher_temas", proposta_id: proposta.id, temas: Array.from(escolhidos) });
-                  return chamarFuncao("agente-calendario", { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined });
+                  try {
+                    await chamarFuncao("agente-calendario", { acao: "escolher_temas", proposta_id: proposta.id, temas: Array.from(escolhidos) });
+                    return await chamarFuncao("agente-calendario", { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined });
+                  } finally {
+                    // Detalhar parcial devolve erro com o que já ficou pronto: relê igual.
+                    atualizar();
+                  }
                 }}
                 aoConcluir={() => atualizar()}
               />

@@ -96,9 +96,22 @@ export function useAnexos(clientId: string) {
       return [];
     });
 
+  /**
+   * Tira só os anexos que foram no pedido. O que a pessoa anexou enquanto o
+   * agente trabalhava continua no campo para o próximo pedido.
+   */
+  const tirarEnviados = (enviados: string[]) =>
+    setLista((l) =>
+      l.filter((a) => {
+        const foi = !!a.caminho && enviados.indexOf(a.caminho) >= 0;
+        if (foi) soltarPrevia(a.previa);
+        return !foi;
+      }),
+    );
+
   const caminhos = lista.filter((a) => a.estado === "pronto" && a.caminho).map((a) => a.caminho as string);
   const subindo = lista.some((a) => a.estado === "subindo");
-  return { lista, adicionar, remover, limpar, caminhos, subindo, cheio: lista.length >= MAX_ANEXOS };
+  return { lista, adicionar, remover, limpar, tirarEnviados, caminhos, subindo, cheio: lista.length >= MAX_ANEXOS };
 }
 
 export type ControleDeAnexos = ReturnType<typeof useAnexos>;

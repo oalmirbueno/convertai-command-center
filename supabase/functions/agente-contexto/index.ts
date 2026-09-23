@@ -534,9 +534,25 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
   const regras = texto(c.regras, 3000);
   const vazio = (v: unknown) => v == null || (typeof v === "string" && !v.trim()) || (Array.isArray(v) && !v.length);
   const sugestoes: Record<string, unknown> = {};
+  // O que a equipe ensinou pela conversa (campo preenchido) fica, a menos que venha forcar.
+  const antigo = ((kit as { contexto?: ContextoConsolidado | null } | null)?.contexto ?? null) as ContextoConsolidado | null;
+  const cheio = (v: unknown) => (typeof v === "string" ? !!v.trim() : Array.isArray(v) ? v.length > 0 : v != null);
+  const mesclado: ContextoConsolidado = forcar || !antigo ? contexto : {
+    ...contexto,
+    negocio: cheio(antigo.negocio) ? antigo.negocio : contexto.negocio,
+    publico: cheio(antigo.publico) ? antigo.publico : contexto.publico,
+    oferta: cheio(antigo.oferta) ? antigo.oferta : contexto.oferta,
+    tom_de_voz: cheio(antigo.tom_de_voz) ? antigo.tom_de_voz : contexto.tom_de_voz,
+    diferenciais: cheio(antigo.diferenciais) ? antigo.diferenciais : contexto.diferenciais,
+    tipografia: {
+      titulo: antigo.tipografia?.titulo || contexto.tipografia?.titulo || null,
+      texto: antigo.tipografia?.texto || contexto.tipografia?.texto || null,
+      observacao: antigo.tipografia?.observacao || contexto.tipografia?.observacao || null,
+    },
+  };
   const patch: Record<string, unknown> = {
     client_id: clientId,
-    contexto,
+    contexto: mesclado,
     contexto_atualizado_em: new Date().toISOString(),
     atualizado_em: new Date().toISOString(),
     atualizado_por: ch.userId,
@@ -827,19 +843,28 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     }
     patch.contexto = novo;
   }
-  if (Object.keys(patch).length > 3) await db.from("cliente_kit_marca").upsert(patch, { onConflict: "client_id" });
+  if (Object.keys(patch).length > 3) {
+    const { error: erroKit } = await db.from("cliente_kit_marca").upsert(patch, { onConflict: "client_id" });
+    if (erroKit) console.error("agente-contexto: kit nao gravado na conversa", { client_id: clientId, erro: erroKit.message });
+  }
 
   const memorias = (Array.isArray(o.memoria) ? o.memoria : [])
     .filter((m: any) => ["estrategista", "diretor_arte"].includes(m?.agente) && ["aprendizado", "preferencia", "evitar"].includes(m?.tipo) && texto(m?.texto))
     .slice(0, 5)
     .map((m: any) => ({ client_id: clientId, agente: m.agente, tipo: m.tipo, texto: texto(m.texto, 600), origem: "manual" }));
-  if (memorias.length) await db.from("agente_memoria").insert(memorias);
+  if (memorias.length) {
+    const { error: erroMemoria } = await db.from("agente_memoria").insert(memorias);
+    if (erroMemoria) console.error("agente-contexto: memoria nao gravada", { client_id: clientId, erro: erroMemoria.message });
+  }
 
   const resposta = texto(o.resposta, 4000) || "Pronto.";
-  await db.from("agente_mensagens").insert([
-    { conversa_id: conversaId, papel: "usuario", conteudo: mensagem },
-    { conversa_id: conversaId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null },
+  // client_id é obrigatório em agente_mensagens: sem ele o insert falhava calado e a conversa nunca ficava salva.
+  const agora = Date.now();
+  const { error: erroMensagens } = await db.from("agente_mensagens").insert([
+    { conversa_id: conversaId, client_id: clientId, papel: "usuario", conteudo: mensagem, criado_em: new Date(agora).toISOString() },
+    { conversa_id: conversaId, client_id: clientId, papel: "agente", conteudo: resposta, uso_id: r.usoId || null, criado_em: new Date(agora + 1).toISOString() },
   ]);
+  if (erroMensagens) console.error("agente-contexto: conversa nao gravada", { client_id: clientId, erro: erroMensagens.message });
 
   return json({
     resposta,

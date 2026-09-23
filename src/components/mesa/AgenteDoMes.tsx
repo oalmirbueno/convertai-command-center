@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Loader2, Sparkles, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,6 +101,7 @@ export default function AgenteDoMes({
   const [projetoDaResposta, setProjetoDaResposta] = useState<Record<string, string>>({});
   const campoRef = useRef<HTMLTextAreaElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
+  const enviados = useRef<string[]>([]);
 
   const conversa = useQuery({ queryKey: chaves.conversa(clientId), queryFn: () => lerConversaDoAgente(clientId) });
   const mensagens = conversa.data ? conversa.data.mensagens : [];
@@ -112,6 +113,9 @@ export default function AgenteDoMes({
   const propostas = useQuery({
     queryKey: chaves.propostas(clientId, ids),
     enabled: ids.length > 0,
+    // A chave cresce a cada mensagem nova: as propostas já na tela ficam
+    // enquanto a lista nova chega (sem piscar para o esqueleto).
+    placeholderData: keepPreviousData,
     queryFn: () => lerPropostas(ids),
   });
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
@@ -171,6 +175,7 @@ export default function AgenteDoMes({
   const enviar = async () => {
     const mensagem = texto.trim();
     const caminhos = anexos.caminhos.slice();
+    enviados.current = caminhos;
     setEnvio({ mensagem, desde: Date.now() });
     setTexto("");
     try {
@@ -189,7 +194,7 @@ export default function AgenteDoMes({
   };
 
   const concluir = (data: any) => {
-    anexos.limpar();
+    anexos.tirarEnviados(enviados.current);
     setAjustando(null);
     const p = data && data.proposta;
     if (p && p.id) {

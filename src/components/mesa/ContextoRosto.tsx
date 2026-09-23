@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { extensao, textoDoErro } from "@/lib/mesa/api";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { Campo, TituloDeSecao } from "./Seletores";
+import { AvisoDeErro } from "./Custo";
 
 interface Rosto {
   id: string;
@@ -136,6 +137,7 @@ export default function ContextoRosto() {
 
       <section className="space-y-3">
         <TituloDeSecao>Rostos do cliente</TituloDeSecao>
+        {rostos.isError && <AvisoDeErro erro={rostos.error} />}
         {rostos.data && rostos.data.length === 0 && <p className="text-[12.5px] text-muted-foreground">Nenhum rosto registrado.</p>}
         <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(rostos.data || []).map((r) => (

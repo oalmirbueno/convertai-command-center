@@ -21,6 +21,19 @@ import { fonteDoArquivo, useLaminasDaAgenda, type ArteNaAgenda, type PublicacaoD
 
 const LARGURA_DA_MINIATURA = 96;
 
+
+/**
+ * Posição da lâmina na lista do Ampliar, que só leva as que têm arquivo. O
+ * índice vinha da lista inteira e, com uma lâmina sem arquivo antes, o
+ * "Ver grande" abria a lâmina seguinte.
+ */
+export function indiceNoAmpliar(imagens: { caminho: string }[], indice: number | null): number | null {
+  if (indice === null || indice < 0 || indice >= imagens.length || !imagens[indice].caminho) return null;
+  let n = 0;
+  for (let i = 0; i < indice; i++) if (imagens[i].caminho) n++;
+  return n;
+}
+
 export default function EstudioArteDaAgenda({
   arte,
   linkAgenda,
@@ -42,6 +55,7 @@ export default function EstudioArteDaAgenda({
     const f = fonteDoArquivo(a);
     return { caminho: f.caminho || "", bucket: f.bucket, titulo: `Lâmina ${i + 1} de ${lista.length}` };
   });
+  const ampliaveis = imagens.filter((i) => !!i.caminho);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -137,7 +151,7 @@ export default function EstudioArteDaAgenda({
         </div>
       )}
 
-      <Ampliar imagens={imagens.filter((i) => !!i.caminho)} indice={ampliada} onFechar={() => setAmpliada(null)} />
+      <Ampliar imagens={ampliaveis} indice={indiceNoAmpliar(imagens, ampliada)} onFechar={() => setAmpliada(null)} />
     </div>
   );
 }

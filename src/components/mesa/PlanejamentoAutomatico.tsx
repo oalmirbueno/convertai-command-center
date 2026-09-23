@@ -23,6 +23,7 @@ import {
 } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
+import { atualizarAgenda } from "./mesaV4Api";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 
 /**
@@ -260,8 +261,8 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
     const g = await chamarFuncao<any>("agente-calendario", { acao: "gravar", proposta_id: propostaId, project_id: cfg.projetoId });
     const n = Array.isArray(g && g.itens) ? g.itens.length : Array.isArray(g && g.proposta && g.proposta.task_ids) ? g.proposta.task_ids.length : null;
     mudarMes(f.clientId, mes, { fase: "gravado", itens: n });
-    void f.queryClient.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", f.clientId] });
-    void f.queryClient.invalidateQueries({ queryKey: ["mesa", "propostas", f.clientId] });
+    // Agenda do mês, lista do Estúdio (itens-do-mes) e propostas.
+    atualizarAgenda(f.queryClient, f.clientId);
     return { ok: true, parar: false, custo };
   } catch (e) {
     const c = custoDoErro(e);
@@ -269,6 +270,8 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
     const linha = execucoes[f.clientId] ? execucoes[f.clientId]!.linhas[mes] : null;
     mudarMes(f.clientId, mes, { fase: "erro", erro: e, custo: (linha ? linha.custo : 0) + c });
     if (c) f.atualizarCusto();
+    // Gravação parcial (409) já criou parte dos itens: a agenda relê igual.
+    atualizarAgenda(f.queryClient, f.clientId);
     return { ok: false, parar: e instanceof ErroDaMesa && CODIGOS_QUE_PARAM_TUDO.indexOf(e.codigo) >= 0, custo };
   }
 }

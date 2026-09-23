@@ -302,7 +302,7 @@ export function promptDaLamina(
   const caixa = caixaDaZona(layout.zona_texto, capa, opcoes.total > 1);
 
   const paleta = marca.paleta.filter((p) => hexOk(p.hex));
-  const corFundo = layout.cor_fundo || papelDaCor(paleta, "fundo", "primaria", "primária");
+  const corFundo = layout.cor_fundo || papelDaCor(paleta, "fundo", "primaria", "primária", "principal");
   // Contraste conferido em código quando as duas cores são hex.
   const corTexto = textoLegivel(layout.cor_texto || papelDaCor(paleta, "texto"), corFundo);
   // A secundária é a cor dos 30%: não serve de acento. Sem destaque no kit, sem acento.

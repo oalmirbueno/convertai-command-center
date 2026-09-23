@@ -92,7 +92,7 @@ export default function BarraDeCusto({
             <strong className="text-[13px] font-semibold text-foreground">{usd(consumo?.total_usd || 0)}</strong>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[min(92vw,340px)] p-3">
+        <PopoverContent align="start" className="w-[92vw] max-w-[340px] p-3">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Por modelo</p>
           <ul className="mt-1.5 space-y-1">
             {(consumo?.por_modelo || []).length === 0 && <li className="text-[12px] text-muted-foreground">Nada gasto neste mês.</li>}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Megaphone, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import CampanhaDetalhe, { SeloDoEstado } from "./CampanhaDetalhe";
 import CampanhaNova from "./CampanhaNova";
 import CampanhaAgente, { type RascunhoParaOAgente } from "./CampanhaAgente";
 import { chaves, lerCampanhas, lerHypes, periodoCurto, useMidia, type Campanha } from "./mesaV4Api";
-import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos } from "./campanhasApi";
+import { chavesDaCampanha, conteudosDaCampanha, lerContagemDosConteudos, usePedidoDaCampanha } from "./campanhasApi";
 
 /**
  * Aba Campanhas (entre Mês e Estúdio), mesa de trabalho em três colunas:
@@ -163,12 +163,15 @@ export default function AbaCampanhas({
   const [nova, setNova] = useState(hypeIndice !== null);
   const [projetoDaCriacao, setProjetoDaCriacao] = useState<Record<string, string>>({});
   const [gaveta, setGaveta] = useState(false);
-  const [andando, setAndando] = useState(false);
   const [rascunho, setRascunho] = useState<RascunhoParaOAgente | null>(null);
 
   const campanhas = useQuery({ queryKey: chaves.campanhas(clientId), queryFn: () => lerCampanhas(clientId) });
   const hypes = useQuery({ queryKey: chaves.hypes(clientId), enabled: hypeIndice !== null, queryFn: () => lerHypes(clientId) });
   const hype = hypeIndice !== null && hypes.data ? hypes.data.itens[hypeIndice] || null : null;
+  // A campanha nova só recomeça quando chega OUTRO hype. Tirar o hype (o X do
+  // "Do hype") mantém o que já foi escrito no formulário.
+  const chaveDaNova = useRef("nova");
+  if (hype && hypeIndice !== null) chaveDaNova.current = `hype-${hypeIndice}`;
 
   const lista = campanhas.data || [];
   const idsDasPropostas = lista.map((c) => c.proposta_id || "").filter(Boolean).sort();
@@ -183,6 +186,9 @@ export default function AbaCampanhas({
   useEffect(() => { if (hypeIndice !== null) setNova(true); }, [hypeIndice]);
 
   const escolhida = nova ? null : lista.find((c) => c.id === idLocal) || null;
+  // Andamento da campanha aberta, não de qualquer uma: o pedido de outra
+  // campanha não acende nem apaga o botão desta.
+  const andando = !!usePedidoDaCampanha(escolhida ? escolhida.id : null);
   // Lista ao lado com três colunas, ou entre 1024 e 1279 (o agente vira gaveta);
   // entre 1280 e 1535, o agente fica e a lista vira seletor.
   const listaAoLado = tresColunas || (colunasFixas && !agenteFixo);
@@ -276,7 +282,7 @@ export default function AbaCampanhas({
       <div className="mx-auto h-64 max-w-2xl animate-pulse rounded-xl bg-muted" />
     ) : (
       <CampanhaNova
-        key={hype ? `hype-${hypeIndice}` : "nova"}
+        key={chaveDaNova.current}
         hype={hype}
         onLimparHype={onLimparHype}
         onCancelar={fecharNova}
@@ -304,7 +310,6 @@ export default function AbaCampanhas({
       campanha={escolhida}
       rascunho={rascunho}
       naGaveta={!agenteFixo}
-      onAndamento={setAndando}
       className="h-full"
     />
   ) : null;
