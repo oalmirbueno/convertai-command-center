@@ -173,6 +173,7 @@ export type CodigoErroMotor =
   | "provedor_timeout"
   | "provedor_recusou"
   | "openrouter_sem_credito"
+  | "provedor_sem_credito"
   | "resposta_vazia"
   | "json_invalido"
   | "uso_nao_registrado"
@@ -194,6 +195,7 @@ const STATUS_POR_CODIGO: Record<CodigoErroMotor, number> = {
   provedor_timeout: 504,
   provedor_recusou: 422,
   openrouter_sem_credito: 402,
+  provedor_sem_credito: 402,
   resposta_vazia: 502,
   json_invalido: 502,
   uso_nao_registrado: 500,
@@ -483,6 +485,14 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
       const corpo = await res.json() as { error?: { message?: string } | string; message?: string };
       msg = typeof corpo.error === "string" ? corpo.error : corpo.error?.message || corpo.message || "";
     } catch { /* corpo sem JSON */ }
+    // Conta do provedor sem crédito (a da agência ou a do cliente): mensagem clara, não o texto cru.
+    if ((res.status === 429 || res.status === 402) && /credit|quota|billing|insufficient|saldo/i.test(String(msg))) {
+      const onde = provedor === "openai" ? " em platform.openai.com, Billing" : provedor === "anthropic" ? " em console.anthropic.com, Billing" : "";
+      throw new IaMotorErro("provedor_sem_credito", `A conta da ${provedor} que paga este modelo está sem crédito. Recarregue${onde} ou escolha outro modelo no seletor (por exemplo, o Nano Banana).`, {
+        provedor,
+        status_provedor: res.status,
+      });
+    }
     throw new IaMotorErro("provedor_erro", `${provedor} respondeu ${res.status}${msg ? `: ${String(msg).slice(0, 300)}` : ""}`, {
       provedor,
       status_provedor: res.status,

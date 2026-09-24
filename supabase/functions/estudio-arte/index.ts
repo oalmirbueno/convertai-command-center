@@ -1594,6 +1594,13 @@ function areasDeDesenho(card: CardDirecao, total: number, comLogo: boolean): Are
   return areas;
 }
 
+/** No contínuo, tudo menos 7% de cada lateral (cerca de 76 px): as bordas ficam iguais ao panorama. */
+const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };
+
+/** Texto sobre foto real ou sobre o panorama: integrado à cena, nunca numa caixa. */
+const SEM_CAIXA_ATRAS_DO_TEXTO =
+  "Escreva o texto e a logo DIRETAMENTE sobre a imagem, integrados à cena: sem caixa, cartão, painel, faixa, retângulo, moldura, véu, desfoque ou área de cor atrás das letras. Ignore qualquer indicação de fundo liso ou de área de cor para o texto: aqui o fundo é a própria foto. O contraste vem da cor e do peso das letras (escolha na paleta a cor que mais contrasta com aquela parte da foto) e, se preciso, de uma sombra suave nas próprias letras. Não escureça a foto.";
+
 const descreverArea = (a: Area) =>
   `de ${Math.round(a.x0 * 100)}% a ${Math.round(a.x1 * 100)}% da largura e de ${Math.round(a.y0 * 100)}% a ${Math.round(a.y1 * 100)}% da altura`;
 
@@ -1887,13 +1894,18 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     });
   }
 
-  // 1b) Foto real como base.
+  // 1b) Foto real ou fundo contínuo como base.
   if (baseFoto) {
-    const areas = areasDeDesenho(card, total, comLogo);
+    // Contínuo: a lâmina inteira é redesenhada sobre a fatia do panorama (texto
+    // integrado à cena) e só as faixas das bordas voltam do fundo original: é o
+    // que mantém a emenda. Antes a máscara abria só o retângulo do texto e o
+    // gerador pintava ali uma caixa de fundo (Para Si Ótica, 23/09).
+    const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo);
     const prompt = [
       panorama
-        ? `EDITE a imagem 1 (o fundo contínuo desta lâmina, parte de um panorama que atravessa o carrossel). Desenhe SÓ o texto e a logo dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas o fundo fica exatamente como está, para a emenda com as lâminas vizinhas continuar perfeita.`
+        ? `EDITE a imagem 1: ela é a cena desta lâmina, parte de um panorama que atravessa o carrossel. Mantenha a mesma cena, luz, pessoas e objetos, na mesma posição e escala. Não mude nada nas faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado): elas emendam com as lâminas vizinhas.`
         : `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
+      SEM_CAIXA_ATRAS_DO_TEXTO,
       baseComCampanha,
       regrasDeRender(t, card, legendas(1), comLogo),
     ].join("\n\n");
@@ -1903,8 +1915,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       editar: { bytes: baseFoto, mascara: await mascara(1088, 1360, areas) },
       tamanho: TAMANHO_GERADOR,
     });
-    // O gerador redesenha tudo mesmo com máscara: a foto original volta fora das áreas.
-    const final = img.tamanho === TAMANHO_GERADOR ? await devolverOriginalForaDasAreas(baseFoto, img.png, areas) : img.png;
+    // O gerador redesenha tudo mesmo com máscara: o original volta fora das áreas.
+    const final = img.tamanho === TAMANHO_GERADOR ? await devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28) : img.png;
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,

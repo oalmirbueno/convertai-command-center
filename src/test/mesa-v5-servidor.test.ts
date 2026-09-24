@@ -205,3 +205,23 @@ describe("restante da auditoria (23/09 noite)", () => {
     expect(contexto).not.toContain("...(imagens.length ? [`${imagens.length} artes publicadas`] : [])");
   });
 });
+
+describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica, 23/09)", () => {
+  it("no contínuo a lâmina inteira é redesenhada e só as bordas voltam do panorama", () => {
+    const g = corpoDe(estudio, "gerarCard");
+    expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo);");
+    expect(estudio).toContain("const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };");
+    expect(g).toContain("devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28)");
+  });
+  it("texto sobre foto ou panorama nunca vem numa caixa, e a foto não é escurecida", () => {
+    expect(corpoDe(estudio, "gerarCard")).toContain("SEM_CAIXA_ATRAS_DO_TEXTO,");
+    expect(estudio).toContain("sem caixa, cartão, painel, faixa, retângulo, moldura, véu, desfoque ou área de cor atrás das letras");
+    expect(estudio).toContain("Não escureça a foto.");
+  });
+  it("conta do provedor sem crédito vira mensagem clara com o caminho da recarga", () => {
+    const motor = ler("supabase/functions/_shared/ia-motor.ts");
+    expect(motor).toContain('"provedor_sem_credito"');
+    expect(motor).toContain("provedor_sem_credito: 402,");
+    expect(motor).toContain("/credit|quota|billing|insufficient|saldo/i");
+  });
+});
