@@ -40,6 +40,12 @@
  * - biblioteca_ilustrar { limite? } -> { ilustrados, sem_resultado, pendentes, itens } (só admin, Openverse, sem IA)
  * - biblioteca_exemplo_gerar { client_id, item_id, modelo_imagem_id?, qualidade? } -> { item, url, custo_usd }
  * - kit_sugerir agora SALVA os kits como rascunho (sem duplicar o mesmo produto) e devolve kit_ids.
+ * Modelos e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md; ações em modelos.ts e canvas.ts, regras puras em
+ * personas.ts e canvas-regras.ts; o index só registra):
+ * - modelos_listar, modelo_ler, modelo_criar, modelo_editar, motores_imagem, modelo_candidata_gerar,
+ *   modelo_ancora_escolher, modelo_vista_gerar, modelo_imagem_decidir, modelo_detalhar, modelo_conferir
+ * - canvas_listar, canvas_ler, canvas_salvar, canvas_montar, canvas_gerar, canvas_conferir
+ * - estimar aceita também acao_alvo modelo_candidata, modelo_rodada, modelo_vista, modelo_detalhar e canvas_gerar
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
  * identidade separada de estilo (referência de estilo vai depois das fontes,
@@ -167,6 +173,9 @@ import {
   type VersaoTomada,
 } from "./calculos.ts";
 import { SEMENTE_DA_BIBLIOTECA, VERSAO_DA_SEMENTE } from "./biblioteca-semente.ts";
+import { ACOES_LONGAS_DE_MODELOS, acoesDeModelos, ALVOS_DE_ESTIMATIVA_DE_MODELOS } from "./modelos.ts";
+import { ACOES_LONGAS_DO_CANVAS, acoesDoCanvas, ALVOS_DE_ESTIMATIVA_DO_CANVAS } from "./canvas.ts";
+import type { FerramentasDaMesa } from "./ferramentas.ts";
 import {
   AZIMUTES,
   cameraDoPreset,
@@ -1759,7 +1768,9 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
     const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
     return json({ estimativa_usd: custoDeUmaImagem(mImg, qualidade, 0, 2500), modelo_imagem_id: mImg.id, qualidade, custo_usd: 0 });
   }
-  throw new ErroHttp(400, "alvo_invalido", "acao_alvo: preparar, tomada_gerar, ensaio ou biblioteca_exemplo.");
+  if (ALVOS_DE_ESTIMATIVA_DE_MODELOS.includes(acao)) return await MODELOS.estimar(ch, corpo, acao);
+  if (ALVOS_DE_ESTIMATIVA_DO_CANVAS.includes(acao)) return await CANVAS.estimar(ch, corpo);
+  throw new ErroHttp(400, "alvo_invalido", `acao_alvo: preparar, tomada_gerar, ensaio, biblioteca_exemplo, ${[...ALVOS_DE_ESTIMATIVA_DE_MODELOS, ...ALVOS_DE_ESTIMATIVA_DO_CANVAS].join(", ")}.`);
 }
 
 // ------------------------------------------------------------------ ensaio
@@ -3754,6 +3765,30 @@ async function bibliotecaSemear(ch: Chamador, _corpo: Record<string, unknown>) {
   return json({ inseridos: novos.length, ja_existiam: SEMENTE_DA_BIBLIOTECA.length - novos.length, total: SEMENTE_DA_BIBLIOTECA.length, versao: VERSAO_DA_SEMENTE, custo_usd: 0 });
 }
 
+/** O que Modelos e Canvas usam do index (sem import circular; o index não cresce com elas). */
+const FERRAMENTAS: FerramentasDaMesa = {
+  servico,
+  json,
+  garantirAcesso,
+  baixar,
+  baixarReduzida,
+  urlAssinada,
+  salvarNoMesa,
+  emParalelo,
+  lerImagens,
+  lerKitComRefs: async (ch, kitId) => {
+    const kit = await lerKit(ch, kitId);
+    return { kit, refs: await lerRefs(kit) };
+  },
+  lerItensDaBiblioteca,
+  imagemDoItemDaBiblioteca,
+  modeloDeTexto,
+  camposImagem: CAMPOS_IMAGEM,
+  timeoutTextoMs: TIMEOUT_TEXTO_FOTO_MS,
+};
+const MODELOS = acoesDeModelos(FERRAMENTAS);
+const CANVAS = acoesDoCanvas(FERRAMENTAS);
+
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
   acervo_registrar: acervoRegistrar,
@@ -3782,6 +3817,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   campanha_planejar: campanhaPlanejar,
   biblioteca_ilustrar: bibliotecaIlustrar,
   biblioteca_exemplo_gerar: bibliotecaExemploGerar,
+  // Modelos e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md)
+  ...MODELOS.acoes,
+  ...CANVAS.acoes,
 };
 
 /**
@@ -3793,6 +3831,7 @@ const ACOES_LONGAS = new Set([
   "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
   "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
   "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
+  ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS,
 ]);
 
 Deno.serve(async (req) => {

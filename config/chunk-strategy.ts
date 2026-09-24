@@ -39,6 +39,11 @@ export function chunkPara(id: string): string | undefined {
   if (/[\\/]node_modules[\\/](@tanstack|@supabase)[\\/]/.test(id)) return "dados";
   // A causa dos 116 arquivinhos: um chunk por ícone usado.
   if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) return "icones";
+  // O React Flow do Canvas da Mesa Foto NÃO é agrupado à mão, de propósito:
+  // um pedaço nomeado puxa junto as partes do d3 que os gráficos também usam
+  // (cor, interpolação, tempo), e as telas com gráfico passaram a baixar o
+  // quadro inteiro (medido no build de 2026-09-24). Solto, ele fica no
+  // pedaço da aba Canvas, que só baixa quando a aba abre.
 
   return undefined;
 }

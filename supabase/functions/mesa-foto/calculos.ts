@@ -11,6 +11,7 @@
  * Sem travessão nos textos (regra do dono).
  */
 
+import { type CapacidadesImagem, limiteDeReferencias } from "../_shared/capacidades-imagem.ts";
 import {
   type Camera,
   cameraDoPreset,
@@ -1039,13 +1040,21 @@ export function grupoDaFonte(papel: PapelRef): number {
   return 3;
 }
 
-/** Limite de imagens de entrada por motor (documentação de cada API) e o limite prático da casa. */
+/**
+ * Limite de imagens de entrada por motor e o limite prático da casa. Vem das
+ * capacidades do modelo (coluna ia_modelos.capacidades, sincronizada da lista
+ * de imagens do OpenRouter; sem ela, a família conhecida em
+ * _shared/capacidades-imagem.ts): GPT Image 16, Gemini e Seedream 14,
+ * Riverflow 10, FLUX.2 8, MAI 5, Qwen 4, Grok 3, Krea 1.
+ */
 export const LIMITE_PRATICO_DE_FONTES = 8;
-export function limiteDeFontesDoMotor(m: { provedor: string; modelo_api: string }): number {
-  if (m.provedor === "openai") return 16;
-  if (m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)) return 16;
-  if (m.provedor === "openrouter" && /gemini/i.test(m.modelo_api)) return 14;
-  return 8;
+export function limiteDeFontesDoMotor(m: {
+  provedor: string;
+  modelo_api: string;
+  capacidades?: CapacidadesImagem | null;
+  modalidades?: { entrada?: string[]; saida?: string[] } | null;
+}): number {
+  return limiteDeReferencias(m);
 }
 
 /**

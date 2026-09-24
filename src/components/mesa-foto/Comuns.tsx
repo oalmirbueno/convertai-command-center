@@ -29,6 +29,8 @@ export const ETAPAS_DA_MESA_FOTO = [
   { valor: "revisar", rotulo: "Revisar" },
   { valor: "usar", rotulo: "Usar" },
   { valor: "biblioteca", rotulo: "Biblioteca" },
+  { valor: "modelos", rotulo: "Modelos" },
+  { valor: "canvas", rotulo: "Canvas" },
 ] as const;
 
 export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
@@ -48,14 +50,15 @@ export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
 ];
 
 /**
- * Abas que chegam na próxima leva (Modelos e Canvas). A navegação já sabe
- * delas: quando a tela existir, basta marcar disponivel e pôr o valor em
- * ETAPAS_DA_MESA_FOTO. Até lá não aparecem.
+ * Abas avançadas (Modelos e Canvas, docs/mesa-foto/MODELOS-E-CANVAS.md):
+ * aparecem discretas depois das etapas de apoio, separadas por um traço fino,
+ * sem entrar no caminho principal de 3 passos. Aba com disponivel false
+ * some da navegação.
  */
 export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean; depoisDe: string }[] = [
   // docs/mesa-foto/MODELOS-E-CANVAS.md: Modelos depois do Produto, Canvas depois de Criar.
-  { etapa: "modelos", rotulo: "Modelos", disponivel: false, depoisDe: "kits" },
-  { etapa: "canvas", rotulo: "Canvas", disponivel: false, depoisDe: "criar" },
+  { etapa: "modelos", rotulo: "Modelos", disponivel: true, depoisDe: "kits" },
+  { etapa: "canvas", rotulo: "Canvas", disponivel: true, depoisDe: "criar" },
 ];
 
 /** As três formas de criar (passo 3). */

@@ -34,9 +34,11 @@ import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
  * "ainda estou confuso"): 1. Fotos do produto (acervo), 2. O produto (kit
  * identificado pela embalagem ou foto, com referências da internet) e
  * 3. Criar (Variações, Campanha com modelo ou Preparar). O próximo passo fica
- * sempre em destaque. Revisar, Usar e Biblioteca ficam ao lado, discretos.
- * Modelos e Canvas chegam na próxima leva (ABAS_FUTURAS em Comuns). O
- * diretor de fotografia fica à mão em todas, no botão do centro da base.
+ * sempre em destaque. Revisar, Usar e Biblioteca ficam ao lado, discretos,
+ * e depois de um traço fino as avançadas: Modelos (personas sintéticas) e
+ * Canvas (quadro de cartões ligados), de docs/mesa-foto/MODELOS-E-CANVAS.md.
+ * O Canvas carrega o React Flow só quando a aba abre. O diretor de
+ * fotografia fica à mão em todas, no botão do centro da base.
  *
  * Regra da fotografia: nunca escurecer a foto para dar destaque; foto
  * sintética sempre marcada como gerada.
@@ -51,6 +53,10 @@ const carregarUsar = () => import("@/components/mesa-foto/EtapaUsar");
 const carregarBiblioteca = () => import("@/components/mesa-foto/EtapaBiblioteca");
 const carregarCampanha = () => import("@/components/mesa-foto/EtapaCampanha");
 const carregarCriar = () => import("@/components/mesa-foto/EtapaCriar");
+const carregarModelos = () => import("@/components/mesa-foto/EtapaModelos");
+// O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
+const EtapaModelos = lazy(carregarModelos);
+const EtapaCanvas = lazy(() => import("@/components/mesa-foto/EtapaCanvas"));
 const EtapaCampanha = lazy(carregarCampanha);
 const EtapaCriar = lazy(carregarCriar);
 const EtapaAcervo = lazy(carregarAcervo);
@@ -228,7 +234,7 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca]) {
+        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos]) {
           carregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -313,9 +319,8 @@ export default function MesaFoto() {
   };
   const passoAtual = passoDaEtapa(etapa);
   const passoRecomendado = proximo ? passoDaEtapa(proximo.etapa) : null;
-  const apoios = ETAPAS_DE_APOIO.concat(
-    ABAS_FUTURAS.filter((a) => a.disponivel && ETAPAS_DA_MESA_FOTO.some((e) => e.valor === a.etapa)).map((a) => ({ etapa: a.etapa as EtapaDaMesaFoto, rotulo: a.rotulo })),
-  );
+  const apoios = ETAPAS_DE_APOIO;
+  const avancadas = ABAS_FUTURAS.filter((a) => a.disponivel && ETAPAS_DA_MESA_FOTO.some((e) => e.valor === a.etapa)).map((a) => ({ etapa: a.etapa as EtapaDaMesaFoto, rotulo: a.rotulo }));
 
   return (
     <div className="relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6">
@@ -352,7 +357,7 @@ export default function MesaFoto() {
                   );
                 })}
               </div>
-              <div className="mt-1 flex w-full items-center justify-center sm:ml-1 sm:mt-0 sm:w-auto sm:shrink-0" data-etapas-de-apoio="">
+              <div className="mt-1 flex w-full min-w-0 flex-wrap items-center justify-center sm:ml-1 sm:mt-0 sm:w-auto sm:shrink-0" data-etapas-de-apoio="">
                 {apoios.map((e) => {
                   const ativo = etapa === e.etapa;
                   const recomendado = !ativo && !!proximo && proximo.etapa === e.etapa;
@@ -366,6 +371,22 @@ export default function MesaFoto() {
                       className={`h-8 rounded-md px-1.5 text-[12px] transition-colors ${
                         ativo ? "bg-muted font-medium text-foreground" : recomendado ? "font-medium text-primary hover:bg-muted" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }`}
+                    >
+                      {e.rotulo}
+                    </button>
+                  );
+                })}
+                {avancadas.length > 0 && <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />}
+                {avancadas.map((e) => {
+                  const ativo = etapa === e.etapa;
+                  return (
+                    <button
+                      key={e.etapa}
+                      type="button"
+                      onClick={() => mudar({ etapa: e.etapa })}
+                      aria-current={ativo ? "page" : undefined}
+                      data-etapa-avancada={e.etapa}
+                      className={`h-8 rounded-md px-1.5 text-[11.5px] transition-colors ${ativo ? "bg-muted font-medium text-foreground" : "text-muted-foreground/80 hover:bg-muted hover:text-foreground"}`}
                     >
                       {e.rotulo}
                     </button>
@@ -424,6 +445,8 @@ export default function MesaFoto() {
                 {etapa === "revisar" && <EtapaRevisar />}
                 {etapa === "usar" && <EtapaUsar />}
                 {etapa === "biblioteca" && <EtapaBiblioteca />}
+                {etapa === "modelos" && <EtapaModelos />}
+                {etapa === "canvas" && <EtapaCanvas />}
               </Suspense>
             </div>
             <Suspense fallback={null}>

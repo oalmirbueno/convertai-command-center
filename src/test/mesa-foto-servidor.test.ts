@@ -79,6 +79,38 @@ import {
   RECEITAS_V2,
   TIPOS_DE_VARIACAO,
 } from "../../supabase/functions/mesa-foto/receitas";
+import {
+  alertasDoRealismo,
+  conteudoProibido,
+  DESCRICAO_DA_VISTA,
+  fichaEmTexto,
+  FOLHA_PADRAO,
+  identidadesDaVista,
+  invariantesDaFicha,
+  NIVEIS_PELE,
+  normalizarFicha,
+  normalizarNomeDaPersona,
+  padraoDoMotor,
+  PALAVRAS_QUE_PLASTIFICAM,
+  personaUsavel,
+  promptDaCandidata,
+  promptDaVista,
+  promptDoDetalhe,
+  resumoDaFolha,
+  RODADA_PADRAO,
+  statusDaPersona,
+} from "../../supabase/functions/mesa-foto/personas";
+import {
+  entradasDaSaida,
+  escolherSaida,
+  garantirQueDaParaGerar,
+  idsDoCanvas,
+  LIMITE_REFERENCIAS_DO_CANVAS,
+  normalizarCanvas,
+  orcamentoPorPapel,
+  ordenarReferencias,
+  promptDoCanvas,
+} from "../../supabase/functions/mesa-foto/canvas-regras";
 
 /**
  * Mesa Foto, frente A (docs/mesa-foto/CONTRATO.md): lógica pura executando de
@@ -1098,5 +1130,394 @@ describe("v2: ajustes do cartão e blocos da resposta", () => {
     const b = blocosDaResposta("Entendi: vi duas caixas do mouse NTC X, vou trabalhar com ele.\nPlano: 8 variações.\nPróximo passo: identificar o produto.");
     expect(b).toEqual({ entendi: "vi duas caixas do mouse NTC X, vou trabalhar com ele.", proximo_passo: "identificar o produto." });
     expect(blocosDaResposta("texto solto")).toEqual({ entendi: "", proximo_passo: "" });
+  });
+});
+// ------------------------------------------------------------------ Modelos e Canvas (MODELOS-E-CANVAS.md)
+
+const modelosFonte = ler("supabase/functions/mesa-foto/modelos.ts");
+const canvasFonte = ler("supabase/functions/mesa-foto/canvas.ts");
+const sql03 = ler("docs/mesa-foto/migrations/03_modelos_canvas.sql");
+
+const fichaBase = { idade_aparente: 29, tom_de_pele: "morena clara com subtom quente", rosto: "oval", olhos: "castanhos amendoados", cabelo: { cor: "castanho escuro", comprimento: "ombro", textura: "ondulado" }, marcas: ["sardas leves no nariz"] };
+
+describe("personas: ficha, idade mínima e o que é proibido", () => {
+  it("idade aparente é obrigatória e mínima de 21 (recusa, não ajusta)", () => {
+    expect(normalizarFicha(fichaBase).idade_aparente).toBe(29);
+    expect(() => normalizarFicha({ ...fichaBase, idade_aparente: 20 })).toThrow(ErroDeRegra);
+    try {
+      normalizarFicha({ ...fichaBase, idade_aparente: 18 });
+    } catch (e) {
+      expect((e as ErroDeRegra).codigo).toBe("idade_minima");
+      expect((e as ErroDeRegra).status).toBe(422);
+    }
+    expect(() => normalizarFicha({ tom_de_pele: "clara" })).toThrow(/idade aparente/);
+    expect(() => normalizarFicha({ ...fichaBase, idade_aparente: 95 })).toThrow(ErroDeRegra);
+  });
+
+  it("sósia, pessoa conhecida, menor e sexualização são recusados", () => {
+    expect(conteudoProibido("parecida com a Anitta")?.codigo).toBe("semelhanca_proibida");
+    expect(conteudoProibido("inspirada em Taylor Swift")?.codigo).toBe("pessoa_publica_proibida");
+    expect(conteudoProibido("rosto de adolescente")?.codigo).toBe("menor_de_idade");
+    expect(conteudoProibido("pose sensual")?.codigo).toBe("sexualizacao_proibida");
+    expect(conteudoProibido("pele morena, nuances douradas, número 3 de cabelo")).toBeNull();
+    expect(() => normalizarFicha({ ...fichaBase, estilo: "igual ao Neymar" })).toThrow(ErroDeRegra);
+    expect(() => normalizarNomeDaPersona("")).toThrow(/nome fictício/);
+    expect(normalizarNomeDaPersona("Marina Aurora")).toBe("Marina Aurora");
+  });
+
+  it("invariantes e a ficha em texto sempre dizem adulta com a idade", () => {
+    const f = normalizarFicha(fichaBase);
+    const inv = invariantesDaFicha(f, ["pinta pequena acima do lábio"]);
+    expect(inv[0]).toBe("adulta, idade aparente de 29 anos");
+    expect(inv).toContain("pinta pequena acima do lábio");
+    expect(fichaEmTexto(f)).toMatch(/^Pessoa adulta de 29 anos de idade aparente/);
+  });
+});
+
+describe("personas: prompts de hiper-realismo com a ficha em todo pedido", () => {
+  const f = normalizarFicha(fichaBase);
+  const inv = invariantesDaFicha(f);
+  const candidata = promptDaCandidata({ nome: "Marina", ficha: f, invariantes: inv, usos: ["pose", "luz"] });
+  const vista = promptDaVista({ nome: "Marina", ficha: f, invariantes: inv, vista: "perfil_esq", identidades: ["âncora da persona"] });
+  const detalhe = promptDoDetalhe({ alvo: "pessoa", nome: "Marina", ficha: f, invariantes: inv, comIdentidade: 2 });
+
+  it("pele, poros, imperfeições, luz, lente e proibições; nada de palavra que plastifica", () => {
+    for (const p of [candidata, vista]) {
+      expect(p).toContain("poros visíveis");
+      expect(p).toContain("pequenas assimetrias naturais");
+      expect(p).toContain("85 mm em f/2");
+      expect(p).toContain("pele de porcelana ou de plástico");
+      expect(p).toContain("Pessoa adulta de 29 anos");
+      expect(p).toContain(inv.join("; "));
+      for (const palavra of PALAVRAS_QUE_PLASTIFICAM) expect(p.toLowerCase()).not.toContain(palavra);
+      expect(p).not.toMatch(/[—–]/);
+    }
+  });
+
+  it("referência do dono entra só como uso declarado, nunca identidade", () => {
+    expect(candidata).toContain("Imagem 1: SÓ POSE");
+    expect(candidata).toContain("Imagem 2: SÓ LUZ");
+    expect(candidata).toContain("Não é a identidade da persona");
+    expect(vista).toContain("Imagem 1: âncora da persona. IDENTIDADE da persona");
+    expect(vista).toContain(DESCRICAO_DA_VISTA.perfil_esq);
+  });
+
+  it("detalhe 4K: mesma foto, identidade da persona e sem inventar", () => {
+    expect(detalhe).toContain("a MESMA fotografia, mesma composição");
+    expect(detalhe).toContain("Imagens 2 a 3: a mesma pessoa sintética");
+    expect(promptDoDetalhe({ alvo: "produto", comIdentidade: 0 })).toContain("texto e logotipo do produto exatamente como estão");
+  });
+});
+
+describe("personas: rodada, folha, status e aviso de realismo", () => {
+  it("rodada padrão do dono: Sunburst alta, Nano Banana Pro 2K, Seedream 5.0 Pro 2K e MAI-Image-2.6 ligados", () => {
+    const ligados = RODADA_PADRAO.filter((r) => r.padrao);
+    expect(ligados.map((r) => r.modelo_imagem_id)).toEqual([
+      "openrouter:openai/gpt-image-2.5-sunburst",
+      "openrouter:google/gemini-3-pro-image",
+      "openrouter:bytedance-seed/seedream-5-0-pro",
+      "openrouter:microsoft/mai-image-2.6",
+    ]);
+    expect(padraoDoMotor("openrouter:openai/gpt-image-2.5-sunburst")).toEqual({ qualidade: "alta", resolucao: null });
+    expect(padraoDoMotor("openrouter:google/gemini-3-pro-image").resolucao).toBe("2K");
+    expect(RODADA_PADRAO.filter((r) => !r.padrao).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("folha de 6 vistas; identidades da vista: âncora e aprovadas mais perto do ângulo", () => {
+    expect(FOLHA_PADRAO).toHaveLength(6);
+    const ancora = { id: "a", papel: "candidata", vista: null, aprovada: true };
+    const imgs = [
+      ancora,
+      { id: "b", papel: "vista", vista: "corpo_inteiro", aprovada: true },
+      { id: "c", papel: "vista", vista: "tres_quartos_esq", aprovada: true },
+      { id: "d", papel: "vista", vista: "perfil_dir", aprovada: false },
+    ];
+    expect(identidadesDaVista(ancora, imgs, "perfil_esq", 14).map((i) => i.id)).toEqual(["a", "c", "b"]);
+    expect(identidadesDaVista(ancora, imgs, "perfil_esq", 1).map((i) => i.id)).toEqual(["a"]);
+    const folha = resumoDaFolha(imgs);
+    expect(folha.aprovadas).toBe(2);
+    expect(folha.pronta).toBe(false);
+  });
+
+  it("status pelo que existe: rascunho, candidatos, ancora, folha, pronta; arquivada fica", () => {
+    expect(statusDaPersona({ status: "rascunho", ancora_imagem_id: null }, [])).toBe("rascunho");
+    expect(statusDaPersona({ status: "rascunho", ancora_imagem_id: null }, [{ id: "1", papel: "candidata", vista: null, aprovada: null }])).toBe("candidatos");
+    expect(statusDaPersona({ status: "candidatos", ancora_imagem_id: "1" }, [{ id: "1", papel: "candidata", vista: null, aprovada: true }])).toBe("ancora");
+    const tres = ["frente", "perfil_esq", "meio_corpo"].map((v, i) => ({ id: `v${i}`, papel: "vista", vista: v, aprovada: true }));
+    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, tres)).toBe("pronta");
+    expect(statusDaPersona({ status: "folha", ancora_imagem_id: "1" }, tres.slice(0, 1))).toBe("folha");
+    expect(statusDaPersona({ status: "arquivada", ancora_imagem_id: "1" }, tres)).toBe("arquivada");
+    expect(personaUsavel("candidatos").ok).toBe(false);
+    expect(personaUsavel("ancora").aviso).toMatch(/Folha da persona incompleta/);
+  });
+
+  it("aviso composto do Jev: só alerta, com nota ponderada", () => {
+    const r = alertasDoRealismo({ realismo_pele: 0.8, anatomia: 2, luz: 2, lembra_pessoa_publica: 0.7, identidade_diferente: 0.1 }, { idade_aparente_estimada: 19 });
+    expect(r.alertas.join(" ")).toMatch(/plástico/);
+    expect(r.alertas.join(" ")).toMatch(/pessoa pública/);
+    expect(r.alertas.join(" ")).toMatch(/abaixo de 21/);
+    expect(r.nota_realismo).toBeCloseTo((0.8 / 3) * 0.5 + 0.3 + 0.2, 3);
+    expect(alertasDoRealismo({ realismo_pele: null, anatomia: null, luz: null, lembra_pessoa_publica: null, identidade_diferente: null }).nota_realismo).toBeNull();
+    expect(NIVEIS_PELE).toHaveLength(4);
+  });
+});
+
+describe("canvas: validação do quadro", () => {
+  const canvasOk = {
+    nome: "Óculos na praia",
+    nos: [
+      { id: "p1", tipo: "produto", x: 0, y: 0, dados: { kit_id: IMG(1) } },
+      { id: "m1", tipo: "modelo", x: 0, y: 100, dados: { modelo_id: IMG(2) } },
+      { id: "a1", tipo: "ambiente", x: 0, y: 200, dados: { texto: "praia ao fim da tarde" } },
+      { id: "e1", tipo: "estilo", x: 0, y: 300, dados: { imagem_ids: [IMG(3), "lixo"], guia: "céu azul com nuvens" } },
+      { id: "t1", tipo: "prompt", x: 0, y: 400, dados: { texto: "sorrindo, vento no cabelo" } },
+      { id: "s1", tipo: "saida", x: 400, y: 200, dados: { formato: "4:5", resolucao: "2k" } },
+    ],
+    ligacoes: [
+      { de: "p1", para: "s1", ordem: 0 },
+      { de: "m1", para: "s1", ordem: 1 },
+      { de: "a1", para: "s1", ordem: 2 },
+      { de: "e1", para: "s1", ordem: 3 },
+      { de: "t1", para: "s1", ordem: 4 },
+      { de: "t1", para: "s1", ordem: 5 },
+    ],
+  };
+
+  it("normaliza nós e ligações, descarta id inválido e ligação repetida", () => {
+    const c = normalizarCanvas(canvasOk);
+    expect(c.nos).toHaveLength(6);
+    expect(c.nos.find((n) => n.id === "e1")!.dados.imagem_ids).toEqual([IMG(3)]);
+    expect(c.nos.find((n) => n.id === "s1")!.dados).toMatchObject({ formato: "4:5", resolucao: "2K", qualidade: "alta" });
+    expect(c.ligacoes).toHaveLength(5);
+    expect(idsDoCanvas(c)).toEqual({ kits: [IMG(1)], modelos: [IMG(2)], imagens: [IMG(3)], biblioteca: [] });
+  });
+
+  it("recusa tipo desconhecido, ligação para cartão que não é saida e texto proibido", () => {
+    expect(() => normalizarCanvas({ nos: [{ id: "x", tipo: "camera" }] })).toThrow(/Tipo de cartão/);
+    expect(() => normalizarCanvas({ ...canvasOk, ligacoes: [{ de: "p1", para: "m1" }] })).toThrow(/resultado/);
+    expect(() => normalizarCanvas({ ...canvasOk, ligacoes: [{ de: "p1", para: "zz" }] })).toThrow(/não existe/);
+    expect(() => normalizarCanvas({ nos: [{ id: "t", tipo: "prompt", dados: { texto: "modelo parecida com a Zendaya" } }] })).toThrow(ErroDeRegra);
+    expect(() => normalizarCanvas({ nos: Array.from({ length: 61 }, (_, i) => ({ id: `n${i}`, tipo: "prompt" })) })).toThrow(/no máximo 60/);
+  });
+
+  it("escolhe a saida, agrupa as entradas em ordem e bloqueia sem produto nem pessoa", () => {
+    const c = normalizarCanvas(canvasOk);
+    const s = escolherSaida(c);
+    expect(s.id).toBe("s1");
+    const e = entradasDaSaida(c, s.id);
+    expect(e.produto.map((n) => n.id)).toEqual(["p1"]);
+    expect(e.modelo.map((n) => n.id)).toEqual(["m1"]);
+    expect(() => garantirQueDaParaGerar({ ...e, produto: [], modelo: [] })).toThrow(/pelo menos um produto/);
+    expect(() => escolherSaida({ nos: [] })).toThrow(/cartão de resultado/);
+    expect(() => escolherSaida(c, "nao")).toThrow(ErroDeRegra);
+  });
+});
+
+describe("canvas: ordem das referências por papel e orçamento do gerador", () => {
+  it("orçamento com 8: produto 3, pessoa 3, ambiente 1, estilo 1; com 16: 5, 5, 2, 4; com 3: 1, 1, 1", () => {
+    const muitos = { produto: 10, pessoa: 10, ambiente: 10, estilo: 10 };
+    expect(orcamentoPorPapel(8, muitos)).toEqual({ produto: 3, pessoa: 3, ambiente: 1, estilo: 1 });
+    expect(orcamentoPorPapel(16, muitos)).toEqual({ produto: 5, pessoa: 5, ambiente: 2, estilo: 4 });
+    expect(orcamentoPorPapel(3, muitos)).toEqual({ produto: 1, pessoa: 1, ambiente: 1, estilo: 0 });
+    // Papel sem imagem passa a vaga adiante.
+    expect(orcamentoPorPapel(8, { produto: 6, pessoa: 0, ambiente: 1, estilo: 0 })).toEqual({ produto: 6, pessoa: 0, ambiente: 1, estilo: 0 });
+  });
+
+  it("produto primeiro (identidade), pessoa, ambiente e estilo; cortadas com aviso", () => {
+    const cand = (papel: "produto" | "pessoa" | "ambiente" | "estilo", n: number) =>
+      Array.from({ length: n }, (_, i) => ({ papel, origem: { tipo: "acervo" as const, id: `${papel}${i}`, no_id: papel }, imagem_id: `${papel}${i}`, titulo: papel, legenda: papel }));
+    const r = ordenarReferencias([...cand("estilo", 2), ...cand("pessoa", 4), ...cand("ambiente", 1), ...cand("produto", 4)], 8);
+    expect(r.referencias.map((x) => x.papel)).toEqual(["produto", "produto", "produto", "pessoa", "pessoa", "pessoa", "ambiente", "estilo"]);
+    expect(r.referencias.map((x) => x.ordem)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(r.cortadas).toHaveLength(3);
+    expect(r.avisos[0]).toMatch(/3 imagens ficaram de fora/);
+    const krea = ordenarReferencias([...cand("produto", 2), ...cand("pessoa", 2)], 1);
+    expect(krea.avisos.join(" ")).toMatch(/Nenhuma imagem de pessoa coube/);
+  });
+
+  it("prompt do canvas: índice por papel, invariantes do kit e da ficha, hiper-realismo com pessoa", () => {
+    const ficha = normalizarFicha(fichaBase);
+    const refs = ordenarReferencias([
+      { papel: "produto", origem: { tipo: "kit", id: "k", no_id: "p1" }, imagem_id: "i1", titulo: "Óculos", legenda: "identidade" },
+      { papel: "produto", origem: { tipo: "kit", id: "k", no_id: "p1" }, imagem_id: "i2", titulo: "Óculos", legenda: "detalhe" },
+      { papel: "pessoa", origem: { tipo: "persona", id: "m", no_id: "m1" }, imagem_id: "i3", titulo: "Marina", legenda: "âncora" },
+      { papel: "estilo", origem: { tipo: "acervo", id: "e", no_id: "e1" }, imagem_id: "i4", titulo: "print", legenda: "estilo" },
+    ], 12).referencias;
+    const p = promptDoCanvas({
+      referencias: refs,
+      produtos: [{ no_id: "p1", nome: "Óculos Aurora", variante: "tartaruga", invariantes: ["ponte dupla dourada"], lacunas: ["verso da haste"] }],
+      pessoas: [{ no_id: "m1", nome: "Marina", ficha, invariantes: invariantesDaFicha(ficha) }],
+      ambientes: [{ texto: "praia ao fim da tarde" }],
+      estilos: [{ guia: "céu azul com nuvens" }],
+      textos: [{ texto: "sorrindo", papel: "pedido" }, { texto: "sem chapéu", papel: "restricao" }],
+      formato: "4:5",
+      marca: { nome: "Ótica X", paleta: ["#112233"] },
+    });
+    expect(p).toContain('Imagens 1 a 2: O PRODUTO "Óculos Aurora (variante tartaruga)" (identidade invariante)');
+    expect(p).toContain("Invariantes: ponte dupla dourada.");
+    expect(p).toContain('Imagem 3: A PESSOA SINTÉTICA "Marina"');
+    expect(p).toContain("Pessoa adulta de 29 anos");
+    expect(p).toContain("Imagem 4: SÓ ESTILO");
+    expect(p).toContain("poros visíveis");
+    expect(p).toContain("RESTRIÇÕES DA EQUIPE: sem chapéu");
+    expect(p).toContain("NÃO DOCUMENTADO NO KIT");
+    expect(p).not.toMatch(/[—–]/);
+    const semPessoa = promptDoCanvas({ referencias: refs.slice(0, 2), produtos: [{ no_id: "p1", nome: "Óculos", variante: null, invariantes: [], lacunas: [] }], pessoas: [], ambientes: [], estilos: [], textos: [], formato: "1:1" });
+    expect(semPessoa).not.toContain("poros visíveis");
+    expect(LIMITE_REFERENCIAS_DO_CANVAS).toBe(12);
+  });
+});
+
+describe("modelos e canvas: contratos da função", () => {
+  it("ações registradas no index (arquivos próprios, sem crescer o index) e com fôlego", () => {
+    for (const a of [
+      "modelos_listar", "modelo_ler", "modelo_criar", "modelo_editar", "motores_imagem", "modelo_candidata_gerar",
+      "modelo_ancora_escolher", "modelo_vista_gerar", "modelo_imagem_decidir", "modelo_detalhar", "modelo_conferir",
+    ]) expect(modelosFonte).toContain(`${a}: `);
+    for (const a of ["canvas_listar", "canvas_ler", "canvas_salvar", "canvas_montar", "canvas_gerar", "canvas_conferir"]) expect(canvasFonte).toContain(`${a}: `);
+    expect(fonte).toContain("...MODELOS.acoes,");
+    expect(fonte).toContain("...CANVAS.acoes,");
+    expect(fonte).toContain("...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS,");
+    for (const a of ["modelo_candidata_gerar", "modelo_vista_gerar", "modelo_detalhar", "modelo_conferir"]) expect(modelosFonte).toMatch(new RegExp(`ACOES_LONGAS_DE_MODELOS = \\[[^\\]]*"${a}"`));
+    for (const a of ["canvas_montar", "canvas_gerar", "canvas_conferir"]) expect(canvasFonte).toMatch(new RegExp(`ACOES_LONGAS_DO_CANVAS = \\[[^\\]]*"${a}"`));
+    expect(fonte).toContain("if (ALVOS_DE_ESTIMATIVA_DE_MODELOS.includes(acao)) return await MODELOS.estimar(ch, corpo, acao);");
+    expect(fonte).toContain("if (ALVOS_DE_ESTIMATIVA_DO_CANVAS.includes(acao)) return await CANVAS.estimar(ch, corpo);");
+  });
+
+  it("uma imagem por chamada, com resolução, custo gravado e bytes como vieram", () => {
+    expect(modelosFonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(2);
+    expect(canvasFonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
+    expect(modelosFonte).toContain("resolucao: d.resolucao,");
+    expect(modelosFonte).toContain("custo_usd: arred6(saida.custoUsd),");
+    expect(modelosFonte).toContain("uso_id: saida.usoId || null,");
+    expect(canvasFonte).toContain("custo_usd: arred6(saida.custoUsd),");
+    expect(modelosFonte).not.toContain("emPng(");
+    expect(canvasFonte).not.toContain("emPng(");
+  });
+
+  it("persona: ética obrigatória, UMA candidata por gerador, folha presa ao gerador da âncora, 4K explícito", () => {
+    expect(modelosFonte).toContain('if (corpo.etica_confirmada !== true) {');
+    expect(modelosFonte).toContain('if (!motorId) throw new ErroDeRegra(400, "modelo_imagem_obrigatorio"');
+    expect(modelosFonte).toContain('"motor_da_ancora"');
+    expect(modelosFonte).toContain('if (!aceitaResolucao(caps, "4K")) {');
+    expect(modelosFonte).toContain('papel: "detalhe",');
+    expect(modelosFonte).toContain('derivada_de: origem.id,');
+    expect(modelosFonte).toContain('modo: "detalhe",');
+    expect(modelosFonte).toContain("aviso: \"Só aviso: a equipe decide (sem refazer automático).\"");
+  });
+
+  it("conferência: visão descreve e o Jev dá notas como aviso (sem laço)", () => {
+    expect(modelosFonte).toContain('realismo_pele: { type: "score"');
+    expect(modelosFonte).toContain('lembra_pessoa_publica: {\n          type: "noul"');
+    expect(modelosFonte).toContain("timeoutMs: f.timeoutTextoMs,");
+    expect(canvasFonte).toContain("timeoutMs: f.timeoutTextoMs,");
+    expect(fonte).toContain("timeoutTextoMs: TIMEOUT_TEXTO_FOTO_MS,");
+    expect(modelosFonte).not.toMatch(/while\s*\(.*conferencia/);
+  });
+
+  it("canvas: trava otimista por versao, ids conferidos contra o banco e imagem marcada gerada no acervo", () => {
+    expect(canvasFonte).toContain('"versao_esperada_obrigatoria"');
+    expect(canvasFonte).toContain('throw new ErroDeRegra(409, "canvas_mudou"');
+    expect(canvasFonte).toContain('.eq("versao", atual.versao)');
+    expect(canvasFonte).toContain("await conferirIds(clientId, c);");
+    expect(canvasFonte).toContain('modo: "canvas",');
+    expect(canvasFonte).toContain("gerada: true,");
+    expect(canvasFonte).toContain("...mt.personaIds.map((p) => `persona:${p}`),");
+    expect(canvasFonte).toContain('"kit_de_pessoa"');
+    expect(canvasFonte).toContain('"persona_sem_ancora"');
+  });
+
+  it("migration 03: capacidades, modos novos, personas adultas, canvas com versão e RLS", () => {
+    expect(sql03).toContain("ADD COLUMN IF NOT EXISTS capacidades jsonb");
+    expect(sql03).toContain("capacidades = COALESCE(EXCLUDED.capacidades, m.capacidades),");
+    expect(sql03).toContain("AND NOT (_provedor = 'openrouter' AND modelo_api LIKE 'openai/gpt-image%');");
+    expect(sql03).toContain("'preservar', 'luz_cor', 'cenario', 'angulo', 'ensaio', 'canvas', 'detalhe'");
+    expect(sql03).toContain("(ficha ->> 'idade_aparente')::numeric >= 21");
+    expect(sql03).toContain("gerada boolean NOT NULL DEFAULT true CHECK (gerada)");
+    expect(sql03).toContain("versao integer NOT NULL DEFAULT 1 CHECK (versao > 0)");
+    for (const t of ["foto_modelos", "foto_modelo_imagens", "foto_canvas", "foto_canvas_geracoes"]) {
+      expect(sql03).toContain(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY;`);
+    }
+    for (const id of ["openrouter:bytedance-seed/seedream-5-0-pro", "openrouter:microsoft/mai-image-2.6", "openrouter:bytedance-seed/seedream-4.5"]) expect(sql03).toContain(`'${id}'`);
+    expect(sql03).not.toMatch(/[—–]/);
+  });
+});
+
+describe("modelos e canvas: contrato com a tela (as duas frentes escreveram em paralelo)", () => {
+  const modelosApi = ler("src/components/mesa-foto/modelosApi.ts");
+  const canvasApi = ler("src/components/mesa-foto/canvasApi.ts");
+  const regrasFonte = ler("supabase/functions/mesa-foto/canvas-regras.ts");
+  const acoesDaTela = (texto: string) => {
+    const saida: string[] = [];
+    const re = /acao: "([a-z_]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(texto))) if (saida.indexOf(m[1]) < 0) saida.push(m[1]);
+    return saida;
+  };
+
+  it("toda ação que a tela chama está registrada na função", () => {
+    const acoes = acoesDaTela(modelosApi + canvasApi);
+    expect(acoes).toEqual(expect.arrayContaining(["modelo_criar", "modelo_candidata_gerar", "modelo_vista_gerar", "modelo_detalhar", "modelo_imagem_decidir", "canvas_salvar"]));
+    for (const a of acoes) {
+      const registrada = modelosFonte.includes(`${a}: `) || canvasFonte.includes(`${a}: `) || new RegExp(`\\n  ${a}[,:]`).test(fonte);
+      expect(registrada, `ação ${a}`).toBe(true);
+    }
+    // A tela chama canvas_montar e canvas_gerar pelo helper (acao vem do parâmetro).
+    expect(canvasApi).toContain('corpoDoPedidoDoCanvas("canvas_montar"');
+    expect(canvasApi).toContain('corpoDoPedidoDoCanvas("canvas_gerar"');
+  });
+
+  it("os nomes antigos da tela não voltam (a função é a fonte dos nomes de entrada)", () => {
+    for (const velho of ["da_agencia", "prompt_extra", "regenerar_4k", "no_gerar_id", "motor_id: p.motorId", 'formato: "4:5" }', "etica: { sintetica"]) {
+      expect(modelosApi + canvasApi, velho).not.toContain(velho);
+    }
+    // Campos que a função lê, escritos na tela.
+    for (const campo of ["etica_confirmada", "escopo:", "modelo_imagem_id: p.motorId", "pedido = p.pedido", 'alvo: "pessoa"', 'acao: "modelo_imagem_decidir"']) expect(modelosApi, campo).toContain(campo);
+    expect(modelosFonte).toContain("if (corpo.etica_confirmada !== true) {");
+    expect(modelosFonte).toContain("const escopo = lerEscopo(corpo.escopo);");
+    expect(modelosFonte).toContain("const pedido = limpoOuNulo(corpo.pedido, 600);");
+    expect(modelosFonte).toContain("const alvo = lerAlvoDoDetalhe(corpo.alvo);");
+    for (const campo of ["no_saida_id: p.gerarId", "modelo_imagem_id: p.motorId"]) expect(canvasApi, campo).toContain(campo);
+  });
+
+  it("canvas: a função aceita os apelidos da tela e grava com os seus nomes", () => {
+    expect(regrasFonte).toContain('export const APELIDOS_DE_TIPO: Record<string, TipoDeNo> = { texto: "prompt", gerar: "saida" };');
+    expect(canvasFonte).toContain("const pedido = lerPedidoDoCanvas(corpo);");
+    expect(canvasFonte).toContain("const grafo = canvasGravado(c);");
+    const c = normalizarCanvas({
+      nos: [
+        { id: "g", tipo: "gerar", x: 1, y: 2, dados: { motores: ["openrouter:openai/gpt-image-2.5-sunburst"], resultados: [{ geracao_id: "g1", url: "https://expira.test", storage_path: "a/b.png", status: "gerada", custo_usd: 0.1 }] } },
+        { id: "t", tipo: "texto", dados: { texto: "sorrindo", papel: "restricao" } },
+        { id: "e", tipo: "estilo", dados: { imagem_id: IMG(3), biblioteca_id: IMG(4), texto: "luz fria" } },
+        { id: "m", tipo: "modelo", dados: { modelo_id: IMG(2), versao: 3 } },
+      ],
+      ligacoes: [
+        { id: "l1", de: "t", para: "g", entrada: "texto", ordem: 0 },
+        { id: "l2", de: "e", para: "g", entrada: "estilo", ordem: 0 },
+        { id: "l3", de: "m", para: "g", entrada: "pessoa", ordem: 0 },
+      ],
+    });
+    expect(c.nos.map((n) => n.tipo)).toEqual(["saida", "prompt", "estilo", "modelo"]);
+    expect(c.nos[2].dados).toMatchObject({ imagem_ids: [IMG(3)], biblioteca_ids: [IMG(4)], guia: "luz fria" });
+    expect(c.nos[3].dados).toMatchObject({ modelo_id: IMG(2), versao: 3 });
+    expect(c.nos[0].dados.resultados).toEqual([{ geracao_id: "g1", imagem_id: null, storage_bucket: "mesa", storage_path: "a/b.png", motor_id: "", status: "gerada", erro: "", custo_usd: 0.1, conferencia: null, criado_em: "" }]);
+    expect(c.ligacoes.map((l) => l.id)).toEqual(["l1", "l2", "l3"]);
+    expect(c.ligacoes.every((l) => !("entrada" in l))).toBe(true);
+    const e = entradasDaSaida(c, "g");
+    expect(e.prompt.map((n) => n.id)).toEqual(["t"]);
+    expect(e.estilo.map((n) => n.id)).toEqual(["e"]);
+    expect(idsDoCanvas(c)).toMatchObject({ modelos: [IMG(2)], imagens: [IMG(3)], biblioteca: [IMG(4)] });
+    // Os resultados guardados na Saída têm teto.
+    const muitos = normalizarCanvas({ nos: [{ id: "g", tipo: "saida", dados: { resultados: Array.from({ length: 30 }, (_, i) => ({ geracao_id: `g${i}` })) } }] });
+    expect((muitos.nos[0].dados.resultados as unknown[]).length).toBe(24);
+  });
+});
+
+describe("personas da agência só com admin (servidor)", () => {
+  it("criar, mover ou editar persona da agência pede admin", () => {
+    const m = readFileSync(resolve(__dirname, "../../supabase/functions/mesa-foto/modelos.ts"), "utf8").replace(/\r\n/g, "\n");
+    expect(m).toContain('db().rpc("has_role", { _user_id: ch.userId, _role: "admin" })');
+    expect(m).toContain('if (escopo === "agencia") await garantirAdminDaAgencia(ch);');
+    expect(m).toContain('if (!p.client_id || corpo.escopo === "agencia") await garantirAdminDaAgencia(ch);');
   });
 });

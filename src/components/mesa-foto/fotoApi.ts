@@ -28,7 +28,7 @@ import { novoId } from "@/components/mesa/EstudioFotos";
 
 export type TipoDoKit = "produto" | "pessoa" | "alimento" | "bebida" | "cosmetico" | "moda" | "tecnologia" | "outro";
 export type PapelDaRef = "identidade" | "detalhe" | "embalagem" | "verso" | "rotulo" | "rosto" | "corpo" | "pose" | "estilo" | "cenario";
-export type ModoDaFoto = "preservar" | "luz_cor" | "cenario" | "angulo" | "ensaio";
+export type ModoDaFoto = "preservar" | "luz_cor" | "cenario" | "angulo" | "ensaio" | "canvas" | "detalhe";
 export type ModoDePreparo = "fundo_branco" | "fundo_transparente" | "cenario" | "luz_cor" | "limpar";
 export type ClasseDaFoto = "original" | "derivada" | "gerada";
 export type Enquadramento = "detalhe" | "medio" | "aberto";
@@ -302,6 +302,8 @@ export const MODOS_DA_FOTO: Record<ModoDaFoto, { rotulo: string; dica: string }>
   cenario: { rotulo: "Novo cenário", dica: "Troca o fundo e o lugar; o assunto fica." },
   angulo: { rotulo: "Novo ângulo", dica: "Gera partes que não aparecem nas fotos. Sem garantia de fidelidade." },
   ensaio: { rotulo: "Ensaio", dica: "Tomada gerada a partir do kit." },
+  canvas: { rotulo: "Canvas", dica: "Gerada no Canvas: produto, persona e ambiente juntos." },
+  detalhe: { rotulo: "Detalhe 4K", dica: "Re-renderizada em 4K: versão nova, pode mexer em traço fino." },
 };
 
 export const rotuloDoModo = (m?: string | null) => (m && (MODOS_DA_FOTO as any)[m] ? MODOS_DA_FOTO[m as ModoDaFoto].rotulo : m ? String(m) : "");
@@ -614,7 +616,7 @@ export function listaDeTextos(v: unknown): string[] {
   return saida;
 }
 
-const MODOS_VALIDOS: ModoDaFoto[] = ["preservar", "luz_cor", "cenario", "angulo", "ensaio"];
+const MODOS_VALIDOS: ModoDaFoto[] = ["preservar", "luz_cor", "cenario", "angulo", "ensaio", "canvas", "detalhe"];
 const TIPOS_VALIDOS = TIPOS_DE_KIT.map((t) => t.valor);
 const PAPEIS_VALIDOS = PAPEIS_DA_REF.map((p) => p.valor);
 
@@ -665,7 +667,7 @@ export const normalizarFotos = (lista: unknown): FotoDoAcervo[] => {
 
 /** Original, derivada (tratada a partir de outra) ou gerada (sintética). */
 export function classeDaFoto(f: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo">): ClasseDaFoto {
-  if (f.gerada || f.modo === "angulo" || f.modo === "ensaio") return "gerada";
+  if (f.gerada || f.modo === "angulo" || f.modo === "ensaio" || f.modo === "canvas" || f.modo === "detalhe") return "gerada";
   if (f.derivada_de) return "derivada";
   return "original";
 }

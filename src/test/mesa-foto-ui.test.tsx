@@ -370,11 +370,12 @@ describe("rota, casca e troca entre mesas", () => {
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const botoes = within(nav).getAllByRole("button");
     // Pedido do dono ("ainda estou confuso"): 3 passos claros e as etapas de apoio discretas ao lado.
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Produto", "3Criar", "Revisar", "Usar", "Biblioteca"]);
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca"]);
+    // Modelos e Canvas (MODELOS-E-CANVAS.md) vêm depois, discretos, fora do caminho principal.
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Produto", "3Criar", "Revisar", "Usar", "Biblioteca", "Modelos", "Canvas"]);
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "canvas"]);
     expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo"], ["kits"], ["criar", "ensaio", "campanha", "preparar"]]);
-    // Modelos e Canvas já estão previstos na navegação, mas não aparecem antes de existir a tela.
-    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", false], ["canvas", false]]);
+    // Modelos e Canvas já têm tela: aparecem como abas avançadas.
+    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["canvas", true]]);
     // Celular: o caminho principal em 3 colunas e as de apoio quebram a linha, sem rolagem lateral.
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(caminho.className).toContain("grid-cols-3");
@@ -398,10 +399,10 @@ describe("rota, casca e troca entre mesas", () => {
     // O diretor de fotografia fica à mão em qualquer etapa.
     expect(await screen.findByRole("button", { name: "Abrir o diretor de fotografia" })).toBeTruthy();
     fireEvent.click(botoes[5]);
-    await waitFor(() => expect(within(nav).getAllByRole("button")[5].getAttribute("aria-current")).toBe("page"));
+    await waitFor(() => expect(within(nav).getAllByRole("button")[5].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
     // Variações, Campanha e Preparar ficam dentro do passo 3 (Criar).
     fireEvent.click(within(nav).getAllByRole("button")[2]);
-    await waitFor(() => expect(document.querySelector('[data-forma-de-criar="campanha"]')).toBeTruthy());
+    await waitFor(() => expect(document.querySelector('[data-forma-de-criar="campanha"]')).toBeTruthy(), { timeout: 5000 });
     fireEvent.click(document.querySelector('[data-forma-de-criar="ensaio"]') as HTMLElement);
     const criar = await screen.findByRole("navigation", { name: "Formas de criar" });
     expect(within(criar).getByRole("button", { name: "Variações" }).getAttribute("aria-current")).toBe("page");

@@ -42,18 +42,53 @@
  *   referencia; edits em multipart com varias imagens de referencia e mascara).
  * - anthropic: Messages API (pensamento adaptativo com output_config.effort,
  *   web_search de servidor e saida em json_schema).
- * - openrouter: Chat Completions; imagem pelos modelos com saida de imagem
- *   (modalities image+text). O custo vem em usage.cost.
+ * - openrouter: Chat Completions para texto. Imagem: GPT Image e todo modelo
+ *   so de imagem (Seedream, FLUX.2, MAI, Riverflow, Qwen, Grok, Krea) pela API
+ *   de imagens (POST /api/v1/images), com proporcao, resolucao (1K, 2K, 4K),
+ *   qualidade, semente e fundo so quando o modelo aceita; Gemini segue no chat
+ *   (modalities image+text), com image_size quando a resolucao e pedida.
+ *   Referencias cortadas no limite de cada modelo (capacidades-imagem.ts), com
+ *   aviso. O custo vem em usage.cost.
  *
- * Catalogo: listarCatalogoOpenRouter le a lista publica do OpenRouter e
- * converte para linhas de ia_modelos (usada pela acao sincronizar_catalogo
- * do ia-gateway, que roda todo dia).
+ * Catalogo: listarCatalogoOpenRouter le a lista publica do OpenRouter (chat
+ * e imagens, com preco e capacidades de cada endpoint) e converte para linhas
+ * de ia_modelos (usada pela acao sincronizar_catalogo do ia-gateway, que roda
+ * todo dia).
  *
  * Privacidade: nunca registrar chave (nem o segredo do Vault) nem prompt em
  * log. Os logs daqui levam so codigo de erro, status e ids.
  */
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  capacidadesDaListaDeImagens,
+  type CapacidadesImagem,
+  capacidadesDoModelo,
+  type EndpointDeImagemOpenRouter,
+  type ModeloDeImagemOpenRouter,
+  OPENROUTER_IMAGENS_URL,
+  precoDasEntradas,
+  precoImagemDoEndpoint,
+  precoPorImagem,
+  precosDoEndpoint,
+  proporcaoEntre,
+  qualidadeParaModelo,
+  referenciasNoLimite,
+  type Resolucao,
+  resolucaoParaModelo,
+  urlDosEndpointsDeImagem,
+} from "./capacidades-imagem.ts";
+
+export {
+  aceitaResolucao,
+  type CapacidadesImagem,
+  capacidadesDoModelo,
+  lerResolucao,
+  limiteDeReferencias,
+  precoPorImagem,
+  type Resolucao,
+  RESOLUCOES,
+} from "./capacidades-imagem.ts";
 
 export type Provedor = "openai" | "anthropic" | "openrouter";
 export type TipoModelo = "texto" | "imagem";
@@ -83,6 +118,13 @@ export type ModeloIa = {
   disponivel?: boolean;
   contexto_tokens?: number | null;
   modalidades?: { entrada?: string[]; saida?: string[] } | null;
+  /**
+   * Modelos de imagem: referências máximas, resoluções, proporções, qualidade,
+   * semente, fundo transparente e a API do OpenRouter (capacidades-imagem.ts).
+   * Coluna nova (docs/mesa-foto/migrations/03_modelos_canvas.sql); sem ela
+   * valem as famílias conhecidas.
+   */
+  capacidades?: CapacidadesImagem | null;
 };
 
 export type ImagemEntrada = { bytes: Uint8Array; mime: string; nome?: string };
@@ -142,6 +184,14 @@ export type EntradaImagem = {
    * calado para fundo opaco.
    */
   fundo?: "transparente";
+  /**
+   * Resolução pedida (Mesa Foto: 1K, 2K, 4K). Vai ao provedor só quando o
+   * modelo aceita (capacidades.resolucoes); aceita outra: a mais perto abaixo,
+   * com aviso em SaidaImagem.avisos. Sem ela, o corpo sai como antes.
+   */
+  resolucao?: Resolucao | null;
+  /** Semente (reprodutibilidade), só nos modelos que aceitam. */
+  seed?: number | null;
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   tarefa?: Tarefa;
@@ -149,6 +199,7 @@ export type EntradaImagem = {
 };
 
 export type SaidaImagem = {
+  /** Bytes como o provedor devolveu (PNG, JPEG ou WebP: ver mime). */
   png: Uint8Array;
   mime: string;
   /** Tamanho em que a arte saiu de fato (4:5 pedido ou 2:3 de reserva). */
@@ -159,6 +210,12 @@ export type SaidaImagem = {
   modeloId: string;
   /** Aviso para a tela quando o motor atendeu por outro caminho (a funcao de borda devolve como reserva_usada). */
   reservaUsada?: ReservaUsada;
+  /** Resolução que foi ao provedor (null quando o modelo não escolhe). */
+  resolucao?: Resolucao | null;
+  /** Imagens de entrada que foram de fato (depois do limite do modelo). */
+  referenciasEnviadas?: number;
+  /** Referências cortadas pelo limite, resolução ajustada e afins. */
+  avisos?: string[];
 };
 
 export type EntradaEstimativa = {
@@ -169,6 +226,10 @@ export type EntradaEstimativa = {
   imagens?: number;
   qualidade?: Qualidade;
   buscasWeb?: number;
+  /** Imagem: resolução pedida (preço por variante) e imagens de entrada (preço por referência). */
+  resolucao?: Resolucao | null;
+  imagensEntrada?: number;
+  tamanho?: string | null;
 };
 
 export type CodigoErroMotor =
@@ -629,6 +690,9 @@ type UsoTokens = {
   imagens?: number;
   qualidade?: Qualidade;
   buscasWeb?: number;
+  /** Imagem: resolução que foi ao provedor e quantas imagens de entrada. */
+  resolucao?: Resolucao | null;
+  imagensEntrada?: number;
 };
 
 /**
@@ -647,9 +711,12 @@ export function custoPelaTabela(m: ModeloIa, u: UsoTokens): number {
     const entradaImagem = Math.min(num(u.entradaImagem), num(u.entrada));
     const entradaTexto = num(u.entrada) - entradaImagem;
     const custoEntrada = (entradaTexto * pe + entradaImagem * pImgEntrada) / 1_000_000;
-    if (num(u.saida) > 0 && ps > 0) return arred(custoEntrada + (num(u.saida) * ps) / 1_000_000);
-    const porImagem = num(m.preco_imagem?.[u.qualidade ?? "media"]);
-    return arred(custoEntrada + num(u.imagens ?? 1) * porImagem);
+    // Modelo cobrado por imagem de entrada (Seedream, Qwen, Grok): soma por referência.
+    const entradasPorImagem = precoDasEntradas(m, num(u.imagensEntrada));
+    if (num(u.saida) > 0 && ps > 0) return arred(custoEntrada + entradasPorImagem + (num(u.saida) * ps) / 1_000_000);
+    // Com resolução, o preço da variante (res_2K, por megapixel ou por token); sem ela, o da qualidade.
+    const porImagem = u.resolucao ? precoPorImagem(m, u.qualidade ?? "media", u.resolucao) : num(m.preco_imagem?.[u.qualidade ?? "media"]);
+    return arred(custoEntrada + entradasPorImagem + num(u.imagens ?? 1) * porImagem);
   }
   const cache = Math.min(num(u.cache), num(u.entrada));
   return arred(((num(u.entrada) - cache) * pe + cache * pc + num(u.saida) * ps) / 1_000_000 + busca);
@@ -663,10 +730,13 @@ export async function estimar(e: EntradaEstimativa): Promise<number> {
 
 export function estimarComModelo(m: ModeloIa, e: Omit<EntradaEstimativa, "modeloId" | "tipo">): number {
   if (m.tipo === "imagem") {
-    const porImagem = num(m.preco_imagem?.[e.qualidade ?? "media"]);
+    // Resolução pedida: preço da variante (1K, 2K, 4K, megapixel ou token); sem ela, o da qualidade, como antes.
+    const porImagem = e.resolucao || m.preco_imagem?.por_megapixel != null
+      ? precoPorImagem(m, e.qualidade ?? "media", e.resolucao ?? null, e.tamanho ?? null)
+      : num(m.preco_imagem?.[e.qualidade ?? "media"]);
     const pImgEntrada = m.preco_imagem && m.preco_imagem.entrada_imagem_1m != null ? num(m.preco_imagem.entrada_imagem_1m) : num(m.preco_entrada_1m);
     // Na estimativa toda a entrada e cobrada como imagem: fica do lado seguro.
-    return arred(num(e.imagens ?? 1) * porImagem + (num(e.tokensEntrada) * pImgEntrada) / 1_000_000);
+    return arred(num(e.imagens ?? 1) * porImagem + (num(e.tokensEntrada) * pImgEntrada) / 1_000_000 + precoDasEntradas(m, num(e.imagensEntrada)));
   }
   return custoPelaTabela(m, { entrada: num(e.tokensEntrada), saida: num(e.tokensSaida), cache: 0, buscasWeb: num(e.buscasWeb) });
 }
@@ -1068,6 +1138,10 @@ type RespostaProvedorImagem = {
   entradaImagem: number;
   saida: number;
   custoProvedor: number | null;
+  /** Só nos caminhos que sabem (API de imagens e chat do OpenRouter). */
+  resolucao?: Resolucao | null;
+  referenciasEnviadas?: number;
+  avisos?: string[];
 };
 
 /** A arte sai direto no formato do feed; 2:3 fica de reserva. */
@@ -1161,29 +1235,45 @@ export function proporcao(tamanho: string): string {
 }
 
 /**
- * GPT Image pelo OpenRouter: vai pela API dedicada de imagens
- * (POST /api/v1/images), não pelo chat. Tamanho em pixels, qualidade e as
- * imagens de entrada (a editada primeiro, depois as referências) em
- * input_references como data URL. Não aceita máscara: quem precisa de área
- * travada (foto real, fundo contínuo) já devolve o original fora da área no
- * código. Resposta: data[0].b64_json e usage.cost.
+ * API dedicada de imagens do OpenRouter (POST /api/v1/images), não o chat.
+ * Vai por ela o GPT Image (tamanho em pixels, qualidade e fundo) e todo modelo
+ * só de imagem (Seedream, FLUX.2, MAI, Riverflow, Qwen, Grok, Krea), com os
+ * parâmetros que as capacidades dizem que o modelo aceita: proporção,
+ * resolução, qualidade, semente, fundo e formato. Imagens de entrada (a
+ * editada primeiro, depois as referências, em ordem) em input_references como
+ * data URL, cortadas no limite do modelo. Não aceita máscara: quem precisa de
+ * área travada já devolve o original fora da área no código.
+ * Resposta: data[0].b64_json (ou url) e usage.cost.
  */
-export const usaApiDeImagensDoOpenRouter = (m: ModeloIa) => m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api);
+export const usaApiDeImagensDoOpenRouter = (m: ModeloIa) =>
+  (m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)) ||
+  (m.provedor === "openrouter" && capacidadesDoModelo(m).api === "imagens");
 
 async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
-  const imagens = [
-    ...(e.editar ? [{ bytes: e.editar.bytes, mime: "image/png" }] : []),
-    ...e.referencias,
-  ].slice(0, 16);
+  const caps = capacidadesDoModelo(m);
+  const gpt = /^openai\/gpt-image/.test(m.modelo_api);
+  const noLimite = referenciasNoLimite(e.editar ? { bytes: e.editar.bytes, mime: "image/png" } : null, e.referencias, caps.refs_max ?? 16);
+  const imagens = noLimite.imagens;
+  const avisos: string[] = noLimite.aviso ? [noLimite.aviso] : [];
   const tamanho = e.tamanho || TAMANHO_2X3;
-  const corpo: Record<string, unknown> = {
-    model: m.modelo_api,
-    prompt: e.prompt,
-    n: 1,
-    size: tamanho,
-    quality: QUALIDADE_OPENAI[e.qualidade] ?? "medium",
-    output_format: "png",
-  };
+  const corpo: Record<string, unknown> = { model: m.modelo_api, prompt: e.prompt, n: 1 };
+  let resolucao: Resolucao | null = null;
+  if (gpt) {
+    // GPT Image: como sempre foi (tamanho em pixels e qualidade da OpenAI).
+    corpo.size = tamanho;
+    corpo.quality = QUALIDADE_OPENAI[e.qualidade] ?? "medium";
+    corpo.output_format = "png";
+  } else {
+    corpo.aspect_ratio = proporcaoEntre(tamanho, caps.proporcoes);
+    const r = resolucaoParaModelo(caps, e.resolucao ?? null);
+    resolucao = r.resolucao;
+    if (r.resolucao) corpo.resolution = r.resolucao;
+    if (r.aviso) avisos.push(r.aviso);
+    const q = qualidadeParaModelo(caps, e.qualidade);
+    if (q) corpo.quality = q;
+    if (caps.seed && typeof e.seed === "number" && Number.isFinite(e.seed)) corpo.seed = Math.floor(e.seed);
+    if ((caps.formatos_saida ?? []).includes("png")) corpo.output_format = "png";
+  }
   if (imagens.length) corpo.input_references = imagens.map((img) => ({ type: "image_url", image_url: { url: dataUrl(img) } }));
   if (e.fundo === "transparente") corpo.background = "transparent";
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/images", {
@@ -1197,32 +1287,54 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
   };
   const item = data.data?.[0];
   let bytes: Uint8Array | null = item?.b64_json ? deBase64(item.b64_json) : null;
+  let mime = item?.media_type || "";
   if (!bytes && item?.url) {
-    // Pelo mesmo ponto de saída do motor (tempo limite e erro padronizado).
-    const baixada = await buscar("openrouter", item.url, { method: "GET" }, 60_000);
-    bytes = new Uint8Array(await baixada.arrayBuffer());
+    const embutida = item.url.match(/^data:([^;]+);base64,(.+)$/);
+    if (embutida) {
+      bytes = deBase64(embutida[2]);
+      mime = mime || embutida[1];
+    } else {
+      // Pelo mesmo ponto de saída do motor (tempo limite e erro padronizado).
+      const baixada = await buscar("openrouter", item.url, { method: "GET" }, 60_000);
+      mime = mime || baixada.headers.get("content-type")?.split(";")[0] || "";
+      bytes = new Uint8Array(await baixada.arrayBuffer());
+    }
   }
   if (!bytes || !bytes.length) throw new IaMotorErro("resposta_vazia", "O gerador nao devolveu imagem.", { provedor: "openrouter" });
   const u = data.usage ?? {};
   return {
     bytes,
-    mime: item?.media_type || "image/png",
+    mime: mime || mimePelosBytes(bytes),
     tamanho,
     entrada: num(u.prompt_tokens),
     entradaImagem: 0,
     saida: num(u.completion_tokens),
     custoProvedor: typeof u.cost === "number" && Number.isFinite(u.cost) ? u.cost : null,
+    resolucao,
+    referenciasEnviadas: imagens.length,
+    avisos,
   };
+}
+
+/** Tipo da imagem pelos primeiros bytes (PNG, JPEG, WebP); PNG quando não dá para saber. */
+function mimePelosBytes(b: Uint8Array): string {
+  if (b[0] === 0xff && b[1] === 0xd8) return "image/jpeg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) return "image/webp";
+  return "image/png";
 }
 
 /**
  * Modelos que devolvem fundo transparente de verdade: GPT Image direto na
- * OpenAI e pela API de imagens do OpenRouter. O chat do OpenRouter (Gemini e
+ * OpenAI e pela API de imagens do OpenRouter, e os modelos só de imagem cujas
+ * capacidades dizem que aceitam (Riverflow). O chat do OpenRouter (Gemini e
  * outros) não tem esse parâmetro.
  */
-export function aceitaFundoTransparente(m: Pick<ModeloIa, "provedor" | "modelo_api">): boolean {
+export function aceitaFundoTransparente(m: Pick<ModeloIa, "provedor" | "modelo_api"> & Pick<Partial<ModeloIa>, "capacidades" | "modalidades">): boolean {
   if (m.provedor === "openai") return /^gpt-image/.test(m.modelo_api);
-  return m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api);
+  if (m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)) return true;
+  if (m.provedor !== "openrouter") return false;
+  const caps = capacidadesDoModelo(m);
+  return caps.api === "imagens" && caps.fundo_transparente === true;
 }
 
 function erroFundoTransparente(m: ModeloIa): IaMotorErro {
@@ -1235,10 +1347,15 @@ function erroFundoTransparente(m: ModeloIa): IaMotorErro {
 async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
   if (usaApiDeImagensDoOpenRouter(m)) return await imagemOpenRouterImages(m, chave, e);
   if (e.fundo === "transparente") throw erroFundoTransparente(m);
-  const imagens = [
-    ...(e.editar ? [{ bytes: e.editar.bytes, mime: "image/png" }] : []),
-    ...e.referencias,
-  ];
+  // Chat do OpenRouter (Gemini): corpo igual ao de antes; resolução (image_size) só quando pedida e aceita.
+  const caps = capacidadesDoModelo(m);
+  const noLimite = referenciasNoLimite(e.editar ? { bytes: e.editar.bytes, mime: "image/png" } : null, e.referencias, caps.refs_max ?? 14);
+  const imagens = noLimite.imagens;
+  const avisos: string[] = noLimite.aviso ? [noLimite.aviso] : [];
+  const r = resolucaoParaModelo(caps, e.resolucao ?? null);
+  if (r.aviso) avisos.push(r.aviso);
+  const imageConfig: Record<string, unknown> = { aspect_ratio: proporcao(e.tamanho || TAMANHO_2X3) };
+  if (r.resolucao) imageConfig.image_size = r.resolucao;
   const corpo = {
     model: m.modelo_api,
     messages: [{
@@ -1249,7 +1366,7 @@ async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): P
       ],
     }],
     modalities: ["image", "text"],
-    image_config: { aspect_ratio: proporcao(e.tamanho || TAMANHO_2X3) },
+    image_config: imageConfig,
   };
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -1272,6 +1389,9 @@ async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): P
     entradaImagem: 0,
     saida: num(u.completion_tokens),
     custoProvedor: typeof u.cost === "number" && Number.isFinite(u.cost) ? u.cost : null,
+    resolucao: r.resolucao,
+    referenciasEnviadas: imagens.length,
+    avisos,
   };
 }
 
@@ -1291,11 +1411,18 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
   if (e.fundo === "transparente" && !aceitaFundoTransparente(rota.m)) throw erroFundoTransparente(rota.m);
 
   const qtdImagensEntrada = e.referencias.length + (e.editar ? 1 : 0);
-  const estimativaPara = (mod: ModeloIa) => estimarComModelo(mod, {
-    imagens: 1,
-    qualidade: e.qualidade,
-    tokensEntrada: Math.ceil(e.prompt.length / 3.5) + qtdImagensEntrada * TOKENS_POR_IMAGEM_ENTRADA,
-  });
+  const estimativaPara = (mod: ModeloIa) => {
+    const limite = capacidadesDoModelo(mod).refs_max ?? qtdImagensEntrada;
+    const enviadas = Math.min(qtdImagensEntrada, Math.max(0, limite));
+    return estimarComModelo(mod, {
+      imagens: 1,
+      qualidade: e.qualidade,
+      tokensEntrada: Math.ceil(e.prompt.length / 3.5) + enviadas * TOKENS_POR_IMAGEM_ENTRADA,
+      resolucao: e.resolucao ? resolucaoParaModelo(capacidadesDoModelo(mod), e.resolucao).resolucao : null,
+      imagensEntrada: enviadas,
+      tamanho: e.tamanho,
+    });
+  };
   const estimativa = estimativaPara(rota.m);
   garantirCota(rota.chave, estimativa);
   await garantirSaldo(e.clientId, estimativa);
@@ -1308,7 +1435,16 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
   const custoFonte: "provedor" | "tabela" = r.custoProvedor != null ? "provedor" : "tabela";
   const custoUsd = r.custoProvedor != null
     ? arred(r.custoProvedor)
-    : custoPelaTabela(m, { entrada: r.entrada, entradaImagem: r.entradaImagem, saida: r.saida, cache: 0, imagens: 1, qualidade: e.qualidade });
+    : custoPelaTabela(m, {
+      entrada: r.entrada,
+      entradaImagem: r.entradaImagem,
+      saida: r.saida,
+      cache: 0,
+      imagens: 1,
+      qualidade: e.qualidade,
+      resolucao: r.resolucao ?? null,
+      imagensEntrada: r.referenciasEnviadas ?? qtdImagensEntrada,
+    });
 
   const { usoId, saldoUsd } = await registrarUso({
     clientId: e.clientId,
@@ -1328,6 +1464,9 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
   });
   const saida: SaidaImagem = { png: r.bytes, mime: r.mime, tamanho: r.tamanho, usoId, custoUsd, saldoUsd, modeloId: m.id };
   if (reserva) saida.reservaUsada = reserva;
+  if (r.resolucao !== undefined) saida.resolucao = r.resolucao;
+  if (r.referenciasEnviadas !== undefined) saida.referenciasEnviadas = r.referenciasEnviadas;
+  if (r.avisos?.length) saida.avisos = r.avisos;
   return saida;
 }
 
@@ -1367,6 +1506,8 @@ export type LinhaCatalogo = {
   contexto_tokens: number | null;
   modalidades: { entrada: string[]; saida: string[] };
   fonte_preco: string;
+  /** Só modelos de imagem (lista de imagens do OpenRouter); texto: null. */
+  capacidades: CapacidadesImagem | null;
 };
 
 type ModeloOpenRouter = {
@@ -1437,15 +1578,112 @@ export function converterModeloOpenRouter(o: ModeloOpenRouter, hoje: string): Li
     contexto_tokens: Number.isInteger(contexto) && contexto > 0 ? contexto : null,
     modalidades: { entrada, saida },
     fonte_preco: `${OPENROUTER_MODELOS_URL} e https://openrouter.ai/${slug} (sincronizado ${hoje})`,
+    capacidades: null,
   };
 }
 
-/** Lista publica do OpenRouter (sem chave), ja convertida para o catalogo. */
+/**
+ * Converte um modelo da lista pública de IMAGENS do OpenRouter
+ * (/api/v1/images/models + /endpoints) em linha do catálogo, com as
+ * capacidades e o preço por imagem na variante certa (por imagem, por
+ * megapixel ou por token). Ficam de fora: GPT Image (linha mantida à mão,
+ * com o preço por qualidade da OpenAI; a sincronização não a derruba) e
+ * modelo sem preço publicado no endpoint.
+ */
+export function converterModeloDeImagemOpenRouter(
+  o: ModeloDeImagemOpenRouter,
+  endpoints: EndpointDeImagemOpenRouter[] | null,
+  hoje: string,
+): LinhaCatalogo | null {
+  const slug = String(o.id ?? "").trim();
+  if (!slug || slug.includes(":") || slug.startsWith("openrouter/") || /^openai\/gpt-image/.test(slug)) return null;
+  const saida = o.architecture?.output_modalities ?? [];
+  if (!saida.includes("image")) return null;
+  const endpoint = (endpoints ?? [])[0] ?? null;
+  const caps = capacidadesDaListaDeImagens(o, endpoint);
+  const precos = precosDoEndpoint(endpoint);
+  const preco = precoImagemDoEndpoint(slug, caps, precos);
+  if (!preco.preco_imagem) return null;
+  return {
+    id: `openrouter:${slug}`,
+    modelo_api: slug,
+    tipo: "imagem",
+    rotulo: String(o.name ?? slug).slice(0, 200),
+    preco_entrada_1m: preco.preco_entrada_1m,
+    preco_saida_1m: preco.preco_saida_1m,
+    preco_cache_1m: null,
+    preco_imagem: preco.preco_imagem,
+    raciocinio: [],
+    contexto_tokens: null,
+    modalidades: { entrada: o.architecture?.input_modalities ?? ["text"], saida },
+    fonte_preco: `${OPENROUTER_IMAGENS_URL} e ${urlDosEndpointsDeImagem(slug)} (sincronizado ${hoje})`,
+    capacidades: { ...caps, precos, fonte: urlDosEndpointsDeImagem(slug) },
+  };
+}
+
+/**
+ * Junta a linha do chat (Gemini, que também está na lista de imagens) com as
+ * capacidades e os preços por resolução da lista de imagens. O preço por
+ * token do chat fica; entram as chaves res_<R>.
+ */
+export function juntarCapacidades(linha: LinhaCatalogo, daImagem: LinhaCatalogo): LinhaCatalogo {
+  const resolucoes: Record<string, number> = {};
+  for (const [k, v] of Object.entries(daImagem.preco_imagem ?? {})) if (k.startsWith("res_") || k === "entrada_por_imagem") resolucoes[k] = v;
+  return {
+    ...linha,
+    preco_imagem: linha.preco_imagem ? { ...linha.preco_imagem, ...resolucoes } : daImagem.preco_imagem,
+    capacidades: daImagem.capacidades,
+  };
+}
+
+/** Lista de imagens + endpoints de cada modelo (6 por vez, uma nova tentativa por falha). */
+async function listarModelosDeImagemOpenRouter(hoje: string): Promise<LinhaCatalogo[]> {
+  const obterJson = async (url: string) => (await buscar("openrouter", url, { method: "GET" }, TIMEOUT_LISTA_MS)).json();
+  const comUmaNovaTentativa = async <T>(fn: () => Promise<T>): Promise<T> => {
+    try {
+      return await fn();
+    } catch {
+      return await fn();
+    }
+  };
+  const lista = ((await comUmaNovaTentativa(() => obterJson(OPENROUTER_IMAGENS_URL))) as { data?: ModeloDeImagemOpenRouter[] }).data ?? [];
+  const alvos = lista.filter((o) => {
+    const slug = String(o.id ?? "");
+    return slug && !slug.includes(":") && !/^openai\/gpt-image/.test(slug) && (o.architecture?.output_modalities ?? []).includes("image");
+  });
+  const linhas: LinhaCatalogo[] = [];
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < alvos.length) {
+      const o = alvos[proximo++];
+      const dados = await comUmaNovaTentativa(() => obterJson(urlDosEndpointsDeImagem(String(o.id)))) as { endpoints?: EndpointDeImagemOpenRouter[] };
+      const linha = converterModeloDeImagemOpenRouter(o, dados.endpoints ?? [], hoje);
+      if (linha) linhas.push(linha);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, alvos.length) }, trabalhador));
+  return linhas;
+}
+
+/**
+ * Lista publica do OpenRouter (sem chave), ja convertida para o catalogo:
+ * a lista do chat (/api/v1/models) mais a de imagens (/api/v1/images/models,
+ * com o preço e as capacidades de cada endpoint). Os modelos só de imagem
+ * (Seedream, FLUX.2, MAI, Riverflow...) só aparecem na segunda. Se a lista de
+ * imagens falhar duas vezes, a sincronização inteira falha (sem ela, a rodada
+ * completa marcaria esses modelos como indisponíveis) e o cron tenta amanhã.
+ */
 export async function listarCatalogoOpenRouter(): Promise<{ linhas: LinhaCatalogo[]; recebidos: number }> {
   const res = await buscar("openrouter", OPENROUTER_MODELOS_URL, { method: "GET" }, TIMEOUT_LISTA_MS);
   const data = await res.json() as { data?: ModeloOpenRouter[] };
   const hoje = new Date().toISOString().slice(0, 10);
   const lista = data.data ?? [];
-  const linhas = lista.map((o) => converterModeloOpenRouter(o, hoje)).filter((l): l is LinhaCatalogo => l !== null);
-  return { linhas, recebidos: lista.length };
+  const doChat = lista.map((o) => converterModeloOpenRouter(o, hoje)).filter((l): l is LinhaCatalogo => l !== null);
+  const deImagem = await listarModelosDeImagemOpenRouter(hoje);
+  const porId = new Map(doChat.map((l) => [l.id, l]));
+  for (const img of deImagem) {
+    const noChat = porId.get(img.id);
+    porId.set(img.id, noChat ? juntarCapacidades(noChat, img) : img);
+  }
+  return { linhas: Array.from(porId.values()), recebidos: lista.length + deImagem.length };
 }
