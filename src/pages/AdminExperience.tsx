@@ -2387,6 +2387,14 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       Mesa
                     </button>
                   )}
+                  {["admin", "manager", "design"].includes(profile?.role || "") && (
+                    <button
+                      onClick={() => navigate(`/mesa-ads?client=${client.id}`)}
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 border-none cursor-pointer"
+                    >
+                      Mesa Ads
+                    </button>
+                  )}
                   <button
                     onClick={() => openClientProfile(client.id)}
                     className={`${["admin", "manager", "design"].includes(profile?.role || "") ? "" : "sm:ml-auto "}text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer`}

@@ -65,6 +65,7 @@ const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
 const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));
+const MesaAds = lazy(() => import("@/pages/MesaAds"));
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
@@ -276,6 +277,8 @@ export function AppRoutes() {
       {/* Suspense próprio: enquanto a Mesa baixa, o menu continua na tela e
           aparece o esqueleto dela, não a tela cheia de carregando. */}
       <Route path="/mesa" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaDoCliente /></Suspense> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
+      {/* Mesa Ads: criativos de anúncio (docs/mesa-ads/SPEC.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+      <Route path="/mesa-ads" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
       <Route path="/novidades" element={<ProtectedRoute><AppLayout><Novidades /></AppLayout></ProtectedRoute>} />
