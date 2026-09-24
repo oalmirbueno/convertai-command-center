@@ -336,6 +336,8 @@ export function promptDaLamina(
     logo?: { tom: string | null; clara: boolean } | null;
     /** Descrição da foto real anexada como base: o gerador não redesenha a foto. */
     fotoReal?: string | null;
+    /** A logo oficial é aplicada pelo código depois (foto real fixa): o gerador não desenha logo. */
+    logoNoCodigo?: boolean;
     /** Criativo de anúncio (trabalho tipo 'ads'): quadro, zona segura e regras do formato. */
     anuncio?: { formato: FormatoCriativo } | null;
   },
@@ -374,6 +376,12 @@ export function promptDaLamina(
       `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}.`;
   });
 
+  // Foto real como base (24/09): a foto já está decidida. Nada de véu ou painel
+  // atrás do texto, nada de mudar pose ou enquadramento, e a logo entra pelo
+  // código (o gerador desenhava a logo torta dentro de uma caixa fosca).
+  const foto = !!opcoes.fotoReal;
+  const cantoDaLogo = layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo";
+
   const paletaTxt = paleta.length
     ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
     : "paleta coerente com as artes da marca anexadas";
@@ -388,24 +396,28 @@ export function promptDaLamina(
     opcoes.conceito ? `Conceito do conjunto: ${opcoes.conceito}` : "",
     "",
     "IMAGEM E COMPOSIÇÃO",
-    opcoes.fotoReal
-      ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz e cores ficam exatamente como estão. Desenhe só o texto e, se precisar para a leitura, um painel ou véu suave dentro da área do texto.`
+    foto
+      ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz, cores, corte e enquadramento ficam exatamente como estão. Desenhe só o texto, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás dele.`
       : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
-    opcoes.fioVisual && serie
+    opcoes.fioVisual && serie && !foto
       ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").slice(0, 600)} Mesma pessoa, mesmo cenário, mesma luz e paleta em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
       : "",
-    anuncio && capa
+    foto && capa
+      ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, legível até no tamanho da miniatura do feed. A foto já é o elemento visual forte: não mude a foto. Nada competindo com a headline."
+      : anuncio && capa
       ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : capa
       ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma luz, cenário e paleta das lâminas seguintes. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : "",
-    opcoes.anteriores && opcoes.anteriores.length && serie
+    opcoes.anteriores && opcoes.anteriores.length && serie && !foto
       ? `- Lâminas anteriores desta série mostraram: ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}. Mantenha a mesma protagonista, cenário e luz; mude só a pose e o enquadramento (não repita a pose da lâmina anterior).`
       : "",
-    `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
-    `- Ponto focal: ${layout.ponto_focal}.`,
-    `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
-    `- Tratamento: ${layout.tratamento}.`,
+    foto
+      ? `- O texto fica na área indicada (${layout.zona_texto.replace("-", " ")}), sobre a parte mais calma da foto; o contraste vem da cor e do peso das letras, nunca de escurecer ou cobrir a foto.`
+      : `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
+    foto ? "" : `- Ponto focal: ${layout.ponto_focal}.`,
+    foto ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
+    foto ? "" : `- Tratamento: ${layout.tratamento}.`,
     marca.estilo ? `- Estilo visual da marca, obrigatório: ${marca.estilo}` : "",
     "",
     "TEXTO (escrito pela própria arte, integrado à composição)",
@@ -420,8 +432,10 @@ export function promptDaLamina(
       ? `- Tipografia: títulos em ${fonteTitulo || fonteTexto}, texto em ${fonteTexto || fonteTitulo}. Se houver amostra da fonte anexada, siga o desenho exato das letras da amostra.`
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
     marca.tipografiaCitada?.observacao ? `- Observação da marca sobre tipografia: ${marca.tipografiaCitada.observacao}` : "",
-    opcoes.levaLogo && marca.temLogo
-      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo"} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.` +
+    opcoes.logoNoCodigo && opcoes.levaLogo
+      ? `- Logo: NÃO desenhe logo, símbolo nem marca. A logo oficial é aplicada depois pelo sistema no canto ${cantoDaLogo}; deixe esse canto só com a foto, sem texto e sem nenhuma forma.`
+      : opcoes.levaLogo && marca.temLogo
+      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${cantoDaLogo} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.` +
         (opcoes.logo
           ? opcoes.logo.clara
             ? " A logo é clara: o fundo atrás dela é escuro o bastante para ela aparecer inteira."

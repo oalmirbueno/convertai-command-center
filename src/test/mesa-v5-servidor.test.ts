@@ -211,7 +211,7 @@ describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica,
     const g = corpoDe(estudio, "gerarCard");
     expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);");
     expect(estudio).toContain("const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };");
-    expect(g).toContain("devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28)");
+    expect(g).toContain("devolverOriginalAlinhado(baseFoto, img.png, areas, panorama ? 40 : 28, { texto: fotoFixa })");
   });
   it("texto sobre foto ou panorama nunca vem numa caixa, e a foto não é escurecida", () => {
     expect(corpoDe(estudio, "gerarCard")).toContain("SEM_CAIXA_ATRAS_DO_TEXTO,");

@@ -61,7 +61,7 @@ describe("estudio-arte: a lamina inteira sai do gerador", () => {
   it("logo so vai no prompt quando o arquivo existe (sem anexo o gerador inventaria uma)", () => {
     const gerar = corpoDe("gerarCard");
     expect(gerar).toContain("let comLogo = false;");
-    expect(gerar).toContain("marca.temLogo = comLogo;");
+    expect(gerar).toContain("marca.temLogo = comLogo || !!logoNoCodigo;");
   });
 
   it("qualidade padrao media (US$ 0,01 por lamina contra US$ 0,04 da alta)", () => {

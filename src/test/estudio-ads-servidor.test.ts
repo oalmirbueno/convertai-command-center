@@ -95,7 +95,8 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(g).toContain("editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo");
     // foto real com máscara e devolução do original
     expect(g).toContain("mascara: await mascara(quadro.largura, quadro.altura, areas)");
-    expect(g).toContain("img.tamanho === quadro.tamanho ? await devolverOriginalForaDasAreas(");
+    expect(g).toContain("const volta = img.tamanho === quadro.tamanho");
+    expect(g).toContain("? await devolverOriginalAlinhado(baseFoto, img.png, areas");
     expect(g).not.toContain("mascara(1088, 1360");
     // normal
     expect(g).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");
@@ -108,9 +109,10 @@ describe("Estúdio Ads: tamanho por formato", () => {
     // leitura da conferência e entrega no quadro final do formato
     expect(corpoDe("verificar")).toContain("await laminaFinal(caminho, quadro.final)");
     expect(corpoDe("laminaFinal")).toContain("Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01");
-    expect(corpoDe("fotoRealNaLamina")).toContain("transform: { width: largura, height: altura, resize: \"cover\", format: \"origin\" }");
+    // O Storage só reduz a foto inteira; o recorte com foco no tamanho do card é feito na função.
+    expect(corpoDe("fotoRealNaLamina")).toContain("return await fotoNaLamina(bytes, largura, altura);");
     expect(imagemLocal).toContain("export async function fotoNaLamina(bytes: Uint8Array, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA)");
-    expect(imagemLocal).toContain("return await cobrir(await decodificar(bytes), largura, altura).encode(1);");
+    expect(imagemLocal).toContain("return await cobrirComFoco(await decodificar(bytes), largura, altura).encode(1);");
   });
 });
 

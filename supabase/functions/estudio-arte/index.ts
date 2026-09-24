@@ -122,7 +122,9 @@ import {
 } from "./conversa-do-diretor.ts";
 import {
   ampliar,
+  aplicarLogo,
   type Area,
+  devolverOriginalAlinhado,
   devolverOriginalForaDasAreas,
   analisarLogo,
   fotoNaLamina,
@@ -856,13 +858,15 @@ const resumoDaFoto = (a: ImagemAcervo) =>
 
 /**
  * Foto real já no formato da lâmina (1088 x 1360 por padrão; o criativo de
- * anúncio passa o tamanho do formato), cover pelo centro. Pede o recorte à
- * transformação do Storage (sem gastar CPU da função) e, sem ela, recorta aqui.
+ * anúncio passa o tamanho do formato), recortada pelo foco da foto. O Storage
+ * só reduz a foto inteira (contain, sem cortar: o "cover" dele cortava pelo
+ * centro e decapitava quem estava no alto de uma foto de Reels) e o recorte
+ * com foco é feito aqui.
  */
 async function fotoRealNaLamina(a: ImagemAcervo, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
   try {
     const { data, error } = await servico().storage.from(a.storage_bucket).download(a.storage_path, {
-      transform: { width: largura, height: altura, resize: "cover", format: "origin" },
+      transform: { width: 2000, height: 2500, resize: "contain", format: "origin" },
     });
     if (!error && data) {
       const bytes = new Uint8Array(await data.arrayBuffer());
@@ -1847,6 +1851,10 @@ const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };
 const SEM_CAIXA_ATRAS_DO_TEXTO =
   "Escreva o texto e a logo DIRETAMENTE sobre a imagem, integrados à cena: sem caixa, cartão, painel, faixa, retângulo, moldura, véu, desfoque ou área de cor atrás das letras. Ignore qualquer indicação de fundo liso ou de área de cor para o texto: aqui o fundo é a própria foto. O contraste vem da cor e do peso das letras (escolha na paleta a cor que mais contrasta com aquela parte da foto) e, se preciso, de uma sombra suave nas próprias letras. Não escureça a foto.";
 
+/** O gerador aproximava e deslocava a foto; o código alinha, mas o certo é não mexer. */
+const NAO_REENQUADRAR =
+  "Não reenquadre a imagem 1: mesmo corte, mesmo zoom, mesma posição e tamanho de cada pessoa e objeto, nada aproximado, afastado, girado ou espelhado. A saída tem exatamente o mesmo enquadramento da imagem 1.";
+
 const descreverArea = (a: Area) =>
   `de ${Math.round(a.x0 * 100)}% a ${Math.round(a.x1 * 100)}% da largura e de ${Math.round(a.y0 * 100)}% a ${Math.round(a.y1 * 100)}% da altura`;
 
@@ -2036,17 +2044,27 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const legendar = (txt: string) => rotulos.push(txt);
   const legendas = (deslocamento: number) => rotulos.map((r, i) => `imagem ${i + 1 + deslocamento}: ${r}`);
 
+  // Foto real fixa (sem panorama e sem elementos soltos): a foto não é refeita,
+  // o gerador só escreve o texto e a logo oficial entra pelo código.
+  const fotoFixa = !!baseFoto && !panorama && !elementos.length;
+
   // Logo só quando o arquivo existe de fato: pedir "a logo anexada" sem anexo faz o gerador inventar uma.
   let comLogo = false;
   let tomDaLogo: { tom: string | null; clara: boolean } | null = null;
+  let logoNoCodigo: Uint8Array | null = null;
   if (levaLogo(t, ordem)) {
     const logo = await baixarLogo(t.client_id, kit);
     if (logo) {
-      anexos.push(logo);
-      legendar("logo oficial da marca");
-      comLogo = true;
       // Medida em código: o prompt põe atrás da logo um fundo de valor oposto.
       tomDaLogo = await analisarLogo(logo.bytes).catch(() => null);
+      if (fotoFixa && tomDaLogo) {
+        // Sobre foto real o gerador desenhava a logo torta, dentro de uma caixa fosca (24/09).
+        logoNoCodigo = logo.bytes;
+      } else {
+        anexos.push(logo);
+        legendar("logo oficial da marca");
+        comLogo = true;
+      }
     }
   }
   for (const a of await amostrasDasFontes(fontes)) {
@@ -2066,7 +2084,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Sem tela dupla, a anterior vai como referência; no contínuo o final também vê a capa.
   if (anterior && !continuar) {
     anexos.push({ bytes: await baixar("mesa", anterior.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
-    legendar(`card ${ordem - 1} já aprovado desta mesma série: mantenha a mesma protagonista, cenário, luz, paleta, tipografia e posição da marca; mude só a pose, o enquadramento e o texto`);
+    // Com foto real a cena já está decidida: "mude a pose e o enquadramento" fazia o gerador reenquadrar a foto.
+    legendar(fotoFixa
+      ? `card ${ordem - 1} desta mesma série: siga só a tipografia, as cores do texto e a hierarquia dele; NÃO copie a foto nem o enquadramento dele, a foto desta lâmina é a imagem 1`
+      : `card ${ordem - 1} já aprovado desta mesma série: mantenha a mesma protagonista, cenário, luz, paleta, tipografia e posição da marca; mude só a pose, o enquadramento e o texto`);
   }
   if (infinito && ordem === total && ordem > 2) {
     const capa = versaoAtual(t, 1);
@@ -2109,7 +2130,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // Direção com layout: o prompt é recomposto agora, com o kit atual da marca.
   const marca = await marcaDoCliente(t.client_id, kit, fontes);
-  marca.temLogo = comLogo;
+  marca.temLogo = comLogo || !!logoNoCodigo;
   const base = card.layout
     ? promptDaLamina(card, marca, {
       total,
@@ -2118,6 +2139,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       conceito: t.direcao.conceito,
       anteriores: imagensAnteriores(t.direcao.cards, ordem),
       fotoReal: resumoDoFundo,
+      logoNoCodigo: !!logoNoCodigo,
       fioVisual: t.direcao.fio_visual ?? null,
       logo: tomDaLogo,
       // Criativo de anúncio: quadro, zona segura e regras do formato (conhecimento-ads.ts).
@@ -2171,6 +2193,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       panorama
         ? `EDITE a imagem 1: ela é a cena desta lâmina, parte de um panorama que atravessa o carrossel. Mantenha a mesma cena, luz, pessoas e objetos, na mesma posição e escala. Não mude nada nas faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado): elas emendam com as lâminas vizinhas.`
         : `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
+      NAO_REENQUADRAR,
       SEM_CAIXA_ATRAS_DO_TEXTO,
       baseComCampanha,
       regrasDeRender(t, card, legendas(1), comLogo),
@@ -2182,13 +2205,39 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       tamanho: quadro.tamanho,
       tamanhoFixo: quadro.fixo,
     });
-    // O gerador redesenha tudo mesmo com máscara: o original volta fora das áreas.
-    const final = img.tamanho === quadro.tamanho ? await devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28) : img.png;
+    // O gerador redesenha tudo mesmo com máscara (e reenquadra): o original é
+    // alinhado ao que ele devolveu e volta fora das áreas; na foto real, dentro
+    // da área do texto fica só o que ele escreveu.
+    const volta = img.tamanho === quadro.tamanho
+      ? await devolverOriginalAlinhado(baseFoto, img.png, areas, panorama ? 40 : 28, { texto: fotoFixa })
+      : null;
+    let final = volta ? volta.png : img.png;
+    let logoAplicada = false;
+    if (logoNoCodigo) {
+      try {
+        const zona = normalizarLayout(card.layout, card.funcao, card.ordem, total).zona_texto;
+        const c = caixaDaLogo(zona, card.funcao === "capa" || card.ordem === 1, quadro.formato);
+        final = await aplicarLogo(final, logoNoCodigo, { x0: c.x0 / 100, y0: c.y0 / 100, x1: c.x1 / 100, y1: c.y1 / 100 }, !!tomDaLogo?.clara);
+        logoAplicada = true;
+      } catch {
+        // Raro (analisarLogo já abriu a logo): a lâmina segue sem ela e a versão fica marcada logo_no_codigo: false.
+      }
+    }
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
       custoExtraUsd: custoFundo || undefined,
-      extra: { referencias_jev: escolha.jev, tamanho: img.tamanho, modo: panorama ? "panorama" : "foto_real", imagem_id: foto?.id ?? null, foto_livre: fundoLivre ? fundoLivre.caminho : null },
+      extra: {
+        referencias_jev: escolha.jev,
+        tamanho: img.tamanho,
+        modo: panorama ? "panorama" : "foto_real",
+        imagem_id: foto?.id ?? null,
+        foto_livre: fundoLivre ? fundoLivre.caminho : null,
+        alinhamento: volta
+          ? { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada }
+          : null,
+        logo_no_codigo: logoNoCodigo ? logoAplicada : null,
+      },
     });
   }
 
