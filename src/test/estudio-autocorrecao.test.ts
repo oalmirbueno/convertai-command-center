@@ -79,26 +79,26 @@ describe("decidirAutocorrecao", () => {
     expect(sobrando.motivos).toEqual(["Logo onde não devia"]);
   });
 
-  it("identidade baixa (abaixo da metade da escala): corrige; na metade, não", () => {
+  it("identidade baixa vira aviso, não correção automática (24/09: a edição inteira inventava defeitos)", () => {
     const baixa = decidirAutocorrecao(certa({ identidade: nota(1.2) }), { ads: false, textoExato: TEXTO });
-    expect(baixa.precisa).toBe(true);
+    expect(baixa.precisa).toBe(false);
     expect(baixa.motivos[0]).toContain("Identidade da marca baixa (nota 1.2 de 4)");
-    expect(baixa.instrucao).toContain("paleta do kit");
+    expect(baixa.instrucao).toBeNull();
     expect(decidirAutocorrecao(certa({ identidade: nota(2) }), { ads: false, textoExato: TEXTO }).precisa).toBe(false);
     // Jev fora do ar: identidade { erro } não vira correção.
     expect(decidirAutocorrecao(certa({ identidade: { erro: "jev_indisponivel" } }), { ads: false, textoExato: TEXTO }).precisa).toBe(false);
   });
 
-  it("anúncio com risco de política alto (nível de NIVEIS_RISCO_POLITICA) ou clareza baixa: corrige", () => {
+  it("anúncio com risco de política alto ou clareza baixa: aviso para a equipe, sem corrigir sozinho", () => {
     expect(NIVEIS_RISCO_POLITICA[NIVEL_POLITICA_QUE_CORRIGE]).toMatch(/Risco alto/);
     const politica = decidirAutocorrecao(certa({ politica: nota(1), clareza: nota(3) }), { ads: true, textoExato: TEXTO });
-    expect(politica.precisa).toBe(true);
+    expect(politica.precisa).toBe(false);
     expect(politica.motivos[0]).toBe(`Risco de política alto: ${NIVEIS_RISCO_POLITICA[1]}`);
-    expect(politica.instrucao).toContain("sem mudar o texto combinado");
+    expect(politica.instrucao).toBeNull();
     // Moderado (2) fica com a equipe.
     expect(decidirAutocorrecao(certa({ politica: nota(2), clareza: nota(3) }), { ads: true, textoExato: TEXTO }).precisa).toBe(false);
     const clareza = decidirAutocorrecao(certa({ politica: nota(4), clareza: nota(1) }), { ads: true, textoExato: TEXTO });
-    expect(clareza.precisa).toBe(true);
+    expect(clareza.precisa).toBe(false);
     expect(clareza.motivos[0]).toContain("Oferta pouco clara");
     // No post (social), política e clareza não entram.
     expect(decidirAutocorrecao(certa({ politica: nota(0), clareza: nota(0) }), { ads: false, textoExato: TEXTO }).precisa).toBe(false);
@@ -134,9 +134,9 @@ describe("decidirAutocorrecao", () => {
   });
 });
 
-describe("limite de 2 rodadas automáticas seguidas por lâmina", () => {
+describe("limite de 1 rodada automática seguida por lâmina", () => {
   it("conta da versão mais nova para trás e para na versão sem autocorreção ou pedida pela equipe", () => {
-    expect(LIMITE_DE_AUTOCORRECAO).toBe(2);
+    expect(LIMITE_DE_AUTOCORRECAO).toBe(1);
     expect(rodadasSeguidas([{ versao: 1 }])).toBe(0);
     expect(rodadasSeguidas([{ versao: 1 }, { versao: 2, autocorrecao: { rodada: 1 } }])).toBe(1);
     expect(rodadasSeguidas([{ versao: 3, autocorrecao: { rodada: 2 } }, { versao: 1 }, { versao: 2, autocorrecao: { rodada: 1 } }])).toBe(2);
@@ -194,7 +194,7 @@ describe("front: confere e corrige antes de revelar", () => {
     autocorrecao: { precisa, motivos: precisa ? motivos : [], instrucao: precisa ? "Corrija" : null },
   });
 
-  it("corrige até 2 vezes, confere depois de cada correção e soma o custo de tudo", async () => {
+  it("corrige uma vez, confere depois e soma o custo de tudo", async () => {
     const etapas: string[] = [];
     const conferir = vi.fn()
       .mockResolvedValueOnce(resposta(true, 0.002))
@@ -207,13 +207,13 @@ describe("front: confere e corrige antes de revelar", () => {
       corrigirSozinho: true,
       aoMudarEtapa: (e, d) => etapas.push(d ? `${e}:${d}` : e),
     });
-    expect(RODADAS_AUTOMATICAS).toBe(2);
-    expect(corrigir).toHaveBeenCalledTimes(2);
-    expect(conferir).toHaveBeenCalledTimes(3);
-    expect(r.rodadas).toBe(2);
-    expect(r.custo_usd).toBeCloseTo(0.002 * 3 + 0.012 * 2, 6);
+    expect(RODADAS_AUTOMATICAS).toBe(1);
+    expect(corrigir).toHaveBeenCalledTimes(1);
+    expect(conferir).toHaveBeenCalledTimes(2);
+    expect(r.rodadas).toBe(1);
+    expect(r.custo_usd).toBeCloseTo(0.002 * 2 + 0.012, 6);
     expect(r.autocorrecao?.precisa).toBe(true);
-    expect(etapas).toEqual(["conferindo", "corrigindo:texto errado na arte", "reconferindo", "corrigindo:texto errado na arte", "reconferindo"]);
+    expect(etapas).toEqual(["conferindo", "corrigindo:texto errado na arte", "reconferindo"]);
   });
 
   it("para quando a conferência fica certa", async () => {
@@ -271,12 +271,12 @@ describe("front: confere e corrige antes de revelar", () => {
     expect(motivoCurto(undefined)).toBe("");
   });
 
-  it("ArteDoCriativo e o Estúdio da Mesa usam o mesmo ciclo, com a chave ligada por padrão e o véu", () => {
+  it("ArteDoCriativo e o Estúdio da Mesa usam o mesmo ciclo, com a chave DESLIGADA por padrão e o véu", () => {
     for (const fonte of [arteDoCriativo, abaEstudio]) {
       expect(fonte).toContain("conferirECorrigir({");
       expect(fonte).toContain('acao: "corrigir_card"');
       expect(fonte).toContain("useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(");
-      expect(fonte).toContain(", true);");
+      expect(fonte).toContain(", false);");
       expect(fonte).toContain("Corrigir sozinho");
       expect(fonte).toContain("onCorrigir={() => corrigirDeNovo(");
     }
@@ -309,5 +309,20 @@ describe("front: confere e corrige antes de revelar", () => {
       // aspect-ratio em CSS (os comentários dizem "sem aspect-ratio"): nem classe nem estilo.
       expect(fonte).not.toMatch(/aspect-\[|aspect-square|aspect-video|aspectRatio/);
     }
+  });
+});
+
+describe("correção só na área do texto e refazer diferente (24/09/2026)", () => {
+  it("corrigir_card abre só as áreas de texto e logo; o ajuste devolve o original fora delas", () => {
+    const c = corpoDe("corrigirCard");
+    expect(c).toContain("areasDeDesenho(card, totalCards(t), levaLogo(t, ordem), quadroDoCard(t, card))");
+    expect(c).toContain("areas: areasDaCorrecao");
+    expect(corpoDe("ajustarCard")).toContain("auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas)");
+  });
+  it("refazer pede outra composição e as regras fixas cobram anatomia e nada de moldura", () => {
+    expect(estudio).toContain("blocoDeVariacao(versoesAntes, !!baseFoto)");
+    expect(estudio).toContain("NÃO repita a composição da versão anterior");
+    expect(estudio).toContain("mãos com cinco dedos");
+    expect(estudio).toContain("Sem moldura, borda, contorno ou cantos arredondados");
   });
 });

@@ -426,7 +426,7 @@ type Verificacao = {
 };
 
 /** Marca da versão que nasceu da autocorreção (corrigir_card). */
-type MarcaDeAutocorrecao = { rodada: number; motivos: string[]; pedido_da_equipe?: boolean };
+type MarcaDeAutocorrecao = { rodada: number; motivos: string[]; pedido_da_equipe?: boolean; areas?: Area[] };
 
 type NotaJev = { nota: number | null; escala_max: number; nivel: string | null; confianca: number | null } | { erro: string };
 
@@ -537,6 +537,36 @@ function comLayout(card: CardDirecao, total: number): CardDirecao {
 }
 
 const totalCards = (t: Trabalho) => t.direcao.cards.length;
+
+/**
+ * Refazer não pode devolver a mesma arte (dono, 24/09): o pedido era idêntico
+ * a cada vez. Da segunda versão em diante, o prompt pede outra composição e
+ * gira uma direção concreta por versão. Com foto real ou fundo contínuo a
+ * cena fica; muda a composição do texto.
+ */
+const VARIACOES_DE_CENA = [
+  "enquadramento mais aberto, mostrando mais do ambiente, com o assunto menor e deslocado para um lado",
+  "plano mais fechado e próximo do assunto, com detalhe e textura em primeiro plano",
+  "câmera em outro ângulo (mais baixa ou mais alta) e o assunto do lado oposto ao da versão anterior",
+  "outra pose e outro gesto da pessoa (ou outra posição do objeto), com o olhar ou a ação apontando para o texto",
+  "outra hora do dia e outra luz no mesmo cenário, mantendo a paleta da marca",
+];
+const VARIACOES_DE_TEXTO = [
+  "texto em outra posição da lâmina (se estava embaixo, vai para cima ou para a lateral)",
+  "hierarquia diferente: a palavra-chave bem maior e o resto menor, em outra disposição de linhas",
+  "outro arranjo do bloco de texto (alinhamento, largura e quebra de linhas diferentes)",
+];
+export function blocoDeVariacao(versoesAntes: number, cenaFixa: boolean): string {
+  if (versoesAntes < 1) return "";
+  const i = versoesAntes - 1;
+  return [
+    `NOVA VERSÃO (${versoesAntes + 1}ª) DESTA LÂMINA: a equipe pediu para refazer, então NÃO repita a composição da versão anterior.`,
+    cenaFixa
+      ? `A cena de fundo fica; mude a composição gráfica: ${VARIACOES_DE_TEXTO[i % VARIACOES_DE_TEXTO.length]}.`
+      : `Mude de verdade a composição: ${VARIACOES_DE_CENA[i % VARIACOES_DE_CENA.length]}; e ${VARIACOES_DE_TEXTO[i % VARIACOES_DE_TEXTO.length]}.`,
+    "Continuam iguais: o texto exato, a mensagem, a marca (cores, fontes, logo) e a qualidade.",
+  ].join(" ");
+}
 /**
  * Trabalho da Mesa Ads: criativo de anúncio. Um card é a peça única (1:1, 4:5
  * ou 9:16); vários cards são um carrossel de anúncio (feed 4:5).
@@ -1751,6 +1781,8 @@ function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLog
       ? "- Carrossel infinito: o que chega à borda continua na lâmina vizinha com a mesma posição, escala, perspectiva e luz."
       : "",
     anexos.length ? `- Imagens anexadas, na ordem: ${anexos.join("; ")}.` : "",
+    "- Pessoas com anatomia correta e natural: cabeça alinhada ao corpo e virada para o mesmo lado do tronco, pescoço natural, mãos com cinco dedos e segurando os objetos de um jeito possível, braços e pernas inteiros e na proporção certa.",
+    "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda da tela. Faixas e formas gráficas só as do layout da marca.",
     "- Sem travessão no texto.",
   ].filter(Boolean).join("\n");
 }
@@ -2093,7 +2125,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     })
     : card.prompt_imagem;
   // Estilo pedido na conversa com o diretor: entra em todas as lâminas, depois da campanha.
-  const baseComCampanha = [base, campanha ? blocoDaCampanha(campanha) : "", blocoDoEstiloPedido(t.direcao.estilo_pedido)].filter(Boolean).join("\n\n");
+  // Refazer: a lâmina já tem versão, então a nova precisa ser outra composição.
+  const versoesAntes = t.cards.filter((c) => c.ordem === ordem).length;
+  const baseComCampanha = [
+    base,
+    campanha ? blocoDaCampanha(campanha) : "",
+    blocoDoEstiloPedido(t.direcao.estilo_pedido),
+    blocoDeVariacao(versoesAntes, !!baseFoto),
+  ].filter(Boolean).join("\n\n");
   const comum = {
     clientId: t.client_id,
     modeloId: t.modelo_imagem_id!,
@@ -2290,7 +2329,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   const ordem = lerOrdem(corpo);
   const tipo: "livre" | "fundo" = !auto && corpo.tipo === "fundo" ? "fundo" : "livre";
   // Ajuste pontual: só as áreas marcadas na tela mudam (máscara + devolução dos pixels originais).
-  const areas = tipo === "fundo" || auto ? [] : normalizarAreas(corpo.areas);
+  // Correção automática: só as áreas de texto e logo da lâmina (o resto volta do original).
+  const areas = tipo === "fundo" ? [] : auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas);
   const pedido = texto(corpo.instrucao, auto ? 4000 : 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
   if (!pedido) throw new ErroEstudio(400, "instrucao_vazia", "Descreva o ajuste que você quer.");
   garantirEditavel(t);
@@ -2470,7 +2510,22 @@ async function corrigirCard(ch: Chamador, corpo: Record<string, unknown>) {
     );
   }
   const rodada = pedidoDaEquipe ? 1 : seguidas + 1;
-  const marca: MarcaDeAutocorrecao = { rodada, motivos: autocorrecao.motivos, ...(pedidoDaEquipe ? { pedido_da_equipe: true } : {}) };
+  // Só a área do texto e da logo abre para o gerador: pessoa, cenário e
+  // composição ficam idênticos (antes a imagem inteira era refeita e o gerador
+  // inventava defeitos). Lâmina antiga sem layout não tem área conhecida: não
+  // corrige sozinha.
+  const areasDaCorrecao = card.layout ? areasDeDesenho(card, totalCards(t), levaLogo(t, ordem), quadroDoCard(t, card)) : [];
+  if (!areasDaCorrecao.length) {
+    return json({
+      trabalho_id: t.id,
+      ordem,
+      versao: atual.versao,
+      corrigido: false,
+      autocorrecao: { ...autocorrecao, precisa: false, motivos: [...autocorrecao.motivos, "Lâmina sem layout: marque a área do texto e use Ajustar."] },
+      custo_usd: 0,
+    });
+  }
+  const marca: MarcaDeAutocorrecao = { rodada, motivos: autocorrecao.motivos, areas: areasDaCorrecao, ...(pedidoDaEquipe ? { pedido_da_equipe: true } : {}) };
   const resposta = await ajustarCard(ch, { trabalho_id: t.id, ordem, instrucao: autocorrecao.instrucao }, marca);
   const dados = await resposta.json();
   return json({ ...dados, corrigido: true, rodada, autocorrecao }, resposta.status);

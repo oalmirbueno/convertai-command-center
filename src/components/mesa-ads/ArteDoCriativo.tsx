@@ -209,8 +209,8 @@ export default function ArteDoCriativo({
   const [refsAlvo, setRefsAlvo] = useState<AlvoDasReferencias>("conjunto");
   const [refsAba, setRefsAba] = useState<"cliente" | "banco">("cliente");
   const [zonaSegura, setZonaSegura] = useState(true);
-  // "Corrigir sozinho": ligado por padrão, guardado por trabalho na sessão.
-  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho.id), true);
+  // "Corrigir sozinho": desligado por padrão (24/09/2026), guardado por trabalho na sessão.
+  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho.id), false);
 
   useEffect(() => {
     setModeloImagem(trabalho.modelo_imagem_id || (padraoPara(catalogo, "imagem") || { id: "" }).id);

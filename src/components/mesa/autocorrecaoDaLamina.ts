@@ -22,10 +22,11 @@ export interface DecisaoDeAutocorrecao {
 }
 
 /** Rodadas automáticas por ciclo (o servidor recusa a terceira seguida). */
-export const RODADAS_AUTOMATICAS = 2;
+/** Uma rodada só: a correção mexe só no texto e na logo (24/09/2026). */
+export const RODADAS_AUTOMATICAS = 1;
 
 /** Chave da sessão com a escolha "Corrigir sozinho" de cada trabalho. */
-export const chaveDoCorrigirSozinho = (trabalhoId: string) => `mesa:estudio:corrigir-sozinho:${trabalhoId}`;
+export const chaveDoCorrigirSozinho = (trabalhoId: string) => `mesa:estudio:corrigir-sozinho:v2:${trabalhoId}`;
 
 export function decisaoDaResposta(r: unknown): DecisaoDeAutocorrecao | null {
   const a = r && typeof r === "object" ? (r as { autocorrecao?: Partial<DecisaoDeAutocorrecao> | null }).autocorrecao : null;

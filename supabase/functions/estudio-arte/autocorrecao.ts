@@ -53,7 +53,13 @@ export type DecisaoDeAutocorrecao = {
 };
 
 /** Rodadas automáticas seguidas por lâmina; a terceira o servidor recusa. */
-export const LIMITE_DE_AUTOCORRECAO = 2;
+/**
+ * Uma rodada automática só (24/09/2026): duas rodadas triplicavam o custo da
+ * lâmina, demoravam e a edição da imagem inteira inventava defeitos (cabeça
+ * virada, mão errada, borda). A correção agora mexe só na área do texto e da
+ * logo; o resto da imagem volta pixel a pixel do original.
+ */
+export const LIMITE_DE_AUTOCORRECAO = 1;
 
 /**
  * Nível de NIVEIS_RISCO_POLITICA a partir do qual corrige: 0 "Viola" e 1
@@ -143,6 +149,9 @@ export function decidirAutocorrecao(
     }
   }
 
+  // Até aqui, erro objetivo (texto e logo): é o que corrige sozinho.
+  const objetivos = passos.length;
+
   // 3) Identidade da marca.
   const identidade = notaValida(v.identidade);
   if (identidade && abaixoDaMetade(identidade)) {
@@ -180,10 +189,15 @@ export function decidirAutocorrecao(
     }
   }
 
-  if (!passos.length) return { precisa: false, motivos: [], instrucao: null };
+  // Só texto e logo (os dois primeiros blocos) são erro objetivo e corrigem
+  // sozinhos, dentro das áreas de texto e logo. Identidade, política e clareza
+  // são julgamento: ficam como aviso para a equipe decidir (Mirante, 24/09: a
+  // edição da imagem inteira por "identidade baixa" inventou cabeça virada,
+  // mão errada e borda, e triplicou o custo).
+  if (!objetivos) return { precisa: false, motivos, instrucao: null };
   const instrucao = [
     "Corrija esta lâmina, só o que está listado:",
-    ...passos.map((p, i) => `${i + 1}. ${p}`),
+    ...passos.slice(0, objetivos).map((p, i) => `${i + 1}. ${p}`),
     PRESERVAR,
   ].join("\n");
   return { precisa: true, motivos, instrucao };

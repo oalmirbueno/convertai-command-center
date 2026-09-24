@@ -362,8 +362,8 @@ function DetalheDoItem({
   const [ferramentaGuardada, setFerramenta] = useEstadoGuardado<Ferramenta | "">(`${chave}:ferramenta`, "lamina");
   const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "conjunto");
   const [refsAba, setRefsAba] = useEstadoGuardado<"cliente" | "banco">(`${chave}:refs-aba`, "cliente");
-  // "Corrigir sozinho" (autocorreção antes de mostrar): ligado por padrão, guardado por trabalho na sessão.
-  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho ? trabalho.id : `item:${item.id}`), true);
+  // "Corrigir sozinho": desligado por padrão (24/09/2026: a correção automática triplicava o custo); guardado por trabalho na sessão.
+  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho ? trabalho.id : `item:${item.id}`), false);
   const parar = useRef(false);
   const painelRef = useRef<HTMLDivElement>(null);
 
