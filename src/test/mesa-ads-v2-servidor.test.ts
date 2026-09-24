@@ -135,6 +135,13 @@ describe("aprovação do ângulo (regra em código)", () => {
     expect(r.principais.filter((x) => x.reprovado).map((x) => x.id)).toEqual(["a3", "a1"]);
     expect(r.descartados.map((x) => x.id)).toEqual(["a4"]);
   });
+  it("separa com máximo: aprovado além do pedido fica de reserva nos descartados", () => {
+    const a = (id: string, aprovado: boolean, pontuacao: number) => ({ id, aprovado, pontuacao });
+    const r = separarAngulos([a("a1", true, 7), a("a2", true, 9), a("a3", true, 8), a("a4", true, 6), a("a5", false, 5)], 3, 3);
+    expect(r.principais.map((x) => x.id)).toEqual(["a2", "a3", "a1"]);
+    expect(r.descartados.map((x) => x.id)).toEqual(["a4", "a5"]);
+    expect((r.descartados[0] as { motivos?: string[] }).motivos?.[0]).toContain("reserva");
+  });
 });
 
 describe("conta ao vivo: tendência e sinal em código", () => {
@@ -348,12 +355,15 @@ describe("contratos das ações novas (fonte da função)", () => {
     expect(c).toContain('.from("ads_analises")');
     expect(c).toContain("analise_id:");
   });
-  it("plano_gerar: laço de qualidade com relógio, 6 notas e descartados", () => {
+  it("plano_gerar: escreve a mais, uma conferência só, entrega os melhores (sem laço de correção)", () => {
     const p = corpoDe(fonte, "planoGerar");
     expect(p).toContain("rodadas < MAX_RODADAS_QUALIDADE");
     expect(p).toContain("restanteMs(chamador) < TEMPO_DE_UMA_RODADA_MS");
     expect(p).toContain("esquemaJson: ESQUEMA_ANGULOS_REESCRITOS");
-    expect(p).toContain("separarAngulos(angulos, 3)");
+    expect(p).toContain("separarAngulos(angulos, 3, qtd)");
+    expect(p).toContain("const qtdGerar = Math.min(8, qtd + ANGULOS_EXTRAS);");
+    expect(p).toContain('.from("ads_planos").insert({');
+    expect(p).toContain(".upsert({");
     expect(p).toContain("descartados,");
     expect(p).toContain("qualidade,");
     expect(p).toContain('corpo.modo === "variar_vencedor"');
@@ -362,7 +372,8 @@ describe("contratos das ações novas (fonte da função)", () => {
     expect(j).toContain("criteria: NIVEIS_PARADA");
     expect(j).toContain("criteria: NIVEIS_DIFERENCIACAO");
     expect(j).toContain("risco_politica: notaDe0a10(risco, NIVEIS_RISCO_POLITICA.length)");
-    expect(fonte).toContain("const MAX_RODADAS_QUALIDADE = 2;");
+    expect(fonte).toContain("const MAX_RODADAS_QUALIDADE = 0;");
+    expect(fonte).toContain("const TIMEOUT_TEXTO_ADS_MS = 300_000;");
     expect(fonte).toContain("const LIMITE_FUNCAO_MS = 400_000;");
   });
   it("só o nicho do cliente vai para o prompt, escolhido pelo Jev (Choice)", () => {

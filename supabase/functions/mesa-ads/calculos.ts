@@ -430,16 +430,20 @@ export function pontuacaoDoAngulo(j: NotasAngulo | null | undefined): number | n
  * `minimo`, os melhores reprovados completam a lista marcados `reprovado`;
  * o resto vai para os descartados com os motivos.
  */
-export function separarAngulos<T extends { aprovado: boolean; pontuacao: number | null }>(
+export function separarAngulos<T extends { aprovado: boolean; pontuacao: number | null; motivos?: string[] }>(
   angulos: T[],
   minimo = 3,
+  maximo = Infinity,
 ): { principais: (T & { reprovado?: boolean })[]; descartados: T[] } {
   const ordem = (a: T, b: T) => (b.pontuacao ?? -1) - (a.pontuacao ?? -1);
-  const aprovados = angulos.filter((a) => a.aprovado).sort(ordem);
+  const todosAprovados = angulos.filter((a) => a.aprovado).sort(ordem);
+  // Gera a mais e entrega os melhores: aprovado além do pedido fica de reserva.
+  const aprovados = todosAprovados.slice(0, maximo);
+  const reservas = todosAprovados.slice(maximo).map((a) => ({ ...a, motivos: ["Aprovado, ficou de reserva: outros tiveram nota maior."] }));
   const reprovados = angulos.filter((a) => !a.aprovado).sort(ordem);
-  const faltam = Math.max(0, minimo - aprovados.length);
+  const faltam = Math.max(0, Math.min(minimo, maximo) - aprovados.length);
   const resgatados = reprovados.slice(0, faltam).map((a) => ({ ...a, reprovado: true }));
-  return { principais: [...aprovados, ...resgatados], descartados: reprovados.slice(faltam) };
+  return { principais: [...aprovados, ...resgatados], descartados: [...reservas, ...reprovados.slice(faltam)] };
 }
 
 // ------------------------------------------------------------- conta ao vivo

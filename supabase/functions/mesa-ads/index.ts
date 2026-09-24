@@ -166,7 +166,20 @@ const STATUS_OFERTA = ["rascunho", "escolhida", "arquivada"] as const;
 const LIMITE_FUNCAO_MS = 400_000;
 /** Tempo que uma chamada de texto mais a conferência do Jev podem levar, com folga. */
 const TEMPO_DE_UMA_RODADA_MS = 165_000;
-const MAX_RODADAS_QUALIDADE = 2;
+/**
+ * Sem rodada de reescrita (dono, 24/09/2026: "não é entrar em looping de correção, é entregar o trabalho
+ * melhor e rápido"). O estrategista escreve ângulos a mais numa chamada só, o Jev pontua todos de uma vez
+ * e saem os melhores na quantidade pedida (ANGULOS_EXTRAS).
+ */
+const MAX_RODADAS_QUALIDADE = 0;
+/**
+ * Tempo limite de cada chamada de texto da Mesa Ads. O padrão do motor (120 s)
+ * cortava o plano de 6 ângulos no meio: a IA cobrava e o plano não saía.
+ * A função responde com fôlego, então pode passar dos 150 s.
+ */
+const TIMEOUT_TEXTO_ADS_MS = 300_000;
+/** Ângulos escritos além do pedido, para a conferência escolher os melhores. */
+const ANGULOS_EXTRAS = 2;
 const MAX_IMAGENS_REFERENCIA = 12;
 const DOWNLOADS_EM_PARALELO = 4;
 const MAX_BYTES_PAGINA = 3 * 1024 * 1024;
@@ -1356,6 +1369,7 @@ TAREFA: proponha o briefing de performance deste cliente para anúncios na Meta.
 - O que faltar vira null no campo e uma linha em lacunas, dizendo o que perguntar ao cliente.
 - observacoes: o que as métricas de anúncio mostram (ou que não há métricas).`;
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -1474,6 +1488,7 @@ async function referenciaLer(servico: SupabaseClient, chamador: Chamador, corpo:
     imagens.length ? `Preencha a ficha a partir das ${imagens.length} imagem(ns) anexa(s) e do contexto acima.` : "Não há imagem: preencha só o que a página ou a copy permitem e deixe null o resto; diga em limites que a leitura foi sem imagem.",
   ].filter(Boolean).join("\n\n");
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE_LEITOR,
@@ -1788,6 +1803,8 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const briefing = await carregarBriefing(servico, clientId, corpo.briefing_id);
   if (!briefing) throw new ErroHttp(409, "sem_briefing", "Salve o briefing do cliente (etapa Oferta) antes de gerar o plano.");
   const qtd = Math.min(6, Math.max(3, Math.round(Number(corpo.quantidade_angulos) || 4)));
+  // Escreve a mais e entrega os melhores pela nota do Jev (sem laço de correção).
+  const qtdGerar = Math.min(8, qtd + ANGULOS_EXTRAS);
   const pedidoEquipe = texto(corpo.pedido, 2000);
   const modo = corpo.modo === "variar_vencedor" ? "variar_vencedor" : "novo";
   if (corpo.objetivo != null && corpo.objetivo !== "" && !objetivoPorId(corpo.objetivo)) {
@@ -1804,7 +1821,8 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
     throw new ErroHttp(400, "sem_vencedor", "Para variar um vencedor, escolha ao menos um anúncio ou referência de exemplo.");
   }
   const oferta = ofertaLinha ? ofertaDaLinha(ofertaLinha) : null;
-  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "high");
+  // Médio por padrão: o alto levava perto de 2 min só na primeira versão (Verzelo, 24/09).
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "medium");
   const refsValidas = new Set([...refs.map((r) => r.id), ...exemplos.map((r) => r.id)]);
   const jaRodou = jaRodouDoContexto(ctx);
 
@@ -1833,7 +1851,7 @@ ${JSON.stringify(refs.map(resumoDaReferencia), null, 1)}
 
 TAREFA: ${pedido}
 Regras dos ângulos:
-- Exatamente ${qtd} ângulos REALMENTE diferentes: cada um combina uma situação do público, um mecanismo, uma prova e um estilo visual diferentes (vinte paráfrases não são vinte conceitos).
+- Exatamente ${qtdGerar} ângulos REALMENTE diferentes (a conferência escolhe os ${qtd} melhores): cada um combina uma situação do público, um mecanismo, uma prova e um estilo visual diferentes (vinte paráfrases não são vinte conceitos).
 - Agressivo e vendedor dentro da política: o gancho tem que parar a rolagem e a peça tem que levar à ação do objetivo. Nada de "mais do mesmo" da categoria nem repetir o que o cliente já rodou.
 - situacao: a cena concreta vivida pelo comprador, com a linguagem dele, ligada a uma situação do briefing.
 - mecanismo e tecnica: qual das dezoito técnicas e qual mecanismo (sem citar marca de terceiros).
@@ -1852,6 +1870,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
   let s;
   try {
     s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId,
       tarefa: TAREFA,
       agente: AGENTE,
@@ -1872,7 +1891,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
   let custo = s.custoUsd + achado.custo;
   let saldo = s.saldoUsd;
   const comObjetivo = (a: Angulo): Angulo => ({ ...a, objetivo: a.objetivo ?? objetivo?.id ?? null });
-  let angulos = (Array.isArray(r.angulos) ? r.angulos : []).slice(0, 6).map((a, i) => comObjetivo(normalizarAngulo(a, `a${i + 1}`, refsValidas))).filter((a) => a.nome && a.situacao);
+  let angulos = (Array.isArray(r.angulos) ? r.angulos : []).slice(0, 8).map((a, i) => comObjetivo(normalizarAngulo(a, `a${i + 1}`, refsValidas))).filter((a) => a.nome && a.situacao);
   const cobranca = { clientId, planoId, criadoPor: chamador.userId };
   const extraJev = { oferta: ofertaParaPrompt as Record<string, unknown> | null, jaRodou };
   const primeira = await pontuarAngulosComJev(angulos, briefing, cobranca, extraJev);
@@ -1880,6 +1899,29 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
   custo += primeira.custo;
   let jevErro = primeira.jev_erro;
   const avisos: string[] = [];
+
+  // Grava já a primeira versão conferida: se a rodada de qualidade cair ou o
+  // relógio acabar, o plano pago continua na tela (antes só gravava no fim).
+  await servico.from("ads_planos").insert({
+    id: planoId,
+    client_id: clientId,
+    briefing_id: briefing.id,
+    nome: texto(r.nome, 120) || `Plano de teste ${hojeSaoPaulo()}`,
+    status: "rascunho",
+    angulos: angulos.slice().sort((a, b) => (b.pontuacao ?? -1) - (a.pontuacao ?? -1)),
+    estrutura: {
+      resumo: texto(r.resumo, 3000),
+      objetivo: objetivo?.id ?? null,
+      oferta_id: oferta?.id ?? null,
+      modo,
+      qualidade: { rodadas: 0, provisorio: true },
+      jev_erro: jevErro,
+    },
+    pedido: pedidoEquipe || null,
+    conversa_id: conversaId,
+    custo_usd: arred6(custo),
+    criado_por: chamador.userId,
+  });
 
   // Laço de qualidade: reescreve só os reprovados, com os motivos, e repontua.
   let rodadas = 0;
@@ -1894,6 +1936,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
     let reescrita;
     try {
       reescrita = await chamarTexto({
+        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
         clientId,
         tarefa: TAREFA,
         agente: AGENTE,
@@ -1948,7 +1991,7 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
     descartados = [];
     avisos.push("O Jev não respondeu: os ângulos ficaram sem a conferência de qualidade.");
   } else {
-    const separados = separarAngulos(angulos, 3);
+    const separados = separarAngulos(angulos, 3, qtd);
     principais = separados.principais;
     descartados = separados.descartados;
   }
@@ -1963,7 +2006,7 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
 
   const { data: plano, error } = await servico
     .from("ads_planos")
-    .insert({
+    .upsert({
       id: planoId,
       client_id: clientId,
       briefing_id: briefing.id,
@@ -2047,6 +2090,7 @@ Aplique o pedido. Devolva:
 - angulos: ${podeMudar ? "a lista COMPLETA atualizada só se algum ângulo mudou, entrou ou saiu (mantenha o id dos que ficam; novo recebe id novo); senão null. Mesmas regras de ângulo, hipótese e referências." : "sempre null."}
 - estrutura: a estrutura completa só se mudou; senão null.`;
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: p.client_id,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -2157,6 +2201,7 @@ Para cada variação (variacao = 1, 2, 3):
 - carrossel: ${formatos.includes("carrossel") ? "de 3 a 5 cards seguindo a sequência tensão, explicação, demonstração, objeção, próximo passo (cada lâmina acrescenta algo; a primeira é a capa com o gancho, a última o próximo passo); texto_exato curto por card e a ilustracao de cada um" : "null"}.
 Nada de número, depoimento, prazo, preço ou urgência que não esteja no briefing. Nunca peça para escurecer a foto: o destaque vem de contraste, composição, tipografia, escala e cor.`;
     const s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId: p.client_id,
       tarefa: TAREFA,
       agente: AGENTE,
@@ -2301,6 +2346,7 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch(() => null);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -2429,6 +2475,7 @@ async function aprendizadoRegistrar(servico: SupabaseClient, chamador: Chamador,
   if (!textoFinal) {
     const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low");
     const s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId: c.client_id,
       tarefa: TAREFA,
       agente: AGENTE,
@@ -3335,6 +3382,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
   let s;
   try {
     s = await chamarTexto({
+      timeoutMs: TIMEOUT_TEXTO_ADS_MS,
       clientId,
       tarefa: TAREFA,
       agente: AGENTE,
@@ -3362,11 +3410,13 @@ Responda como o estrategista de ofertas da agência. Devolva:
   let jevErro = conferencia.jev_erro;
 
   // Alerta de política ou oferta fraca (força ou clareza abaixo de 7): reescreve uma vez e confere de novo antes de responder.
-  const precisaReforco = (n: (typeof notas)[number]) => !!n && (n.alerta_politica || (n.forca != null && n.forca < 7) || (n.clareza != null && n.clareza < 7));
+  // Sem reforço por nota (sem laço): só alerta de política é reescrito, porque oferta com alerta não pode ir ao ar.
+  const precisaReforco = (n: (typeof notas)[number]) => !!n && n.alerta_politica;
   const alertadas = notas.map((n, i) => (precisaReforco(n) ? i : -1)).filter((i) => i >= 0);
   if (alertadas.length && restanteMs(chamador) > TEMPO_DE_UMA_RODADA_MS) {
     try {
       const re = await chamarTexto({
+        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
         clientId,
         tarefa: TAREFA,
         agente: AGENTE,
@@ -3638,6 +3688,7 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
   };
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -3713,6 +3764,7 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
   const nicho = achado.nicho;
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -3872,6 +3924,7 @@ async function gerarPacoteDoCriativo(
   const angulo = ctx.plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
   const verba = numeroOuNulo((ctx.briefing?.objetivo ?? {}).verba_diaria_brl);
   const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
     tarefa: TAREFA,
     agente: AGENTE,
@@ -3925,6 +3978,7 @@ TAREFA: escreva o pacote completo de copy deste criativo para o gestor de tráfe
     if (restanteMs(chamador) > TEMPO_DE_UMA_RODADA_MS / 2) {
       try {
         const re = await chamarTexto({
+          timeoutMs: TIMEOUT_TEXTO_ADS_MS,
           clientId: c.client_id,
           tarefa: TAREFA,
           agente: AGENTE,

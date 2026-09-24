@@ -330,7 +330,12 @@ export default function AbaPlano({
         modo: extra.modo,
         referencia_ids: extra.referencia_ids,
       }),
-    );
+    ).catch(async (e) => {
+      // O servidor grava o plano logo depois da primeira conferência: se a
+      // chamada cair no meio, o que foi pago aparece na lista.
+      await queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
+      throw e;
+    });
 
   const aoGerar = (data: any) => {
     setPedido("");
