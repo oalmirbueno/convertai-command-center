@@ -669,7 +669,14 @@ Peças de uma oferta completa:
 9. Ancoragem: comparar com referência verdadeira (soma dos itens vendidos separados, custo de não resolver, preço da alternativa com fonte). "De R$ X por R$ Y" só com preço anterior praticado de verdade (Código de Defesa do Consumidor proíbe publicidade enganosa).
 10. CTA e próximo passo: uma ação só, fácil e coerente com o destino (mensagem com texto pronto, agendar, comprar).
 Diagnóstico rápido: dar nota de 1 a 10 a cada alavanca (resultado, confiança, tempo, esforço); a mais baixa é a que a próxima versão melhora. Mudar uma alavanca por rodada.
-Honestidade na oferta: preço, desconto, prazo, estoque, vagas, garantia, bônus e resultados só os que estão no briefing ou que a equipe confirmou. O que faltar vira pergunta para a equipe ou fica entre colchetes ([preço confirmado]), nunca suposição. Evitar palavras com cara de golpe ("segredo", "método escondido", "dinheiro fácil", "garantido" para saúde ou renda).`;
+Honestidade na oferta: preço, desconto, prazo, estoque, vagas, garantia, bônus e resultados só os que estão no briefing ou que a equipe confirmou. O que faltar vira pergunta para a equipe ou fica entre colchetes ([preço confirmado]), nunca suposição. Evitar palavras com cara de golpe ("segredo", "método escondido", "dinheiro fácil", "garantido" para saúde ou renda).
+Honesto não é tímido. A promessa diz o resultado que a pessoa quer, com força; os limites vão em riscos e provas_necessarias, nunca dentro da promessa, do nome ou dos entregáveis ("com condições a confirmar" dentro do entregável derruba a oferta).
+Exemplos (serviço de poda):
+- Fraca: "Entenda quais cuidados podem ser indicados para a árvore antes de aprovar a poda." Forte: "Árvore podada com segurança e quintal limpo no mesmo dia."
+- Fraca: "Contratar a poda e não ficar com os galhos no quintal." Forte: "Poda completa com os galhos recolhidos: você não carrega nem um galho."
+- Fraco nome: "Avaliação antes da poda". Forte: "Telhado Seguro", "Poda Sem Sujeira".
+- Fraco CTA: "Orientação para solicitar orçamento pelo Direct". Forte: "Mande a foto da árvore no Direct".
+Toda oferta sai com pelo menos um bônus que resolve o próximo problema e uma reversão de risco (avaliação grátis, orçamento fechado antes, refazer sem custo, pagar só depois). Os que o cliente ainda não confirmou vêm marcados "(sugestão, confirmar com o cliente)".`;
 
 export const CONHECIMENTO_AGRESSIVO = `AGRESSIVO E VENDEDOR DENTRO DA POLÍTICA
 Agressivo é ser direto, específico e impossível de ignorar. Não é mentir, assustar nem expor a pessoa.

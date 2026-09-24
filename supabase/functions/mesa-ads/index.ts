@@ -3328,6 +3328,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
   - garantia, urgencia_real e ancoragem: as reais; se não houver, proponha uma possível marcada "(sugestão, confirmar com o cliente)" ou null. Nunca urgência falsa.
   - cta: verbo de ação e o próximo passo em até 8 palavras (ex.: "Mande a foto da árvore no Direct").
   - provas_necessarias (o que o cliente precisa confirmar ou enviar) e riscos (de política e de entrega).
+  - Toda oferta leva pelo menos 1 bônus e 1 reversão de risco (reais ou sugestão marcada). Nada de "a confirmar" dentro de nome, promessa ou entregáveis: isso vai em provas_necessarias. Veja os exemplos de promessa fraca e forte na MONTAGEM DE OFERTA.
 - briefing_sugerido: o briefing COMPLETO atualizado só quando a conversa trouxe dado novo para ele; senão null.
 - ideias: de 0 a 6 ideias de criativo quando a equipe pedir criativos a partir de uma oferta ou de exemplos; cada uma com gancho verbal, gancho visual (sem escurecer a foto), estilo_visual da lista e formato.`;
 
