@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { enviarParaAprovacao, type ResultadoDoEnvio } from "@/lib/mesa/api";
+import { enviarParaAprovacao, type ParteDaEstimativa, type Qualidade, type ResultadoDoEnvio } from "@/lib/mesa/api";
 
 /**
  * Pequenas utilidades do Estúdio: estado que sobrevive à troca de aba da Mesa
@@ -172,4 +172,111 @@ export function normalizarArea(a: Area): Area {
     x1: tres(limitar(Math.max(a.x0, a.x1))),
     y1: tres(limitar(Math.max(a.y0, a.y1))),
   };
+}
+
+// ---------------------------------------------- fundo do carrossel contínuo
+
+/** Lâminas por trecho do panorama (espelho de LAMINAS_POR_TRECHO em supabase/functions/_shared/direcao-arte.ts). */
+export const LAMINAS_POR_TRECHO = 3;
+/** Tamanho de uma lâmina no panorama (espelho de imagem-local.ts): o trecho tem LARGURA 1088*k x 1360. */
+export const LARGURA_DA_LAMINA_NO_PANORAMA = 1088;
+export const ALTURA_DA_LAMINA_NO_PANORAMA = 1360;
+/** Área da imagem que o preço por imagem do catálogo cobre (1024 x 1536). */
+const AREA_DA_IMAGEM_DO_PRECO = 1024 * 1536;
+
+/** Frase do preço quando a estimativa soma o panorama que falta. */
+export const NOTA_DO_FUNDO_CONTINUO = "Inclui o fundo contínuo";
+
+/**
+ * Trecho do panorama que contém a lâmina (espelho do servidor): 1 a 3,
+ * depois 3 a 5, 5 a 7... (a primeira de cada trecho liga ao anterior).
+ */
+export function trechoDaLamina(ordem: number, total: number): { inicio: number; fim: number } {
+  if (total <= LAMINAS_POR_TRECHO || ordem <= LAMINAS_POR_TRECHO) return { inicio: 1, fim: Math.min(LAMINAS_POR_TRECHO, total) };
+  const j = Math.ceil((ordem - LAMINAS_POR_TRECHO) / (LAMINAS_POR_TRECHO - 1));
+  const inicio = j * (LAMINAS_POR_TRECHO - 1) + 1;
+  return { inicio, fim: Math.min(inicio + LAMINAS_POR_TRECHO - 1, total) };
+}
+
+/**
+ * Quantas imagens de preço um trecho de k lâminas vale: a área dele
+ * (k*1088 x 1360) sobre a da imagem do preço (1024 x 1536), arredondada
+ * para cima em 1 casa (k=1: 1,0; k=2: 1,9; k=3: 2,9).
+ */
+export function fatorDoTrecho(k: number): number {
+  const razao = (k * LARGURA_DA_LAMINA_NO_PANORAMA * ALTURA_DA_LAMINA_NO_PANORAMA) / AREA_DA_IMAGEM_DO_PRECO;
+  return Math.ceil(razao * 10 - 1e-9) / 10;
+}
+
+export interface TrechoQueFalta {
+  inicio: number;
+  fim: number;
+  k: number;
+  fator: number;
+}
+
+/** A lâmina usa o fundo panorâmico: tem layout e não tem foto própria (acervo ou foto real composta). */
+export function usaFundoContinuo(card: { layout?: unknown; imagens_ids?: string[] | null; fotos_livres?: unknown[] | null }): boolean {
+  return !!card.layout && !(card.imagens_ids && card.imagens_ids.length) && !(card.fotos_livres && card.fotos_livres.length);
+}
+
+/**
+ * Trechos do panorama que ainda vão ser gerados para as lâminas pedidas:
+ * só os das lâminas cujo fundo ainda não existe em panorama.fundos, cada
+ * trecho uma vez. Como no servidor, um trecho depois do primeiro precisa do
+ * fundo da lâmina de ligação (a primeira dele): se ela ainda não tem fundo,
+ * o trecho anterior também entra.
+ */
+export function trechosQueFaltam(
+  ordens: number[],
+  total: number,
+  fundos: Record<string, string> | null | undefined,
+): TrechoQueFalta[] {
+  const tem: Record<number, boolean> = {};
+  if (fundos) for (const k of Object.keys(fundos)) if (fundos[k]) tem[Number(k)] = true;
+  const saida: TrechoQueFalta[] = [];
+  const garantir = (ordem: number, profundidade: number) => {
+    if (tem[ordem] || profundidade > 50) return;
+    const { inicio, fim } = trechoDaLamina(ordem, total);
+    if (inicio > 1 && !tem[inicio]) garantir(inicio, profundidade + 1);
+    if (tem[ordem]) return;
+    const k = fim - inicio + 1;
+    saida.push({ inicio, fim, k, fator: fatorDoTrecho(k) });
+    for (let o = inicio; o <= fim; o++) tem[o] = true;
+  };
+  const pedidas = ordens
+    .filter((o, i) => Number.isInteger(o) && o >= 1 && o <= total && ordens.indexOf(o) === i)
+    .sort((a, b) => a - b);
+  if (total < 2) return saida;
+  for (const o of pedidas) garantir(o, 0);
+  return saida;
+}
+
+/**
+ * Custo do panorama que falta para gerar as lâminas pedidas: por trecho, o
+ * preço de UMA imagem na qualidade escolhida vezes o fator de área do trecho.
+ */
+export function custoDoPanorama(
+  ordens: number[],
+  total: number,
+  fundos: Record<string, string> | null | undefined,
+  precoDeUmaImagem: number,
+): number {
+  const fator = trechosQueFaltam(ordens, total, fundos).reduce((s, t) => s + t.fator, 0);
+  return Math.round(fator * precoDeUmaImagem * 1000000) / 1000000;
+}
+
+/**
+ * O mesmo custo como partes da estimativa (uma imagem na qualidade, repetida
+ * pelo fator de cada trecho): o BotaoComCusto soma com as da lâmina.
+ */
+export function partesDoPanorama(
+  ordens: number[],
+  total: number,
+  fundos: Record<string, string> | null | undefined,
+  modeloImagemId: string | null | undefined,
+  qualidade: Qualidade,
+): ParteDaEstimativa[] {
+  if (!modeloImagemId) return [];
+  return trechosQueFaltam(ordens, total, fundos).map((t) => ({ modeloId: modeloImagemId, tipo: "imagem" as const, imagens: 1, qualidade, vezes: t.fator }));
 }

@@ -70,7 +70,7 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
-import PranchetaDoEstudio, { type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
+import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import {
   copiarTexto,
@@ -78,7 +78,10 @@ import {
   enviarUmParaAprovacao,
   legendaParaCopiar,
   normalizarHashtags,
+  NOTA_DO_FUNDO_CONTINUO,
+  partesDoPanorama,
   useEstadoGuardado,
+  usaFundoContinuo,
   type Area,
   type EscolhasDoPreparo,
 } from "./estudioUtil";
@@ -145,13 +148,24 @@ export function partesDaLamina(modeloImagem: string, leitorId: string | undefine
   ];
 }
 
-/** Preço de uma lâmina em cada qualidade, pela estimativa local (vazio quando não dá para estimar). */
-export function precosPorQualidade(modeloImagem: string, leitorId: string | undefined, catalogo: ModeloIa[]): Record<Qualidade, string> {
+/**
+ * Preço de uma lâmina em cada qualidade, pela estimativa local (vazio quando
+ * não dá para estimar). Com `fundo` (carrossel contínuo), soma o panorama que
+ * falta para as `laminas` a gerar e divide por elas: o preço médio por lâmina.
+ */
+export function precosPorQualidade(
+  modeloImagem: string,
+  leitorId: string | undefined,
+  catalogo: ModeloIa[],
+  fundo?: { laminas: number; partes: (q: Qualidade) => ParteDaEstimativa[] },
+): Record<Qualidade, string> {
   const saida: Record<Qualidade, string> = { baixa: "", media: "", alta: "" };
   if (!modeloImagem) return saida;
   for (const q of QUALIDADES_DO_ESTUDIO) {
-    const v = estimarLocal(partesDaLamina(modeloImagem, leitorId, q.valor), catalogo);
-    saida[q.valor] = v === null ? "" : `~${usd(v)}`;
+    const laminas = fundo && fundo.laminas > 0 ? fundo.laminas : 1;
+    const partes = partesDaLamina(modeloImagem, leitorId, q.valor, laminas).concat(fundo ? fundo.partes(q.valor) : []);
+    const v = estimarLocal(partes, catalogo);
+    saida[q.valor] = v === null ? "" : `~${usd(v / laminas)}`;
   }
   return saida;
 }
@@ -390,7 +404,6 @@ function DetalheDoItem({
   const partesDiretor = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
   ];
-  const precos = precosPorQualidade(modeloImagem, leitor?.id, catalogo);
 
   /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
   const marcar = (ordem: number, etapa: EtapaDaLamina) =>
@@ -487,6 +500,33 @@ function DetalheDoItem({
   const progresso = cardsDaDirecao.length ? Math.round((laminasComArte / cardsDaDirecao.length) * 100) : 0;
   const entregue = !!trabalho && (trabalho.status === "entregue" || trabalho.entrega_status === "agendado");
   const estado: EstadoDoItem = cardsDaDirecao.length > 0 ? "producao" : arte && !refazendo ? "agenda" : "preparar";
+  // No contínuo a ordem faz parte da cena (o panorama foi cortado nela): reordenar fica travado.
+  const ordemTravada = infinito && cardsDaDirecao.length > 1;
+
+  // Estimativa do contínuo: o panorama que falta entra no preço (mesma regra de
+  // trechos do servidor; só com o editor da OpenAI e lâmina sem foto própria).
+  const modeloDoFundo = catalogo.find((m) => m.id === modeloImagem);
+  const comFundoContinuo = ordemTravada && !!modeloDoFundo && modeloDoFundo.provedor === "openai";
+  const fundosProntos = (((trabalho?.direcao as any)?.panorama?.fundos ?? null) as Record<string, string> | null);
+  const partesDoFundo = (ordens: number[], q: Qualidade = qualidade): ParteDaEstimativa[] => {
+    if (!comFundoContinuo) return [];
+    const comFundo = ordens.filter((o) => {
+      const c = cardsDaDirecao.find((x) => x.ordem === o);
+      return !!c && usaFundoContinuo(c);
+    });
+    return partesDoPanorama(comFundo, cardsDaDirecao.length, fundosProntos, modeloImagem, q);
+  };
+  const ordensDaFila = filaDeGeracao.map((c) => c.ordem);
+  const filaComFundo = partesDoFundo(ordensDaFila).length > 0;
+  const precos = precosPorQualidade(
+    modeloImagem,
+    leitor?.id,
+    catalogo,
+    filaComFundo ? { laminas: ordensDaFila.length, partes: (q) => partesDoFundo(ordensDaFila, q) } : undefined,
+  );
+  /** Descrição do botão com a nota do fundo contínuo quando o preço inclui o panorama. */
+  const comNotaDoFundo = (descricao: string, ordens: number[]) =>
+    partesDoFundo(ordens).length ? `${descricao} ${NOTA_DO_FUNDO_CONTINUO}.` : descricao;
 
   // Lâmina escolhida: a guardada na sessão, se ainda existir; senão a primeira.
   useEffect(() => {
@@ -632,6 +672,10 @@ function DetalheDoItem({
   /** Nova ordem das lâminas: renumera a direção e as versões já geradas juntas. */
   const reordenar = async (novas: number[]) => {
     if (!trabalho) return;
+    if (ordemTravada) {
+      toast.error("Ordem travada", { description: AVISO_DA_ORDEM_NO_CONTINUO });
+      return;
+    }
     const ok = await confirmar({
       title: "Mudar a ordem das lâminas?",
       description: "A primeira vira capa e a última vira o fechamento. As artes já geradas acompanham a lâmina.",
@@ -819,7 +863,7 @@ function DetalheDoItem({
             role="radio"
             aria-checked={ativa}
             disabled={emLote}
-            title={`${q.rotulo}: ${q.dica}${precos[q.valor] ? `, cerca de ${precos[q.valor].slice(1)} por lâmina` : ""}`}
+            title={`${q.rotulo}: ${q.dica}${precos[q.valor] ? `, cerca de ${precos[q.valor].slice(1)} por lâmina${filaComFundo ? ` (${NOTA_DO_FUNDO_CONTINUO.toLowerCase()})` : ""}` : ""}`}
             onClick={() => { setQualidade(q.valor); void guardarEscolha({ qualidade: q.valor }); }}
             className={`flex h-10 min-w-[72px] flex-col items-center justify-center rounded-md px-2 leading-tight transition-colors ${
               ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -872,13 +916,13 @@ function DetalheDoItem({
           }
           titulo={`Gerar ${filaDeGeracao.length} lâmina(s)`}
           descricao={infinito
-            ? "Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma."
+            ? comNotaDoFundo("Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma.", ordensDaFila)
             : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "outline"}
           className="h-10 gap-1 px-3 text-[12.5px]"
           disabled={ocupado || entregue}
-          partes={() => partesGerar(filaDeGeracao.length)}
+          partes={() => partesGerar(filaDeGeracao.length).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
           aoConcluir={(data) => {
             toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
@@ -947,11 +991,11 @@ function DetalheDoItem({
     <BotaoComCusto
       rotulo={<><Wand2 className="h-3.5 w-3.5" /><span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
       titulo={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}`}
-      descricao={`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`}
+      descricao={comNotaDoFundo(`${v ? "Refazer" : "Gerar"} a lâmina ${c.ordem}. A conferência roda logo depois.`, [c.ordem])}
       variant={v ? "outline" : "default"}
       className="h-8 w-full gap-1 px-2 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue}
-      partes={() => partesGerar(1)}
+      partes={() => partesGerar(1).concat(partesDoFundo([c.ordem]))}
       executar={() => gerarEConferir(c.ordem)}
     />
   );
@@ -967,7 +1011,8 @@ function DetalheDoItem({
       infinito={infinito}
       largura={vertical ? LARGURA_NA_PRANCHETA : LARGURA_NA_PRANCHETA_PILHA}
       orientacao={vertical ? "vertical" : "horizontal"}
-      podeReordenar={!ocupado && cardsDaDirecao.length > 1 && !entregue}
+      podeReordenar={!ocupado && cardsDaDirecao.length > 1 && !entregue && !ordemTravada}
+      avisoDaOrdem={ordemTravada ? AVISO_DA_ORDEM_NO_CONTINUO : undefined}
       onReordenar={(ordens) => void reordenar(ordens)}
       onVersoes={(ordem) => abrirPainel(ordem, "versoes")}
       onAjustar={(ordem) => abrirPainel(ordem, "livre")}
@@ -1001,7 +1046,7 @@ function DetalheDoItem({
   const centroDaProducao = colunas ? (
     <>
       <div className="flex min-h-0 shrink-0 flex-col border-r border-border" style={{ width: LARGURA_NA_PRANCHETA + 32 }}>
-        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem">
+        <p className="flex h-9 shrink-0 items-center px-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title={ordemTravada ? `Lâminas: clique escolhe, duplo clique amplia. ${AVISO_DA_ORDEM_NO_CONTINUO}` : "Lâminas: clique escolhe, duplo clique amplia, arraste pela alça muda a ordem"}>
           Prancheta
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-8">
@@ -1073,7 +1118,8 @@ function DetalheDoItem({
       onVersaoVista={setVersaoVista}
       areas={areas}
       onAreas={setAreas}
-      partesGerar={() => partesGerar(1)}
+      partesGerar={() => partesGerar(1).concat(partesDoFundo([cardSelecionado.ordem]))}
+      notaDoGerar={partesDoFundo([cardSelecionado.ordem]).length ? `${NOTA_DO_FUNDO_CONTINUO}.` : undefined}
       partesAjustar={partesAjustar}
       partesConferir={partesConferir}
       onGerar={() => gerarEConferir(cardSelecionado.ordem)}

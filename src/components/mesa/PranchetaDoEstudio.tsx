@@ -20,7 +20,8 @@ import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
  * por dentro; na vertical (computador), uma coluna ao lado da lâmina grande.
  * Lâmina sem arte mostra o esboço do layout (zona do texto, hierarquia e
  * margens de segurança), nas mesmas posições que o gerador recebe. O
- * carrossel contínuo aparece colado, como panorama (só na horizontal).
+ * carrossel contínuo aparece colado, como panorama (só na horizontal), e
+ * com a ordem travada: a alça fica apagada e o tooltip explica por quê.
  *
  * Sob cada lâmina, sempre visíveis (não só no hover): número e função, o
  * ajuste, a versão (abre as versões) e a barrinha com gerar ou refazer e o
@@ -31,7 +32,11 @@ import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
  * desce no hover.
  */
 
-export type EtapaDaLamina = "fila" | "gerando" | "ajustando" | "conferindo";
+/** Aviso da ordem travada: no carrossel contínuo o panorama foi cortado nesta ordem. */
+export const AVISO_DA_ORDEM_NO_CONTINUO =
+  "No carrossel contínuo a ordem faz parte da cena. Desligue o contínuo ou use Refazer o fundo para reordenar.";
+
+export type EtapaDaLamina ="fila" | "gerando" | "ajustando" | "conferindo";
 
 /** O que está acontecendo com a lâmina agora e desde quando (o cronômetro não recomeça entre etapas). */
 export interface AndamentoDaLamina {
@@ -61,6 +66,11 @@ type Props = {
   /** "vertical": coluna ao lado da lâmina grande (computador). */
   orientacao?: "horizontal" | "vertical";
   podeReordenar: boolean;
+  /**
+   * Motivo de a ordem estar travada (carrossel contínuo): a alça aparece
+   * apagada, sem arrastar, com este aviso no tooltip. Vence o podeReordenar.
+   */
+  avisoDaOrdem?: string;
   onReordenar: (ordens: number[]) => void;
   /** Barrinha de ações sob a lâmina (sempre visível). */
   acoes?: (card: CardDaDirecao, versao: CardGerado | undefined) => ReactNode;
@@ -225,6 +235,7 @@ function Lamina({
   onAjustar,
   largura,
   arrastavel,
+  avisoDaOrdem,
   colado,
   vertical,
   primeira,
@@ -242,6 +253,7 @@ function Lamina({
   onAjustar?: () => void;
   largura: number;
   arrastavel: boolean;
+  avisoDaOrdem?: string;
   colado: boolean;
   vertical: boolean;
   primeira: boolean;
@@ -325,6 +337,18 @@ function Lamina({
               <GripVertical className="h-3.5 w-3.5" />
             </span>
           )}
+          {!arrastavel && avisoDaOrdem && (
+            <span
+              className="ml-0.5 shrink-0 cursor-not-allowed rounded p-0.5 text-muted-foreground/40"
+              role="img"
+              aria-disabled="true"
+              aria-label={`Ordem da lâmina ${card.ordem} travada. ${avisoDaOrdem}`}
+              title={avisoDaOrdem}
+              data-ordem-travada={card.ordem}
+            >
+              <GripVertical className="h-3.5 w-3.5" />
+            </span>
+          )}
         </div>
         {/* Barrinha: as ações, ou o indicador único da lâmina enquanto ela está em andamento. */}
         <div className="mt-1 flex h-8 min-w-0 items-center justify-center">
@@ -346,11 +370,14 @@ export default function PranchetaDoEstudio({
   largura,
   orientacao = "horizontal",
   podeReordenar,
+  avisoDaOrdem,
   onReordenar,
   acoes,
   onVersoes,
   onAjustar,
 }: Props) {
+  // Ordem travada (contínuo): ninguém arrasta, nem pelo teclado.
+  const podeArrastar = podeReordenar && !avisoDaOrdem;
   const sensores = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
@@ -358,7 +385,7 @@ export default function PranchetaDoEstudio({
   const vertical = orientacao === "vertical";
   const colado = infinito && !vertical;
   const aoSoltar = (e: DragEndEvent) => {
-    if (!e.over || e.active.id === e.over.id) return;
+    if (!podeArrastar || !e.over || e.active.id === e.over.id) return;
     const ordens = cards.map((c) => c.ordem);
     const de = ordens.indexOf(Number(e.active.id));
     const para = ordens.indexOf(Number(e.over.id));
@@ -384,7 +411,8 @@ export default function PranchetaDoEstudio({
           onVersoes={onVersoes ? () => onVersoes(c.ordem) : undefined}
           onAjustar={onAjustar ? () => onAjustar(c.ordem) : undefined}
           largura={largura}
-          arrastavel={podeReordenar}
+          arrastavel={podeArrastar}
+          avisoDaOrdem={avisoDaOrdem}
           colado={colado}
           vertical={vertical}
           primeira={i === 0}

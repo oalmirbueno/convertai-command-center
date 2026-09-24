@@ -26,7 +26,8 @@ import type { CardDaDirecao, FotoLivre } from "./useItensDoMes";
  * (contrato V5: card.fotos_livres); a próxima geração usa.
  *
  * O Ctrl+V só é interceptado quando há ARQUIVO de imagem na área de
- * transferência: colar texto em qualquer campo continua normal.
+ * transferência: colar texto em qualquer campo continua normal. Imagem com
+ * texto junto: a imagem é anexada e o texto cola normal no campo em foco.
  */
 
 export const LIMITE_DE_FUNDOS = 1;
@@ -107,7 +108,40 @@ export function imagensDoColar(dados: DataTransfer | null | undefined): File[] {
   return saida;
 }
 
-export const caminhoDaFoto = (clientId: string, id: string, ext: string) => `${clientId}/estudio/fotos/${id}.${ext}`;
+/** O colar traz texto junto (text/plain não vazio)? Ex.: imagem copiada com a legenda. */
+export function textoDoColar(dados: DataTransfer | null | undefined): boolean {
+  if (!dados) return false;
+  try {
+    if (typeof dados.getData === "function") {
+      const texto = dados.getData("text/plain");
+      if (texto && texto.trim()) return true;
+    }
+  } catch {
+    /* navegador que não deixa ler: olha os itens */
+  }
+  const itens = dados.items;
+  if (itens && itens.length) {
+    for (let i = 0; i < itens.length; i++) {
+      const it = itens[i];
+      if (it && it.kind === "string" && it.type === "text/plain") return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * O que fazer com um Ctrl+V: as imagens a anexar e se o colar padrão é
+ * bloqueado. Só bloqueia quando há imagem e NENHUM texto junto; com texto,
+ * o texto cola normal no campo em foco e a imagem é anexada do mesmo jeito.
+ * Colar só texto nunca é interceptado.
+ */
+export function decidirColar(dados: DataTransfer | null | undefined): { imagens: File[]; bloquear: boolean } {
+  const imagens = imagensDoColar(dados);
+  if (!imagens.length) return { imagens, bloquear: false };
+  return { imagens, bloquear: !textoDoColar(dados) };
+}
+
+export const caminhoDaFoto =(clientId: string, id: string, ext: string) => `${clientId}/estudio/fotos/${id}.${ext}`;
 
 /** UUID v4 (randomUUID quando existe; senão getRandomValues, que o Safari 11 tem). */
 export function novoId(): string {
@@ -257,12 +291,13 @@ export default function EstudioFotos({
     }
   };
 
-  // Ctrl+V com a ferramenta aberta: só quando há arquivo de imagem na área de transferência.
+  // Ctrl+V com a ferramenta aberta: só quando há arquivo de imagem na área de
+  // transferência. Com texto junto, o texto cola normal e a imagem é anexada.
   useEffect(() => {
     const aoColar = (e: ClipboardEvent) => {
-      const imagens = imagensDoColar(e.clipboardData);
+      const { imagens, bloquear } = decidirColar(e.clipboardData);
       if (!imagens.length) return;
-      e.preventDefault();
+      if (bloquear) e.preventDefault();
       void adicionarArquivos(imagens);
     };
     window.addEventListener("paste", aoColar);

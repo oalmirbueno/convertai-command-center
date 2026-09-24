@@ -183,6 +183,7 @@ export default function CardDoEstudio({
   areas,
   onAreas,
   partesGerar,
+  notaDoGerar,
   partesAjustar,
   partesConferir,
   onGerar,
@@ -207,6 +208,8 @@ export default function CardDoEstudio({
   areas: Area[];
   onAreas: (areas: Area[]) => void;
   partesGerar: () => ParteDaEstimativa[];
+  /** Nota do preço de gerar (ex.: "Inclui o fundo contínuo."), somada à descrição do botão. */
+  notaDoGerar?: string;
   partesAjustar: () => ParteDaEstimativa[];
   partesConferir: () => ParteDaEstimativa[];
   onGerar: () => Promise<any>;
@@ -323,7 +326,7 @@ export default function CardDoEstudio({
           emAndamento={ocupado}
           rotulo={<><Wand2 className="mr-1 h-3.5 w-3.5" /> {ultima ? "Refazer" : "Gerar"}</>}
           titulo={`${ultima ? "Refazer" : "Gerar"} a lâmina ${direcao.ordem}`}
-          descricao="O gerador faz a lâmina inteira com o texto dentro. Depois a leitura confere a ortografia e o Jev confere a identidade."
+          descricao={`O gerador faz a lâmina inteira com o texto dentro. Depois a leitura confere a ortografia e o Jev confere a identidade.${notaDoGerar ? ` ${notaDoGerar}` : ""}`}
           variant={ultima ? "outline" : "default"}
           className="h-9 shrink-0"
           disabled={ocupado}
