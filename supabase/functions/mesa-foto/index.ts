@@ -30,8 +30,16 @@
  * - biblioteca_salvar { client_id, item } -> { item }
  * - referencias_buscar { q, licenca?, pagina? } -> { itens } (Openverse, sem chave)
  * - referencia_importar { client_id, imagem_url, titulo, licenca, fonte_url } -> { item, url }
- * - agente_conversar { client_id, mensagem, conversa_id?, kit_id?, ensaio_id?, anexos? } -> { conversa_id, resposta, sugestoes }
- * - agente_aplicar { ensaio_id?, client_id?, sugestao } -> { ensaio?, tomada?, item?, itens? }
+ * - agente_conversar { client_id, mensagem, conversa_id?, kit_id?, ensaio_id?, anexos?, nova_conversa? } -> { conversa_id, resposta, sugestoes }
+ * - agente_aplicar { ensaio_id?, client_id?, kit_id?, sugestao } -> { ensaio?, tomada?, item?, itens? } e, na v2:
+ *   plano_de_variacoes e campanha -> { ensaio, estimativa_usd, estimativa, ... }; identificar_produto -> resposta de produto_identificar
+ * v2 (docs/mesa-foto/CONTRATO-V2.md):
+ * - produto_identificar { client_id, imagem_ids[], salvar_kit?, pedido? } -> { produto, referencias_web, lacunas, proximo_passo, kit, kit_acao, aviso_jev }
+ * - variacoes_planejar { client_id, kit_id, quantidade, tipos?, pedido?, referencia_ids?, formatos? } -> { ensaio, estimativa_usd, estimativa, lacunas }
+ * - campanha_planejar { client_id, kit_id, quantidade, referencias_estilo_ids?, modelo?, pedido?, formatos? } -> { ensaio, guia_de_estilo, modelo, estimativa_usd, estimativa, lacunas }
+ * - biblioteca_ilustrar { limite? } -> { ilustrados, sem_resultado, pendentes, itens } (só admin, Openverse, sem IA)
+ * - biblioteca_exemplo_gerar { client_id, item_id, modelo_imagem_id?, qualidade? } -> { item, url, custo_usd }
+ * - kit_sugerir agora SALVA os kits como rascunho (sem duplicar o mesmo produto) e devolve kit_ids.
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
  * identidade separada de estilo (referência de estilo vai depois das fontes,
@@ -60,6 +68,42 @@ import {
 import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import {
+  AVISO_REFERENCIA_WEB,
+  blocosDaResposta,
+  cameraDaCampanha,
+  camposV2,
+  chaveDoProduto,
+  descricaoDaReferenciaWeb,
+  type FotoDeCampanha,
+  type GuiaDeEstilo,
+  type Identificacao,
+  imagensDoHtml,
+  type KitExistente,
+  kitParecido,
+  lacunasDaEvidencia,
+  lerFotosDeCampanha,
+  lerModeloSintetico,
+  lerOrigemWeb,
+  lerVariacoesSugeridas,
+  MAX_FOTOS_CAMPANHA,
+  MAX_VARIACOES,
+  mesclarKit,
+  type ModeloSintetico,
+  normalizarGuiaDeEstilo,
+  normalizarIdentificacao,
+  type OrigemWeb,
+  planoDeVariacoes,
+  referenciaWebServe,
+  TAG_REFERENCIA_WEB,
+  formatoValido,
+  promptDoExemplo,
+  temIdentidade,
+  termosDeBusca,
+  type VagaDeVariacao,
+  vagasDoPlano,
+  type VariacaoSugerida,
+} from "./calculos.ts";
 import {
   aplicarSugestaoDeTomada,
   arred6,
@@ -125,9 +169,16 @@ import {
 import { SEMENTE_DA_BIBLIOTECA, VERSAO_DA_SEMENTE } from "./biblioteca-semente.ts";
 import {
   AZIMUTES,
+  cameraDoPreset,
   ELEVACOES,
   ENQUADRAMENTOS,
   FORMATOS,
+  PROMESSA_CAMPANHA,
+  PROMESSA_REFERENCIA_WEB,
+  RECEITA_CAMPANHA,
+  RECEITA_VARIACOES,
+  TIPOS_DE_VARIACAO,
+  tipoDeVariacaoPorId,
   type Formato,
   MODOS_PREPARAR,
   type ModoPreparar,
@@ -197,6 +248,18 @@ const TIMEOUT_BUSCA_MS = 15_000;
 // Sem e-mail de pessoa no User-Agent (Openverse e hosts de imagem; Wikimedia Commons não é usado aqui).
 const AGENTE_HTTP = "Mozilla/5.0 (compatible; AceleriqMesaFoto/1.0)";
 const MAX_HISTORICO_CONVERSA = 12;
+/** produto_identificar: fotos lidas por chamada e referências baixadas da internet. */
+const MAX_FOTOS_IDENTIFICAR = 6;
+const MAX_REFERENCIAS_WEB = 6;
+const MAX_PAGINAS_LIDAS = 3;
+const MAX_BYTES_PAGINA = 2 * 1024 * 1024;
+const TIMEOUT_PAGINA_MS = 12_000;
+/** biblioteca_ilustrar: o Openverse sem cadastro aceita 20 buscas por minuto. */
+const ILUSTRAR_PADRAO = 8;
+const ILUSTRAR_MAXIMO = 18;
+const TAG_EXEMPLO_PUBLICO = "exemplo_banco_publico";
+const TAG_EXEMPLO_GERADO = "exemplo_gerado";
+const TAG_SEM_EXEMPLO = "exemplo_nao_encontrado";
 const CAMPOS_IMAGEM =
   "id, client_id, origem, storage_bucket, storage_path, nome, pasta, categoria, tags, descricao, ativa, derivada_de, gerada, modo, kit_id, sha256, largura, altura, aprovada, criado_em, atualizado_em";
 
@@ -421,15 +484,23 @@ async function comUrl(l: LinhaImagem) {
 }
 
 async function lerKit(ch: Chamador, kitId: string): Promise<LinhaKit> {
+  const k = await lerKitSemConferir(kitId);
+  await garantirAcesso(ch, k.client_id);
+  return k;
+}
+
+/** Kit lido sem conferir o acesso (só depois de uma conferência feita pela ação). */
+async function lerKitSemConferir(kitId: string): Promise<LinhaKit> {
   const { data, error } = await servico().from("foto_kits").select("*").eq("id", kitId).maybeSingle();
   if (error) throw new ErroHttp(503, "kit_indisponivel", "Não foi possível ler o kit.");
   if (!data) throw new ErroHttp(404, "kit_inexistente", "Kit não encontrado.");
   const k = data as LinhaKit;
-  await garantirAcesso(ch, k.client_id);
+  const identificacao = normalizarIdentificacao(k.atributos?.identificacao);
   k.atributos = {
     observado: listaDeTextos(k.atributos?.observado, 30, 300),
     informado: listaDeTextos(k.atributos?.informado, 30, 300),
     inferido: listaDeTextos(k.atributos?.inferido, 30, 300),
+    ...(identificacao ? { identificacao } : {}),
   };
   k.invariantes = k.invariantes ?? [];
   k.lacunas = k.lacunas ?? [];
@@ -448,7 +519,7 @@ async function lerRefs(kit: LinhaKit): Promise<(RefDoKit & { imagem: LinhaImagem
     .filter((r) => porId.get(r.imagem_id)?.ativa !== false && porId.has(r.imagem_id))
     .map((r) => {
       const i = porId.get(r.imagem_id)!;
-      return { ...r, gerada: !!i.gerada, aprovada: !!i.aprovada, nome: i.nome, descricao: i.descricao, imagem: i };
+      return { ...r, gerada: !!i.gerada, aprovada: !!i.aprovada, nome: i.nome, descricao: i.descricao, origem_web: lerOrigemWeb(i.tags, i.descricao), imagem: i };
     });
 }
 
@@ -579,9 +650,92 @@ const ESQUEMA_PLANO = {
       pode_mudar: lista(S("string")),
       formato: S(["string", "null"]),
       observacao: S(["string", "null"]),
+      props: lista(S("string")),
     })),
     lacunas_que_limitam: lista(S("string")),
     perguntas: lista(S("string")),
+  }),
+};
+
+const ESQUEMA_GUIA_DE_ESTILO = obj({
+  resumo: S("string"),
+  paleta: lista(S("string")),
+  luz: S("string"),
+  cenarios: lista(S("string")),
+  props: lista(S("string")),
+  enquadramentos: lista(S("string")),
+  clima: S("string"),
+  figurino: S("string"),
+  evitar: lista(S("string")),
+});
+
+const ESQUEMA_MODELO = obj({ perfil: S("string"), idade_aprox: S(["number", "null"]), estilo: S("string") });
+
+const ESQUEMA_FOTO_CAMPANHA = obj({
+  nome: S("string"),
+  objetivo: S("string"),
+  acao: S("string"),
+  expressao: S("string"),
+  figurino: S("string"),
+  enquadramento: S("string", { enum: ["close", "medio", "aberto"] }),
+  camera: S(["string", "null"]),
+  cenario: S("string"),
+  luz: S("string"),
+  props: lista(S("string")),
+  formato: S(["string", "null"]),
+  com_pessoa: S("boolean"),
+});
+
+const ESQUEMA_IDENTIFICACAO = {
+  nome: "produto_identificado",
+  schema: obj({
+    texto_lido: S("string"),
+    observado: lista(S("string")),
+    fotos: lista(obj({ imagem_id: S("string"), e_embalagem: S("boolean"), vista: enumNulo(NOMES_DAS_VISTAS) })),
+    produto: obj({
+      marca: S(["string", "null"]),
+      modelo: S(["string", "null"]),
+      variante: S(["string", "null"]),
+      categoria: S(["string", "null"]),
+      tipo_kit: S("string", { enum: TIPOS_DE_KIT }),
+      especificacoes: lista(S("string")),
+      forma_do_produto: lista(S("string")),
+      confianca: S("string", { enum: ["alta", "media", "baixa"] }),
+      evidencias: lista(S("string")),
+    }),
+    candidatos: lista(obj({ marca: S(["string", "null"]), modelo: S(["string", "null"]), variante: S(["string", "null"]), motivo: S("string") })),
+    paginas: lista(obj({ url: S("string"), fonte: S("string"), tipo: S("string", { enum: ["oficial", "loja", "outra"] }) })),
+    imagens: lista(obj({ url: S("string"), pagina: S(["string", "null"]), fonte: S("string"), mostra: S("string") })),
+    lacunas: lista(S("string")),
+    proximo_passo: S("string"),
+  }),
+};
+
+const ESQUEMA_VARIACOES = {
+  nome: "plano_de_variacoes",
+  schema: obj({
+    conceito: S("string"),
+    tomadas: lista(obj({
+      vaga_id: S("string"),
+      nome: S("string"),
+      objetivo: S("string"),
+      cenario: S("string"),
+      luz: S("string"),
+      props: lista(S("string")),
+      formato: S(["string", "null"]),
+    })),
+    lacunas_que_limitam: lista(S("string")),
+  }),
+};
+
+const ESQUEMA_CAMPANHA = {
+  nome: "campanha_com_modelo",
+  schema: obj({
+    conceito: S("string"),
+    guia_de_estilo: ESQUEMA_GUIA_DE_ESTILO,
+    modelo: ESQUEMA_MODELO,
+    fotos: lista(ESQUEMA_FOTO_CAMPANHA),
+    lacunas: lista(S("string")),
   }),
 };
 
@@ -599,7 +753,7 @@ const ESQUEMA_AGENTE = {
   schema: obj({
     resposta: S("string"),
     sugestoes: lista(obj({
-      tipo: S("string", { enum: ["tomada_nova", "ajuste_tomada", "prompt", "busca_referencia"] }),
+      tipo: S("string", { enum: ["identificar_produto", "plano_de_variacoes", "campanha", "tomada_nova", "ajuste_tomada", "prompt", "busca_referencia"] }),
       titulo: S("string"),
       motivo: S("string"),
       tomada_id: S(["string", "null"]),
@@ -617,6 +771,22 @@ const ESQUEMA_AGENTE = {
       negativo: S(["string", "null"]),
       categoria: S(["string", "null"]),
       busca: S(["string", "null"]),
+      kit_id: S(["string", "null"]),
+      quantidade: S(["number", "null"]),
+      variacoes: lista(obj({
+        nome: S("string"),
+        tipo: S("string", { enum: TIPOS_DE_VARIACAO.map((t) => t.id) }),
+        camera: S(["string", "null"]),
+        cenario: S("string"),
+        luz: S("string"),
+        props: lista(S("string")),
+        formato: S(["string", "null"]),
+      })),
+      guia_de_estilo: ESQUEMA_GUIA_DE_ESTILO,
+      modelo: ESQUEMA_MODELO,
+      fotos: lista(ESQUEMA_FOTO_CAMPANHA),
+      imagem_ids: lista(S("string")),
+      referencias_estilo_ids: lista(S("string")),
     })),
   }),
 };
@@ -626,11 +796,20 @@ const ESQUEMA_AGENTE = {
 const REGRAS_DA_CASA = `REGRAS DA CASA (Mesa Foto):
 - Original é imutável; o que se gera é derivada rastreável.
 - Identidade do assunto (produto, pessoa, alimento) vem só das fotos de evidência do kit; estilo, cenário e pose só orientam.
-- Embalagem não é o produto. Sem evidência, não inventar detalhe: lacuna fica escrita.
-- Pessoas: só a pessoa do kit, com autorização; retoque não muda anatomia, idade nem rosto.
+- A embalagem não mostra o formato do produto, mas identifica marca, modelo e variante: use a caixa para identificar e pesquisar o produto real. Com foto do produto (real ou referência oficial da internet), o produto pode sair fora da caixa; sem ela, a caixa é o assunto. Nunca desenhe o produto a partir da arte da caixa. Lacuna fica escrita.
+- Referência da internet (foto oficial ou de loja) é uso interno para fidelidade: nunca vai ao cliente como foto final.
+- Pessoa real: só a do kit, com autorização; retoque não muda anatomia, idade nem rosto. Pessoa sintética (campanha): gerada, adulta, sem parecer pessoa real conhecida, sem sexualização, sempre marcada como gerada.
 - Alimento: não aumentar porção nem inventar ingrediente.
 - Nunca escurecer a foto para dar destaque; as regras da capa das artes não valem para fotografia.
 - Português do Brasil, sem travessão.`;
+
+/** Linguagem de direção de arte publicitária usada pelo diretor em todo plano. */
+const PADRAO_PUBLICITARIO = `PADRÃO DE FOTOGRAFIA PUBLICITÁRIA:
+- Cada foto tem intenção: para que serve (anúncio, feed, catálogo, capa) e o que o olhar vê primeiro.
+- Luz descrita como fotógrafo: fonte e tamanho (softbox, octabox, janela, sol filtrado), direção, altura, qualidade (dura ou suave), temperatura de cor, preenchimento e recorte.
+- Cenário concreto: superfície e material, fundo, planos de profundidade, props com função (nunca aleatórios, sem marca de terceiros, sem texto), paleta do cliente no cenário e nunca no produto.
+- Variações diferentes de verdade: não repita a mesma combinação de câmera, cenário, luz e paleta; cada uma responde a um uso diferente.
+- Produto fiel: formato, cor, texto e proporções do kit; escala real em relação às mãos e ao cenário.`;
 
 const SISTEMA_LEITOR = `Você é o assistente de estúdio fotográfico da agência Aceleriq. Olhe a foto real do cliente e descreva só o que se vê.
 - descricao: até 3 frases objetivas sobre o assunto e a foto.
@@ -644,7 +823,9 @@ Responda só com o JSON pedido.`;
 
 const SISTEMA_KITS = `Você organiza as fotos de um cliente em kits de referência de um estúdio fotográfico. Cada kit é UM assunto (um produto numa variante, uma pessoa, um prato).
 - Agrupe só o que é comprovadamente o mesmo assunto. Duas variantes (cor, tamanho, sabor, modelo) são kits diferentes, mesmo com embalagem parecida.
-- Produto e a caixa dele ficam no mesmo kit com papéis diferentes (identidade para o produto, embalagem para a caixa). A caixa sozinha não documenta o produto: se só houver caixa, escreva a lacuna "falta foto do produto fora da embalagem".
+- Produto e a caixa dele ficam no mesmo kit com papéis diferentes (identidade para o produto, embalagem para a caixa). Leia na caixa marca, modelo, variante e códigos e use no nome e na variante do kit. Se só houver caixa, o kit existe do mesmo jeito (a caixa com papel embalagem) e a lacuna diz "falta foto do produto fora da embalagem"; a identificação pela internet completa depois.
+- Foto marcada como REFERÊNCIA DA INTERNET é foto oficial ou de loja do produto: pode entrar como identidade do mesmo produto (uso interno), nunca como embalagem.
+- A palavra do pedido que não bate com a foto não trava nada: organize pelo que as fotos mostram.
 - papel: identidade (foto limpa do assunto inteiro), detalhe, embalagem, verso, rotulo, rosto, corpo, pose, estilo, cenario. vista: de que lado a foto mostra o assunto.
 - atributos.observado: o que se vê; atributos.inferido: o que você supõe (marcado como suposição). Nada do que o cliente informou existe ainda.
 - invariantes: o que não pode mudar em nenhuma foto (cor, texto do rótulo, quantidade de botões, formato).
@@ -666,7 +847,9 @@ COMO PLANEJAR:
 - pode_mudar: o que a tomada pode variar (cenário, props, superfície, luz, composição), nunca o assunto.
 - formato: um dos formatos pedidos.
 - lacunas_que_limitam: o que falta no kit e limita o ensaio. perguntas: o que a equipe precisa confirmar.
+- props: objetos de cena com função (lista curta, sem marca e sem texto); vazio quando a tomada pede fundo limpo.
 - Nunca invente atributo do produto; cenário e props não sugerem função, acessório, sabor ou ingrediente que o kit não tem.
+${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
 Responda só com o JSON pedido.`;
 
@@ -677,14 +860,61 @@ Não julgue beleza nem gosto. Não invente o que não vê.
 ${REGRAS_DA_CASA}
 Responda só com o JSON pedido.`;
 
-const SISTEMA_AGENTE = `Você é o diretor de fotografia da Mesa Foto conversando com a equipe da agência Aceleriq. Responda de forma direta e prática (até 8 frases), em linguagem de fotógrafo, usando o contexto real do cliente, o kit e o ensaio recebidos.
-Quando ajudar, devolva sugestões aplicáveis com um clique (no máximo 6):
-- tomada_nova: campos com nome, objetivo, preset_id (da lista), cenario, luz, formato e pode_mudar.
-- ajuste_tomada: tomada_id de uma tomada existente e só os campos que mudam (os outros null).
-- prompt: prompt pronto em português (prompt_pt) e em inglês (prompt_en), com negativo, e a categoria da biblioteca (produto, alimento, bebida, cosmetico, moda, tecnologia, pessoa, ambiente, estilo, composicao, luz, cenario).
-- busca_referencia: termo curto em inglês para buscar referências de estilo com licença comercial.
-Em sugestões que não usam um campo, deixe null (e pode_mudar vazio).
-Você sugere, a equipe decide: nada de prometer fidelidade em novo ângulo, nada de laço de correção.
+const SISTEMA_AGENTE = `Você é o diretor de fotografia e de arte publicitária da Mesa Foto, trabalhando junto com a equipe da agência Aceleriq. Você TRABALHA: entende o pedido, decide e entrega o próximo passo concreto, pronto para aplicar com um clique. Nada de resposta de uma linha, nada de recusar.
+
+COMO RESPONDER (campo resposta), em blocos curtos, cada um numa linha própria começando pelo rótulo:
+Entendi: o que você viu nas fotos e no pedido, em uma ou duas frases (se a palavra da equipe não bate com a foto, diga o que viu e siga com isso; ex.: "vi duas caixas do mouse NTC X, vou trabalhar com ele").
+Plano: o que você propõe e por quê, com números (quantas fotos, quais tipos).
+Atenção: só se houver lacuna real que muda o resultado (e o caminho padrão que você já tomou).
+Próximo passo: a ação exata que a equipe aplica agora.
+
+SEJA PROATIVO:
+- Sempre proponha o próximo passo executável. Só pergunte quando a resposta muda o resultado, e mesmo assim entregue a sugestão com o caminho padrão.
+- Foto de caixa ou embalagem: leia marca, modelo, variante e códigos e devolva identificar_produto com os ids dessas fotos (ele pesquisa o produto real na internet, baixa fotos de referência e salva o kit). Nunca recuse porque "só tem a caixa".
+- Anexo com referencia_de_estilo true (print de perfil, moodboard) é só estilo: vai em referencias_estilo_ids, nunca em identificar_produto.
+- Sem kit do produto e com fotos anexadas do produto ou da caixa: a primeira sugestão é identificar_produto. Com kit (kit aberto ou kits_do_cliente), use o kit_id certo.
+- "N fotos", "variações", "várias fotos", "tirar da caixa": plano_de_variacoes com N variações realmente diferentes (tipos da lista tipos_de_variacao; camera é um preset_id; cenario, luz, props e formato concretos). Padrão sem número: 8.
+- "Campanha", "modelo", "publicidade", "pessoa usando", print de perfil ou moodboard anexado: campanha com guia_de_estilo lido das imagens anexadas (paleta, luz, cenários, props, enquadramentos, clima, figurino, o que evitar), modelo (perfil, idade_aprox adulta, estilo) e as fotos (com_pessoa false para produto sozinho, flutuando ou em destaque). referencias_estilo_ids = ids das imagens anexadas que são referência de estilo. Extraia a DIREÇÃO, nunca copie foto, marca ou pessoa da referência.
+
+TIPOS DE SUGESTÃO (até 6; em cada uma, campos que não se aplicam ficam null, listas vazias, textos vazios):
+- identificar_produto: imagem_ids (até 6 ids de fotos anexadas ou do acervo).
+- plano_de_variacoes: kit_id, quantidade (1 a 16), variacoes.
+- campanha: kit_id, quantidade, guia_de_estilo, modelo, fotos, referencias_estilo_ids.
+- tomada_nova e ajuste_tomada (só com ensaio aberto): campos com nome, objetivo, preset_id, cenario, luz, formato, pode_mudar.
+- prompt: prompt_pt, prompt_en, negativo e categoria da biblioteca.
+- busca_referencia: termo curto em inglês para referências de estilo com licença comercial.
+
+HONESTIDADE: referência da internet é uso interno para fidelidade, nunca foto final; pessoa sintética é gerada, adulta e não parece ninguém real; o que falta fica escrito. Você sugere, a equipe decide; nada de laço de correção.
+${PADRAO_PUBLICITARIO}
+${REGRAS_DA_CASA}
+Responda só com o JSON pedido.`;
+
+const SISTEMA_IDENTIFICAR = `Você identifica produtos para o estúdio fotográfico da agência Aceleriq. Recebe fotos de uma embalagem ou do próprio produto.
+1. LEIA as fotos: todo texto visível (marca, modelo, variante, cor, códigos, EAN, especificações impressas) em texto_lido, exatamente como está; observado com fatos visíveis. Em fotos, diga para cada imagem_id se é embalagem (caixa, blister, pacote) ou o produto em si, e a vista.
+2. PESQUISE NA INTERNET o produto real: página oficial do fabricante primeiro, depois lojas grandes. Confirme marca, modelo e variante; traga especificações objetivas (dimensões, peso, conexão, material, cores) e forma_do_produto (como o produto é por fora: formato, cor, botões, peças, acabamento, logotipo e onde fica).
+3. IMAGENS: endereços diretos de imagem (jpg, png ou webp) do PRODUTO em si, de preferência fundo limpo, da página oficial ou de lojas grandes. Só endereços que você viu nos resultados da busca; nunca invente nem monte endereço. Nada de foto da caixa, de montagem com vários produtos, de outro modelo ou de outra cor.
+4. confianca: alta quando a página oficial ou duas lojas confirmam o modelo e a variante lidos; media quando confirma o modelo mas não a variante; baixa quando não achou ou há dúvida. candidatos: os modelos possíveis quando há dúvida (inclua o escolhido).
+5. lacunas: o que não foi confirmado (variante, cor, medida). proximo_passo: uma frase com o que a equipe faz agora.
+Nunca invente marca, modelo ou especificação. Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
+
+const SISTEMA_VARIACOES = `Você é o diretor de fotografia publicitária da agência Aceleriq. Recebe o contexto real do cliente, o kit do produto e as VAGAS de um lote de variações já decididas no código (tipo, câmera e o que muda em cada uma).
+Para cada vaga (use exatamente o vaga_id recebido), escreva: nome curto e vendedor, objetivo (uso da foto), cenario, luz, props e formato (um dos formatos pedidos).
+- Cada foto do lote precisa ser claramente diferente das outras: superfície, fundo, paleta de apoio, hora e direção da luz, props. Nunca repita o mesmo cenário.
+- Siga a direção do tipo da vaga e a mudança da rodada quando houver.
+- Use a paleta, o estilo e o público do cliente; props e cenário conversam com a história da marca.
+- Vaga com foco embalagem: a caixa fechada é o herói; não descreva o produto de dentro.
+- Vaga fora da embalagem: o produto sozinho, sem a caixa.
+${PADRAO_PUBLICITARIO}
+${REGRAS_DA_CASA}
+Responda só com o JSON pedido.`;
+
+const SISTEMA_CAMPANHA = `Você é o diretor de arte de campanhas publicitárias da agência Aceleriq. Recebe o contexto real do cliente, o kit do produto, o perfil pedido da pessoa sintética e imagens: primeiro as fotos do produto (identidade), depois as REFERÊNCIAS DE ESTILO (print de perfil, moodboard).
+1. guia_de_estilo: extraia a DIREÇÃO das referências de estilo (paleta com nomes de cor e hex quando der, luz, cenários, props, enquadramentos, clima, figurino, o que evitar). Nunca copie foto, marca, logotipo, texto ou pessoa das referências. Sem referência, crie o guia pela marca e pelo público do cliente.
+2. modelo: uma pessoa sintética adulta (idade_aprox a partir de 21) coerente com o público do cliente, com perfil e estilo concretos; respeite o perfil pedido pela equipe. Nunca parecida com pessoa real conhecida, sem sexualização. Varie etnia, corpo e estilo entre campanhas quando a equipe não pedir um perfil.
+3. fotos: a quantidade pedida, todas diferentes entre si (enquadramento, cenário, luz, ação). acao diz exatamente o que a pessoa faz com o produto no jeito real de uso; com_pessoa false para produto sozinho, flutuando ou em destaque (no máximo um terço das fotos). camera é um preset_id ou null. Os cenários complementam a identidade do cliente e seguem o guia.
+4. lacunas: o que limita a campanha (produto sem foto fora da caixa, variante não confirmada).
+O produto do kit é invariante: forma, cor, peças e texto não mudam em nenhuma foto.
+${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
 Responda só com o JSON pedido.`;
 
@@ -939,7 +1169,9 @@ async function kitSugerir(ch: Chamador, corpo: Record<string, unknown>) {
   const fotos = await emParalelo(ordem, 4, (img) => baixarReduzida(img.storage_bucket, img.storage_path, 768, img.nome));
   const leitor = await modeloDeTexto("leitura", corpo.modelo_id);
   const legenda = ordem.map((img, i) =>
-    `Imagem ${i + 1}: id ${img.id}; arquivo "${img.nome}"${img.descricao ? `; leitura anterior: ${limpo(img.descricao, 300)}` : ""}${img.gerada ? "; IMAGEM GERADA (não é evidência)" : ""}`
+    `Imagem ${i + 1}: id ${img.id}; arquivo "${img.nome}"${img.descricao ? `; leitura anterior: ${limpo(img.descricao, 300)}` : ""}${img.gerada ? "; IMAGEM GERADA (não é evidência)" : ""}${
+      (img.tags ?? []).includes(TAG_REFERENCIA_WEB) ? "; REFERÊNCIA DA INTERNET (foto oficial ou de loja do produto, uso interno)" : ""
+    }`
   ).join("\n");
   const saida = await chamarTexto({
     clientId,
@@ -991,7 +1223,128 @@ async function kitSugerir(ch: Chamador, corpo: Record<string, unknown>) {
     .map((x) => (x ?? {}) as Record<string, unknown>)
     .filter((x) => validos.has(String(x.imagem_id)))
     .map((x) => ({ imagem_id: String(x.imagem_id), motivo: limpo(x.motivo, 300) }));
-  return json({ kits, nao_agrupadas: naoAgrupadas, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
+  // v2: sugestão vira kit salvo (rascunho). Kit rascunho do mesmo produto é
+  // atualizado (as referências da internet de produto_identificar ficam).
+  const refsWeb = imagens.filter((i) => (i.tags ?? []).includes(TAG_REFERENCIA_WEB)).map((i) => i.id);
+  const salvos: unknown[] = [];
+  const falhas: string[] = [];
+  for (const bruto of kits as (KitFoto & { refs: RefDoKit[]; perguntas: string[] })[]) {
+    if (bruto.tipo === "pessoa" || !bruto.refs.length) {
+      // Kit de pessoa só salva com a autorização registrada pela equipe (kit_salvar).
+      salvos.push({ ...bruto, id: null, salvo: false, motivo_nao_salvo: bruto.tipo === "pessoa" ? "autorizacao_pendente" : "sem_referencias" });
+      continue;
+    }
+    try {
+      const { perguntas, ...kit } = bruto;
+      const r2 = await salvarKitRascunho(ch, clientId, kit, { refsWeb });
+      salvos.push({ ...(await kitComRefs(r2.kit)), perguntas, salvo: true, acao: r2.acao });
+    } catch (e) {
+      falhas.push(e instanceof Error ? e.message : "falha ao salvar");
+      salvos.push({ ...bruto, id: null, salvo: false, motivo_nao_salvo: "gravacao_falhou" });
+    }
+  }
+  return json({
+    kits: salvos,
+    kit_ids: salvos.map((k) => (k as { id?: string | null }).id).filter((x): x is string => !!x),
+    nao_agrupadas: naoAgrupadas,
+    aviso: falhas.length ? `Nem todo kit sugerido foi salvo: ${falhas.join("; ")}` : null,
+    custo_usd: saida.custoUsd,
+    saldo_usd: saida.saldoUsd,
+    reserva_usada: saida.reservaUsada ?? null,
+  });
+}
+
+/** Kits do cliente (menos os arquivados) com as referências, para achar o mesmo produto. */
+async function kitsDoCliente(clientId: string): Promise<KitExistente[]> {
+  const { data, error } = await servico().from("foto_kits").select("id, status, nome, variante, tipo, atualizado_em")
+    .eq("client_id", clientId).neq("status", "arquivado").order("atualizado_em", { ascending: false }).limit(200);
+  if (error) throw new ErroHttp(503, "kit_indisponivel", "Não foi possível ler os kits do cliente.");
+  const kits = (data as (KitExistente & { tipo: string })[] | null) ?? [];
+  if (!kits.length) return [];
+  const { data: refs } = await servico().from("foto_kit_refs").select("kit_id, imagem_id, papel").in("kit_id", kits.map((k) => k.id));
+  const lista = (refs as { kit_id: string; imagem_id: string; papel: string }[] | null) ?? [];
+  return kits.map((k) => ({ ...k, refs: lista.filter((r) => r.kit_id === k.id) }));
+}
+
+/**
+ * Grava o kit e troca o conjunto de referências (o enviado substitui o
+ * anterior). Usado por kit_salvar, kit_sugerir e produto_identificar.
+ */
+async function gravarKit(ch: Chamador, clientId: string, kit: KitFoto, refs: RefDoKit[], anteriorId: string | null): Promise<LinhaKit> {
+  const campos = {
+    client_id: clientId,
+    tipo: kit.tipo,
+    nome: kit.nome,
+    variante: kit.variante,
+    atributos: kit.atributos,
+    invariantes: kit.invariantes,
+    lacunas: kit.lacunas,
+    autorizacao: kit.autorizacao,
+    frente_imagem_id: kit.frente_imagem_id && refs.some((r) => r.imagem_id === kit.frente_imagem_id) ? kit.frente_imagem_id : null,
+    status: kit.status,
+  };
+  const gravado = anteriorId
+    ? await servico().from("foto_kits").update(campos).eq("id", anteriorId).eq("client_id", clientId).select("*").single()
+    : await servico().from("foto_kits").insert({ ...campos, criado_por: ch.userId }).select("*").single();
+  if (gravado.error || !gravado.data) throw new ErroHttp(503, "gravacao_falhou", "Não foi possível gravar o kit.");
+  const salvo = gravado.data as LinhaKit;
+  const { data: atuais } = await servico().from("foto_kit_refs").select("id, imagem_id, papel").eq("kit_id", salvo.id);
+  const manter = new Set(refs.map((r) => `${r.imagem_id}|${r.papel}`));
+  const remover = ((atuais as { id: string; imagem_id: string; papel: string }[] | null) ?? []).filter((a) => !manter.has(`${a.imagem_id}|${a.papel}`)).map((a) => a.id);
+  if (remover.length) await servico().from("foto_kit_refs").delete().in("id", remover);
+  if (refs.length) {
+    const { error } = await servico().from("foto_kit_refs").upsert(
+      refs.map((r) => ({ kit_id: salvo.id, client_id: clientId, imagem_id: r.imagem_id, papel: r.papel, vista: r.vista, prioridade: r.prioridade })),
+      { onConflict: "kit_id,imagem_id,papel" },
+    );
+    if (error) throw new ErroHttp(503, "gravacao_falhou", "O kit foi salvo, mas as referências não. Tente de novo.");
+  }
+  return salvo;
+}
+
+/** O kit gravado com as referências e a URL assinada de cada foto (como kit_salvar devolve). */
+async function kitComRefs(kit: LinhaKit) {
+  // O acesso ao cliente já foi conferido pela ação que chamou.
+  const lido = await lerKitSemConferir(kit.id);
+  const refs = await lerRefs(lido);
+  return {
+    ...lido,
+    refs: await Promise.all(refs.map(async ({ imagem, ...r }) => ({ ...r, imagem: await comUrl(imagem) }))),
+  };
+}
+
+/**
+ * Salva o kit sugerido como rascunho sem duplicar: rascunho do mesmo produto
+ * (nome e variante, ou foto de evidência em comum) é atualizado; kit
+ * confirmado do mesmo produto não é tocado.
+ */
+async function salvarKitRascunho(
+  ch: Chamador,
+  clientId: string,
+  novo: KitFoto & { refs: RefDoKit[] },
+  opcoes: { preferirNomeNovo?: boolean; refsWeb?: string[] } = {},
+): Promise<{ kit: LinhaKit; acao: "criado" | "atualizado" | "ja_confirmado" }> {
+  const imagens = await lerImagens(clientId, novo.refs.map((r) => r.imagem_id));
+  // Imagem gerada sem aprovação nunca vira evidência; foto fora do cliente sai.
+  const refs = novo.refs
+    .filter((r) => imagens.some((i) => i.id === r.imagem_id))
+    .map((r) => {
+      const i = imagens.find((x) => x.id === r.imagem_id)!;
+      return i.gerada && !i.aprovada && r.papel !== "estilo" && r.papel !== "cenario" ? { ...r, papel: "estilo" as const } : r;
+    });
+  const existentes = await kitsDoCliente(clientId);
+  const alvo = { ...novo, refs };
+  const achado = kitParecido(existentes, alvo);
+  if (!achado) {
+    const confirmado = existentes.find((k) => k.status === "confirmado" && chaveDoProduto(k) === chaveDoProduto(alvo));
+    if (confirmado) return { kit: await lerKit(ch, confirmado.id), acao: "ja_confirmado" };
+    const kit = { ...alvo, status: "rascunho" as const, lacunas: lacunasDaEvidencia(alvo, refs, opcoes.refsWeb ?? []) };
+    return { kit: await gravarKit(ch, clientId, kit, refs, null), acao: "criado" };
+  }
+  const anterior = await lerKit(ch, achado.id);
+  const refsAnteriores = (await lerRefs(anterior)).map(({ imagem: _i, ...r }) => r);
+  const mesclado = mesclarKit({ ...anterior, refs: refsAnteriores }, alvo, opcoes);
+  return { kit: await gravarKit(ch, clientId, mesclado, mesclado.refs, anterior.id), acao: "atualizado" };
 }
 
 async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -1005,9 +1358,22 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
     throw new ErroHttp(400, "frente_fora_do_kit", "A foto da frente precisa estar entre as referências do kit.");
   }
   let anterior: LinhaKit | null = null;
+  let atualizouRascunho = false;
   if (kit.id) {
     anterior = await lerKit(ch, kit.id);
     if (anterior.client_id !== clientId) throw new ErroHttp(409, "kit_de_outro_cliente", "Este kit pertence a outro cliente.");
+  } else if (kit.tipo !== "pessoa") {
+    // Kit novo do mesmo produto de um rascunho que já existe (ex.: a sugestão já
+    // salva aberta de novo na tela): atualiza o rascunho em vez de duplicar.
+    const parecido = kitParecido(await kitsDoCliente(clientId), { nome: kit.nome, variante: kit.variante, refs });
+    if (parecido) {
+      anterior = await lerKit(ch, parecido.id);
+      atualizouRascunho = true;
+    }
+  }
+  // A identificação pela internet não se perde quando a tela salva sem ela.
+  if (!kit.atributos.identificacao && anterior?.atributos.identificacao) {
+    kit.atributos = { ...kit.atributos, identificacao: anterior.atributos.identificacao };
   }
   // Autorização de pessoa: quem confirmou e quando ficam registrados pelo servidor.
   let autorizacao = kit.autorizacao;
@@ -1019,41 +1385,292 @@ async function kitSalvar(ch: Chamador, corpo: Record<string, unknown>) {
       registrada_em: ja ? anterior!.autorizacao!.registrada_em ?? new Date().toISOString() : new Date().toISOString(),
     };
   }
-  const campos = {
-    client_id: clientId,
-    tipo: kit.tipo,
-    nome: kit.nome,
-    variante: kit.variante,
-    atributos: kit.atributos,
-    invariantes: kit.invariantes,
-    lacunas: kit.lacunas,
-    autorizacao,
-    frente_imagem_id: kit.frente_imagem_id,
-    status: kit.status,
-  };
-  const gravado = anterior
-    ? await servico().from("foto_kits").update(campos).eq("id", anterior.id).eq("client_id", clientId).select("*").single()
-    : await servico().from("foto_kits").insert({ ...campos, criado_por: ch.userId }).select("*").single();
-  if (gravado.error || !gravado.data) throw new ErroHttp(503, "gravacao_falhou", "Não foi possível gravar o kit.");
-  const salvo = gravado.data as LinhaKit;
-
-  // Referências: o conjunto enviado substitui o anterior.
-  const { data: atuais } = await servico().from("foto_kit_refs").select("id, imagem_id, papel").eq("kit_id", salvo.id);
-  const manter = new Set(refs.map((r) => `${r.imagem_id}|${r.papel}`));
-  const remover = ((atuais as { id: string; imagem_id: string; papel: string }[] | null) ?? []).filter((a) => !manter.has(`${a.imagem_id}|${a.papel}`)).map((a) => a.id);
-  if (remover.length) await servico().from("foto_kit_refs").delete().in("id", remover);
-  if (refs.length) {
-    const { error } = await servico().from("foto_kit_refs").upsert(
-      refs.map((r) => ({ kit_id: salvo.id, client_id: clientId, imagem_id: r.imagem_id, papel: r.papel, vista: r.vista, prioridade: r.prioridade })),
-      { onConflict: "kit_id,imagem_id,papel" },
-    );
-    if (error) throw new ErroHttp(503, "gravacao_falhou", "O kit foi salvo, mas as referências não. Tente de novo.");
-  }
+  // Referências: o conjunto enviado substitui o anterior (gravarKit).
+  const salvo = await gravarKit(ch, clientId, { ...kit, autorizacao }, refs, anterior?.id ?? null);
   const refsLidas = await lerRefs(salvo);
   return json({
     kit: salvo,
     refs: await Promise.all(refsLidas.map(async ({ imagem, ...r }) => ({ ...r, imagem: await comUrl(imagem) }))),
+    atualizou_rascunho_existente: atualizouRascunho,
     custo_usd: 0,
+  });
+}
+
+// ------------------------------------------------------------------ identificar o produto
+
+type ReferenciaWebBaixada = { imagem_id: string; url_origem: string; pagina: string | null; fonte: string; url: string | null; ja_existia: boolean };
+
+/** Página pública (https, sem host interno), só texto HTML, até 2 MB. */
+async function lerPagina(url: string): Promise<{ url: string; html: string } | null> {
+  const r = await buscarSeguro(url, { maxBytes: MAX_BYTES_PAGINA, aceitar: "text/html,application/xhtml+xml", timeoutMs: TIMEOUT_PAGINA_MS });
+  if (!r || !/html|xml|text\/plain/.test(r.tipo || "text/html")) return null;
+  return { url: r.url.toString(), html: new TextDecoder().decode(r.bytes) };
+}
+
+/**
+ * Baixa uma imagem de referência da internet para mesa/<cliente>/foto/web/:
+ * só https público, tipo validado pelo conteúdo (JPEG, PNG, WebP), tamanho
+ * mínimo (nada de ícone ou logotipo) e sem duplicar (sha256 do cliente).
+ */
+async function baixarReferenciaWeb(clientId: string, alvo: OrigemWeb, produto: string): Promise<ReferenciaWebBaixada | null> {
+  const buscado = await buscarSeguro(alvo.url, { maxBytes: MAX_BYTES_REFERENCIA, aceitar: "image/avif,image/webp,image/png,image/jpeg,image/*", timeoutMs: 10_000 });
+  if (!buscado) return null;
+  const mime = mimeDe(buscado.bytes);
+  if (!mime) return null;
+  let dim = dimensoesDaImagem(buscado.bytes);
+  if (!dim) dim = await dimensoesDecodificando(buscado.bytes).catch(() => null);
+  if (!referenciaWebServe(dim)) return null;
+  const sha = await sha256Hex(buscado.bytes);
+  const { data: ja } = await servico().from("cliente_imagens").select(CAMPOS_IMAGEM).eq("client_id", clientId).eq("sha256", sha).limit(1);
+  const existente = ((ja as LinhaImagem[] | null) ?? [])[0];
+  const origem: OrigemWeb = { url: buscado.url.toString(), pagina: alvo.pagina, fonte: alvo.fonte || buscado.url.hostname };
+  if (existente) {
+    return { imagem_id: existente.id, url_origem: origem.url, pagina: origem.pagina, fonte: origem.fonte, url: await urlAssinada(existente.storage_bucket, existente.storage_path), ja_existia: true };
+  }
+  const caminho = `${clientId}/foto/web/${crypto.randomUUID()}.${extensaoDe(mime)}`;
+  await salvarNoMesa(caminho, buscado.bytes, mime);
+  const host = buscado.url.hostname.replace(/^www\./, "").slice(0, 60);
+  const { data, error } = await servico().from("cliente_imagens").insert({
+    client_id: clientId,
+    origem: "mesa_foto",
+    storage_bucket: "mesa",
+    storage_path: caminho,
+    nome: `Ref. internet: ${produto} (${host})`.slice(0, 160),
+    pasta: "Mesa Foto / Referências da internet",
+    categoria: "produto",
+    tags: ["mesa_foto", TAG_REFERENCIA_WEB, `fonte:${host}`, "nao_publicar"],
+    descricao: descricaoDaReferenciaWeb(origem, produto),
+    sha256: sha,
+    largura: dim!.largura,
+    altura: dim!.altura,
+    gerada: false,
+    aprovada: false,
+    modo: null,
+    derivada_de: null,
+  }).select(CAMPOS_IMAGEM).single();
+  if (error || !data) {
+    await servico().storage.from("mesa").remove([caminho]).catch(() => {});
+    return null;
+  }
+  return { imagem_id: (data as LinhaImagem).id, url_origem: origem.url, pagina: origem.pagina, fonte: origem.fonte, url: await urlAssinada("mesa", caminho), ja_existia: false };
+}
+
+/**
+ * produto_identificar { client_id, imagem_ids[], salvar_kit? (padrão true), modelo_id? }
+ * -> { produto, referencias_web, lacunas, proximo_passo, kit, aviso_jev, custo_usd, saldo_usd }
+ *
+ * Visão lê a embalagem ou a foto (marca, modelo, variante, códigos), a
+ * pesquisa web acha o produto real (página oficial, especificações, imagens),
+ * até 6 imagens entram no acervo como referência da internet (uso interno) e
+ * o kit rascunho do produto é salvo (ou atualizado) com elas como identidade.
+ * O Jev só avisa quando há dúvida entre candidatos de modelo.
+ */
+async function produtoIdentificar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const ids = Array.isArray(corpo.imagem_ids) ? Array.from(new Set(corpo.imagem_ids.map(String))) : [];
+  if (!ids.length) throw new ErroHttp(400, "sem_imagens", "Escolha as fotos da embalagem ou do produto.");
+  if (ids.length > MAX_FOTOS_IDENTIFICAR) throw new ErroHttp(400, "fotos_demais", `Escolha no máximo ${MAX_FOTOS_IDENTIFICAR} fotos para identificar o produto.`);
+  const imagens = await lerImagens(clientId, ids);
+  const faltando = ids.filter((i) => !imagens.some((x) => x.id === i));
+  if (faltando.length) throw new ErroHttp(404, "imagem_fora_do_cliente", "Há foto que não está no acervo deste cliente.", { imagem_ids: faltando });
+  const ordem = ids.map((i) => imagens.find((x) => x.id === i)!);
+  const fotos = await emParalelo(ordem, 3, (img) => baixarReduzida(img.storage_bucket, img.storage_path, LADO_VISAO, img.nome));
+  const leitor = await modeloDeTexto("leitura", corpo.modelo_id);
+  const legenda = ordem.map((img, i) => `Imagem ${i + 1}: id ${img.id}; arquivo "${img.nome}"${img.descricao ? `; leitura anterior: ${limpo(img.descricao, 300)}` : ""}`).join("\n");
+  const pedido = limpo(corpo.pedido, 500);
+  const saida = await chamarTexto({
+    clientId,
+    tarefa: TAREFA_LEITURA,
+    agente: AGENTE_LEITOR,
+    modeloId: leitor.id,
+    raciocinio: raciocinioPara(leitor),
+    sistema: SISTEMA_IDENTIFICAR,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `Identifique o produto destas ${ordem.length} fotos e pesquise o produto real na internet.\n${legenda}${pedido ? `\nPedido da equipe (pode estar ditado errado; vale o que as fotos mostram): ${pedido}` : ""}`,
+      imagens: fotos,
+    }],
+    pesquisaWeb: true,
+    esquemaJson: ESQUEMA_IDENTIFICACAO,
+    maxTokensSaida: 8_000,
+    timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
+    referencia: { tipo: REF_IMAGEM, id: ordem[0].id },
+    criadoPor: ch.userId,
+  });
+  let custo = saida.custoUsd;
+  const r = (saida.json ?? {}) as Record<string, unknown>;
+  const p = (r.produto ?? {}) as Record<string, unknown>;
+  const paginas = (Array.isArray(r.paginas) ? r.paginas : [])
+    .map((x) => (x ?? {}) as Record<string, unknown>)
+    .map((x) => ({ url: urlPublicaSegura(x.url)?.toString() ?? null, fonte: limpo(x.fonte, 120), tipo: String(x.tipo ?? "outra") }))
+    .filter((x): x is { url: string; fonte: string; tipo: string } => !!x.url)
+    .sort((a, b) => Number(b.tipo === "oficial") - Number(a.tipo === "oficial") || Number(b.tipo === "loja") - Number(a.tipo === "loja"))
+    .slice(0, 8);
+  const identificacao: Identificacao | null = normalizarIdentificacao({
+    marca: p.marca,
+    modelo: p.modelo,
+    variante: p.variante,
+    categoria: p.categoria,
+    especificacoes: p.especificacoes,
+    confianca: p.confianca,
+    evidencias: p.evidencias,
+    paginas,
+    identificado_em: new Date().toISOString(),
+  });
+  const nomeProduto = identificacao ? [identificacao.marca, identificacao.modelo].filter(Boolean).join(" ") : "";
+  const lacunas = listaDeTextos(r.lacunas, 12, 300);
+
+  // Candidatas a referência: as que o modelo viu na busca e as da própria página (og:image, JSON-LD).
+  const candidatas: OrigemWeb[] = [];
+  const somar = (url: unknown, pagina: string | null, fonte: string) => {
+    const u = urlPublicaSegura(url);
+    if (u && !candidatas.some((c) => c.url === u.toString())) candidatas.push({ url: u.toString(), pagina, fonte: fonte || u.hostname });
+  };
+  for (const x of Array.isArray(r.imagens) ? r.imagens : []) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    somar(o.url, urlPublicaSegura(o.pagina)?.toString() ?? null, limpo(o.fonte, 120));
+  }
+  if (identificacao) {
+    const lidas = await emParalelo(paginas.slice(0, MAX_PAGINAS_LIDAS), 3, (pg) => lerPagina(pg.url).catch(() => null));
+    lidas.forEach((l, i) => {
+      if (l) imagensDoHtml(l.html, l.url, 4).forEach((u) => somar(u, paginas[i].url, paginas[i].fonte));
+    });
+  }
+  // Tempo: 300 s da leitura com busca + páginas (12 s) + 3 rodadas de download (10 s) cabem nos 400 s da função.
+  const referencias: ReferenciaWebBaixada[] = [];
+  if (identificacao && candidatas.length) {
+    const baixadas = await emParalelo(candidatas.slice(0, 9), 3, (c) => baixarReferenciaWeb(clientId, c, nomeProduto || "produto").catch(() => null));
+    baixadas.forEach((b) => {
+      if (b && referencias.length < MAX_REFERENCIAS_WEB && !referencias.some((x) => x.imagem_id === b.imagem_id)) referencias.push(b);
+    });
+  }
+  if (!identificacao) lacunas.unshift("A leitura não identificou marca nem modelo: o kit fica com a embalagem como assunto até a equipe informar o produto.");
+  else if (!referencias.length) lacunas.unshift("Nenhuma foto do produto fora da caixa foi confirmada na internet: o ensaio trabalha com a embalagem até chegar foto real.");
+  if (identificacao && identificacao.confianca !== "alta") {
+    lacunas.unshift(`Modelo ou variante com confiança ${identificacao.confianca}: confirme com o cliente antes de publicar.`);
+  }
+
+  // Jev só como aviso: com mais de um candidato, ele diz qual bate com o texto lido.
+  let avisoJev: { escolha: string | null; confianca: number | null; concorda: boolean | null; aviso: string | null } | { erro: string } | null = null;
+  const candidatos = (Array.isArray(r.candidatos) ? r.candidatos : [])
+    .map((x) => (x ?? {}) as Record<string, unknown>)
+    .map((x) => [limpo(x.marca, 80), limpo(x.modelo, 120), limpo(x.variante, 80)].filter(Boolean).join(" "))
+    .filter((x, i, a) => x && a.indexOf(x) === i)
+    .slice(0, 6);
+  const escolhido = [nomeProduto, identificacao?.variante ?? ""].filter(Boolean).join(" ");
+  const opcoes = Array.from(new Set([escolhido, ...candidatos].filter(Boolean)));
+  if (identificacao && opcoes.length >= 2) {
+    try {
+      const criterios: Record<string, unknown> = {};
+      opcoes.forEach((o, i) => (criterios[`c${i}`] = o));
+      criterios.nenhum = "Nenhum dos candidatos bate com o texto lido na embalagem.";
+      const res = await jevPerguntar({
+        state: { texto_lido: limpo(r.texto_lido, 2000), observado: listaDeTextos(r.observado, 20, 200), evidencias_da_busca: identificacao.evidencias },
+        questions: {
+          modelo: {
+            type: "choice",
+            instructions: "Qual candidato de produto (marca, modelo e variante) bate com o texto lido na embalagem em `texto_lido`, com o que se vê em `observado` e com as evidências da busca?",
+            criteria: criterios,
+          },
+        },
+      });
+      const cobrado = await cobrarJev(res, { clientId, tarefa: TAREFA_LEITURA, referencia: { tipo: REF_IMAGEM, id: ordem[0].id }, criadoPor: ch.userId });
+      if (cobrado) custo += cobrado.custoUsd;
+      const resposta = res.answers.modelo;
+      const escolha = typeof resposta?.choice === "string" ? resposta.choice : null;
+      const confianca = typeof resposta?.confidence === "number" ? resposta.confidence : null;
+      const concorda = escolha ? escolha === "c0" : null;
+      const nomeEscolha = escolha && escolha !== "nenhum" ? opcoes[Number(escolha.slice(1))] ?? null : escolha;
+      avisoJev = {
+        escolha: nomeEscolha,
+        confianca,
+        concorda,
+        aviso: concorda === false || (confianca != null && confianca < 0.6)
+          ? `O Jev ${concorda === false ? `aponta outro candidato (${nomeEscolha})` : "ficou em dúvida entre os candidatos"}: confira modelo e variante antes de usar.`
+          : null,
+      };
+      if (avisoJev.aviso) lacunas.unshift(avisoJev.aviso);
+    } catch (e) {
+      avisoJev = { erro: e instanceof JevErro ? e.codigo : "jev_indisponivel" };
+    }
+  }
+
+  // Kit rascunho do produto: fotos lidas (caixa como embalagem) e referências da internet como identidade.
+  let kit: unknown = null;
+  let acaoKit: string | null = null;
+  if (corpo.salvar_kit !== false) {
+    const porFoto = new Map((Array.isArray(r.fotos) ? r.fotos : []).map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return [String(o.imagem_id), o] as const;
+    }));
+    const refs: RefDoKit[] = [
+      ...ordem.map((img, i) => {
+        const f = porFoto.get(img.id);
+        const web = (img.tags ?? []).includes(TAG_REFERENCIA_WEB);
+        const vista = typeof f?.vista === "string" && NOMES_DAS_VISTAS.includes(f.vista) ? f.vista : null;
+        return { imagem_id: img.id, papel: (f?.e_embalagem === false || web ? "identidade" : "embalagem") as RefDoKit["papel"], vista, prioridade: 10 + i };
+      }),
+      ...referencias.map((ref, i) => ({ imagem_id: ref.imagem_id, papel: "identidade" as const, vista: null, prioridade: 50 + i })),
+    ];
+    const tipo = TIPOS_DE_KIT.includes(p.tipo_kit as TipoKit) && p.tipo_kit !== "pessoa" ? (p.tipo_kit as TipoKit) : "produto";
+    const forma = listaDeTextos(p.forma_do_produto, 12, 200);
+    const novo: KitFoto & { refs: RefDoKit[] } = {
+      tipo,
+      nome: limpo(nomeProduto, 120) || limpo(ordem[0].nome, 120) || "Produto",
+      variante: identificacao?.variante ?? null,
+      atributos: {
+        observado: listaDeTextos(r.observado, 20, 300),
+        informado: [],
+        inferido: [
+          ...(identificacao?.especificacoes ?? []).map((s) => `Pela internet: ${s}`),
+          ...forma.map((s) => `Forma pela internet: ${s}`),
+        ].slice(0, 30),
+        ...(identificacao ? { identificacao } : {}),
+      },
+      invariantes: [],
+      lacunas,
+      autorizacao: null,
+      frente_imagem_id: null,
+      status: "rascunho",
+      refs,
+    };
+    try {
+      const salvo = await salvarKitRascunho(ch, clientId, novo, { preferirNomeNovo: !!identificacao, refsWeb: referencias.map((x) => x.imagem_id) });
+      kit = await kitComRefs(salvo.kit);
+      acaoKit = salvo.acao;
+    } catch (e) {
+      lacunas.unshift(`O kit não foi salvo: ${e instanceof Error ? e.message : "falha ao gravar"}. As referências já estão no acervo.`);
+    }
+  }
+  const temRefs = referencias.length > 0;
+  const proximo = limpo(r.proximo_passo, 400) ||
+    (temRefs
+      ? `Produto identificado com ${referencias.length} ${referencias.length === 1 ? "referência" : "referências"} da internet. Próximo: planejar variações fora da caixa.`
+      : "Próximo: planejar as fotos com a embalagem como assunto, ou subir uma foto real do produto.");
+  return json({
+    produto: {
+      marca: identificacao?.marca ?? null,
+      modelo: identificacao?.modelo ?? null,
+      variante: identificacao?.variante ?? null,
+      categoria: identificacao?.categoria ?? null,
+      especificacoes: identificacao?.especificacoes ?? [],
+      confianca: identificacao?.confianca ?? "baixa",
+      evidencias: identificacao?.evidencias ?? [],
+      texto_lido: typeof r.texto_lido === "string" ? r.texto_lido.slice(0, 2000) : "",
+      paginas,
+    },
+    referencias_web: referencias.map(({ imagem_id, url_origem, pagina, fonte, url, ja_existia }) => ({ imagem_id, url_origem, pagina, fonte, url, ja_existia })),
+    aviso_referencias: temRefs ? AVISO_REFERENCIA_WEB : null,
+    lacunas: Array.from(new Set(lacunas)).slice(0, 15),
+    proximo_passo: proximo,
+    kit,
+    kit_acao: acaoKit,
+    aviso_jev: avisoJev,
+    promessa: temRefs ? PROMESSA_REFERENCIA_WEB : null,
+    custo_usd: arred6(custo),
+    saldo_usd: saida.saldoUsd,
+    reserva_usada: saida.reservaUsada ?? null,
   });
 }
 
@@ -1072,7 +1689,10 @@ function receitas() {
     vistas: NOMES_DAS_VISTAS,
     formatos: FORMATOS,
     modos_preparar: MODOS_PREPARAR,
-    promessas: PROMESSA_DO_MODO,
+    promessas: { ...PROMESSA_DO_MODO, campanha: PROMESSA_CAMPANHA, referencia_web: PROMESSA_REFERENCIA_WEB },
+    tipos_de_variacao: TIPOS_DE_VARIACAO.map((t) => ({ id: t.id, nome: t.nome, direcao: t.direcao, formato: t.formato, foco: t.foco })),
+    max_variacoes: MAX_VARIACOES,
+    max_fotos_campanha: MAX_FOTOS_CAMPANHA,
     custo_usd: 0,
   });
 }
@@ -1081,21 +1701,34 @@ function receitas() {
 async function estimarEnsaio(
   tomadas: Tomada[],
   refs: RefDoKit[],
-  opcoes: { modeloImagemId?: unknown; qualidade?: Qualidade } = {},
+  opcoes: { modeloImagemId?: unknown; qualidade?: Qualidade; extras?: number } = {},
 ): Promise<Estimativa & { modelo_imagem_id: string; qualidade: Qualidade }> {
   const mImg = await modeloDeImagem(opcoes.modeloImagemId);
   const mLeitura = await modeloDeTexto("leitura").catch(() => null);
   const qualidade = opcoes.qualidade ?? QUALIDADE_PADRAO;
-  const limite = Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES);
+  // Referências de estilo do ensaio (e a pessoa aprovada da campanha) também entram no gerador.
+  const extras = Math.max(0, Math.min(3, opcoes.extras ?? 0));
+  const limite = Math.max(1, Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES) - extras);
   const porId = new Map(tomadas.map((t) => [t.id, t]));
   const fontes = (id: string) => fontesDaTomada(refs, porId.get(id)!, limite).length;
   const est = estimativaDoEnsaio(
     tomadas,
-    (id) => custoDeUmaImagem(mImg, qualidade, fontes(id)),
+    (id) => custoDeUmaImagem(mImg, qualidade, fontes(id) + extras),
     (id) => (mLeitura ? custoDeUmaConferencia(mLeitura, Math.min(4, fontes(id)) + 1) : 0),
   );
   return { ...est, modelo_imagem_id: mImg.id, qualidade };
 }
+
+/** Imagens extras que o ensaio manda ao gerador em toda tomada (estilo e pessoa aprovada). */
+const extrasDoEnsaio = (e: Pick<LinhaEnsaio, "direcao" | "receita_id">) =>
+  referenciasDeEstiloDoEnsaio(e).length + (e.receita_id === RECEITA_CAMPANHA ? 1 : 0);
+
+/** Referências de estilo gravadas no ensaio (campanha e variações), até 2. */
+function referenciasDeEstiloDoEnsaio(e: Pick<LinhaEnsaio, "direcao">): string[] {
+  const v = (e.direcao ?? {}).referencias_estilo;
+  return Array.isArray(v) ? v.map(String).filter((x) => UUID.test(x)).slice(0, MAX_ESTILOS_NO_GERADOR) : [];
+}
+const MAX_ESTILOS_NO_GERADOR = 2;
 
 async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   const qualidade = lerQualidade(corpo.qualidade);
@@ -1119,10 +1752,14 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
     const kit = await lerKit(ch, ensaio.kit_id);
     const refs = await lerRefs(kit);
     const alvo = acao === "tomada_gerar" ? [tomadaDoEnsaio(ensaio, corpo.tomada_id)] : ensaio.tomadas;
-    const est = await estimarEnsaio(alvo, refs, { modeloImagemId: corpo.modelo_imagem_id, qualidade });
+    const est = await estimarEnsaio(alvo, refs, { modeloImagemId: corpo.modelo_imagem_id, qualidade, extras: extrasDoEnsaio(ensaio) });
     return json({ estimativa_usd: acao === "tomada_gerar" ? est.geracao_usd : est.total_usd, estimativa: est, custo_usd: 0 });
   }
-  throw new ErroHttp(400, "alvo_invalido", "acao_alvo: preparar, tomada_gerar ou ensaio.");
+  if (acao === "biblioteca_exemplo") {
+    const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
+    return json({ estimativa_usd: custoDeUmaImagem(mImg, qualidade, 0, 2500), modelo_imagem_id: mImg.id, qualidade, custo_usd: 0 });
+  }
+  throw new ErroHttp(400, "alvo_invalido", "acao_alvo: preparar, tomada_gerar, ensaio ou biblioteca_exemplo.");
 }
 
 // ------------------------------------------------------------------ ensaio
@@ -1137,6 +1774,10 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   if (!receitaBase) throw new ErroHttp(400, "receita_invalida", "Receita desconhecida. Consulte a ação receitas.");
   if (!receitaBase.tipos_de_kit.includes(kit.tipo)) {
     throw new ErroHttp(409, "receita_incompativel", `A receita ${receitaBase.nome} não serve para kit do tipo ${kit.tipo}.`, { tipos_aceitos: receitaBase.tipos_de_kit });
+  }
+  // Campanha com modelo tem planejamento próprio (guia de estilo e pessoa sintética).
+  if (receitaBase.id === RECEITA_CAMPANHA) {
+    return await campanhaPlanejar(ch, { ...corpo, quantidade: corpo.quantidade ?? receitaBase.tomadas.length });
   }
   const formatos = lerFormatos(corpo.formatos);
   const finalidade = limpo(corpo.finalidade, 200) || "catálogo e redes sociais";
@@ -1196,6 +1837,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
       pode_mudar: listaDeTextos(t.pode_mudar, 12, 200),
       formato: typeof t.formato === "string" ? t.formato : null,
       observacao: limpoOuNulo(t.observacao, 600),
+      props: listaDeTextos(t.props, 8, 160),
     };
   }).filter((t) => t.nome);
   const tomadas = montarTomadas(receita, doDiretor, { kit, refs, formatos });
@@ -1263,6 +1905,460 @@ async function aplicarNaTomada(ch: Chamador, ensaio: LinhaEnsaio, sugestao: Suge
     estimativa,
     custo_usd: 0,
   });
+}
+
+// ------------------------------------------------------------------ variações e campanha
+
+type TextoDaVaga = { nome: string; objetivo: string; cenario: string; luz: string; props: string[]; formato: string | null };
+
+/** Grava um ensaio novo (variações ou campanha) e devolve a linha. */
+async function gravarEnsaioNovo(ch: Chamador, d: {
+  clientId: string;
+  kit: LinhaKit;
+  receitaId: string;
+  finalidade: string;
+  formatos: Formato[];
+  tomadas: Tomada[];
+  direcao: Record<string, unknown>;
+  pedido: string | null;
+  custoUsd: number;
+}): Promise<LinhaEnsaio> {
+  const { data, error } = await servico().from("foto_ensaios").insert({
+    client_id: d.clientId,
+    kit_id: d.kit.id,
+    receita_id: d.receitaId,
+    receita_versao: VERSAO_RECEITAS,
+    finalidade: d.finalidade,
+    formatos: d.formatos,
+    tomadas: d.tomadas,
+    direcao: d.direcao,
+    pedido: d.pedido,
+    custo_usd: arred6(d.custoUsd),
+    status: statusDoEnsaio(d.tomadas),
+    criado_por: ch.userId,
+  }).select("*").single();
+  if (error || !data) throw new ErroHttp(503, "gravacao_falhou", "O plano foi feito, mas o ensaio não foi gravado. Tente de novo.", { custo_usd: d.custoUsd });
+  return data as LinhaEnsaio;
+}
+
+/** Formatos do lote: os pedidos, ou os sugeridos pelos tipos das vagas. */
+function formatosDoLote(pedidos: unknown, sugeridos: string[]): Formato[] {
+  if (Array.isArray(pedidos) && pedidos.length) return lerFormatos(pedidos) as Formato[];
+  return lerFormatos(Array.from(new Set(sugeridos))) as Formato[];
+}
+
+/** Tomadas do lote de variações: câmera e tipo das vagas, texto do diretor (ou o base do tipo). */
+function tomadasDasVagas(vagas: VagaDeVariacao[], textos: Map<string, Partial<TextoDaVaga>>, ctx: { kit: KitFoto; refs: RefDoKit[]; formatos: Formato[] }): Tomada[] {
+  const cenarios = new Set<string>();
+  return vagas.map((v) => {
+    const t = textos.get(v.id) ?? {};
+    let cenario = limpo(t.cenario, 800) || v.tipo.cenario;
+    // Cenário repetido no lote não passa: vira o base do tipo com a mudança da rodada.
+    if (cenarios.has(cenario.toLowerCase())) cenario = `${v.tipo.cenario}${v.mudanca ? ` Mudança: ${v.mudanca}.` : ""}`;
+    cenarios.add(cenario.toLowerCase());
+    const formato = formatoValido(t.formato) ?? (ctx.formatos.includes(v.tipo.formato as Formato) ? (v.tipo.formato as Formato) : null);
+    return montarTomada({
+      id: v.id,
+      nome: limpo(t.nome, 120) || (v.rodada ? `${v.tipo.nome} ${v.rodada + 1}` : v.tipo.nome),
+      objetivo: limpo(t.objetivo, 400) || v.tipo.direcao,
+      camera: v.camera,
+      cenario,
+      luz: limpo(t.luz, 800) || v.tipo.luz,
+      props: t.props?.length ? t.props : v.tipo.props,
+      formato,
+      exige: v.tipo.exige ?? null,
+      foco: v.foco,
+      tipo_variacao: v.tipo.id,
+      mudanca: v.mudanca,
+      pode_mudar: ["cenário", "props", "superfície", "luz", "composição"],
+    }, { ...ctx, receita: null });
+  });
+}
+
+type EstiloResolvido = { id: string; titulo: string; imagem: ImagemEntrada; origem: "acervo" | "biblioteca" };
+
+/** Imagem de um item da biblioteca (arquivo guardado no bucket mesa ou endereço público seguro). */
+async function imagemDoItemDaBiblioteca(clientId: string, item: LinhaBiblioteca, lado = 1024): Promise<ImagemEntrada> {
+  const caminho = item.storage_path ? caminhoDoClienteNoMesa(clientId, item.storage_path, true) : null;
+  if (caminho) return await baixarReduzida("mesa", caminho, lado, `estilo-${item.titulo}`);
+  const url = item.imagem_url ? urlPublicaSegura(item.imagem_url) : null;
+  const buscado = url ? await buscarSeguro(url.toString(), { maxBytes: MAX_BYTES_REFERENCIA, aceitar: "image/*" }) : null;
+  const mime = buscado ? mimeDe(buscado.bytes) : null;
+  if (!buscado || !mime) throw new ErroHttp(502, "referencia_indisponivel", `Não foi possível abrir a referência "${item.titulo}". Importe a imagem para o cliente e tente de novo.`);
+  return { bytes: await reduzir(buscado.bytes, lado), mime: "image/png", nome: `estilo-${nomeSeguro(item.titulo)}.png` };
+}
+
+/**
+ * Referências de estilo por id: foto do acervo do cliente (print de perfil,
+ * moodboard) ou item da biblioteca. Id desconhecido é erro explícito.
+ */
+async function resolverReferenciasDeEstilo(clientId: string, ids: string[], max = 4): Promise<EstiloResolvido[]> {
+  const unicos = Array.from(new Set(ids.filter((x) => UUID.test(x)))).slice(0, max);
+  if (!unicos.length) return [];
+  const doAcervo = await lerImagens(clientId, unicos);
+  const resto = unicos.filter((id) => !doAcervo.some((i) => i.id === id));
+  const itens = resto.length ? await lerItensDaBiblioteca(clientId, resto) : [];
+  const faltando = resto.filter((id) => !itens.some((i) => i.id === id && (i.storage_path || i.imagem_url)));
+  if (faltando.length) throw new ErroHttp(404, "referencia_inexistente", "Há referência de estilo que não está no acervo nem na biblioteca deste cliente.", { ids: faltando });
+  return await emParalelo(unicos, 2, async (id): Promise<EstiloResolvido> => {
+    const img = doAcervo.find((i) => i.id === id);
+    if (img) return { id, titulo: img.nome, imagem: await baixarReduzida(img.storage_bucket, img.storage_path, 1024, `estilo-${img.nome}`), origem: "acervo" };
+    const item = itens.find((i) => i.id === id)!;
+    return { id, titulo: item.titulo, imagem: await imagemDoItemDaBiblioteca(clientId, item), origem: "biblioteca" };
+  });
+}
+
+/** Ids de referência de estilo que existem no acervo ou na biblioteca do cliente (sem baixar nada). */
+async function idsDeEstiloValidos(clientId: string, ids: string[]): Promise<string[]> {
+  const unicos = Array.from(new Set(ids.filter((x) => UUID.test(x)))).slice(0, 4);
+  if (!unicos.length) return [];
+  const doAcervo = await lerImagens(clientId, unicos);
+  const itens = await lerItensDaBiblioteca(clientId, unicos.filter((id) => !doAcervo.some((i) => i.id === id)));
+  return unicos.filter((id) => doAcervo.some((i) => i.id === id) || itens.some((i) => i.id === id && (i.storage_path || i.imagem_url)));
+}
+
+/** Kit que aceita variações e campanha: do cliente, ativo e de produto (não pessoa real). */
+async function kitDoLote(ch: Chamador, clientId: string, kitId: unknown): Promise<{ kit: LinhaKit; refs: (RefDoKit & { imagem: LinhaImagem })[] }> {
+  const kit = await lerKit(ch, idDe(kitId, "kit_id"));
+  if (kit.client_id !== clientId) throw new ErroHttp(409, "kit_de_outro_cliente", "Este kit pertence a outro cliente.");
+  if (kit.status === "arquivado") throw new ErroHttp(409, "kit_arquivado", "O kit está arquivado.");
+  if (kit.tipo === "pessoa") {
+    throw new ErroHttp(409, "kit_de_pessoa", "Variações e campanha com pessoa sintética usam kit de produto. Para a pessoa real do kit, use as receitas de retrato.");
+  }
+  return { kit, refs: await lerRefs(kit) };
+}
+
+const quantidadeDe = (v: unknown, padrao: number, max: number, nome: string) => {
+  if (v == null || v === "") return padrao;
+  const q = Math.round(Number(v));
+  if (!Number.isFinite(q) || q < 1 || q > max) throw new ErroHttp(400, "quantidade_invalida", `${nome}: de 1 a ${max}.`);
+  return q;
+};
+
+/**
+ * variacoes_planejar { client_id, kit_id, quantidade (1 a 16), tipos?[], pedido?, referencia_ids?, formatos?, finalidade?, qualidade? }
+ * -> { ensaio, estimativa_usd, estimativa }
+ * Vagas decididas no código (tipos, câmeras, mudança por rodada) e texto de
+ * direção de arte do diretor por vaga, com o contexto real do cliente.
+ */
+async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const { kit, refs } = await kitDoLote(ch, clientId, corpo.kit_id);
+  const quantidade = quantidadeDe(corpo.quantidade, 8, MAX_VARIACOES, "quantidade");
+  const temEmb = refs.some((r) => r.papel === "embalagem");
+  const ctxVagas = { temIdentidade: temIdentidade(kit, refs), temEmbalagem: temEmb };
+  const vagas = planoDeVariacoes(quantidade, corpo.tipos, ctxVagas);
+  const formatos = formatosDoLote(corpo.formatos, vagas.map((v) => v.tipo.formato));
+  const finalidade = limpo(corpo.finalidade, 200) || "anúncios, feed e loja";
+  const pedido = limpoOuNulo(corpo.pedido, 2000);
+  const estiloIds = Array.isArray(corpo.referencia_ids) ? corpo.referencia_ids.map(String) : [];
+  const [contexto, diretor, estilos] = await Promise.all([
+    contextoDoCliente(clientId),
+    modeloDeTexto("diretor_arte", corpo.modelo_id),
+    resolverReferenciasDeEstilo(clientId, estiloIds, MAX_ESTILOS_NO_GERADOR),
+  ]);
+  const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: ctxVagas.temIdentidade ? "produto" : "embalagem" }, 2)
+    .filter((f) => f.papel !== "estilo" && f.papel !== "cenario") as (RefDoKit & { imagem: LinhaImagem })[];
+  const imagensDoProduto = await emParalelo(doProduto, 2, (f) => baixarReduzida(f.imagem.storage_bucket, f.imagem.storage_path, 768, `${f.papel}-${f.imagem.nome}`));
+  const dados = {
+    cliente: contexto.dados,
+    kit: resumoDoKit(kit, refs),
+    finalidade,
+    formatos,
+    pedido_da_equipe: pedido,
+    vagas: vagas.map((v) => ({
+      vaga_id: v.id,
+      tipo: v.tipo.id,
+      tipo_nome: v.tipo.nome,
+      direcao: v.tipo.direcao,
+      foco: v.foco,
+      camera: `${azimuteDaVaga(v)}, ${v.camera.enquadramento}`,
+      cenario_base: v.tipo.cenario,
+      luz_base: v.tipo.luz,
+      props_base: v.tipo.props,
+      formato_sugerido: v.tipo.formato,
+      mudanca_da_rodada: v.mudanca,
+    })),
+  };
+  const legenda = [
+    ...doProduto.map((f, i) => `Imagem ${i + 1}: o produto do kit (${f.papel}${f.origem_web ? ", referência da internet" : ""}).`),
+    ...estilos.map((e, i) => `Imagem ${doProduto.length + i + 1}: SÓ ESTILO ("${e.titulo}"): extraia a direção, não copie.`),
+  ].join("\n");
+  const saida = await chamarTexto({
+    clientId,
+    tarefa: TAREFA_ESTUDIO,
+    agente: AGENTE_DIRETOR,
+    modeloId: diretor.id,
+    raciocinio: raciocinioPara(diretor),
+    sistema: SISTEMA_VARIACOES,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `Escreva a direção de arte de cada vaga deste lote com os dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
+      imagens: [...imagensDoProduto, ...estilos.map((e) => e.imagem)],
+    }],
+    esquemaJson: ESQUEMA_VARIACOES,
+    maxTokensSaida: 12_000,
+    timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
+    referencia: { tipo: REF_KIT, id: kit.id },
+    criadoPor: ch.userId,
+  });
+  const r = (saida.json ?? {}) as Record<string, unknown>;
+  const textos = new Map<string, Partial<TextoDaVaga>>();
+  for (const x of Array.isArray(r.tomadas) ? r.tomadas : []) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    textos.set(String(o.vaga_id ?? ""), {
+      nome: limpo(o.nome, 120),
+      objetivo: limpo(o.objetivo, 400),
+      cenario: limpo(o.cenario, 800),
+      luz: limpo(o.luz, 800),
+      props: listaDeTextos(o.props, 8, 160),
+      formato: typeof o.formato === "string" ? o.formato : null,
+    });
+  }
+  const tomadas = tomadasDasVagas(vagas, textos, { kit, refs, formatos });
+  const qualidade = lerQualidade(corpo.qualidade);
+  const estimativa = await estimarEnsaio(tomadas, refs, { modeloImagemId: corpo.modelo_imagem_id, qualidade, extras: estilos.length });
+  const lacunas = listaDeTextos(r.lacunas_que_limitam, 12, 300);
+  if (!ctxVagas.temIdentidade && temEmb) lacunas.unshift("Sem foto do produto fora da caixa: as variações usam a embalagem como assunto. Rode Identificar produto para tirar da caixa.");
+  const ensaio = await gravarEnsaioNovo(ch, {
+    clientId,
+    kit,
+    receitaId: RECEITA_VARIACOES,
+    finalidade,
+    formatos,
+    tomadas,
+    direcao: {
+      tipo: "variacoes",
+      conceito: limpo(r.conceito, 1500),
+      quantidade,
+      tipos: vagas.map((v) => v.tipo.id),
+      referencias_estilo: estilos.map((e) => e.id),
+      lacunas_que_limitam: lacunas,
+      perguntas: [],
+      modelo_id: saida.modeloId,
+      estimativa,
+    },
+    pedido,
+    custoUsd: saida.custoUsd,
+  });
+  return json({
+    ensaio,
+    estimativa_usd: estimativa.total_usd,
+    estimativa,
+    lacunas,
+    custo_usd: saida.custoUsd,
+    saldo_usd: saida.saldoUsd,
+    reserva_usada: saida.reservaUsada ?? null,
+  });
+}
+
+const azimuteDaVaga = (v: VagaDeVariacao) => (v.camera.elevacao >= 75 ? "vista de cima" : `azimute ${v.camera.azimute}, elevação ${v.camera.elevacao}`);
+
+/** Tomadas da campanha: câmera pelo enquadramento, cena da pessoa sintética, foco pelo que o kit documenta. */
+function tomadasDaCampanha(fotos: FotoDeCampanha[], ctx: { kit: KitFoto; refs: RefDoKit[]; formatos: Formato[] }): Tomada[] {
+  const foco = temIdentidade(ctx.kit, ctx.refs) || !ctx.refs.some((r) => r.papel === "embalagem") ? "produto" : "embalagem";
+  const usados = new Set<string>();
+  return fotos.map((f) => {
+    const raiz = nomeSeguro(f.nome).slice(0, 30) || "foto";
+    let id = raiz;
+    for (let n = 2; usados.has(id); n++) id = `${raiz}-${n}`;
+    usados.add(id);
+    return montarTomada({
+      id,
+      nome: f.nome,
+      objetivo: f.objetivo,
+      receita_tomada_id: null,
+      camera: cameraDaCampanha(f),
+      cenario: f.cenario,
+      luz: f.luz,
+      props: f.props,
+      formato: formatoValido(f.formato),
+      espaco_para_texto: !f.com_pessoa,
+      foco,
+      tipo_variacao: null,
+      campanha: { com_pessoa: f.com_pessoa, acao: f.acao, expressao: f.expressao, figurino: f.figurino },
+      pode_mudar: ["cenário", "props", "figurino", "pose", "luz", "composição"],
+    }, { ...ctx, receita: receitaPorId(RECEITA_CAMPANHA) });
+  });
+}
+
+/** Fotos padrão da receita de campanha, para completar a quantidade pedida. */
+function fotosPadraoDaCampanha(quantidade: number, ja: FotoDeCampanha[]): FotoDeCampanha[] {
+  const receita = receitaPorId(RECEITA_CAMPANHA)!;
+  const saida = ja.slice(0, quantidade);
+  let i = 0;
+  while (saida.length < quantidade && i < 40) {
+    const t = receita.tomadas[i % receita.tomadas.length];
+    const volta = Math.floor(i / receita.tomadas.length);
+    saida.push({
+      nome: volta ? `${t.nome} ${volta + 1}` : t.nome,
+      objetivo: t.objetivo,
+      acao: "",
+      expressao: "",
+      figurino: "",
+      enquadramento: t.camera.enquadramento === "detalhe" ? "close" : t.camera.enquadramento === "aberto" ? "aberto" : "medio",
+      camera: t.camera.preset_id,
+      cenario: "",
+      luz: "",
+      props: [],
+      formato: null,
+      com_pessoa: t.com_pessoa !== false,
+    });
+    i++;
+  }
+  return saida;
+}
+
+const LACUNA_MESMA_MODELO = "O gerador não garante o mesmo rosto entre fotos: aprove a primeira foto com pessoa e as próximas usam ela como referência da mesma modelo sintética.";
+
+/**
+ * campanha_planejar { client_id, kit_id, quantidade (1 a 16), referencias_estilo_ids?, modelo?: { perfil?, idade_aprox?, estilo? }, pedido?, formatos?, finalidade? }
+ * -> { ensaio, guia_de_estilo, modelo, estimativa_usd, estimativa, lacunas }
+ * Lê as referências de estilo por visão (guia de estilo), define a pessoa
+ * sintética e planeja as fotos; grava foto_ensaios com receita
+ * campanha-com-modelo e direcao.guia_de_estilo.
+ */
+async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const { kit, refs } = await kitDoLote(ch, clientId, corpo.kit_id);
+  const quantidade = quantidadeDe(corpo.quantidade, 6, MAX_FOTOS_CAMPANHA, "quantidade");
+  const pedidoModelo = lerModeloSintetico(corpo.modelo);
+  const formatos = formatosDoLote(corpo.formatos, ["4:5", "9:16"]);
+  const finalidade = limpo(corpo.finalidade, 200) || "campanha e feed";
+  const pedido = limpoOuNulo(corpo.pedido, 2000);
+  const estiloIds = Array.isArray(corpo.referencias_estilo_ids) ? corpo.referencias_estilo_ids.map(String) : [];
+  const [contexto, diretor, estilos] = await Promise.all([
+    contextoDoCliente(clientId),
+    modeloDeTexto("diretor_arte", corpo.modelo_id),
+    resolverReferenciasDeEstilo(clientId, estiloIds, 4),
+  ]);
+  const comProduto = temIdentidade(kit, refs);
+  const doProduto = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: comProduto ? "produto" : "embalagem" }, 2)
+    .filter((f) => f.papel !== "estilo" && f.papel !== "cenario") as (RefDoKit & { imagem: LinhaImagem })[];
+  const imagensDoProduto = await emParalelo(doProduto, 2, (f) => baixarReduzida(f.imagem.storage_bucket, f.imagem.storage_path, 768, `${f.papel}-${f.imagem.nome}`));
+  const dados = {
+    cliente: contexto.dados,
+    kit: resumoDoKit(kit, refs),
+    assunto: comProduto ? "o produto do kit" : "a embalagem do kit (sem foto do produto fora da caixa)",
+    quantidade,
+    formatos,
+    finalidade,
+    modelo_pedido_pela_equipe: { perfil: pedidoModelo.perfil || null, idade_aprox: corpo.modelo ? pedidoModelo.idade_aprox : null, estilo: pedidoModelo.estilo || null },
+    pedido_da_equipe: pedido,
+    presets: PRESETS.filter((p) => p.elevacao_graus <= 30).map((p) => p.id),
+  };
+  const legenda = [
+    ...doProduto.map((f, i) => `Imagem ${i + 1}: IDENTIDADE do produto (${f.papel}${f.origem_web ? ", referência da internet" : ""}).`),
+    ...estilos.map((e, i) => `Imagem ${doProduto.length + i + 1}: REFERÊNCIA DE ESTILO ("${e.titulo}"): extraia a direção; não copie foto, marca nem pessoa.`),
+  ].join("\n");
+  const saida = await chamarTexto({
+    clientId,
+    tarefa: TAREFA_ESTUDIO,
+    agente: AGENTE_DIRETOR,
+    modeloId: diretor.id,
+    raciocinio: raciocinioPara(diretor),
+    sistema: SISTEMA_CAMPANHA,
+    mensagens: [{
+      papel: "usuario",
+      conteudo: `Planeje a campanha com estes dados reais:\n${JSON.stringify(dados)}${legenda ? `\n${legenda}` : ""}`,
+      imagens: [...imagensDoProduto, ...estilos.map((e) => e.imagem)],
+    }],
+    esquemaJson: ESQUEMA_CAMPANHA,
+    maxTokensSaida: 14_000,
+    timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
+    referencia: { tipo: REF_KIT, id: kit.id },
+    criadoPor: ch.userId,
+  });
+  const r = (saida.json ?? {}) as Record<string, unknown>;
+  const guia = normalizarGuiaDeEstilo(r.guia_de_estilo);
+  const doDiretor = (r.modelo ?? {}) as Record<string, unknown>;
+  // O que a equipe pediu vale sobre o que o diretor escolheu.
+  const modelo = lerModeloSintetico({
+    perfil: pedidoModelo.perfil || doDiretor.perfil,
+    idade_aprox: corpo.modelo && (corpo.modelo as Record<string, unknown>).idade_aprox != null ? pedidoModelo.idade_aprox : doDiretor.idade_aprox,
+    estilo: pedidoModelo.estilo || doDiretor.estilo,
+  });
+  modelo.avisos = Array.from(new Set([...pedidoModelo.avisos, ...modelo.avisos]));
+  const fotos = fotosPadraoDaCampanha(quantidade, lerFotosDeCampanha(r.fotos, formatos, quantidade));
+  const lacunas = listaDeTextos(r.lacunas, 10, 300);
+  if (!comProduto) lacunas.unshift("Sem foto do produto fora da caixa: a campanha usa a embalagem. Rode Identificar produto para ter o produto em uso.");
+  const resultado = await criarEnsaioDeCampanha(ch, {
+    clientId,
+    kit,
+    refs,
+    fotos,
+    guia,
+    modelo,
+    estilos: estilos.map((e) => e.id),
+    formatos,
+    finalidade,
+    conceito: limpo(r.conceito, 1500),
+    lacunas,
+    pedido,
+    custoUsd: saida.custoUsd,
+    modeloTextoId: saida.modeloId,
+    qualidade: lerQualidade(corpo.qualidade),
+    modeloImagemId: corpo.modelo_imagem_id,
+  });
+  return json({ ...resultado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
+}
+
+/** Monta e grava o ensaio de campanha (campanha_planejar e a sugestão do diretor). */
+async function criarEnsaioDeCampanha(ch: Chamador, d: {
+  clientId: string;
+  kit: LinhaKit;
+  refs: RefDoKit[];
+  fotos: FotoDeCampanha[];
+  guia: GuiaDeEstilo | null;
+  modelo: ModeloSintetico;
+  estilos: string[];
+  formatos: Formato[];
+  finalidade: string;
+  conceito: string;
+  lacunas: string[];
+  pedido: string | null;
+  custoUsd: number;
+  modeloTextoId: string | null;
+  qualidade?: Qualidade;
+  modeloImagemId?: unknown;
+}) {
+  const tomadas = tomadasDaCampanha(d.fotos, { kit: d.kit, refs: d.refs, formatos: d.formatos });
+  const estilos = d.estilos.slice(0, MAX_ESTILOS_NO_GERADOR);
+  const lacunas = Array.from(new Set([...d.lacunas, ...d.modelo.avisos, ...(tomadas.some((t) => t.campanha?.com_pessoa) ? [LACUNA_MESMA_MODELO] : [])])).slice(0, 14);
+  const estimativa = await estimarEnsaio(tomadas, d.refs, { modeloImagemId: d.modeloImagemId, qualidade: d.qualidade, extras: estilos.length + 1 });
+  const ensaio = await gravarEnsaioNovo(ch, {
+    clientId: d.clientId,
+    kit: d.kit,
+    receitaId: RECEITA_CAMPANHA,
+    finalidade: d.finalidade,
+    formatos: d.formatos,
+    tomadas,
+    direcao: {
+      tipo: "campanha",
+      conceito: d.conceito,
+      guia_de_estilo: d.guia,
+      modelo: { perfil: d.modelo.perfil, idade_aprox: d.modelo.idade_aprox, estilo: d.modelo.estilo, sintetica: true },
+      referencias_estilo: estilos,
+      lacunas_que_limitam: lacunas,
+      perguntas: [],
+      modelo_id: d.modeloTextoId,
+      estimativa,
+      promessa: PROMESSA_CAMPANHA,
+    },
+    pedido: d.pedido,
+    custoUsd: d.custoUsd,
+  });
+  return {
+    ensaio,
+    guia_de_estilo: d.guia,
+    modelo: { perfil: d.modelo.perfil, idade_aprox: d.modelo.idade_aprox, estilo: d.modelo.estilo, sintetica: true },
+    estimativa_usd: estimativa.total_usd,
+    estimativa,
+    lacunas,
+    promessa: PROMESSA_CAMPANHA,
+  };
 }
 
 // ------------------------------------------------------------------ guia (biblioteca, referência, livre)
@@ -1334,14 +2430,23 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     exige: salva.exige,
     observacao: salva.observacao,
     versoes: salva.versoes,
+    ...camposV2(salva),
   }, { kit, refs, receita: receitaPorId(ensaio.receita_id), formatos: lerFormatos(ensaio.formatos) as Formato[] });
   if (tomada.motivo_bloqueio) throw new ErroHttp(409, "tomada_bloqueada", tomada.motivo_bloqueio, { tomada_id: tomada.id });
 
   const guia = lerGuia(corpo.guia);
   const guiado = await resolverGuia(ensaio.client_id, guia);
+  // Sem guia pedido na tela, valem as referências de estilo gravadas no ensaio (campanha, variações).
+  const doEnsaio = guia.modo === "nenhum" ? await resolverReferenciasDeEstilo(ensaio.client_id, referenciasDeEstiloDoEnsaio(ensaio), MAX_ESTILOS_NO_GERADOR) : [];
+  const estilos = [...guiado.estilos, ...doEnsaio.map((e) => ({ titulo: e.titulo, imagem: e.imagem }))].slice(0, MAX_ESTILOS_NO_GERADOR);
+  // Campanha: a primeira foto com pessoa já aprovada mantém a mesma modelo sintética nas próximas.
+  const aprovadaComPessoa = tomada.campanha?.com_pessoa
+    ? ensaio.tomadas.filter((t) => t.campanha?.com_pessoa).flatMap((t) => t.versoes).find((v) => v.aprovada === true) ?? null
+    : null;
+  const pessoaAprovada = aprovadaComPessoa ? [await baixarReduzida("mesa", aprovadaComPessoa.storage_path, 1024, "pessoa-sintetica-aprovada")] : [];
   const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
   const qualidade = lerQualidade(corpo.qualidade);
-  const limite = Math.max(1, Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES) - guiado.estilos.length);
+  const limite = Math.max(1, Math.min(limiteDeFontesDoMotor(mImg), LIMITE_PRATICO_DE_FONTES) - estilos.length - pessoaAprovada.length);
   const fontes = fontesDaTomada(refs, tomada, limite);
   const imagensFontes = await emParalelo(fontes, 4, (f) => {
     const r = f as RefDoKit & { imagem: LinhaImagem };
@@ -1349,16 +2454,20 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
   });
   const contexto = await lerMarcaParaDirecao(servico(), ensaio.client_id);
   const rejeicoes = tomada.versoes.filter((v) => v.aprovada === false && v.motivo_rejeicao).map((v) => v.motivo_rejeicao!);
+  const direcao = ensaio.direcao as Record<string, unknown>;
   const prompt = promptDaTomada({
     kit,
     tomada,
     finalidade: ensaio.finalidade ?? "",
     marca: { nome: contexto.nomeCliente, estilo: contexto.estilo, paleta: hexDaPaleta(contexto as ContextoFoto["marca"]) },
     fontes,
-    estilos: guiado.estilos.map((e) => ({ titulo: e.titulo })),
+    estilos: estilos.map((e) => ({ titulo: e.titulo })),
     guiaTexto: guiado.texto,
     versoesAntes: tomada.versoes.length,
     rejeicoes,
+    guiaDeEstilo: normalizarGuiaDeEstilo(direcao.guia_de_estilo),
+    modelo: tomada.campanha ? lerModeloSintetico(direcao.modelo) : null,
+    pessoaAprovada: pessoaAprovada.length > 0,
   });
   const tamanho = TAMANHO_DO_FORMATO[tomada.formato] ?? TAMANHO_DO_FORMATO["4:5"];
   /** A tomada gravada com os campos recalculados, as versões de agora e o status pedido. */
@@ -1375,7 +2484,7 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
       clientId: ensaio.client_id,
       modeloId: mImg.id,
       prompt,
-      referencias: [...imagensFontes, ...guiado.estilos.map((e) => e.imagem)],
+      referencias: [...imagensFontes, ...pessoaAprovada, ...estilos.map((e) => e.imagem)],
       qualidade,
       tamanho,
       referencia: { tipo: REF_ENSAIO, id: ensaio.id },
@@ -1435,9 +2544,12 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({
     ensaio: gravado,
     versao: versao ? { ...versao, tomada_id: tomada.id, url: await urlAssinada("mesa", caminho) } : null,
-    promessa: PROMESSA_DO_MODO[tomada.modo],
+    promessa: tomada.campanha ? PROMESSA_CAMPANHA : PROMESSA_DO_MODO[tomada.modo],
     proximo_passo: "versao_conferir",
-    aviso: saida.tamanho !== tamanho ? `O gerador entregou em ${saida.tamanho} em vez de ${tamanho}; recorte no formato ao usar.` : null,
+    aviso: [
+      saida.tamanho !== tamanho ? `O gerador entregou em ${saida.tamanho} em vez de ${tamanho}; recorte no formato ao usar.` : "",
+      fontes.some((f) => f.origem_web) ? "O produto foi refeito a partir de referências da internet (uso interno): confira modelo e variante antes de aprovar." : "",
+    ].filter(Boolean).join(" ") || null,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
     reserva_usada: saida.reservaUsada ?? null,
@@ -1461,13 +2573,17 @@ async function versaoConferir(ch: Chamador, corpo: Record<string, unknown>) {
     baixarReduzida("mesa", versao.storage_path, LADO_VISAO, `versao-${versao.versao}`),
     ...fontes.map((f) => baixarReduzida(f.imagem.storage_bucket, f.imagem.storage_path, 1024, `${f.papel}-${f.imagem.nome}`)),
   ]);
-  const criterios = criteriosDaConferencia(kit.tipo);
+  const criterios = criteriosDaConferencia(kit.tipo, {
+    comPessoaSintetica: !!tomada.campanha?.com_pessoa || !!tipoDeVariacaoPorId(tomada.tipo_variacao)?.com_maos,
+    embalagem: tomada.foco === "embalagem",
+  });
   const leitor = await modeloDeTexto("leitura", corpo.modelo_id);
   const pedido = [
     `Tomada "${tomada.nome}" (${PROMESSA_DO_MODO[tomada.modo]}). Câmera pedida: preset ${tomada.camera.preset_id ?? "próprio"}, azimute ${tomada.camera.azimute}, elevação ${tomada.camera.elevacao}, enquadramento ${tomada.camera.enquadramento}.`,
     `Cenário pedido: ${tomada.cenario}. Luz pedida: ${tomada.luz}.`,
     `Assunto: ${kit.nome}${kit.variante ? ` (variante ${kit.variante})` : ""}. Invariantes: ${tomada.invariantes.join("; ")}.`,
-    `Imagem 1 = foto gerada. ${fontes.map((f, i) => `Imagem ${i + 2} = fonte real (${f.papel}${f.vista ? `, vista ${f.vista}` : ""}).`).join(" ")}`,
+    tomada.campanha?.com_pessoa ? "A pessoa da foto é SINTÉTICA (gerada de propósito): confira anatomia, mãos, idade adulta e que não se pareça com pessoa real conhecida; o produto é conferido contra as fontes." : "",
+    `Imagem 1 = foto gerada. ${fontes.map((f, i) => `Imagem ${i + 2} = fonte real (${f.papel}${f.vista ? `, vista ${f.vista}` : ""}${f.origem_web ? ", foto de referência da internet do mesmo produto" : ""}).`).join(" ")}`,
     `Critérios: ${criterios.join("; ")}.`,
   ].join("\n");
   const lido = await chamarTexto({
@@ -1551,8 +2667,14 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
           nome: `${kit.nome}, ${tomada.nome} v${v.versao}`.slice(0, 160),
           pasta: "Mesa Foto / Ensaios",
           categoria: categoriaDoAcervo(kit.tipo),
-          tags: ["mesa_foto", "ensaio", `tomada:${tomada.id}`, ...(tomada.angulo_novo ? ["novo_angulo"] : [])],
-          descricao: `${PROMESSA_DO_MODO[v.modo]} Ensaio ${ensaio.id}, tomada ${tomada.nome}.`.slice(0, 1000),
+          tags: [
+            "mesa_foto", "ensaio", `tomada:${tomada.id}`,
+            ...(tomada.angulo_novo ? ["novo_angulo"] : []),
+            ...(tomada.campanha ? ["campanha"] : []),
+            ...(tomada.campanha?.com_pessoa || tipoDeVariacaoPorId(tomada.tipo_variacao)?.com_maos ? ["pessoa_sintetica"] : []),
+            ...(tomada.tipo_variacao ? [`variacao:${tomada.tipo_variacao}`] : []),
+          ],
+          descricao: `${tomada.campanha ? PROMESSA_CAMPANHA : PROMESSA_DO_MODO[v.modo]} Ensaio ${ensaio.id}, tomada ${tomada.nome}.`.slice(0, 1000),
           derivada_de: origem,
           gerada: true,
           modo: v.modo,
@@ -1795,6 +2917,13 @@ async function enviar(ch: Chamador, corpo: Record<string, unknown>) {
   const imagens = await lerImagens(clientId, ids);
   const faltando = ids.filter((i) => !imagens.some((x) => x.id === i));
   if (faltando.length) throw new ErroHttp(404, "imagem_fora_do_cliente", "Há foto que não está no acervo deste cliente.", { imagem_ids: faltando });
+  // Referência da internet é uso interno para fidelidade: nunca vai ao cliente nem para Arquivos.
+  const daInternet = imagens.filter((i) => (i.tags ?? []).includes(TAG_REFERENCIA_WEB)).map((i) => i.id);
+  if (daInternet.length) {
+    throw new ErroHttp(409, "referencia_web_nao_publica", "Foto de referência da internet é uso interno para fidelidade e não pode ser enviada. Envie as fotos geradas e aprovadas.", {
+      imagem_ids: daInternet,
+    });
+  }
   if (destino === "aprovacao") {
     const semAprovacao = imagens.filter((i) => i.gerada && !i.aprovada).map((i) => i.id);
     if (semAprovacao.length) {
@@ -1882,7 +3011,7 @@ async function baixarFotos(ch: Chamador, corpo: Record<string, unknown>) {
     let arquivo = `${nomeSeguro(img.nome)}.${ext}`;
     for (let n = 2; usados.has(arquivo); n++) arquivo = `${nomeSeguro(img.nome)}-${n}.${ext}`;
     usados.add(arquivo);
-    return { imagem_id: id, nome: img.nome, arquivo, url: await urlAssinada(img.storage_bucket, img.storage_path, arquivo), gerada: !!img.gerada, aprovada: !!img.aprovada };
+    return { imagem_id: id, nome: img.nome, arquivo, url: await urlAssinada(img.storage_bucket, img.storage_path, arquivo), gerada: !!img.gerada, aprovada: !!img.aprovada, referencia_web: (img.tags ?? []).includes(TAG_REFERENCIA_WEB) };
   }));
   return json({ arquivos, validade_s: URL_ASSINADA_S, custo_usd: 0 });
 }
@@ -2079,8 +3208,8 @@ async function referenciaImportar(ch: Chamador, corpo: Record<string, unknown>) 
 
 type LinhaMensagem = { papel: string; conteudo: string; criado_em: string };
 
-async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, referenciaId: string | null): Promise<string> {
-  if (conversaId != null && conversaId !== "") {
+async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unknown, referenciaId: string | null, abrirNova = false): Promise<string> {
+  if (!abrirNova && conversaId != null && conversaId !== "") {
     const id = idDe(conversaId, "conversa_id");
     const { data } = await servico().from("agente_conversas").select("id, client_id, referencia_tipo").eq("id", id).maybeSingle();
     const c = data as { id: string; client_id: string; referencia_tipo: string | null } | null;
@@ -2089,7 +3218,8 @@ async function conversaDoAgente(ch: Chamador, clientId: string, conversaId: unkn
   }
   let q = servico().from("agente_conversas").select("id").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("referencia_tipo", REF_CONVERSA);
   q = referenciaId ? q.eq("referencia_id", referenciaId) : q.is("referencia_id", null);
-  const { data } = await q.order("criado_em", { ascending: false }).limit(1);
+  // "Nova conversa" na tela abre outra de verdade (antes reabria a última do mesmo kit).
+  const { data } = abrirNova ? { data: [] } : await q.order("criado_em", { ascending: false }).limit(1);
   const achada = ((data as { id: string }[] | null) ?? [])[0];
   if (achada) return achada.id;
   const { data: nova, error } = await servico().from("agente_conversas")
@@ -2119,7 +3249,7 @@ async function gravarMensagens(conversaId: string, clientId: string, msgs: { pap
 }
 
 /** Anexos da conversa: ids do acervo ou caminhos do bucket mesa na pasta do cliente (até 4). */
-async function anexosDaConversa(clientId: string, bruto: unknown): Promise<{ imagens: ImagemEntrada[]; registro: unknown[] }> {
+async function anexosDaConversa(clientId: string, bruto: unknown): Promise<{ imagens: ImagemEntrada[]; registro: unknown[]; doAcervo: LinhaImagem[] }> {
   const itens = (Array.isArray(bruto) ? bruto.slice(0, 4) : []).map((x) => {
     if (x && typeof x === "object") {
       const o = x as Record<string, unknown>;
@@ -2135,7 +3265,7 @@ async function anexosDaConversa(clientId: string, bruto: unknown): Promise<{ ima
     ...caminhos.map((c) => ({ bucket: "mesa", caminho: c, nome: c.split("/").pop() ?? "anexo", registro: { caminho: c } })),
   ];
   const imagens = await emParalelo(alvos, 4, (a) => baixarReduzida(a.bucket, a.caminho, 1024, a.nome).catch(() => null));
-  return { imagens: imagens.filter((x): x is ImagemEntrada => !!x), registro: alvos.map((a) => a.registro) };
+  return { imagens: imagens.filter((x): x is ImagemEntrada => !!x), registro: alvos.map((a) => a.registro), doAcervo };
 }
 
 async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -2152,8 +3282,12 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   const kit = kitId ? await lerKit(ch, kitId) : null;
   if (kit && kit.client_id !== clientId) throw new ErroHttp(409, "kit_de_outro_cliente", "Este kit pertence a outro cliente.");
   const refs = kit ? await lerRefs(kit) : [];
-  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, ensaio?.id ?? kit?.id ?? null);
-  const [contexto, diretor, historico, anexos, biblioteca] = await Promise.all([
+  // Anexo marcado pela tela como estilo (print de perfil, moodboard) nunca é o assunto.
+  const anexosDeEstilo = new Set((Array.isArray(corpo.anexos) ? corpo.anexos : [])
+    .filter((x) => x && typeof x === "object" && (x as Record<string, unknown>).papel === "estilo")
+    .map((x) => String((x as Record<string, unknown>).imagem_id ?? "")));
+  const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, ensaio?.id ?? kit?.id ?? null, corpo.nova_conversa === true);
+  const [contexto, diretor, historico, anexos, biblioteca, kitsDoCli] = await Promise.all([
     contextoDoCliente(clientId),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO_CONVERSA),
@@ -2161,6 +3295,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     servico().from("foto_biblioteca").select("id, client_id, tipo, categoria, titulo, destaque").eq("tipo", "prompt")
       .or(`client_id.is.null,client_id.eq.${clientId}`)
       .order("destaque", { ascending: false }).limit(40),
+    kitsDoCliente(clientId).catch(() => [] as KitExistente[]),
   ]);
   const categoria = kit ? categoriaDoKit(kit.tipo) : null;
   const prompts = ((biblioteca.data as { id: string; client_id: string | null; categoria: string; titulo: string; destaque: boolean }[] | null) ?? [])
@@ -2197,6 +3332,23 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
         }),
       }
       : null,
+    kits_do_cliente: kitsDoCli.slice(0, 20).map((k) => ({
+      id: k.id,
+      nome: k.nome,
+      variante: k.variante,
+      status: k.status,
+      fotos_do_produto: k.refs.filter((r) => r.papel === "identidade").length,
+      fotos_da_embalagem: k.refs.filter((r) => r.papel === "embalagem").length,
+    })),
+    anexos_desta_mensagem: anexos.doAcervo.map((i) => ({
+      imagem_id: i.id,
+      nome: i.nome,
+      leitura: limpo(i.descricao, 300) || null,
+      referencia_da_internet: (i.tags ?? []).includes(TAG_REFERENCIA_WEB),
+      gerada: !!i.gerada,
+      referencia_de_estilo: anexosDeEstilo.has(i.id),
+    })),
+    tipos_de_variacao: TIPOS_DE_VARIACAO.map((t) => ({ id: t.id, nome: t.nome, direcao: t.direcao, foco: t.foco })),
     biblioteca_de_prompts: prompts,
     presets: PRESETS.map((p) => ({ id: p.id, nome: p.nome })),
     formatos: ensaio?.formatos ?? FORMATOS,
@@ -2213,16 +3365,35 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     sistema: `${SISTEMA_AGENTE}\n\nDADOS REAIS DESTA CONVERSA:\n${JSON.stringify(dados)}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: mensagem, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     esquemaJson: ESQUEMA_AGENTE,
-    maxTokensSaida: 6_000,
+    maxTokensSaida: 12_000,
     timeoutMs: TIMEOUT_TEXTO_FOTO_MS,
     referencia: { tipo: ensaio ? REF_ENSAIO : kit ? REF_KIT : REF_CONVERSA, id: ensaio?.id ?? kit?.id ?? conversaId },
     criadoPor: ch.userId,
   });
   const r = (saida.json ?? {}) as Record<string, unknown>;
   const resposta = limpo(r.resposta, 6000) || "Sem resposta do diretor.";
-  const sugestoes = normalizarSugestoes(r.sugestoes, { tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [], formatos: ensaio?.formatos ?? FORMATOS })
+  const kitsValidos = Array.from(new Set([...(kit ? [kit.id] : []), ...kitsDoCli.map((k) => k.id)]));
+  const sugestoes = normalizarSugestoes(r.sugestoes, {
+    tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [],
+    formatos: ensaio?.formatos ?? FORMATOS,
+    kitIds: kitsValidos,
+    kitPadrao: kit?.id ?? null,
+  })
     // Sem ensaio aberto não há tomada para criar ou ajustar.
     .filter((s) => ensaio || (s.tipo !== "tomada_nova" && s.tipo !== "ajuste_tomada"));
+  // Proativo: foto anexada sem kit e sem nenhuma sugestão vira "identificar produto" (a equipe decide aplicar).
+  const anexadasDoProduto = anexos.doAcervo
+    .filter((i) => !(i.tags ?? []).includes(TAG_REFERENCIA_WEB) && !i.gerada && !anexosDeEstilo.has(i.id))
+    .map((i) => i.id);
+  if (!kit && !sugestoes.length && anexadasDoProduto.length) {
+    const [extra] = normalizarSugestoes([{
+      tipo: "identificar_produto",
+      titulo: "Identificar o produto pela embalagem ou foto",
+      motivo: "Lê marca, modelo e variante, pesquisa o produto real na internet, baixa fotos de referência (uso interno) e salva o kit.",
+      imagem_ids: anexadasDoProduto.slice(0, 6),
+    }], { tomadaIds: [] });
+    if (extra) sugestoes.push(extra);
+  }
   const mensagemIds = await gravarMensagens(conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: anexos.registro },
     { papel: "agente", conteudo: resposta, anexos: sugestoes.length ? [{ tipo: "sugestoes", sugestoes }] : [], uso_id: saida.usoId },
@@ -2230,7 +3401,10 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({
     conversa_id: conversaId,
     resposta,
+    ...blocosDaResposta(resposta),
     sugestoes,
+    // A conversa não grava kit: kit sai salvo de identificar_produto ou kit_sugerir.
+    kit_ids: [],
     mensagem_ids: mensagemIds,
     custo_usd: saida.custoUsd,
     saldo_usd: saida.saldoUsd,
@@ -2244,11 +3418,89 @@ async function agenteAplicar(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = ensaio?.client_id ?? idDe(corpo.client_id, "client_id");
   if (!ensaio) await garantirAcesso(ch, clientId);
   // A sugestão passa de novo pela mesma conferência (a tela não é fonte de verdade).
-  const [s] = normalizarSugestoes([corpo.sugestao], { tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [], formatos: ensaio?.formatos ?? FORMATOS });
+  const kitsCli = await kitsDoCliente(clientId).catch(() => [] as KitExistente[]);
+  const kitPedido = corpo.kit_id != null && UUID.test(String(corpo.kit_id)) ? String(corpo.kit_id) : null;
+  const [s] = normalizarSugestoes([corpo.sugestao], {
+    tomadaIds: ensaio?.tomadas.map((t) => t.id) ?? [],
+    formatos: ensaio?.formatos ?? FORMATOS,
+    kitIds: kitsCli.map((k) => k.id),
+    kitPadrao: ensaio?.kit_id ?? (kitPedido && kitsCli.some((k) => k.id === kitPedido) ? kitPedido : null),
+  });
   if (!s) throw new ErroHttp(400, "sugestao_invalida", "Sugestão inválida ou de uma tomada que não existe mais.");
   if (s.tipo === "tomada_nova" || s.tipo === "ajuste_tomada") {
     if (!ensaio) throw new ErroHttp(400, "ensaio_obrigatorio", "Abra um ensaio para aplicar sugestões de tomada.");
     return await aplicarNaTomada(ch, ensaio, s);
+  }
+  if (s.tipo === "identificar_produto") {
+    // Pesquisa web e download: resposta com fôlego (agente_aplicar é ação longa).
+    return await produtoIdentificar(ch, { client_id: clientId, imagem_ids: s.imagem_ids, salvar_kit: true });
+  }
+  if (s.tipo === "plano_de_variacoes") {
+    const { kit, refs } = await kitDoLote(ch, clientId, s.kit_id);
+    const ctxVagas = { temIdentidade: temIdentidade(kit, refs), temEmbalagem: refs.some((r) => r.papel === "embalagem") };
+    const variacoes: VariacaoSugerida[] = s.variacoes ?? [];
+    const vagas = vagasDoPlano(variacoes, s.quantidade, s.tipos, ctxVagas);
+    const textos = new Map<string, Partial<TextoDaVaga>>(
+      vagas.map((v, i) => [v.id, variacoes[i] ? { nome: variacoes[i].nome, cenario: variacoes[i].cenario, luz: variacoes[i].luz, props: variacoes[i].props, formato: variacoes[i].formato } : {}]),
+    );
+    const formatos = formatosDoLote(corpo.formatos, [
+      ...variacoes.map((v) => v.formato).filter((f): f is string => !!f),
+      ...vagas.map((v) => v.tipo.formato),
+    ]);
+    const tomadas = tomadasDasVagas(vagas, textos, { kit, refs, formatos });
+    const estimativa = await estimarEnsaio(tomadas, refs, { modeloImagemId: corpo.modelo_imagem_id, qualidade: lerQualidade(corpo.qualidade) });
+    const lacunas = !ctxVagas.temIdentidade && ctxVagas.temEmbalagem
+      ? ["Sem foto do produto fora da caixa: as variações usam a embalagem como assunto. Rode Identificar produto para tirar da caixa."]
+      : [];
+    const novo = await gravarEnsaioNovo(ch, {
+      clientId,
+      kit,
+      receitaId: RECEITA_VARIACOES,
+      finalidade: "anúncios, feed e loja",
+      formatos,
+      tomadas,
+      direcao: {
+        tipo: "variacoes",
+        origem: "diretor",
+        conceito: s.motivo || s.titulo,
+        quantidade: tomadas.length,
+        tipos: vagas.map((v) => v.tipo.id),
+        referencias_estilo: [],
+        lacunas_que_limitam: lacunas,
+        perguntas: [],
+        estimativa,
+      },
+      pedido: s.titulo,
+      custoUsd: 0,
+    });
+    return json({ ensaio: novo, estimativa_usd: estimativa.total_usd, estimativa, lacunas, custo_usd: 0 });
+  }
+  if (s.tipo === "campanha") {
+    const { kit, refs } = await kitDoLote(ch, clientId, s.kit_id);
+    const fotos = fotosPadraoDaCampanha(s.quantidade ?? 6, s.fotos ?? []);
+    const formatos = formatosDoLote(corpo.formatos, fotos.map((f) => f.formato ?? "4:5"));
+    const estilos = await idsDeEstiloValidos(clientId, s.referencias_estilo_ids ?? []);
+    const modelo = s.modelo ?? lerModeloSintetico(null);
+    const comProduto = temIdentidade(kit, refs);
+    const resultado = await criarEnsaioDeCampanha(ch, {
+      clientId,
+      kit,
+      refs,
+      fotos,
+      guia: s.guia_de_estilo ?? null,
+      modelo,
+      estilos,
+      formatos,
+      finalidade: "campanha e feed",
+      conceito: s.motivo || s.titulo,
+      lacunas: comProduto ? [] : ["Sem foto do produto fora da caixa: a campanha usa a embalagem. Rode Identificar produto para ter o produto em uso."],
+      pedido: s.titulo,
+      custoUsd: 0,
+      modeloTextoId: null,
+      qualidade: lerQualidade(corpo.qualidade),
+      modeloImagemId: corpo.modelo_imagem_id,
+    });
+    return json({ ...resultado, custo_usd: 0 });
   }
   if (s.tipo === "prompt") {
     const kit = ensaio ? await lerKit(ch, ensaio.kit_id) : null;
@@ -2277,10 +3529,204 @@ async function agenteAplicar(ch: Chamador, corpo: Record<string, unknown>) {
  * Só admin. Grava a biblioteca de prompts da agência (client_id nulo) sem
  * duplicar: pula o que já existe com o mesmo título e tipo. Sem IA, sem custo.
  */
-async function bibliotecaSemear(ch: Chamador, _corpo: Record<string, unknown>) {
+async function ehAdmin(ch: Chamador): Promise<boolean> {
   const { data: admin, error: erroPapel } = await servico().rpc("has_role", { _user_id: ch.userId, _role: "admin" });
   if (erroPapel) throw new ErroHttp(503, "autorizacao_indisponivel", "Não foi possível conferir a permissão agora.");
-  if (admin !== true) throw new ErroHttp(403, "somente_admin", "Só admin grava a biblioteca da agência.");
+  return admin === true;
+}
+
+async function garantirAdmin(ch: Chamador) {
+  if (!(await ehAdmin(ch))) throw new ErroHttp(403, "somente_admin", "Só admin grava a biblioteca da agência.");
+}
+
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Coluna nova (02_mesa_foto_v2.sql) ainda não aplicada no banco. */
+const colunaAusente = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /column .* does not exist|Could not find the '.*' column/i.test(e.message ?? ""));
+
+/**
+ * Atualiza o item da biblioteca; sem as colunas novas (miniatura_url,
+ * exemplo), grava o resto e devolve o aviso da migration pendente.
+ */
+async function atualizarItemDaBiblioteca(id: string, campos: Record<string, unknown>): Promise<{ item: LinhaBiblioteca; aviso: string | null }> {
+  const primeira = await servico().from("foto_biblioteca").update(campos).eq("id", id).select("*").single();
+  if (!primeira.error && primeira.data) return { item: primeira.data as LinhaBiblioteca, aviso: null };
+  if (colunaAusente(primeira.error)) {
+    const { miniatura_url: _m, exemplo: _e, ...resto } = campos;
+    const segunda = await servico().from("foto_biblioteca").update(resto).eq("id", id).select("*").single();
+    if (!segunda.error && segunda.data) {
+      return { item: segunda.data as LinhaBiblioteca, aviso: "Miniatura e crédito completo do exemplo ficaram de fora: aplique docs/mesa-foto/migrations/02_mesa_foto_v2.sql." };
+    }
+  }
+  throw new ErroHttp(503, "gravacao_falhou", "Não foi possível gravar o exemplo no item da biblioteca.");
+}
+
+/**
+ * biblioteca_ilustrar { limite? } -> { ilustrados, sem_resultado, pendentes, itens, aviso }
+ * Só admin, sem IA paga. Para cada prompt da agência sem imagem, busca no
+ * Openverse uma fotografia de uso comercial que ilustre o prompt e grava a
+ * imagem, a miniatura e o crédito (licença, autor, página). Respeita o limite
+ * de 20 buscas por minuto do Openverse sem cadastro: um lote por chamada;
+ * chame de novo enquanto houver pendentes.
+ */
+async function bibliotecaIlustrar(ch: Chamador, corpo: Record<string, unknown>) {
+  await garantirAdmin(ch);
+  const pedido = Math.round(Number(corpo.limite));
+  const limite = Number.isFinite(pedido) && pedido > 0 ? Math.min(ILUSTRAR_MAXIMO, pedido) : ILUSTRAR_PADRAO;
+  const semImagem = () => servico().from("foto_biblioteca").select("id, titulo, categoria, prompt_en, tags, fonte_nome, fonte_url, licenca, autor, destaque", { count: "exact" })
+    .is("client_id", null).eq("tipo", "prompt").is("imagem_url", null).is("storage_path", null).not("tags", "cs", `{${TAG_SEM_EXEMPLO}}`);
+  const { data, error, count } = await semImagem().order("destaque", { ascending: false }).order("titulo").limit(limite);
+  if (error) throw new ErroHttp(503, "biblioteca_indisponivel", "Não foi possível ler a biblioteca da agência.");
+  const itens = (data as (LinhaBiblioteca & { destaque: boolean })[] | null) ?? [];
+  const { data: usadas } = await servico().from("foto_biblioteca").select("imagem_url").is("client_id", null).not("imagem_url", "is", null).limit(5000);
+  const jaUsadas = new Set(((usadas as { imagem_url: string }[] | null) ?? []).map((u) => u.imagem_url));
+  const feitos: { id: string; titulo: string; imagem_url: string | null; busca: string }[] = [];
+  let semResultado = 0;
+  let parouNoLimite = false;
+  let aviso: string | null = null;
+  let buscas = 0;
+  const buscar = async (q: string) => {
+    // 20 buscas por minuto: uma a cada 3,1 s.
+    if (buscas++) await esperar(3_100);
+    const res = await fetch(urlDoOpenverse(q, "comercial", 1, { categoria: "photograph", porPagina: 12 }), {
+      headers: { "User-Agent": AGENTE_HTTP, Accept: "application/json" },
+      signal: AbortSignal.timeout(TIMEOUT_BUSCA_MS),
+    }).catch(() => null);
+    if (!res) return null;
+    if (res.status === 429) {
+      await res.body?.cancel().catch(() => {});
+      parouNoLimite = true;
+      return null;
+    }
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return [];
+    }
+    return itensDoOpenverse(await res.json().catch(() => null));
+  };
+  const escolher = (lista: ReturnType<typeof itensDoOpenverse>) =>
+    lista.find((x) => !jaUsadas.has(x.imagem_url) && (x.largura == null || x.largura >= 640) && (x.altura == null || x.altura >= 480)) ?? null;
+  for (const item of itens) {
+    if (parouNoLimite) break;
+    const busca = termosDeBusca(item);
+    let achado = escolher((await buscar(busca)) ?? []);
+    if (!achado && !parouNoLimite) {
+      // Segunda tentativa mais larga: duas primeiras palavras e a categoria.
+      const larga = busca.split(" ").slice(0, 2).join(" ");
+      if (larga && larga !== busca) achado = escolher((await buscar(larga)) ?? []);
+    }
+    if (parouNoLimite) break;
+    if (!achado) {
+      semResultado++;
+      await servico().from("foto_biblioteca").update({ tags: Array.from(new Set([...(item.tags ?? []), TAG_SEM_EXEMPLO])) }).eq("id", item.id);
+      feitos.push({ id: item.id, titulo: item.titulo, imagem_url: null, busca });
+      continue;
+    }
+    jaUsadas.add(achado.imagem_url);
+    const r = await atualizarItemDaBiblioteca(item.id, {
+      imagem_url: achado.imagem_url,
+      miniatura_url: achado.miniatura_url,
+      licenca: achado.licenca_rotulo,
+      autor: achado.autor,
+      autor_url: achado.autor_url,
+      fonte_url: achado.fonte_url,
+      fonte_nome: achado.fonte_nome ? `${achado.fonte_nome} via Openverse` : "Openverse",
+      tags: Array.from(new Set([...(item.tags ?? []), TAG_EXEMPLO_PUBLICO, ...(achado.id ? [`openverse:${achado.id}`] : [])])),
+      exemplo: {
+        tipo: "banco_publico",
+        busca,
+        openverse_id: achado.id,
+        licenca_codigo: achado.licenca,
+        licenca_url: achado.licenca_url,
+        titulo_da_foto: achado.titulo,
+        // Crédito do prompt antes da ilustração (nada se perde).
+        prompt_origem: { fonte_nome: item.fonte_nome, fonte_url: item.fonte_url, licenca: item.licenca, autor: item.autor },
+        ilustrado_em: new Date().toISOString(),
+      },
+    });
+    aviso = aviso ?? r.aviso;
+    feitos.push({ id: item.id, titulo: item.titulo, imagem_url: achado.imagem_url, busca });
+  }
+  const ilustrados = feitos.filter((f) => f.imagem_url).length;
+  const pendentes = Math.max(0, (count ?? itens.length) - ilustrados - semResultado);
+  return json({
+    ilustrados,
+    sem_resultado: semResultado,
+    pendentes,
+    itens: feitos,
+    aviso: [
+      parouNoLimite ? "O Openverse chegou ao limite de buscas (20 por minuto, 200 por dia sem cadastro). Espere um minuto e chame de novo." : "",
+      aviso ?? "",
+    ].filter(Boolean).join(" ") || null,
+    fonte: "Openverse",
+    custo_usd: 0,
+  });
+}
+
+/**
+ * biblioteca_exemplo_gerar { client_id, item_id, modelo_imagem_id?, qualidade? } -> { item, url, custo_usd, saldo_usd }
+ * Pago (custo antes na tela com estimar acao_alvo biblioteca_exemplo): gera
+ * um exemplo real do prompt com produto genérico da categoria, sem marca.
+ * Item da agência guarda em mesa/biblioteca/exemplos/ (só admin); item do
+ * cliente, na pasta do cliente. A carteira cobrada é a do client_id.
+ */
+async function bibliotecaExemploGerar(ch: Chamador, corpo: Record<string, unknown>) {
+  const clientId = idDe(corpo.client_id, "client_id");
+  await garantirAcesso(ch, clientId);
+  const itemId = idDe(corpo.item_id, "item_id");
+  const [item] = await lerItensDaBiblioteca(clientId, [itemId]);
+  if (!item) throw new ErroHttp(404, "item_inexistente", "Item da biblioteca não encontrado.");
+  if (item.tipo !== "prompt" || (!item.prompt_pt && !item.prompt_en)) throw new ErroHttp(400, "item_sem_prompt", "Só item de prompt ganha exemplo gerado.");
+  const daAgencia = item.client_id == null;
+  if (daAgencia && !(await ehAdmin(ch))) {
+    throw new ErroHttp(403, "somente_admin", "Só admin muda um item da biblioteca da agência. Copie o item para o cliente e gere o exemplo nele.");
+  }
+  const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
+  const qualidade = lerQualidade(corpo.qualidade);
+  const saida = await chamarImagem({
+    clientId,
+    modeloId: mImg.id,
+    prompt: promptDoExemplo(item),
+    referencias: [],
+    qualidade,
+    tamanho: "1024x1024",
+    referencia: { tipo: "foto_biblioteca", id: item.id },
+    criadoPor: ch.userId,
+    tarefa: TAREFA_ESTUDIO,
+    agente: AGENTE_GERADOR,
+  });
+  const png = await emPng(saida.png);
+  const caminho = daAgencia ? `biblioteca/exemplos/${item.id}-${crypto.randomUUID().slice(0, 8)}.png` : `${clientId}/foto/biblioteca/exemplos/${item.id}-${crypto.randomUUID().slice(0, 8)}.png`;
+  await salvarNoMesa(caminho, png, "image/png");
+  const r = await atualizarItemDaBiblioteca(item.id, {
+    storage_path: caminho,
+    tags: Array.from(new Set([...(item.tags ?? []).filter((t) => t !== TAG_SEM_EXEMPLO), TAG_EXEMPLO_GERADO])),
+    exemplo: {
+      tipo: "gerado",
+      modelo_id: saida.modeloId,
+      qualidade,
+      custo_usd: arred6(saida.custoUsd),
+      pago_por_cliente: clientId,
+      gerado_em: new Date().toISOString(),
+      aviso: "Exemplo gerado por IA com produto genérico, só para mostrar a direção do prompt.",
+    },
+  }).catch(async (e) => {
+    await servico().storage.from("mesa").remove([caminho]).catch(() => {});
+    throw e;
+  });
+  return json({
+    item: r.item,
+    url: await urlAssinada("mesa", caminho),
+    aviso: r.aviso,
+    custo_usd: saida.custoUsd,
+    saldo_usd: saida.saldoUsd,
+    reserva_usada: saida.reservaUsada ?? null,
+  });
+}
+
+async function bibliotecaSemear(ch: Chamador, _corpo: Record<string, unknown>) {
+  await garantirAdmin(ch);
   const { data: existentes, error } = await servico().from("foto_biblioteca").select("titulo").is("client_id", null).eq("tipo", "prompt").limit(5000);
   if (error) throw new ErroHttp(503, "biblioteca_indisponivel", "A biblioteca ainda não existe no banco. Aplique a migration da Mesa Foto.");
   const ja = new Set(((existentes ?? []) as { titulo: string }[]).map((x) => x.titulo));
@@ -2330,15 +3776,23 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   referencia_importar: referenciaImportar,
   agente_conversar: agenteConversar,
   agente_aplicar: agenteAplicar,
+  // v2 (docs/mesa-foto/CONTRATO-V2.md)
+  produto_identificar: produtoIdentificar,
+  variacoes_planejar: variacoesPlanejar,
+  campanha_planejar: campanhaPlanejar,
+  biblioteca_ilustrar: bibliotecaIlustrar,
+  biblioteca_exemplo_gerar: bibliotecaExemploGerar,
 };
 
 /**
- * Ações que podem passar de 150 s (IA, imagem, downloads em lote, envio):
- * a resposta começa na hora (resposta-com-folego.ts) e o erro vai no corpo.
+ * Ações que podem passar de 150 s (IA, imagem, pesquisa web, downloads em
+ * lote, envio): a resposta começa na hora (resposta-com-folego.ts) e o erro
+ * vai no corpo.
  */
 const ACOES_LONGAS = new Set([
-  "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "ensaio_planejar", "tomada_gerar", "versao_conferir",
-  "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "estimar",
+  "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
+  "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
+  "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
 ]);
 
 Deno.serve(async (req) => {

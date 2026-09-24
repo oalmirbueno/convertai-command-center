@@ -9,8 +9,10 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Cus
 import { Ditado } from "@/components/mesa/Ditado";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeModelo, SeletorDeQualidade } from "@/components/mesa/Seletores";
-import { padraoPara, usd, type Qualidade } from "@/lib/mesa/api";
+import { estimarLocal, padraoPara, usd, type Qualidade } from "@/lib/mesa/api";
+import { AndamentoDoLote, BotaoDoLote } from "./AndamentoDoLote";
 import { Cartao, ListaCurta, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
+import { geraNoLote, useLote } from "./lote";
 import SeletorDeGuia from "./SeletorDeGuia";
 import {
   AZIMUTES,
@@ -19,24 +21,31 @@ import {
   ELEVACOES,
   ENQUADRAMENTOS,
   ESTADOS_DA_TOMADA,
+  ehCampanha,
   FINALIDADES,
   FORMATOS,
   gerarTomada,
   guardarEnsaio,
   invalidarFotos,
+  limitarQuantidade,
   MODOS_DA_FOTO,
   mudaAVista,
+  nomeDaReceita,
   partesDaGeracao,
   partesDoPlanejamento,
+  partesDoPlanoDeLote,
   planejarEnsaio,
+  planejarVariacoes,
   proporcaoDoFormato,
+  RECEITAS_COM_TELA_PROPRIA,
   receitaServeParaKit,
   resumoDoEnsaio,
   rotuloDaCamera,
   rotuloDoEstadoDoEnsaio,
   rotuloDoPapel,
   rotuloDoTipo,
-  tomadasParaGerar,
+  rotuloDoTipoDeVariacao,
+  TIPOS_DE_VARIACAO,
   useEnsaios,
   useFotos,
   useKits,
@@ -58,7 +67,17 @@ import {
  * gera uma vez, com o custo antes; sem laço de correção automática: refazer
  * pede uma variação nova. Tomada presa em "gerando" há mais de 6 minutos
  * aparece como falhou e pode gerar de novo.
+ *
+ * v2: o jeito direto é "Variações" (variacoes_planejar): quantas fotos e de
+ * que tipos, e o diretor monta N tomadas realmente diferentes. A receita
+ * continua em "Por receita". Gerar todas vai em lote (lote.ts): total antes,
+ * uma por vez, andamento por foto, dá para sair e voltar.
  */
+
+const QUANTIDADES_DE_VARIACAO = [4, 6, 8, 12, 16].map((n) => ({ valor: n, rotulo: `${n} fotos` }));
+const TIPOS_PADRAO = ["heroi_fundo_cor", "fundo_branco", "lifestyle", "na_mao", "flat_lay", "macro", "cenario_marca", "flutuando"];
+
+type ModoDoNovo = "variacoes" | "receita";
 
 function ResumoDoKit({ kit }: { kit: KitDeFoto }) {
   const { clientId } = useMesa();
@@ -90,7 +109,11 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
   const { kitId, escolherKit, irPara } = useMesaFoto();
   const receitas = useReceitas();
   const kit = kitId ? kits.find((k) => k.id === kitId) || null : null;
-  const lista = useMemo(() => (receitas.data ? receitas.data.receitas : []), [receitas.data]);
+  // Campanha tem tela própria: não entra na grade de receitas.
+  const lista = useMemo(() => (receitas.data ? receitas.data.receitas.filter((r) => RECEITAS_COM_TELA_PROPRIA.indexOf(r.id) < 0) : []), [receitas.data]);
+  const [modo, setModo] = useState<ModoDoNovo>("variacoes");
+  const [quantidade, setQuantidade] = useState(8);
+  const [tiposEscolhidos, setTiposEscolhidos] = useState<string[]>(TIPOS_PADRAO);
   const combinam = lista.filter((r) => receitaServeParaKit(r, kit ? kit.tipo : null));
   const outras = lista.filter((r) => combinam.indexOf(r) < 0);
   const [receitaId, setReceitaId] = useState<string>("");
@@ -122,10 +145,23 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
     );
   }
 
+  const imagem = padraoPara(catalogo, "imagem");
+  // Todos os tipos escolhidos vão: com menos fotos que tipos, o diretor escolhe os que mais servem.
+  const tipos = tiposEscolhidos;
+
   return (
     <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-4">
-        <Cartao titulo="Kit do ensaio">
+        <Pilulas
+          rotulo="Como montar"
+          opcoes={[
+            { valor: "variacoes" as ModoDoNovo, rotulo: "Variações", dica: "Quantas fotos e de que tipos" },
+            { valor: "receita" as ModoDoNovo, rotulo: "Por receita", dica: "Tomadas de uma receita pronta por categoria" },
+          ]}
+          valor={modo}
+          onEscolher={setModo}
+        />
+        <Cartao titulo="Produto">
           <Select value={kit && kit.id ? kit.id : ""} onValueChange={(v) => escolherKit(v)}>
             <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Kit do ensaio">
               <SelectValue placeholder="Escolha o kit" />
@@ -145,120 +181,199 @@ function NovoEnsaio({ kits, onPlanejado }: { kits: KitDeFoto[]; onPlanejado: (e:
           )}
         </Cartao>
 
-        <Cartao titulo="Receita" dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
-          {receitas.isLoading && (
-            <p className="flex items-center text-[12px] text-muted-foreground">
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo as receitas...
-            </p>
-          )}
-          <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-            {combinam.concat(outras).map((r) => {
-              const ativa = receita ? receita.id === r.id : false;
-              const combina = combinam.indexOf(r) >= 0;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={ativa}
-                  onClick={() => setReceitaId(r.id)}
-                  className={`min-w-0 rounded-lg border px-3 py-2 text-left transition-colors ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"} ${combina ? "" : "opacity-60"}`}
-                >
-                  <span className="block truncate text-[12.5px] font-semibold">{r.nome}</span>
-                  <span className="block text-[11.5px] leading-snug text-muted-foreground">{r.direcao}</span>
-                  <span className="mt-0.5 block text-[10.5px] text-muted-foreground">
-                    {r.tomadas.length} tomadas{combina ? "" : " · outro tipo de assunto"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {receita && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-[11.5px] text-muted-foreground">Tomadas (toque para tirar):</p>
-              <div className="flex min-w-0 flex-wrap">
-                {receita.tomadas.map((t) => {
-                  const dentro = fora.indexOf(t.id) < 0;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      aria-pressed={dentro}
-                      onClick={() => setFora((l) => (dentro ? l.concat([t.id]) : l.filter((x) => x !== t.id)))}
-                      className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground line-through"}`}
-                    >
-                      {t.nome}
-                    </button>
-                  );
-                })}
-              </div>
-              {receita.atributos_criticos.length > 0 && <p className="text-[11.5px] text-muted-foreground">Conferência olha: {receita.atributos_criticos.join(", ")}.</p>}
+        {modo === "variacoes" && (
+          <Cartao titulo="Variações" dica="Quantas fotos e de que tipos. Cada uma sai realmente diferente: câmera, cenário e luz próprios.">
+            <Pilulas rotulo="Quantas fotos" opcoes={QUANTIDADES_DE_VARIACAO} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
+            <p className="mb-1 mt-2 text-[11.5px] text-muted-foreground">Tipos (toque para tirar ou pôr)</p>
+            <div className="flex min-w-0 flex-wrap" role="group" aria-label="Tipos de variação">
+              {TIPOS_DE_VARIACAO.map((t) => {
+                const dentro = tiposEscolhidos.indexOf(t.valor) >= 0;
+                return (
+                  <button
+                    key={t.valor}
+                    type="button"
+                    aria-pressed={dentro}
+                    onClick={() => setTiposEscolhidos((l) => (dentro ? l.filter((x) => x !== t.valor) : l.concat([t.valor])))}
+                    className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+                  >
+                    {t.rotulo}
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </Cartao>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              {!tiposEscolhidos.length
+                ? "Sem tipo escolhido, o diretor escolhe pelo produto e pela marca."
+                : quantidade > tiposEscolhidos.length
+                  ? `Com ${tiposEscolhidos.length} tipos e ${quantidade} fotos, o diretor repete tipos com cena diferente.`
+                  : quantidade < tiposEscolhidos.length
+                    ? `Com ${quantidade} fotos e ${tiposEscolhidos.length} tipos, o diretor escolhe os que mais servem ao produto.`
+                    : "Uma foto de cada tipo."}
+            </p>
+          </Cartao>
+        )}
+
+        {modo === "receita" && (
+          <Cartao titulo="Receita" dica={receitas.data && receitas.data.fonte === "local" ? "Receitas da pesquisa (a função ainda não respondeu)." : "Direção fotográfica pronta por categoria."}>
+            {receitas.isLoading && (
+              <p className="flex items-center text-[12px] text-muted-foreground">
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Lendo as receitas...
+              </p>
+            )}
+            <div role="radiogroup" aria-label="Receita" className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+              {combinam.concat(outras).map((r) => {
+                const ativa = receita ? receita.id === r.id : false;
+                const combina = combinam.indexOf(r) >= 0;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={ativa}
+                    onClick={() => setReceitaId(r.id)}
+                    className={`min-w-0 rounded-lg border px-3 py-2 text-left transition-colors ${ativa ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"} ${combina ? "" : "opacity-60"}`}
+                  >
+                    <span className="block truncate text-[12.5px] font-semibold">{r.nome}</span>
+                    <span className="block text-[11.5px] leading-snug text-muted-foreground">{r.direcao}</span>
+                    <span className="mt-0.5 block text-[10.5px] text-muted-foreground">
+                      {r.tomadas.length} tomadas{combina ? "" : " · outro tipo de assunto"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            {receita && (
+              <div className="mt-3 space-y-1.5">
+                <p className="text-[11.5px] text-muted-foreground">Tomadas (toque para tirar):</p>
+                <div className="flex min-w-0 flex-wrap">
+                  {receita.tomadas.map((t) => {
+                    const dentro = fora.indexOf(t.id) < 0;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={dentro}
+                        onClick={() => setFora((l) => (dentro ? l.concat([t.id]) : l.filter((x) => x !== t.id)))}
+                        className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] ${dentro ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground line-through"}`}
+                      >
+                        {t.nome}
+                      </button>
+                    );
+                  })}
+                </div>
+                {receita.atributos_criticos.length > 0 && <p className="text-[11.5px] text-muted-foreground">Conferência olha: {receita.atributos_criticos.join(", ")}.</p>}
+              </div>
+            )}
+          </Cartao>
+        )}
       </div>
 
       <div className="min-w-0 space-y-4">
-        <Cartao titulo="Para quê">
-          <Pilulas rotulo="Finalidade" opcoes={FINALIDADES} valor={finalidade} onEscolher={setFinalidade} />
-          <p className="mb-1 mt-2 text-[11.5px] text-muted-foreground">Formatos</p>
-          <div className="flex min-w-0 flex-wrap" role="group" aria-label="Formatos">
-            {FORMATOS.map((f) => (
-              <button
-                key={f.valor}
-                type="button"
-                aria-pressed={formatos.indexOf(f.valor) >= 0}
-                onClick={() => alternarFormato(f.valor)}
-                className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${formatos.indexOf(f.valor) >= 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
-              >
-                {f.rotulo}
-              </button>
-            ))}
-          </div>
-          <label className="mt-2 block">
-            <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
-            <div className="relative">
-              <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: clima de escritório claro, espaço para texto à direita" className="pr-10 text-[12.5px]" aria-label="Pedido ao diretor" />
-              <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
-            </div>
-          </label>
-          <BotaoComCusto
-            rotulo={
-              <>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Planejar {tomadas.length} {tomadas.length === 1 ? "tomada" : "tomadas"}
-              </>
-            }
-            titulo="Ensaio planejado"
-            descricao="O diretor de fotografia monta as tomadas com o kit, a receita e o contexto do cliente. Nenhuma imagem é gerada agora."
-            className="mt-3 h-9 w-full text-[12.5px]"
-            disabled={!kit || !kit.id || !receita || tomadas.length === 0 || !receitaServeParaKit(receita, kit.tipo)}
-            partes={() => partesDoPlanejamento(catalogo)}
-            executar={() =>
-              planejarEnsaio({
-                clientId,
-                kitId: String(kit && kit.id),
-                receitaId: receita ? receita.id : "",
-                finalidade,
-                formatos,
-                pedido,
-                tomadasPedidas: fora.length ? tomadas.map((t) => t.id) : [],
-              })
-            }
-            aoConcluir={(data) => {
-              if (data && data.ensaio) onPlanejado(data.ensaio);
-              if (data && data.estimativa_usd !== null && data.estimativa_usd !== undefined) {
-                toast.info(`Gerar todas as tomadas: cerca de ${usd(data.estimativa_usd)}`, { description: "O custo de cada tomada aparece no botão antes de gerar." });
+        {modo === "variacoes" && (
+          <Cartao titulo="Montar">
+            <label className="block">
+              <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
+              <div className="relative">
+                <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: fundo verde da marca, mesa de escritório clara" className="pr-10 text-[12.5px]" aria-label="Pedido das variações" />
+                <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+              </div>
+            </label>
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Planejar {quantidade} variações
+                </>
               }
-            }}
-          />
-          {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o kit.</p>}
-          {kit && receita && !receitaServeParaKit(receita, kit.tipo) && (
-            <p className="mt-2 text-[11.5px] text-warning">A receita {receita.nome} não serve para kit de {rotuloDoTipo(kit.tipo).toLowerCase()}. Escolha uma receita em destaque.</p>
-          )}
-        </Cartao>
+              titulo="Variações planejadas"
+              descricao="O diretor monta as tomadas com o produto e a marca. Nenhuma imagem é gerada agora: o total para gerar aparece antes."
+              className="mt-3 h-9 w-full text-[12.5px]"
+              disabled={!kit || !kit.id}
+              partes={() => partesDoPlanoDeLote(catalogo)}
+              executar={() => planejarVariacoes({ clientId, kitId: String(kit && kit.id), quantidade, tipos, pedido })}
+              aoConcluir={(data) => {
+                if (data && data.ensaio) onPlanejado(data.ensaio);
+                if (data && data.estimativa_usd !== null && data.estimativa_usd !== undefined) {
+                  toast.info(`Gerar todas: cerca de ${usd(data.estimativa_usd)}`, { description: "O botão Gerar todas mostra o total antes." });
+                }
+              }}
+            />
+            {imagem && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Depois, gerar as {quantidade} fotos custa perto de <EstimativaDoLote modeloId={imagem.id} quantidade={quantidade} />.
+              </p>
+            )}
+            {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o produto.</p>}
+          </Cartao>
+        )}
+        {modo === "receita" && (
+          <Cartao titulo="Para quê">
+            <Pilulas rotulo="Finalidade" opcoes={FINALIDADES} valor={finalidade} onEscolher={setFinalidade} />
+            <p className="mb-1 mt-2 text-[11.5px] text-muted-foreground">Formatos</p>
+            <div className="flex min-w-0 flex-wrap" role="group" aria-label="Formatos">
+              {FORMATOS.map((f) => (
+                <button
+                  key={f.valor}
+                  type="button"
+                  aria-pressed={formatos.indexOf(f.valor) >= 0}
+                  onClick={() => alternarFormato(f.valor)}
+                  className={`mb-1.5 mr-1.5 h-7 rounded-full border px-2.5 text-[12px] ${formatos.indexOf(f.valor) >= 0 ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+                >
+                  {f.rotulo}
+                </button>
+              ))}
+            </div>
+            <label className="mt-2 block">
+              <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
+              <div className="relative">
+                <Textarea value={pedido} onChange={(e) => setPedido(e.target.value)} rows={3} placeholder="Ex.: clima de escritório claro, espaço para texto à direita" className="pr-10 text-[12.5px]" aria-label="Pedido ao diretor" />
+                <Ditado valor={pedido} onChange={setPedido} className="absolute bottom-1.5 right-1.5" />
+              </div>
+            </label>
+            <BotaoComCusto
+              rotulo={
+                <>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Planejar {tomadas.length} {tomadas.length === 1 ? "tomada" : "tomadas"}
+                </>
+              }
+              titulo="Ensaio planejado"
+              descricao="O diretor de fotografia monta as tomadas com o kit, a receita e o contexto do cliente. Nenhuma imagem é gerada agora."
+              className="mt-3 h-9 w-full text-[12.5px]"
+              disabled={!kit || !kit.id || !receita || tomadas.length === 0 || !receitaServeParaKit(receita, kit.tipo)}
+              partes={() => partesDoPlanejamento(catalogo)}
+              executar={() =>
+                planejarEnsaio({
+                  clientId,
+                  kitId: String(kit && kit.id),
+                  receitaId: receita ? receita.id : "",
+                  finalidade,
+                  formatos,
+                  pedido,
+                  tomadasPedidas: fora.length ? tomadas.map((t) => t.id) : [],
+                })
+              }
+              aoConcluir={(data) => {
+                if (data && data.ensaio) onPlanejado(data.ensaio);
+                if (data && data.estimativa_usd !== null && data.estimativa_usd !== undefined) {
+                  toast.info(`Gerar todas as tomadas: cerca de ${usd(data.estimativa_usd)}`, { description: "O custo de cada tomada aparece no botão antes de gerar." });
+                }
+              }}
+            />
+            {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o kit.</p>}
+            {kit && receita && !receitaServeParaKit(receita, kit.tipo) && (
+              <p className="mt-2 text-[11.5px] text-warning">A receita {receita.nome} não serve para kit de {rotuloDoTipo(kit.tipo).toLowerCase()}. Escolha uma receita em destaque.</p>
+            )}
+          </Cartao>
+        )}
       </div>
     </div>
   );
+}
+
+/** O total de gerar N fotos, em linha (conta local com o catálogo). */
+function EstimativaDoLote({ modeloId, quantidade }: { modeloId: string; quantidade: number }) {
+  const { catalogo } = useMesa();
+  const valor = estimarLocal(partesDaGeracao(modeloId, "alta", quantidade), catalogo);
+  return <span className="font-medium text-foreground">{valor === null ? "sem estimativa" : usd(valor)}</span>;
 }
 
 /**
@@ -348,7 +463,7 @@ function CartaoDaTomada({
   };
   return (
     <li className="min-w-0 rounded-xl border border-border bg-card p-3" data-tomada={tomada.id}>
-      <div className="grid min-w-0 grid-cols-[88px_minmax(0,1fr)] gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
+      <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[88px_minmax(0,1fr)]">
         <div className="min-w-0">
           <Moldura proporcao={proporcaoDoFormato(tomada.formato)} className="border border-border">
             {ultima && ultima.storage_path ? (
@@ -377,6 +492,7 @@ function CartaoDaTomada({
             <span className="rounded-full border border-border px-1.5 py-px text-[10.5px] text-muted-foreground" title={MODOS_DA_FOTO[tomada.modo].dica}>
               {MODOS_DA_FOTO[tomada.modo].rotulo}
             </span>
+            {tomada.tipo && <span className="ml-1.5 rounded-full bg-muted px-1.5 py-px text-[10.5px] text-muted-foreground">{rotuloDoTipoDeVariacao(tomada.tipo)}</span>}
           </div>
           {bloqueada && (
             <p className="flex items-start rounded-lg bg-warning/10 px-2 py-1.5 text-[11.5px] leading-snug">
@@ -466,8 +582,8 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
   const [guia, setGuia] = useState<Guia>({ modo: "nenhum" });
   const [cameras, setCameras] = useState<Record<string, Camera | null>>({});
   const [gerando, setGerando] = useState<Record<string, boolean>>({});
+  const lote = useLote(ensaio.id);
   const modelo = modeloId || (padrao ? padrao.id : "");
-  const pendentes = tomadasParaGerar(ensaio).filter((t) => !t.versoes.length);
   const resumo = resumoDoEnsaio(ensaio);
   const finalidade = FINALIDADES.find((f) => f.valor === ensaio.finalidade);
 
@@ -498,30 +614,13 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
     }
   };
 
-  /** Uma de cada vez, em ordem; para na primeira falha (as feitas ficam). */
-  const gerarTodas = async () => {
-    let custo = 0;
-    let feitas = 0;
-    for (const t of pendentes) {
-      try {
-        const r = await gerarUma(t);
-        custo += Number((r && r.custo_usd) || 0);
-        feitas++;
-      } catch (e) {
-        atualizarCusto();
-        avisarErro(e, `Parou em "${t.nome}"`);
-        break;
-      }
-    }
-    return { custo_usd: custo, feitas };
-  };
-
   return (
     <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="min-w-0 space-y-3">
+        <AndamentoDoLote ensaioId={ensaio.id} />
         <div className="flex min-w-0 flex-wrap items-center">
           <p className="mr-auto min-w-0 text-[12.5px] text-muted-foreground">
-            <span className="font-semibold text-foreground">{receita ? receita.nome : ensaio.receita_id || "Ensaio"}</span>
+            <span className="font-semibold text-foreground">{receita ? receita.nome : nomeDaReceita(null, ensaio.receita_id)}</span>
             {finalidade ? ` · ${finalidade.rotulo}` : ""} · {ensaio.formatos.join(", ") || "1:1"} · {rotuloDoEstadoDoEnsaio(ensaio.status)} · {resumo.aprovadas} de {resumo.total} aprovadas
             {resumo.bloqueadas ? ` · ${resumo.bloqueadas} bloqueadas` : ""}
           </p>
@@ -536,7 +635,7 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
                 tomada={t}
                 camera={cameras[t.id] || null}
                 onCamera={(c) => setCameras((m) => ({ ...m, [t.id]: c }))}
-                gerando={!!gerando[t.id]}
+                gerando={!!gerando[t.id] || geraNoLote(lote, t.id)}
                 modeloId={modelo}
                 qualidade={qualidade}
                 onGerar={() => gerarUma(t)}
@@ -559,25 +658,20 @@ function EnsaioAberto({ ensaio, kit }: { ensaio: Ensaio; kit: KitDeFoto | null }
             <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
             <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
           </div>
-          <BotaoComCusto
-            rotulo={
-              <>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar {pendentes.length} {pendentes.length === 1 ? "tomada" : "tomadas"}, uma por vez
-              </>
-            }
-            titulo="Tomadas geradas"
-            descricao="Gera cada tomada ainda sem versão, em ordem. Bloqueadas ficam de fora. Sem correção automática: você revisa e decide."
+          <BotaoDoLote
+            ensaio={ensaio}
+            modeloId={modelo}
+            qualidade={qualidade}
+            guia={guia}
+            cameras={cameras}
             className="mt-3 h-9 w-full text-[12.5px]"
-            disabled={!pendentes.length || !modelo || Object.keys(gerando).some((k) => gerando[k])}
-            partes={() => partesDaGeracao(modelo, qualidade, pendentes.length)}
-            executar={gerarTodas}
-            fecharAoConfirmar
-            aoConcluir={(data) => {
-              const n = Number((data && data.feitas) || 0);
-              if (n) toast.success(`${n} ${n === 1 ? "tomada gerada" : "tomadas geradas"}`, { description: `Custo real: ${usd(Number((data && data.custo_usd) || 0))}. Agora é revisar.` });
-            }}
+            rotulo={(n) => (
+              <>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar {n} {n === 1 ? "tomada" : "tomadas"}, uma por vez
+              </>
+            )}
           />
-          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">Continue trabalhando enquanto gera: cada tomada mostra o próprio andamento.</p>
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">Pode trocar de etapa enquanto gera: o andamento segue na barra de cima e cada foto pronta já fica salva.</p>
         </Cartao>
       </div>
     </div>
@@ -593,13 +687,11 @@ export default function EtapaEnsaio() {
   const listaDeKits = useMemo(() => kits.data || [], [kits.data]);
   const lista = useMemo(() => ensaios.data || [], [ensaios.data]);
   const [novo, setNovo] = useState(false);
-  const ensaio = !novo && ensaioId ? lista.find((e) => e.id === ensaioId) || null : null;
+  // Campanha abre na aba própria; aqui ficam variações e ensaios por receita.
+  const ensaio = !novo && ensaioId ? lista.find((e) => e.id === ensaioId && !ehCampanha(e)) || null : null;
   const kitDoEnsaio = ensaio && ensaio.kit_id ? listaDeKits.find((k) => k.id === ensaio.kit_id) || null : null;
   const receitas = useReceitas();
-  const nomeDaReceita = (id: string) => {
-    const r = receitas.data ? receitas.data.receitas.find((x) => x.id === id) : null;
-    return r ? r.nome : id || "Ensaio";
-  };
+  const nomeDoEnsaio = (id: string) => nomeDaReceita(receitas.data ? receitas.data.receitas : null, id);
 
   // O ensaio aberto puxa o kit dele para a barra.
   useEffect(() => {
@@ -621,15 +713,17 @@ export default function EtapaEnsaio() {
             <SelectValue placeholder={lista.length ? "Abrir um ensaio" : "Nenhum ensaio ainda"} />
           </SelectTrigger>
           <SelectContent>
-            {lista.map((e) => {
-              const k = listaDeKits.find((x) => x.id === e.kit_id);
-              return (
-                <SelectItem key={e.id} value={e.id}>
-                  {nomeDaReceita(e.receita_id)}
-                  {k ? ` · ${k.nome}` : ""} · {rotuloDoEstadoDoEnsaio(e.status)}
-                </SelectItem>
-              );
-            })}
+            {lista
+              .filter((e) => !ehCampanha(e))
+              .map((e) => {
+                const k = listaDeKits.find((x) => x.id === e.kit_id);
+                return (
+                  <SelectItem key={e.id} value={e.id}>
+                    {nomeDoEnsaio(e.receita_id)}
+                    {k ? ` · ${k.nome}` : ""} · {rotuloDoEstadoDoEnsaio(e.status)}
+                  </SelectItem>
+                );
+              })}
           </SelectContent>
         </Select>
         {(ensaio || lista.length > 0) && (

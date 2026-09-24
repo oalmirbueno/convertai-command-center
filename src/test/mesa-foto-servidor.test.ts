@@ -2,6 +2,30 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  cameraDaCampanha,
+  descricaoDaReferenciaWeb,
+  imagensDoHtml,
+  kitParecido,
+  LACUNA_SO_CAIXA,
+  LACUNA_SO_WEB,
+  lacunasDaEvidencia,
+  lerFotosDeCampanha,
+  lerModeloSintetico,
+  lerOrigemWeb,
+  mesclarKit,
+  normalizarGuiaDeEstilo,
+  normalizarIdentificacao,
+  planoDeVariacoes,
+  promptDaCampanha,
+  promptDoExemplo,
+  referenciaWebServe,
+  termosDeBusca,
+  tipoDeVariacaoDoTexto,
+  blocosDaResposta,
+  vagasDoDiretor,
+  vagasDoPlano,
+} from "../../supabase/functions/mesa-foto/calculos";
+import {
   aplicarSugestaoDeTomada,
   blocoDeVariacao,
   caminhoDeOriginalValido,
@@ -44,7 +68,17 @@ import {
   urlPublicaSegura,
   type VersaoTomada,
 } from "../../supabase/functions/mesa-foto/calculos";
-import { cameraDoPreset, PRESETS, receitaPorId, RECEITAS } from "../../supabase/functions/mesa-foto/receitas";
+import {
+  cameraDoPreset,
+  ORDEM_DAS_VARIACOES,
+  PRESETS,
+  PROIBICOES_PESSOA_SINTETICA,
+  RECEITA_CAMPANHA,
+  receitaPorId,
+  RECEITAS,
+  RECEITAS_V2,
+  TIPOS_DE_VARIACAO,
+} from "../../supabase/functions/mesa-foto/receitas";
 
 /**
  * Mesa Foto, frente A (docs/mesa-foto/CONTRATO.md): lógica pura executando de
@@ -92,8 +126,9 @@ const ref = (n: number, papel: RefDoKit["papel"], vista: string | null = null, p
 // ------------------------------------------------------------------ receitas e presets
 
 describe("receitas e presets da pesquisa", () => {
-  it("tem as 8 receitas da pesquisa, com as mesmas tomadas", () => {
-    expect(RECEITAS).toHaveLength(8);
+  it("tem as 8 receitas da pesquisa, com as mesmas tomadas, e as 2 da v2", () => {
+    expect(RECEITAS).toHaveLength(10);
+    expect(RECEITAS.filter((r) => !RECEITAS_V2.includes(r.id))).toHaveLength(8);
     for (const r of pesquisaReceitas.recipes) {
       const nossa = receitaPorId(r.id);
       expect(nossa, r.id).not.toBeNull();
@@ -527,7 +562,7 @@ describe("função mesa-foto (contrato pelo código)", () => {
   it("fontes do kit na ordem e referência de estilo depois delas", () => {
     const gerar = corpoDe(fonte, "tomadaGerar");
     expect(gerar).toContain("fontesDaTomada(refs, tomada, limite)");
-    expect(gerar).toContain("referencias: [...imagensFontes, ...guiado.estilos.map((e) => e.imagem)]");
+    expect(gerar).toContain("referencias: [...imagensFontes, ...pessoaAprovada, ...estilos.map((e) => e.imagem)]");
     // Bloqueio recalculado com o kit de agora, e a câmera escolhida na tela vale para a tomada.
     expect(gerar).toContain("cameraPedida ?? salva.camera");
     expect(gerar).toContain("lerCamera(corpo.camera)");
@@ -664,5 +699,404 @@ describe("a tela (frente B) só pede o que a função e o banco têm", () => {
     expect(sql).toMatch(/foto_kits \([\s\S]*?atualizado_em timestamptz/);
     expect(sql).toMatch(/foto_ensaios \([\s\S]*?criado_em timestamptz/);
     expect(sql).toMatch(/foto_biblioteca \([\s\S]*?destaque boolean[\s\S]*?titulo|titulo text[\s\S]*?destaque boolean/);
+  });
+});
+
+// ================================================================== v2 (docs/mesa-foto/CONTRATO-V2.md)
+
+const sqlV2 = ler("docs/mesa-foto/migrations/02_mesa_foto_v2.sql");
+
+describe("v2: receitas novas e tipos de variação", () => {
+  it("fora-da-embalagem e campanha-com-modelo existem, sem pessoa real e com o produto invariante", () => {
+    const fora = receitaPorId("fora-da-embalagem")!;
+    expect(fora.tomadas.some((t) => t.foco === "fora_da_embalagem")).toBe(true);
+    expect(fora.tomadas.some((t) => t.foco === "embalagem")).toBe(true);
+    expect(fora.tipos_de_kit).not.toContain("pessoa");
+    const campanha = receitaPorId(RECEITA_CAMPANHA)!;
+    expect(campanha.tipos_de_kit).not.toContain("pessoa");
+    expect(campanha.tomadas.filter((t) => t.com_pessoa === true).length).toBeGreaterThanOrEqual(3);
+    expect(campanha.regra).toMatch(/pessoa real conhecida/);
+  });
+
+  it("os 10 tipos do contrato têm câmera válida, direção, luz e cenário", () => {
+    expect(TIPOS_DE_VARIACAO.map((t) => t.id)).toEqual(expect.arrayContaining([
+      "heroi_fundo_cor", "fundo_branco", "lifestyle", "na_mao", "flat_lay", "macro", "cenario_marca", "flutuando", "fora_da_caixa", "com_embalagem",
+    ]));
+    expect(new Set(TIPOS_DE_VARIACAO.map((t) => t.id)).size).toBe(TIPOS_DE_VARIACAO.length);
+    for (const t of TIPOS_DE_VARIACAO) {
+      expect(t.cameras.length, t.id).toBeGreaterThanOrEqual(2);
+      expect(t.luz.length, t.id).toBeGreaterThan(40);
+      expect(t.cenario.length, t.id).toBeGreaterThan(30);
+    }
+    expect(ORDEM_DAS_VARIACOES.every((id) => TIPOS_DE_VARIACAO.some((t) => t.id === id))).toBe(true);
+  });
+
+  it("tipo dito pelo diretor em palavras soltas vira o tipo certo", () => {
+    expect(tipoDeVariacaoDoTexto("Produto flutuando")!.id).toBe("flutuando");
+    expect(tipoDeVariacaoDoTexto("na mão")!.id).toBe("na_mao");
+    expect(tipoDeVariacaoDoTexto("tirar da caixa, fora da caixa")!.id).toBe("fora_da_caixa");
+    expect(tipoDeVariacaoDoTexto("flat lay")!.id).toBe("flat_lay");
+    expect(tipoDeVariacaoDoTexto("")).toBeNull();
+  });
+});
+
+describe("v2: plano de variações decidido no código", () => {
+  const comProduto = { temIdentidade: true, temEmbalagem: true };
+
+  it("8 variações são 8 tipos diferentes, com câmeras e cenários próprios", () => {
+    const vagas = planoDeVariacoes(8, null, comProduto);
+    expect(vagas).toHaveLength(8);
+    expect(new Set(vagas.map((v) => v.tipo.id)).size).toBe(8);
+    expect(new Set(vagas.map((v) => v.id)).size).toBe(8);
+    expect(vagas.every((v) => v.rodada === 0 && v.mudanca === null)).toBe(true);
+  });
+
+  it("16 variações repetem tipo com outra câmera e uma mudança concreta; limite 16", () => {
+    const vagas = planoDeVariacoes(16, null, comProduto);
+    expect(vagas).toHaveLength(16);
+    const heroi = vagas.filter((v) => v.tipo.id === "heroi_fundo_cor");
+    expect(heroi).toHaveLength(2);
+    expect(heroi[0].camera).not.toEqual(heroi[1].camera);
+    expect(heroi[1].mudanca).toBeTruthy();
+    expect(heroi[1].id).toBe("heroi_fundo_cor-2");
+    expect(planoDeVariacoes(40, null, comProduto)).toHaveLength(16);
+    expect(planoDeVariacoes(0, null, comProduto)).toHaveLength(8);
+  });
+
+  it("tipos pedidos valem na ordem; sem foto do produto a caixa vira o assunto", () => {
+    expect(planoDeVariacoes(3, ["macro", "na_mao", "inexistente"], comProduto).map((v) => v.tipo.id)).toEqual(["macro", "na_mao", "macro"]);
+    const soCaixa = planoDeVariacoes(8, null, { temIdentidade: false, temEmbalagem: true });
+    expect(soCaixa.some((v) => v.tipo.id === "fora_da_caixa" || v.tipo.id === "com_embalagem")).toBe(false);
+    expect(soCaixa.every((v) => v.foco === "embalagem")).toBe(true);
+  });
+
+  it("variações escritas pelo diretor viram vagas com id único e câmera válida", () => {
+    const vagas = vagasDoDiretor([
+      { nome: "Herói azul", tipo: "heroi_fundo_cor", camera: "a0-e0-dmedio", cenario: "fundo azul", luz: "", props: [], formato: "4:5" },
+      { nome: "Herói azul", tipo: "heroi_fundo_cor", camera: "nao-existe", cenario: "fundo verde", luz: "", props: [], formato: null },
+    ], comProduto);
+    expect(vagas.map((v) => v.id)).toEqual(["heroi-azul", "heroi-azul-2"]);
+    expect(vagas[0].camera.preset_id).toBe("a0-e0-dmedio");
+    expect(vagas[1].camera.preset_id).toBe("a0-e0-dmedio");
+    expect(vagas[1].mudanca).toBeTruthy();
+  });
+});
+
+describe("v2: foco na embalagem, fora da embalagem e referência da internet", () => {
+  const kit = kitProduto({ nome: "Mouse NTC X", variante: "preto" });
+  const web = { url: "https://loja.exemplo.com.br/img/mouse.jpg", pagina: "https://loja.exemplo.com.br/mouse-ntc-x", fonte: "loja.exemplo.com.br" };
+
+  it("só caixa: a caixa como assunto gera; fora da embalagem bloqueia pedindo identificar o produto", () => {
+    const caixa = [ref(1, "embalagem", "frente")];
+    expect(motivoDoBloqueio(kit, caixa, null, "embalagem")).toBeNull();
+    expect(motivoDoBloqueio(kit, caixa, null, "fora_da_embalagem")).toMatch(/Identificar produto/);
+    expect(motivoDoBloqueio(kit, [ref(1, "identidade")], null, "embalagem")).toMatch(/embalagem/);
+    const t = montarTomada({ id: "c", nome: "Caixa", camera: cameraDoPreset("a0-e0-dmedio"), foco: "embalagem" }, { kit, refs: caixa, receita: null, formatos: ["4:5"] });
+    expect(t).toMatchObject({ bloqueada: false, modo: "cenario", foco: "embalagem" });
+    expect(t.invariantes.join(" ")).toMatch(/arte, cores, textos e logotipos/);
+    const p = promptDaTomada({ kit, tomada: t, finalidade: "", marca: { nome: "X" }, fontes: caixa, estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] });
+    expect(p).toContain("A caixa é o herói desta foto");
+    expect(p).toContain("EMBALAGEM real, que é o ASSUNTO");
+  });
+
+  it("fora da embalagem: a arte da caixa nunca entra como fonte; foto real antes da referência da internet", () => {
+    const refs: RefDoKit[] = [{ ...ref(1, "identidade", "frente"), origem_web: web }, ref(2, "identidade", "frente"), ref(3, "embalagem")];
+    const fontes = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: { papeis: ["embalagem"], descricao: "caixa" }, foco: "fora_da_embalagem" }, 8);
+    expect(fontes.map((f) => f.imagem_id)).toEqual([IMG(2), IMG(1)]);
+    const caixaPrimeiro = fontesDaTomada(refs, { camera: cameraDoPreset("a0-e0-dmedio"), exige: null, foco: "embalagem" }, 8);
+    expect(caixaPrimeiro[0].imagem_id).toBe(IMG(3));
+    const t = montarTomada({ id: "f", nome: "Fora", camera: cameraDoPreset("a0-e0-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "fora_da_caixa" }, { kit, refs, receita: null, formatos: ["4:5"] });
+    const p = promptDaTomada({ kit, tomada: t, finalidade: "loja", marca: { nome: "X" }, fontes, estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] });
+    expect(p).toContain("FORA DA EMBALAGEM");
+    expect(p).toContain("Nunca desenhe o produto a partir da arte impressa na caixa");
+    expect(p).toContain("achada na internet (loja.exemplo.com.br)");
+    expect(p).toContain("FIDELIDADE DO PRODUTO");
+  });
+
+  it("origem da internet vai e volta pela descrição do acervo", () => {
+    const d = descricaoDaReferenciaWeb(web, "Mouse NTC X");
+    expect(d).toContain("não publicar");
+    expect(lerOrigemWeb(["mesa_foto", "referencia_web", "fonte:loja.exemplo.com.br"], d)).toEqual(web);
+    expect(lerOrigemWeb(["mesa_foto"], d)).toBeNull();
+  });
+
+  it("imagens da página: og:image, twitter, JSON-LD; só https público; relativas viram absolutas", () => {
+    const html = `<html><head>
+      <meta property="og:image" content="/media/mouse-front.jpg">
+      <meta name="twitter:image" content="https://cdn.exemplo.com/mouse.webp">
+      <meta property="og:image" content="http://inseguro.com/x.jpg">
+      <script type="application/ld+json">{"@type":"Product","image":["https://cdn.exemplo.com/a.jpg",{"url":"https://127.0.0.1/b.jpg"}],"offers":{"image":"https://cdn.exemplo.com/c.png"}}</script>
+    </head></html>`;
+    expect(imagensDoHtml(html, "https://loja.exemplo.com.br/p/1")).toEqual([
+      "https://loja.exemplo.com.br/media/mouse-front.jpg", "https://cdn.exemplo.com/mouse.webp", "https://cdn.exemplo.com/a.jpg", "https://cdn.exemplo.com/c.png",
+    ]);
+    expect(referenciaWebServe({ largura: 1200, altura: 1200 })).toBe(true);
+    expect(referenciaWebServe({ largura: 200, altura: 200 })).toBe(false);
+    expect(referenciaWebServe({ largura: 3000, altura: 500 })).toBe(false);
+    expect(referenciaWebServe(null)).toBe(false);
+  });
+});
+
+describe("v2: kit sugerido vira rascunho salvo, sem duplicar", () => {
+  const base = { tipo: "tecnologia" as const, invariantes: [], autorizacao: null, frente_imagem_id: null, status: "rascunho" as const };
+
+  it("acha o rascunho do mesmo produto pelo nome ou por foto em comum; confirmado não é reaproveitado", () => {
+    const existentes = [
+      { id: "k1", status: "confirmado", nome: "Mouse NTC X", variante: "Preto", refs: [] },
+      { id: "k2", status: "rascunho", nome: "mouse ntc x", variante: "preto", refs: [], atualizado_em: "2026-09-24T10:00:00Z" },
+      { id: "k3", status: "rascunho", nome: "Caixas", variante: null, refs: [{ imagem_id: IMG(9), papel: "embalagem" }], atualizado_em: "2026-09-24T11:00:00Z" },
+    ];
+    expect(kitParecido(existentes, { nome: "Mouse NTC X", variante: "Preto", refs: [] })!.id).toBe("k2");
+    expect(kitParecido(existentes, { nome: "Outro nome", variante: null, refs: [{ imagem_id: IMG(9), papel: "embalagem" }] })!.id).toBe("k3");
+    expect(kitParecido(existentes, { nome: "Outro nome", variante: null, refs: [{ imagem_id: IMG(9), papel: "estilo" }] })).toBeNull();
+    expect(kitParecido(existentes.slice(0, 1), { nome: "Mouse NTC X", variante: "Preto", refs: [] })).toBeNull();
+  });
+
+  it("mescla soma referências, guarda o informado e refaz as lacunas de evidência", () => {
+    const existente = {
+      ...base, nome: "Caixas do mouse", variante: null,
+      atributos: { observado: ["caixa azul"], informado: ["cliente disse: cor preta"], inferido: [] },
+      lacunas: [LACUNA_SO_CAIXA, "Vista inferior"], refs: [ref(9, "embalagem")],
+    };
+    const identificacao = normalizarIdentificacao({ marca: "NTC", modelo: "X", confianca: "alta", paginas: ["https://ntc.com.br/x", "http://inseguro"] })!;
+    expect(identificacao.paginas).toEqual([{ url: "https://ntc.com.br/x", fonte: "ntc.com.br" }]);
+    const novo = {
+      ...base, nome: "NTC X", variante: "preto",
+      atributos: { observado: ["caixa azul", "texto NTC X"], informado: [], inferido: ["Pela internet: 1600 dpi"], identificacao },
+      lacunas: [], refs: [{ ...ref(20, "identidade"), origem_web: { url: "https://ntc.com.br/x.jpg", pagina: null, fonte: "ntc.com.br" } }],
+    };
+    const m = mesclarKit(existente, novo, { preferirNomeNovo: true, refsWeb: [IMG(20)] });
+    expect(m.nome).toBe("NTC X");
+    expect(m.refs.map((r) => r.imagem_id)).toEqual([IMG(9), IMG(20)]);
+    expect(m.atributos.informado).toEqual(["cliente disse: cor preta"]);
+    expect(m.atributos.observado).toEqual(["caixa azul", "texto NTC X"]);
+    expect(m.atributos.identificacao!.marca).toBe("NTC");
+    expect(m.lacunas).toContain(LACUNA_SO_WEB);
+    expect(m.lacunas).not.toContain(LACUNA_SO_CAIXA);
+    expect(m.lacunas).toContain("Vista inferior");
+    expect(lacunasDaEvidencia({ tipo: "produto", lacunas: [] }, [ref(1, "embalagem")], [])).toEqual([LACUNA_SO_CAIXA]);
+    expect(lacunasDaEvidencia({ tipo: "produto", lacunas: [LACUNA_SO_CAIXA] }, [ref(1, "identidade")], [])).toEqual([]);
+  });
+
+  it("kit_salvar guarda a identificação da internet no kit", () => {
+    const k = normalizarKit({ tipo: "produto", nome: "NTC X", atributos: { observado: [], identificacao: { marca: "NTC", modelo: "X", confianca: "media" } } });
+    expect(k.atributos.identificacao).toMatchObject({ marca: "NTC", modelo: "X", confianca: "media" });
+    expect(normalizarKit({ tipo: "produto", nome: "Y", atributos: { identificacao: { confianca: "alta" } } }).atributos.identificacao).toBeUndefined();
+  });
+});
+
+describe("v2: campanha com pessoa sintética", () => {
+  const kit = kitProduto({ tipo: "moda", nome: "Óculos Aurora", variante: "armação prata" });
+  const refs = [ref(1, "identidade", "frente")];
+
+  it("pessoa sintética é adulta e pedido de sósia sai com aviso", () => {
+    const m = lerModeloSintetico({ perfil: "mulher parecida com a atriz Fulana, cabelo cacheado", idade_aprox: 16, estilo: "urbano" });
+    expect(m.idade_aprox).toBe(21);
+    expect(m.perfil).not.toMatch(/parecida/i);
+    expect(m.perfil).toContain("cabelo cacheado");
+    expect(m.avisos.length).toBe(2);
+    expect(lerModeloSintetico(null)).toMatchObject({ idade_aprox: 30, avisos: [] });
+  });
+
+  it("fotos da campanha: enquadramento vira câmera; guia de estilo normalizado", () => {
+    const fotos = lerFotosDeCampanha([
+      { nome: "Retrato céu azul", enquadramento: "close", cenario: "céu azul com nuvens", com_pessoa: true, formato: "4:5" },
+      { nome: "Flutuando", enquadramento: "medio", cenario: "formas prateadas", com_pessoa: false, camera: "a0-e0-dmedio" },
+      { nome: "" },
+    ], ["4:5", "9:16"]);
+    expect(fotos).toHaveLength(2);
+    expect(cameraDaCampanha(fotos[0]).preset_id).toBe("a0-e0-ddetalhe");
+    expect(cameraDaCampanha(fotos[1]).preset_id).toBe("a0-e0-dmedio");
+    expect(normalizarGuiaDeEstilo({ resumo: "", paleta: [] })).toBeNull();
+    expect(normalizarGuiaDeEstilo({ resumo: "Editorial solar", paleta: ["azul céu #8EC5FF"], luz: "sol filtrado" })!.paleta).toEqual(["azul céu #8EC5FF"]);
+  });
+
+  it("prompt de campanha: pessoa sintética, produto invariante, mãos, guia só como direção e a mesma modelo aprovada", () => {
+    const t = montarTomada(
+      { id: "r", nome: "Retrato", camera: cameraDoPreset("a0-e0-ddetalhe"), campanha: { com_pessoa: true, acao: "ajusta os óculos no rosto", expressao: "sorriso leve", figurino: "camisa branca" } },
+      { kit, refs, receita: receitaPorId(RECEITA_CAMPANHA), formatos: ["4:5"] },
+    );
+    expect(t.lente).toContain("85 mm");
+    expect(t.proibicoes).toEqual(expect.arrayContaining(PROIBICOES_PESSOA_SINTETICA));
+    const p = promptDaCampanha({
+      kit, tomada: t, finalidade: "campanha", marca: { nome: "Ótica X", paleta: ["#1E3A8A"] }, fontes: refs,
+      estilos: [{ titulo: "print do perfil" }], guiaTexto: null, versoesAntes: 0, rejeicoes: [],
+      guiaDeEstilo: normalizarGuiaDeEstilo({ resumo: "Editorial surreal", paleta: ["azul"], luz: "estúdio azul" }),
+      modelo: lerModeloSintetico({ perfil: "homem negro de 30 anos", estilo: "minimalista" }), pessoaAprovada: true,
+    });
+    for (const trecho of [
+      "PESSOA SINTÉTICA", "não existe", "sem parecer celebridade", "cinco dedos", "PRODUTO (invariante)", "ajusta os óculos no rosto",
+      "Imagem 1: IDENTIDADE", "Imagem 2: SÓ A PESSOA SINTÉTICA", "Imagem 3: SÓ ESTILO", "GUIA DE ESTILO DA CAMPANHA", "Só direção",
+      "retrato de perto", "homem negro de 30 anos", "nunca escurecer",
+    ]) expect(p, trecho).toContain(trecho);
+    expect(p).not.toMatch(/[\u2014\u2013]/);
+    // promptDaTomada encaminha a tomada de campanha para o prompt de campanha.
+    expect(promptDaTomada({ kit, tomada: t, finalidade: "", marca: { nome: "X" }, fontes: refs, estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] })).toContain("PESSOA SINTÉTICA");
+    expect(criteriosDaConferencia("moda", { comPessoaSintetica: true })).toEqual(expect.arrayContaining(["Mãos com anatomia correta"]));
+    expect(criteriosDaConferencia("moda", { embalagem: true })[0]).toMatch(/Embalagem igual/);
+  });
+
+  it("variações: direção de arte, mão adulta e produto flutuando com a sombra certa", () => {
+    const mao = montarTomada({ id: "m", nome: "Na mão", camera: cameraDoPreset("a45-e0-dmedio"), tipo_variacao: "na_mao", props: ["caneca"], mudanca: "outra hora do dia" },
+      { kit, refs, receita: null, formatos: ["4:5"] });
+    const pm = promptDaTomada({ kit, tomada: mao, finalidade: "", marca: { nome: "X" }, fontes: refs, estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] });
+    expect(pm).toContain("DIREÇÃO DE ARTE: Na mão");
+    expect(pm).toContain("Objetos de cena: caneca");
+    expect(pm).toContain("outra hora do dia");
+    expect(pm).toContain("MÃO: mão adulta natural");
+    const voa = montarTomada({ id: "v", nome: "Voa", camera: cameraDoPreset("a45-e-30-dmedio"), tipo_variacao: "flutuando" }, { kit, refs, receita: null, formatos: ["4:5"] });
+    const pv = promptDaTomada({ kit, tomada: voa, finalidade: "", marca: { nome: "X" }, fontes: refs, estilos: [], guiaTexto: null, versoesAntes: 0, rejeicoes: [] });
+    expect(pv).toContain("flutua de propósito");
+    expect(pv).not.toContain("nada de sombra dupla nem assunto flutuando");
+  });
+});
+
+describe("v2: sugestões novas do diretor", () => {
+  const KIT = "33333333-3333-4333-8333-333333333333";
+  it("plano de variações e campanha só com kit do cliente; identificar produto só com fotos", () => {
+    const sug = normalizarSugestoes([
+      { tipo: "plano_de_variacoes", kit_id: KIT, variacoes: [{ nome: "Herói", tipo: "heroi_fundo_cor", camera: "a0-e0-dmedio", cenario: "azul", luz: "", props: [], formato: "4:5" }] },
+      { tipo: "plano_de_variacoes", kit_id: OUTRO, quantidade: 8, variacoes: [] },
+      { tipo: "campanha", kit_id: null, quantidade: 4, fotos: [], modelo: { idade_aprox: 17 }, guia_de_estilo: { resumo: "surreal" }, referencias_estilo_ids: [IMG(1), "x"] },
+      { tipo: "identificar_produto", imagem_ids: [IMG(1), IMG(1), "nao-uuid"] },
+      { tipo: "identificar_produto", imagem_ids: [] },
+    ], { tomadaIds: [], kitIds: [KIT], kitPadrao: null });
+    expect(sug.map((s) => s.tipo)).toEqual(["plano_de_variacoes", "identificar_produto"]);
+    expect(sug[0]).toMatchObject({ kit_id: KIT, quantidade: 1 });
+    expect(sug[1].imagem_ids).toEqual([IMG(1)]);
+    const comKitAberto = normalizarSugestoes([
+      { tipo: "campanha", kit_id: OUTRO, quantidade: 4, fotos: [], modelo: { idade_aprox: 17 }, guia_de_estilo: { resumo: "surreal" }, referencias_estilo_ids: [IMG(1), "x"] },
+    ], { tomadaIds: [], kitIds: [KIT], kitPadrao: KIT });
+    expect(comKitAberto[0]).toMatchObject({ kit_id: KIT, quantidade: 4, referencias_estilo_ids: [IMG(1)] });
+    expect(comKitAberto[0].modelo!.idade_aprox).toBe(21);
+  });
+});
+
+describe("v2: biblioteca ilustrada", () => {
+  it("termos de busca concretos, sem jargão, com a categoria em inglês; busca só de fotografia", () => {
+    expect(termosDeBusca({ categoria: "bebida", prompt_en: "Professional photo of an iced coffee glass on marble, soft window light, 85mm lens" })).toBe("iced coffee glass marble drink");
+    expect(termosDeBusca({ categoria: "cosmetico", prompt_en: null, tags: ["sérum", "frasco"] })).toBe("serum frasco cosmetics");
+    const u = new URL(urlDoOpenverse("coffee", "comercial", 1, { categoria: "photograph", porPagina: 12 }));
+    expect(u.searchParams.get("category")).toBe("photograph");
+    expect(u.searchParams.get("license_type")).toBe("commercial");
+    expect(u.searchParams.get("page_size")).toBe("12");
+  });
+
+  it("exemplo gerado usa produto genérico sem marca e as regras da pessoa sintética", () => {
+    const p = promptDoExemplo({ categoria: "pessoa", titulo: "Retrato editorial", prompt_en: "editorial portrait, rim light", negativo: "plastic skin" });
+    expect(p).toContain("pessoa sintética adulta");
+    expect(p).toContain("Sem marca, sem logotipo");
+    expect(p).toContain("EVITE: plastic skin");
+    expect(p).toContain("editorial portrait, rim light");
+  });
+
+  it("SQL 02 cria miniatura_url e exemplo, idempotente e sem travessão", () => {
+    expect(sqlV2).toContain("ADD COLUMN IF NOT EXISTS miniatura_url text");
+    expect(sqlV2).toContain("ADD COLUMN IF NOT EXISTS exemplo jsonb");
+    expect(sqlV2).not.toMatch(/CREATE TABLE (?!IF NOT EXISTS)/);
+    expect(sqlV2).not.toMatch(/[\u2014\u2013]/);
+  });
+});
+
+describe("v2: contratos da função pelo código", () => {
+  const mapa = fonte.slice(fonte.indexOf("const ACOES:"), fonte.indexOf("const ACOES_LONGAS"));
+  const longas = fonte.slice(fonte.indexOf("const ACOES_LONGAS"), fonte.indexOf("Deno.serve"));
+
+  it("ações novas existem e respondem com fôlego (inclusive agente_aplicar, que pode identificar o produto)", () => {
+    for (const a of ["produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar"]) {
+      expect(mapa, a).toMatch(new RegExp(`\\b${a}\\b`));
+      expect(longas, a).toContain(`"${a}"`);
+    }
+    expect(longas).toContain('"agente_aplicar"');
+  });
+
+  it("produto_identificar: visão com pesquisa web em 300 s, download seguro para foto/web e Jev só como aviso", () => {
+    const p = corpoDe(fonte, "produtoIdentificar");
+    for (const t of [
+      "pesquisaWeb: true", "timeoutMs: TIMEOUT_TEXTO_FOTO_MS", "imagensDoHtml(", "baixarReferenciaWeb(", 'type: "choice"', "cobrarJev(", "salvarKitRascunho(",
+      "MAX_REFERENCIAS_WEB", "catch (e)",
+    ]) expect(p, t).toContain(t);
+    expect(p).not.toContain("chamarImagem(");
+    const b = corpoDe(fonte, "baixarReferenciaWeb");
+    for (const t of ["buscarSeguro(", "mimeDe(", "referenciaWebServe(", "/foto/web/", "TAG_REFERENCIA_WEB", "descricaoDaReferenciaWeb(", "sha256"]) expect(b, t).toContain(t);
+    expect(corpoDe(fonte, "lerPagina")).toContain("buscarSeguro(");
+  });
+
+  it("kit_sugerir salva rascunho e kit_salvar não duplica o mesmo produto", () => {
+    expect(corpoDe(fonte, "kitSugerir")).toContain("salvarKitRascunho(");
+    expect(corpoDe(fonte, "kitSugerir")).toContain("kit_ids");
+    const s = corpoDe(fonte, "kitSalvar");
+    expect(s).toContain("kitParecido(");
+    expect(s).toContain("anterior?.atributos.identificacao");
+    expect(corpoDe(fonte, "salvarKitRascunho")).toContain('"ja_confirmado"');
+  });
+
+  it("diretor proativo com os tipos novos; agente_aplicar cria o ensaio", () => {
+    expect(fonte).toContain('"identificar_produto", "plano_de_variacoes", "campanha"');
+    expect(fonte).toContain('Nunca recuse porque "só tem a caixa"');
+    expect(fonte).toContain("Entendi:");
+    const a = corpoDe(fonte, "agenteAplicar");
+    for (const t of ['s.tipo === "identificar_produto"', 's.tipo === "plano_de_variacoes"', 's.tipo === "campanha"', "gravarEnsaioNovo(", "criarEnsaioDeCampanha(", "estimativa_usd"]) {
+      expect(a, t).toContain(t);
+    }
+    expect(corpoDe(fonte, "agenteConversar")).toContain("kits_do_cliente");
+    expect(corpoDe(fonte, "conversaDoAgente")).toContain("abrirNova");
+  });
+
+  it("variações e campanha: guia de estilo por visão, receitas certas, custo antes", () => {
+    const v = corpoDe(fonte, "variacoesPlanejar");
+    for (const t of ["planoDeVariacoes(", "RECEITA_VARIACOES", "estimarEnsaio(", "resolverReferenciasDeEstilo("]) expect(v, t).toContain(t);
+    const c = corpoDe(fonte, "campanhaPlanejar");
+    for (const t of ["resolverReferenciasDeEstilo(", "ESQUEMA_CAMPANHA", "lerModeloSintetico(", "criarEnsaioDeCampanha("]) expect(c, t).toContain(t);
+    const e = corpoDe(fonte, "criarEnsaioDeCampanha");
+    for (const t of ["RECEITA_CAMPANHA", "guia_de_estilo: d.guia", "sintetica: true", "estimativa_usd"]) expect(e, t).toContain(t);
+    expect(corpoDe(fonte, "ensaioPlanejar")).toContain("campanhaPlanejar(ch");
+  });
+
+  it("tomada_gerar entende campanha: referências de estilo do ensaio e a pessoa já aprovada", () => {
+    const g = corpoDe(fonte, "tomadaGerar");
+    for (const t of ["referenciasDeEstiloDoEnsaio(ensaio)", "aprovadaComPessoa", "...camposV2(salva)", "guiaDeEstilo: normalizarGuiaDeEstilo(", "PROMESSA_CAMPANHA"]) {
+      expect(g, t).toContain(t);
+    }
+  });
+
+  it("referência da internet não sai para o cliente; foto aprovada de campanha é marcada pessoa sintética", () => {
+    expect(corpoDe(fonte, "enviar")).toContain('"referencia_web_nao_publica"');
+    expect(corpoDe(fonte, "versaoDecidir")).toContain('"pessoa_sintetica"');
+  });
+
+  it("biblioteca: ilustrar é só admin, sem IA paga, com pausa pelo limite do Openverse; exemplo gerado cobra uma imagem", () => {
+    const i = corpoDe(fonte, "bibliotecaIlustrar");
+    for (const t of ["garantirAdmin(ch)", 'categoria: "photograph"', "res.status === 429", "esperar(3_100)", "pendentes", "TAG_EXEMPLO_PUBLICO", "prompt_origem"]) {
+      expect(i, t).toContain(t);
+    }
+    expect(i).not.toMatch(/chamarImagem\(|chamarTexto\(/);
+    const g = corpoDe(fonte, "bibliotecaExemploGerar");
+    expect(g.split("chamarImagem(").length - 1).toBe(1);
+    expect(g).toContain("TAG_EXEMPLO_GERADO");
+    expect(g).toContain("biblioteca/exemplos/");
+    expect(g).toContain("ehAdmin(ch)");
+  });
+});
+
+describe("v2: ajustes do cartão e blocos da resposta", () => {
+  const ctx = { temIdentidade: true, temEmbalagem: true };
+  const v = (nome: string, tipo: string) => ({ nome, tipo, camera: null, cenario: nome, luz: "", props: [], formato: null });
+  it("quantidade do cartão completa com tipos ainda não usados ou corta a lista do diretor", () => {
+    const vagas = vagasDoPlano([v("Herói", "heroi_fundo_cor"), v("Mão", "na_mao")], 5, null, ctx);
+    expect(vagas).toHaveLength(5);
+    expect(vagas.slice(0, 2).map((x) => x.tipo.id)).toEqual(["heroi_fundo_cor", "na_mao"]);
+    expect(new Set(vagas.map((x) => x.tipo.id)).size).toBe(5);
+    expect(new Set(vagas.map((x) => x.id)).size).toBe(5);
+    expect(vagasDoPlano([v("A", "macro"), v("B", "macro"), v("C", "macro")], 2, null, ctx)).toHaveLength(2);
+    expect(vagasDoPlano([], 3, ["flat_lay"], ctx).map((x) => x.tipo.id)).toEqual(["flat_lay", "flat_lay", "flat_lay"]);
+    const s = normalizarSugestoes([{ tipo: "plano_de_variacoes", kit_id: IMG(7), quantidade: 12, tipos: ["macro", "x"], variacoes: [v("Herói", "heroi_fundo_cor")] }], { tomadaIds: [], kitIds: [IMG(7)] });
+    expect(s[0]).toMatchObject({ quantidade: 12, tipos: ["macro"] });
+  });
+
+  it("Entendi e Próximo passo saem da resposta do diretor", () => {
+    const b = blocosDaResposta("Entendi: vi duas caixas do mouse NTC X, vou trabalhar com ele.\nPlano: 8 variações.\nPróximo passo: identificar o produto.");
+    expect(b).toEqual({ entendi: "vi duas caixas do mouse NTC X, vou trabalhar com ele.", proximo_passo: "identificar o produto." });
+    expect(blocosDaResposta("texto solto")).toEqual({ entendi: "", proximo_passo: "" });
   });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowUp, Camera, Images, Loader2, Plus, ShieldCheck, Sparkles, Star, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, ArrowUp, Camera, Globe, Images, Loader2, PackageSearch, Plus, ShieldCheck, Sparkles, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cartao, ListaCurta, MiniaturaDaFoto, Pilulas, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
+import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
 import SeletorDeFotos from "./SeletorDeFotos";
 import {
   chaveDosKits,
   classeDaFoto,
   dataParaIso,
   faltaAutorizacao,
+  identificarProduto,
+  invalidarFotos,
+  kitComReferenciasWeb,
   kitVazio,
   listaDeTextos,
+  MAX_FOTOS_NA_IDENTIFICACAO,
   MAX_FOTOS_NA_SUGESTAO,
+  normalizarIdentificacao,
+  normalizarKit,
+  normalizarProposta,
+  partesDaIdentificacao,
   PAPEIS_DA_REF,
   partesDaSugestao,
   rotuloDoPapel,
@@ -30,6 +39,7 @@ import {
   useKits,
   VISTAS_DA_REF,
   type FotoDoAcervo,
+  type IdentificacaoDoProduto,
   type KitDeFoto,
   type PapelDaRef,
   type PropostaDeKit,
@@ -42,7 +52,53 @@ import {
  * papel; o que foi visto, o que o cliente informou e o que foi deduzido
  * ficam separados; o que não pode mudar e o que falta documentar ficam
  * escritos. Kit de pessoa só salva com a autorização confirmada.
+ *
+ * v2 (primeiro uso do dono): "Identificar produto pela embalagem ou foto"
+ * lê marca, modelo e variante e acha as fotos oficiais na internet (uso
+ * interno para fidelidade); confirmar monta ou atualiza o kit. Kit sugerido
+ * já volta salvo como rascunho (aparece na lista e na barra). A proposta sem
+ * id, o kit novo ainda não salvo e a identificação ficam guardados na sessão
+ * do navegador: trocar de etapa não apaga mais nada (era assim que o kit
+ * "sumia": vivia só no estado desta tela, que desmonta ao trocar de etapa).
  */
+
+/** Guardado na sessão do navegador, por cliente (só JSON). */
+const chaveDaSessao = (clientId: string, nome: string) => `mesa-foto:${nome}:${clientId}`;
+
+export function lerDaSessao<T>(clientId: string, nome: string): T | null {
+  try {
+    const bruto = window.sessionStorage.getItem(chaveDaSessao(clientId, nome));
+    return bruto ? (JSON.parse(bruto) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function gravarNaSessao(clientId: string, nome: string, valor: unknown) {
+  try {
+    if (valor === null || valor === undefined || (Array.isArray(valor) && !valor.length)) window.sessionStorage.removeItem(chaveDaSessao(clientId, nome));
+    else window.sessionStorage.setItem(chaveDaSessao(clientId, nome), JSON.stringify(valor));
+  } catch {
+    /* sem armazenamento: vale só nesta tela */
+  }
+}
+
+function propostasDaSessao(clientId: string): PropostaDeKit[] {
+  const brutas = lerDaSessao<any[]>(clientId, "propostas");
+  const saida: PropostaDeKit[] = [];
+  (Array.isArray(brutas) ? brutas : []).forEach((b) => {
+    const p = normalizarProposta(b);
+    if (p) saida.push(p);
+  });
+  return saida;
+}
+
+function rascunhoDaSessao(clientId: string): { kit: KitDeFoto; textos: Textos } | null {
+  const r = lerDaSessao<{ kit: any; textos: Textos }>(clientId, "kit-novo");
+  if (!r || !r.kit || !r.textos) return null;
+  const kit = normalizarKit(r.kit, Array.isArray(r.kit.refs) ? r.kit.refs : []);
+  return kit ? { kit: { ...kit, id: null, client_id: clientId }, textos: r.textos } : null;
+}
 
 const SEM_VISTA = "sem-vista";
 const PAPEIS_DE_EVIDENCIA: PapelDaRef[] = ["identidade", "detalhe", "embalagem", "verso", "rotulo", "rosto", "corpo"];
@@ -137,7 +193,7 @@ function FonteDoKit({
   const papel = PAPEIS_DA_REF.find((p) => p.valor === refDoKit.papel);
   return (
     <li className="flex min-w-0 items-start rounded-lg border border-border bg-background p-2" data-ref={refDoKit.imagem_id}>
-      <div className="w-16 shrink-0">{foto ? <MiniaturaDaFoto foto={foto} /> : <div className="h-16 w-16 animate-pulse rounded-lg bg-muted" />}</div>
+      <div className="w-12 shrink-0">{foto ? <MiniaturaDaFoto foto={foto} /> : <div className="h-12 w-12 animate-pulse rounded-lg bg-muted" />}</div>
       <div className="ml-2.5 min-w-0 flex-1 space-y-1.5">
         <div className="flex min-w-0 flex-wrap items-center">
           <Select value={refDoKit.papel} onValueChange={(v) => onMudar({ ...refDoKit, papel: v as PapelDaRef })}>
@@ -171,6 +227,14 @@ function FonteDoKit({
           {papel ? papel.dica : ""}
           {foto && classeDaFoto(foto) === "gerada" ? " Esta foto é gerada." : ""}
         </p>
+        {refDoKit.origem_web && (
+          <p className="flex min-w-0 items-center text-[11px] text-warning" data-origem-web="">
+            <Globe className="mr-1 h-3 w-3 shrink-0" />
+            <span className="min-w-0 truncate">
+              Da internet ({refDoKit.origem_web.fonte || "fonte"}): uso interno para fidelidade, não publicar.
+            </span>
+          </p>
+        )}
         <div className="flex flex-wrap items-center">
           <button
             type="button"
@@ -196,26 +260,29 @@ function FonteDoKit({
 }
 
 function CartaoDaProposta({ proposta, fotos, onUsar }: { proposta: PropostaDeKit; fotos: FotoDoAcervo[]; onUsar: () => void }) {
+  // Com id, a função já gravou a proposta como kit rascunho.
+  const salva = !!proposta.id;
   return (
-    <div className="min-w-0 space-y-2 rounded-xl border border-primary/30 bg-background p-3" data-proposta="">
+    <div className="min-w-0 space-y-2 rounded-xl border border-primary/30 bg-background p-3" data-proposta={salva ? "salva" : ""}>
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold">{proposta.nome}</p>
           <p className="text-[11.5px] text-muted-foreground">
             {rotuloDoTipo(proposta.tipo)}
             {proposta.variante ? ` · ${proposta.variante}` : ""} · {proposta.refs.length} {proposta.refs.length === 1 ? "foto" : "fotos"}
+            {salva ? " · salvo como rascunho" : ""}
           </p>
         </div>
         <Button type="button" size="sm" className="ml-2 h-8 shrink-0 text-[12px]" onClick={onUsar}>
-          Usar esta proposta
+          {salva ? "Abrir o kit" : "Usar esta proposta"}
         </Button>
       </div>
       <div className="flex min-w-0 flex-wrap">
         {proposta.refs.slice(0, 8).map((r) => {
           const f = fotos.find((x) => x.id === r.imagem_id);
           return (
-            <div key={`${r.imagem_id}-${r.papel}`} className="mb-1 mr-1 w-14" title={rotuloDoPapel(r.papel)}>
-              {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-14 w-14 rounded-lg bg-muted" />}
+            <div key={`${r.imagem_id}-${r.papel}`} className="mb-1 mr-1 w-11" title={rotuloDoPapel(r.papel)}>
+              {f ? <MiniaturaDaFoto foto={f} selo={false} /> : <div className="h-11 w-11 rounded-lg bg-muted" />}
               <span className="block truncate text-center text-[10px] text-muted-foreground">{rotuloDoPapel(r.papel)}</span>
             </div>
           );
@@ -242,11 +309,35 @@ export default function EtapaKits() {
   const lista = useMemo(() => kits.data || [], [kits.data]);
   const kitSalvo = kitId ? lista.find((k) => k.id === kitId) || null : null;
 
-  const [editando, setEditando] = useState<KitDeFoto | null>(null);
-  const [textos, setTextos] = useState<Textos>(textosDoKit(kitVazio(clientId)));
-  const [propostas, setPropostas] = useState<PropostaDeKit[]>([]);
+  // Kit novo ainda não salvo: volta da sessão quando não há kit escolhido.
+  const [editando, setEditando] = useState<KitDeFoto | null>(() => (kitId ? null : (rascunhoDaSessao(clientId) || { kit: null }).kit));
+  const [textos, setTextos] = useState<Textos>(() => {
+    const r = kitId ? null : rascunhoDaSessao(clientId);
+    return r ? r.textos : textosDoKit(kitVazio(clientId));
+  });
+  const [propostas, setPropostasNaTela] = useState<PropostaDeKit[]>(() => propostasDaSessao(clientId));
+  const [identificacao, setIdentificacaoNaTela] = useState<IdentificacaoDoProduto | null>(() => {
+    const bruta = lerDaSessao<any>(clientId, "identificacao");
+    return bruta ? normalizarIdentificacao(bruta) : null;
+  });
   const [escolhendo, setEscolhendo] = useState(false);
+  const [escolhendoParaLer, setEscolhendoParaLer] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [pondoNoKit, setPondoNoKit] = useState(false);
+
+  const setPropostas = (p: PropostaDeKit[]) => {
+    setPropostasNaTela(p);
+    gravarNaSessao(clientId, "propostas", p);
+  };
+  const setIdentificacao = (i: IdentificacaoDoProduto | null) => {
+    setIdentificacaoNaTela(i);
+    gravarNaSessao(clientId, "identificacao", i);
+  };
+
+  // O kit novo (sem id) fica na sessão enquanto é editado.
+  useEffect(() => {
+    if (editando && !editando.id) gravarNaSessao(clientId, "kit-novo", { kit: editando, textos });
+  }, [clientId, editando, textos]);
 
   // Kit escolhido na barra (ou pela URL): o editor abre nele.
   useEffect(() => {
@@ -262,6 +353,34 @@ export default function EtapaKits() {
     setEditando(k);
     setTextos(textosDoKit(k));
     escolherKit(null);
+  };
+
+  /** Kits que a função gravou (kit_sugerir v2): relê a lista e abre o primeiro. */
+  const abrirSalvos = (ids: string[], avisar = true) => {
+    if (!ids.length) return;
+    void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
+    escolherKit(ids[0]);
+    if (avisar) toast.success(ids.length === 1 ? "Kit salvo como rascunho" : `${ids.length} kits salvos como rascunho`, { description: "Já aparece na lista e na barra. Confira e confirme." });
+  };
+
+  // Fotos para identificar: as marcadas no Acervo; sem marcadas, as do kit aberto.
+  const fotosParaLer = (selecionadas.length ? selecionadas : editando ? editando.refs.filter((r) => !r.origem_web).map((r) => r.imagem_id) : []).slice(0, MAX_FOTOS_NA_IDENTIFICACAO);
+
+  const porNoKitAberto = async () => {
+    if (!editando || !editando.id || !identificacao) return;
+    setPondoNoKit(true);
+    try {
+      const base = kitDoEditor(editando, textos);
+      const salvo = await salvarKit(clientId, kitComReferenciasWeb(base, identificacao.referencias_web));
+      void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
+      setEditando(salvo);
+      setTextos(textosDoKit(salvo));
+      toast.success("Referências da internet no kit", { description: "Entraram como identidade, marcadas como uso interno." });
+    } catch (e) {
+      avisarErro(e, "Kit não atualizado");
+    } finally {
+      setPondoNoKit(false);
+    }
   };
 
   const comFotos = (ids: string[]) => {
@@ -289,6 +408,7 @@ export default function EtapaKits() {
       const salvo = await salvarKit(clientId, kit);
       toast.success(kit.id ? "Kit atualizado" : "Kit criado");
       void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
+      if (!kit.id) gravarNaSessao(clientId, "kit-novo", null);
       setEditando(salvo);
       setTextos(textosDoKit(salvo));
       if (salvo.id) escolherKit(salvo.id);
@@ -338,6 +458,7 @@ export default function EtapaKits() {
                       <span className="ml-2 min-w-0 flex-1">
                         <span className="block truncate text-[12.5px] font-medium">{k.nome}</span>
                         <span className="block truncate text-[11px] text-muted-foreground">
+                          {k.status === "rascunho" ? "Rascunho · " : ""}
                           {rotuloDoTipo(k.tipo)} · {k.refs.length} {k.refs.length === 1 ? "foto" : "fotos"}
                           {k.lacunas.length ? ` · ${k.lacunas.length} ${k.lacunas.length === 1 ? "lacuna" : "lacunas"}` : ""}
                         </span>
@@ -349,7 +470,7 @@ export default function EtapaKits() {
             </ul>
           </Cartao>
 
-          <Cartao titulo="Sugerir kit" dica="A leitura olha as fotos marcadas, separa assunto de embalagem e estilo, e propõe papéis, atributos e lacunas. Nada é salvo sem você.">
+          <Cartao titulo="Separar em kits" dica="Várias fotos de produtos diferentes: a leitura separa cada produto, a embalagem e o estilo. O kit volta salvo como rascunho.">
             {selecionadas.length === 0 ? (
               <p className="text-[12px] text-muted-foreground">
                 Marque as fotos no{" "}
@@ -372,8 +493,11 @@ export default function EtapaKits() {
                   partes={() => partesDaSugestao(catalogo, selecionadas.length)}
                   executar={() => sugerirKit(clientId, selecionadas)}
                   aoConcluir={(data) => {
-                    const p = (data && data.propostas) || [];
-                    setPropostas(p);
+                    const p: PropostaDeKit[] = (data && data.propostas) || [];
+                    // Salvas (com id) vão direto para a lista; só as sem id ficam como proposta na tela.
+                    setPropostas(p.filter((x) => !x.id));
+                    abrirSalvos((data && data.kit_ids) || []);
+                    if (data && data.aviso) toast.warning("Atenção", { description: data.aviso, duration: 9000 });
                     if (!p.length) toast.info("A leitura não conseguiu propor um kit com estas fotos.");
                     const fora = (data && data.nao_agrupadas) || [];
                     if (fora.length) {
@@ -399,6 +523,78 @@ export default function EtapaKits() {
         </aside>
 
         <div className="min-w-0 space-y-4">
+          <Cartao
+            titulo="Identificar o produto"
+            dica="Pela embalagem ou por uma foto: marca, modelo e variante, e as fotos oficiais da internet para o produto sair fiel."
+            className={!lista.length && !identificacao ? "border-primary/50" : ""}
+          >
+            <div className="flex min-w-0 flex-wrap items-center">
+              <BotaoComCusto
+                rotulo={
+                  <>
+                    <PackageSearch className="mr-1.5 h-3.5 w-3.5" /> Identificar produto pela embalagem ou foto
+                  </>
+                }
+                titulo="Produto identificado"
+                descricao="Lê a embalagem ou a foto e pesquisa o produto real na internet. As fotos achadas são só para fidelidade, não para publicar."
+                className="mb-1.5 mr-2 h-9 text-[12.5px]"
+                disabled={!fotosParaLer.length}
+                partes={() => partesDaIdentificacao(catalogo, fotosParaLer.length)}
+                executar={() => identificarProduto(clientId, fotosParaLer)}
+                aoConcluir={(data: IdentificacaoDoProduto) => {
+                  setIdentificacao(data);
+                  invalidarFotos(queryClient, clientId);
+                  // A função já grava o kit rascunho do produto: vai para a lista e para a barra.
+                  if (data && data.kit && data.kit.id) abrirSalvos([data.kit.id]);
+                }}
+              />
+              <span className="mb-1.5 mr-2 text-[11.5px] text-muted-foreground">
+                {fotosParaLer.length
+                  ? `${fotosParaLer.length} ${fotosParaLer.length === 1 ? "foto" : "fotos"} ${selecionadas.length ? "marcadas" : "do kit aberto"}${selecionadas.length > MAX_FOTOS_NA_IDENTIFICACAO ? ` (lê as ${MAX_FOTOS_NA_IDENTIFICACAO} primeiras)` : ""}`
+                  : "Escolha as fotos da embalagem ou do produto."}
+              </span>
+              <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={() => setEscolhendoParaLer(true)}>
+                <Images className="mr-1.5 h-3.5 w-3.5" /> Escolher fotos
+              </Button>
+            </div>
+            {escolhendoParaLer && (
+              <div className="mt-2">
+                <SeletorDeFotos
+                  fotos={todas}
+                  titulo="Fotos da embalagem ou do produto"
+                  jaEscolhidas={[]}
+                  filtroInicial="original"
+                  onUsar={(ids) => {
+                    setSelecionadas(ids.slice(0, MAX_FOTOS_NA_IDENTIFICACAO));
+                    setEscolhendoParaLer(false);
+                  }}
+                  onFechar={() => setEscolhendoParaLer(false)}
+                />
+              </div>
+            )}
+            {identificacao && (
+              <div className="mt-3">
+                <CartaoDaIdentificacao
+                  identificacao={identificacao}
+                  acoes={
+                    <>
+                      <AcoesDaIdentificacao identificacao={identificacao} onKits={abrirSalvos} onPropostas={setPropostas} />
+                      {editando && editando.id && editando.id !== (identificacao.kit && identificacao.kit.id) && identificacao.referencias_web.length > 0 && (
+                        <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={pondoNoKit} onClick={() => void porNoKitAberto()}>
+                          {pondoNoKit ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="mr-1.5 h-3.5 w-3.5" />}
+                          Pôr as referências em {editando.nome || "no kit aberto"}
+                        </Button>
+                      )}
+                      <button type="button" className="mb-1.5 h-8 px-1.5 text-[12px] text-muted-foreground hover:text-foreground" onClick={() => setIdentificacao(null)}>
+                        Dispensar
+                      </button>
+                    </>
+                  }
+                />
+              </div>
+            )}
+          </Cartao>
+
           {propostas.length > 0 && (
             <Cartao
               titulo="Propostas da leitura"
@@ -416,9 +612,11 @@ export default function EtapaKits() {
                     proposta={p}
                     fotos={todas}
                     onUsar={() => {
-                      abrirNovo(p);
+                      if (p.id) escolherKit(p.id);
+                      else abrirNovo(p);
                       setPropostas([]);
                     }}
+
                   />
                 ))}
               </div>
@@ -441,8 +639,8 @@ export default function EtapaKits() {
               titulo={editando.id ? "Editar kit" : "Novo kit"}
               acao={
                 editando.id ? (
-                  <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => irPara("ensaio", { kit: editando.id })}>
-                    <Camera className="mr-1.5 h-3.5 w-3.5" /> Montar ensaio
+                  <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("criar", { kit: editando.id })}>
+                    <Camera className="mr-1.5 h-3.5 w-3.5" /> Criar fotos
                   </Button>
                 ) : undefined
               }

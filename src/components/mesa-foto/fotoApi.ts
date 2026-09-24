@@ -62,6 +62,8 @@ export interface FotoDoAcervo {
   largura: number | null;
   altura: number | null;
   criado_em: string;
+  /** Foto oficial ou de loja baixada da internet (produto_identificar): uso interno para fidelidade, nunca vai ao cliente. */
+  referencia_web: boolean;
 }
 
 export interface Atributos {
@@ -78,11 +80,20 @@ export interface AutorizacaoDoKit {
   observacao: string;
 }
 
+/** De onde veio uma referência da internet (página oficial ou loja). */
+export interface OrigemWeb {
+  url: string;
+  fonte: string;
+  pagina: string;
+}
+
 export interface RefDoKit {
   imagem_id: string;
   papel: PapelDaRef;
   vista: string;
   prioridade: number;
+  /** Referência da internet: uso interno para fidelidade, não publicar. */
+  origem_web?: OrigemWeb | null;
 }
 
 export interface KitDeFoto {
@@ -157,6 +168,9 @@ export interface Tomada {
   ultimo_erro: string;
   /** Quando a função marcou "gerando" (se ela mandar); sem isso vale o atualizado_em do ensaio. */
   gerando_desde: string | null;
+  /** Tipo da variação (herói em fundo de cor, na mão, flat lay...) ou da foto de campanha. */
+  tipo: string;
+  props: string[];
   versoes: VersaoDaTomada[];
 }
 
@@ -173,6 +187,32 @@ export interface Ensaio {
   status: string;
   criado_em: string | null;
   atualizado_em: string | null;
+  /** direcao do ensaio: conceito, guia de estilo e modelo sintético (campanha). */
+  direcao: DirecaoDoEnsaio;
+}
+
+export interface GuiaDeEstilo {
+  resumo: string;
+  paleta: string[];
+  luz: string;
+  cenarios: string[];
+  props: string[];
+  enquadramentos: string[];
+  clima: string;
+  figurino: string;
+  evitar: string[];
+}
+
+export interface PerfilDoModelo {
+  perfil: string;
+  idade_aprox: string;
+  estilo: string;
+}
+
+export interface DirecaoDoEnsaio {
+  conceito: string;
+  guia_de_estilo: GuiaDeEstilo | null;
+  modelo: PerfilDoModelo | null;
 }
 
 /** Tomada da receita: o id é o que ensaio_planejar aceita em tomadas_pedidas. */
@@ -601,8 +641,16 @@ export function normalizarFoto(bruta: any): FotoDoAcervo | null {
     largura: numeroOuNulo(bruta.largura),
     altura: numeroOuNulo(bruta.altura),
     criado_em: texto(bruta.criado_em),
+    referencia_web: ehTagDeWeb(listaDeTextos(bruta.tags), texto(bruta.origem)),
   };
 }
+
+/** Tag que a função põe nas imagens baixadas da internet (produto_identificar). */
+export const TAG_DA_REFERENCIA_WEB = "referencia_web";
+const ehTagDeWeb = (tags: string[], origem: string) => tags.indexOf(TAG_DA_REFERENCIA_WEB) >= 0 || origem === "web" || origem === "referencia_web";
+
+/** Referência da internet: uso interno para fidelidade, nunca vai ao cliente como foto final. */
+export const ehReferenciaWeb = (f: Pick<FotoDoAcervo, "referencia_web"> | null | undefined) => !!(f && f.referencia_web);
 
 export const normalizarFotos = (lista: unknown): FotoDoAcervo[] => {
   const saida: FotoDoAcervo[] = [];
@@ -667,12 +715,24 @@ export function normalizarRef(v: any): RefDoKit | null {
   const id = texto(v.imagem_id || v.id_imagem || v.asset_id);
   if (!id) return null;
   const papel = texto(v.papel || v.role);
-  return {
+  const ref: RefDoKit = {
     imagem_id: id,
     papel: PAPEIS_VALIDOS.indexOf(papel as PapelDaRef) >= 0 ? (papel as PapelDaRef) : "identidade",
     vista: vistaValida(v.vista || v.observed_view),
     prioridade: numeroOuNulo(v.prioridade) === null ? 0 : Number(v.prioridade),
   };
+  const web = normalizarOrigemWeb(v.origem_web);
+  if (web) ref.origem_web = web;
+  return ref;
+}
+
+export function normalizarOrigemWeb(v: any): OrigemWeb | null {
+  if (!v || typeof v !== "object") return null;
+  const url = texto(v.url || v.url_origem || v.imagem_url);
+  const pagina = texto(v.pagina || v.pagina_url || v.page);
+  const fonte = texto(v.fonte || v.site || v.dominio);
+  if (!url && !pagina) return null;
+  return { url, fonte, pagina };
 }
 
 export function normalizarKit(v: any, refsSoltas: any[] = []): KitDeFoto | null {
@@ -702,10 +762,15 @@ export function normalizarKit(v: any, refsSoltas: any[] = []): KitDeFoto | null 
   };
 }
 
+/**
+ * Proposta de kit_sugerir. Na v2 a função já grava a proposta como kit
+ * rascunho e devolve o id: com id, a proposta É um kit salvo (aparece na
+ * lista e na barra); sem id (função antiga), é só uma proposta na tela.
+ */
 export function normalizarProposta(v: any): PropostaDeKit | null {
   const k = normalizarKit(v);
   if (!k) return null;
-  return { ...k, id: null, perguntas: listaDeTextos(v.perguntas || v.confirmar) };
+  return { ...k, id: textoOuNulo(v && (v.id || v.kit_id)), perguntas: listaDeTextos(v.perguntas || v.confirmar) };
 }
 
 /** A resposta de kit_sugerir em qualquer das formas combinadas. */
@@ -811,6 +876,8 @@ export function normalizarTomada(v: any, i: number): Tomada | null {
     motivo_bloqueio: texto(v.motivo_bloqueio || v.motivo || v.bloqueio),
     ultimo_erro: texto(v.ultimo_erro),
     gerando_desde: textoOuNulo(v.gerando_desde),
+    tipo: texto(v.tipo || v.tipo_variacao || v.variacao),
+    props: listaDeTextos(v.props),
     versoes,
   };
 }
@@ -857,6 +924,45 @@ export function normalizarEnsaio(v: any): Ensaio | null {
     status: texto(v.status) || "planejado",
     criado_em: textoOuNulo(v.criado_em),
     atualizado_em: textoOuNulo(v.atualizado_em),
+    direcao: normalizarDirecao(v.direcao, v),
+  };
+}
+
+/** Texto de um campo que pode vir como texto ou lista. */
+const textoOuLista = (v: unknown): string => (Array.isArray(v) ? listaDeTextos(v).join(", ") : texto(v));
+
+/** Guia de estilo da campanha em qualquer forma (texto solto vira o resumo). */
+export function normalizarGuiaDeEstilo(v: any): GuiaDeEstilo | null {
+  if (!v) return null;
+  if (typeof v === "string") return v.trim() ? { resumo: v.trim(), paleta: [], luz: "", cenarios: [], props: [], enquadramentos: [], clima: "", figurino: "", evitar: [] } : null;
+  if (typeof v !== "object" || Array.isArray(v)) return null;
+  const g: GuiaDeEstilo = {
+    resumo: texto(v.resumo || v.direcao || v.descricao),
+    paleta: listaDeTextos(v.paleta || v.cores),
+    luz: textoOuLista(v.luz),
+    cenarios: listaDeTextos(v.cenarios || v.cenario || v.ambientes),
+    props: listaDeTextos(v.props || v.objetos),
+    enquadramentos: listaDeTextos(v.enquadramentos || v.enquadramento),
+    clima: textoOuLista(v.clima || v.mood),
+    figurino: textoOuLista(v.figurino || v.roupa),
+    evitar: listaDeTextos(v.evitar || v.nao_fazer),
+  };
+  const vazio = !g.resumo && !g.luz && !g.clima && !g.figurino && !g.paleta.length && !g.cenarios.length && !g.props.length && !g.enquadramentos.length && !g.evitar.length;
+  return vazio ? null : g;
+}
+
+export function normalizarPerfilDoModelo(v: any): PerfilDoModelo | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const p = { perfil: texto(v.perfil), idade_aprox: texto(v.idade_aprox || v.idade), estilo: texto(v.estilo) };
+  return p.perfil || p.idade_aprox || p.estilo ? p : null;
+}
+
+function normalizarDirecao(v: any, ensaio: any): DirecaoDoEnsaio {
+  const d = v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  return {
+    conceito: texto(d.conceito),
+    guia_de_estilo: normalizarGuiaDeEstilo(d.guia_de_estilo || (ensaio && ensaio.guia_de_estilo)),
+    modelo: normalizarPerfilDoModelo(d.modelo || (ensaio && ensaio.modelo)),
   };
 }
 
@@ -1105,8 +1211,15 @@ export const MAX_FOTOS_NA_SUGESTAO = 12;
 export async function sugerirKit(
   clientId: string,
   imagemIds: string[],
-): Promise<{ propostas: PropostaDeKit[]; nao_agrupadas: { imagem_id: string; motivo: string }[]; custo_usd?: number }> {
-  const data = await chamarFuncao<any>("mesa-foto", { acao: "kit_sugerir", client_id: clientId, imagem_ids: imagemIds });
+  extras?: { produto?: ProdutoIdentificado | null; referenciasWeb?: ReferenciaDaWeb[] },
+): Promise<{ propostas: PropostaDeKit[]; nao_agrupadas: { imagem_id: string; motivo: string }[]; kit_ids: string[]; aviso: string; custo_usd?: number }> {
+  const corpo: Record<string, unknown> = { acao: "kit_sugerir", client_id: clientId, imagem_ids: imagemIds };
+  // Depois de produto_identificar: o produto lido e as referências da internet vão junto para o kit.
+  if (extras && extras.produto) corpo.produto = extras.produto;
+  if (extras && extras.referenciasWeb && extras.referenciasWeb.length) {
+    corpo.referencias_web = extras.referenciasWeb.map((r) => ({ imagem_id: r.imagem_id, url_origem: r.url_origem, pagina: r.pagina, fonte: r.fonte }));
+  }
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
   const nao: { imagem_id: string; motivo: string }[] = [];
   if (data && Array.isArray(data.nao_agrupadas)) {
     for (const x of data.nao_agrupadas) {
@@ -1114,7 +1227,12 @@ export async function sugerirKit(
       if (id) nao.push({ imagem_id: id, motivo: texto(x.motivo) });
     }
   }
-  return { propostas: normalizarPropostas(data), nao_agrupadas: nao, custo_usd: data && data.custo_usd };
+  const propostas = normalizarPropostas(data);
+  const ids = listaDeTextos(data && data.kit_ids);
+  propostas.forEach((p) => {
+    if (p.id && ids.indexOf(p.id) < 0) ids.push(p.id);
+  });
+  return { propostas, nao_agrupadas: nao, kit_ids: ids, aviso: texto(data && data.aviso), custo_usd: data && data.custo_usd };
 }
 
 /** Corpo do kit_salvar: o kit sem as refs (vão à parte), listas limpas. */
@@ -1143,7 +1261,12 @@ export function corpoDoKit(kit: KitDeFoto) {
 export const STATUS_DO_KIT = ["rascunho", "confirmado", "arquivado"];
 
 export const refsParaSalvar = (refs: RefDoKit[]) =>
-  refs.map((r, i) => ({ imagem_id: r.imagem_id, papel: r.papel, vista: vistaValida(r.vista) || null, prioridade: i }));
+  refs.map((r, i) => {
+    const saida: Record<string, unknown> = { imagem_id: r.imagem_id, papel: r.papel, vista: vistaValida(r.vista) || null, prioridade: i };
+    // Referência da internet leva a fonte junto (uso interno para fidelidade).
+    if (r.origem_web) saida.origem_web = { url: r.origem_web.url, fonte: r.origem_web.fonte, pagina: r.origem_web.pagina };
+    return saida;
+  });
 
 /** Kit de pessoa só salva com a autorização confirmada (regra dura da casa). */
 export function faltaAutorizacao(kit: Pick<KitDeFoto, "tipo" | "autorizacao">): boolean {
@@ -1595,7 +1718,11 @@ export interface ItemDaBiblioteca {
   uso: string;
   negativo: string;
   imagem_url: string | null;
+  /** Miniatura da imagem de exemplo (prompt) ou da referência. */
+  miniatura_url: string | null;
   storage_path: string | null;
+  /** A imagem de exemplo do prompt foi gerada por IA (biblioteca_exemplo_gerar), não veio de banco público. */
+  exemplo_gerado: boolean;
   fonte_nome: string;
   fonte_url: string;
   licenca: string;
@@ -1653,8 +1780,11 @@ export function normalizarItemDaBiblioteca(v: any): ItemDaBiblioteca | null {
     prompt_en: texto(v.prompt_en),
     uso: texto(v.uso),
     negativo: texto(v.negativo),
-    imagem_url: textoOuNulo(v.imagem_url),
-    storage_path: textoOuNulo(v.storage_path),
+    imagem_url: textoOuNulo(v.imagem_url || (v.exemplo && v.exemplo.imagem_url)),
+    miniatura_url: textoOuNulo(v.miniatura_url || v.thumbnail_url || (v.exemplo && v.exemplo.miniatura_url)),
+    storage_path: textoOuNulo(v.storage_path || (v.exemplo && v.exemplo.storage_path)),
+    exemplo_gerado:
+      booleano(v.exemplo_gerado) || (!!v.exemplo && typeof v.exemplo === "object" && booleano(v.exemplo.gerado)) || listaDeTextos(v.tags).indexOf("exemplo_gerado") >= 0,
     fonte_nome: texto(v.fonte_nome),
     fonte_url: texto(v.fonte_url),
     licenca: texto(v.licenca),
@@ -1834,6 +1964,12 @@ export interface MensagemDoDiretor {
   sugestoes: SugestaoDoAgente[];
   custo_usd: number | null;
   anexos: number;
+  /** Quantos anexos foram como referência de estilo (prints, moodboard). */
+  estilos?: number;
+  entendi?: string;
+  proximo_passo?: string;
+  kit_ids?: string[];
+  identificacao?: IdentificacaoDoProduto | null;
 }
 
 export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
@@ -1845,7 +1981,7 @@ export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
       return;
     }
     if (!b || typeof b !== "object") return;
-    const titulo = texto(b.titulo || b.nome || b.resumo || b.texto);
+    const titulo = texto(b.titulo || b.nome || b.resumo || b.texto) || tituloPadraoDaSugestao(texto(b.tipo), b);
     if (!titulo) return;
     // A função manda o porquê em "motivo" (e o termo da busca em "busca").
     const descricao = texto(b.motivo || b.descricao || b.detalhe || b.porque) || (b.busca ? `Buscar: ${texto(b.busca)}` : "");
@@ -1857,6 +1993,21 @@ export function normalizarSugestoes(v: unknown): SugestaoDoAgente[] {
 /** A função lê até 4 fotos anexadas por mensagem ao diretor. */
 export const MAX_ANEXOS_DO_DIRETOR = 4;
 
+export interface RespostaDoDiretor {
+  resposta: string;
+  /** O que o diretor entendeu do pedido (ex.: "vi caixas do mouse NTC X, vou trabalhar com ele"). */
+  entendi: string;
+  /** O próximo passo concreto que ele propõe. */
+  proximo_passo: string;
+  sugestoes: SugestaoDoAgente[];
+  conversa_id: string | null;
+  custo_usd: number | null;
+  /** Kits que a conversa gravou (rascunho): entram na lista e na barra. */
+  kit_ids: string[];
+  /** Quando o diretor já rodou produto_identificar na conversa. */
+  identificacao: IdentificacaoDoProduto | null;
+}
+
 export async function conversarComDiretor(p: {
   clientId: string;
   mensagem: string;
@@ -1864,18 +2015,35 @@ export async function conversarComDiretor(p: {
   kitId: string | null;
   ensaioId: string | null;
   anexos: string[];
-}): Promise<{ resposta: string; sugestoes: SugestaoDoAgente[]; conversa_id: string | null; custo_usd: number | null }> {
+  /** Prints de perfil ou moodboard: vão como referência de estilo, nunca como o assunto. */
+  anexosDeEstilo?: string[];
+  /** Depois de "Nova conversa": a função abre uma conversa nova em vez de continuar a do kit. */
+  novaConversa?: boolean;
+}): Promise<RespostaDoDiretor> {
   const corpo: Record<string, unknown> = { acao: "agente_conversar", client_id: p.clientId, mensagem: p.mensagem.trim() };
   if (p.conversaId) corpo.conversa_id = p.conversaId;
+  else if (p.novaConversa) corpo.nova_conversa = true;
+
   if (p.kitId) corpo.kit_id = p.kitId;
   if (p.ensaioId) corpo.ensaio_id = p.ensaioId;
-  if (p.anexos.length) corpo.anexos = p.anexos.slice(0, MAX_ANEXOS_DO_DIRETOR).map((id) => ({ imagem_id: id }));
+  const anexos: Record<string, string>[] = p.anexos.map((id) => ({ imagem_id: id }));
+  (p.anexosDeEstilo || []).forEach((id) => {
+    if (!anexos.some((a) => a.imagem_id === id)) anexos.push({ imagem_id: id, papel: "estilo" });
+  });
+  if (anexos.length) corpo.anexos = anexos.slice(0, MAX_ANEXOS_DO_DIRETOR);
   const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const kitIds = listaDeTextos(data && data.kit_ids);
+  if (data && data.kit && data.kit.id && kitIds.indexOf(String(data.kit.id)) < 0) kitIds.push(String(data.kit.id));
+  const ident = data && (data.identificacao || (data.produto && typeof data.produto === "object" ? data : null));
   return {
     resposta: texto(data && (data.resposta || data.texto)),
+    entendi: texto(data && (data.entendi || data.entendimento)),
+    proximo_passo: texto(data && data.proximo_passo),
     sugestoes: normalizarSugestoes(data && data.sugestoes),
     conversa_id: textoOuNulo(data && data.conversa_id),
     custo_usd: numeroOuNulo(data && data.custo_usd),
+    kit_ids: kitIds,
+    identificacao: ident ? normalizarIdentificacao(ident) : null,
   };
 }
 
@@ -1883,11 +2051,25 @@ export async function conversarComDiretor(p: {
 export const sugestaoPedeEnsaio = (s: Pick<SugestaoDoAgente, "tipo">) => s.tipo === "tomada_nova" || s.tipo === "ajuste_tomada";
 
 export async function aplicarSugestao(
-  p: { clientId: string; ensaioId: string | null },
+  p: { clientId: string; ensaioId: string | null; kitId?: string | null },
   sugestao: SugestaoDoAgente,
-): Promise<{ ensaio: Ensaio | null; item: ItemDaBiblioteca | null; referencias: ReferenciaEncontrada[]; busca: string; custo_usd?: number }> {
-  const corpo: Record<string, unknown> = { acao: "agente_aplicar", client_id: p.clientId, sugestao: sugestao.bruto };
-  if (p.ensaioId) corpo.ensaio_id = p.ensaioId;
+  /** Ajustes da equipe no cartão (quantidade, tipos, variações escolhidas) por cima da sugestão. */
+  ajustes?: Record<string, unknown>,
+): Promise<{
+  ensaio: Ensaio | null;
+  item: ItemDaBiblioteca | null;
+  referencias: ReferenciaEncontrada[];
+  busca: string;
+  estimativa_usd: number | null;
+  guia_de_estilo: GuiaDeEstilo | null;
+  kit_ids: string[];
+  custo_usd?: number;
+}> {
+  const cria = sugestaoCriaEnsaio(sugestao);
+  const corpo: Record<string, unknown> = { acao: "agente_aplicar", client_id: p.clientId, sugestao: ajustes ? { ...sugestao.bruto, ...ajustes } : sugestao.bruto };
+  // Plano de variações e campanha criam um ensaio novo (não mexem no aberto).
+  if (p.ensaioId && !cria) corpo.ensaio_id = p.ensaioId;
+  if (p.kitId && cria) corpo.kit_id = p.kitId;
   const data = await chamarFuncao<any>("mesa-foto", corpo);
   const referencias: ReferenciaEncontrada[] = [];
   if (data && Array.isArray(data.itens)) {
@@ -1896,16 +2078,474 @@ export async function aplicarSugestao(
       if (n) referencias.push(n);
     });
   }
+  const kitIds = listaDeTextos(data && data.kit_ids);
+  if (data && data.kit && data.kit.id && kitIds.indexOf(String(data.kit.id)) < 0) kitIds.push(String(data.kit.id));
   return {
     ensaio: normalizarEnsaio(data && data.ensaio),
     item: normalizarItemDaBiblioteca(data && data.item),
     referencias,
     busca: texto(data && data.busca),
+    estimativa_usd: numeroOuNulo(data && data.estimativa_usd),
+    guia_de_estilo: normalizarGuiaDeEstilo(data && data.guia_de_estilo),
+    kit_ids: kitIds,
     custo_usd: data && data.custo_usd,
   };
 }
 
+
 export function partesDaConversa(catalogo: ModeloIa[]): ParteDaEstimativa[] {
   const m = padraoPara(catalogo, "diretor_arte");
   return [{ modeloId: m ? m.id : null, tipo: "texto", tokensEntrada: 14000, tokensSaida: 1800 }];
+}
+
+// ------------------------------------------------------------------ v2: produto pela embalagem
+
+/**
+ * produto_identificar (CONTRATO-V2): a visão lê a embalagem ou a foto
+ * (marca, modelo, variante, códigos) e a pesquisa na internet acha o produto
+ * real. As fotos oficiais baixadas entram no acervo com a tag referencia_web
+ * e só servem para fidelidade: nunca vão ao cliente como foto final.
+ */
+export interface ProdutoIdentificado {
+  marca: string;
+  modelo: string;
+  variante: string;
+  categoria: string;
+  especificacoes: string[];
+  /** Confiança em palavras (alta, média, baixa) ou como a função mandou. */
+  confianca: string;
+  evidencias: string[];
+}
+
+export interface ReferenciaDaWeb {
+  imagem_id: string;
+  url_origem: string;
+  pagina: string;
+  fonte: string;
+  /** Link assinado da cópia no acervo (vence): só para ver antes do acervo reler. */
+  url: string;
+}
+
+export interface IdentificacaoDoProduto {
+  produto: ProdutoIdentificado | null;
+  referencias_web: ReferenciaDaWeb[];
+  lacunas: string[];
+  proximo_passo: string;
+  /** As fotos do cliente que foram lidas. */
+  imagem_ids: string[];
+  custo_usd: number | null;
+  /** O kit rascunho que a função já gravou com as fotos e as referências (salvar_kit, padrão). */
+  kit: KitDeFoto | null;
+  /** "criado" ou "atualizado" (kit rascunho do mesmo produto é atualizado, não duplicado). */
+  kit_acao: string;
+  /** Aviso fixo das referências da internet (uso interno, não publicar). */
+  aviso_referencias: string;
+  /** O que dá para prometer com essas referências. */
+  promessa: string;
+  /** O Jev viu outro candidato ou ficou em dúvida (só aviso). */
+  aviso_jev: string;
+  texto_lido: string;
+}
+
+/** A função lê até 6 fotos por identificação (fotos_demais acima disso). */
+export const MAX_FOTOS_NA_IDENTIFICACAO = 6;
+
+/** Confiança em palavras: alta, média ou baixa (número de 0 a 1 ou de 0 a 100). */
+export function rotuloDaConfianca(v: unknown): string {
+  if (v === null || v === undefined || v === "" || typeof v === "boolean") return "";
+  const n = Number(v);
+  if (isFinite(n)) {
+    const f = n > 1 ? n / 100 : n;
+    return f >= 0.75 ? "alta" : f >= 0.45 ? "média" : "baixa";
+  }
+  return texto(v).trim().toLowerCase();
+}
+
+export function normalizarProdutoIdentificado(v: any): ProdutoIdentificado | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const especificacoes: string[] = [];
+  const specs = v.especificacoes || v.specs;
+  if (Array.isArray(specs)) {
+    for (const e of specs) {
+      if (typeof e === "string") {
+        if (e.trim()) especificacoes.push(e.trim());
+      } else if (e && typeof e === "object") {
+        const nome = texto(e.nome || e.chave || e.label);
+        const valor = texto(e.valor || e.value);
+        const t = nome && valor ? `${nome}: ${valor}` : nome || valor;
+        if (t) especificacoes.push(t);
+      }
+    }
+  } else if (specs && typeof specs === "object") {
+    Object.keys(specs).forEach((k) => {
+      const valor = texto(specs[k]);
+      if (valor) especificacoes.push(`${k}: ${valor}`);
+    });
+  } else listaDeTextos(specs).forEach((t) => especificacoes.push(t));
+  const p: ProdutoIdentificado = {
+    marca: texto(v.marca || v.brand),
+    modelo: texto(v.modelo || v.model),
+    variante: texto(v.variante || v.variant || v.cor),
+    categoria: texto(v.categoria || v.tipo),
+    especificacoes,
+    confianca: rotuloDaConfianca(v.confianca),
+    evidencias: listaDeTextos(v.evidencias),
+  };
+  return p.marca || p.modelo || p.variante || p.categoria || p.especificacoes.length ? p : null;
+}
+
+export function normalizarReferenciaDaWeb(v: any): ReferenciaDaWeb | null {
+  if (!v || typeof v !== "object") return null;
+  const id = texto(v.imagem_id || v.id);
+  if (!id) return null;
+  const pagina = texto(v.pagina || v.pagina_url);
+  let fonte = texto(v.fonte || v.site);
+  if (!fonte && pagina) {
+    const m = pagina.match(/^https?:\/\/([^/]+)/i);
+    fonte = m ? m[1].replace(/^www\./i, "") : "";
+  }
+  // "url" é o link assinado da cópia no acervo (para ver); "url_origem" é de onde veio.
+  return { imagem_id: id, url_origem: texto(v.url_origem || v.imagem_url), pagina, fonte, url: texto(v.url) };
+}
+
+export function normalizarIdentificacao(data: any, imagemIds: string[] = []): IdentificacaoDoProduto {
+  const d = data && typeof data === "object" ? data : {};
+  const refs: ReferenciaDaWeb[] = [];
+  const brutas = Array.isArray(d.referencias_web) ? d.referencias_web : Array.isArray(d.referencias) ? d.referencias : [];
+  for (const b of brutas) {
+    const r = normalizarReferenciaDaWeb(b);
+    if (r && !refs.some((x) => x.imagem_id === r.imagem_id)) refs.push(r);
+  }
+  const lidas = listaDeTextos(d.imagem_ids);
+  const jev = d.aviso_jev;
+  const kit = d.kit && typeof d.kit === "object" ? normalizarKit(d.kit, Array.isArray(d.kit.refs) ? d.kit.refs : []) : null;
+  return {
+    produto: normalizarProdutoIdentificado(d.produto),
+    referencias_web: refs,
+    lacunas: listaDeTextos(d.lacunas),
+    proximo_passo: texto(d.proximo_passo),
+    imagem_ids: lidas.length ? lidas : imagemIds.slice(),
+    custo_usd: numeroOuNulo(d.custo_usd),
+    kit: kit && kit.id ? kit : null,
+    kit_acao: texto(d.kit_acao),
+    aviso_referencias: texto(d.aviso_referencias),
+    promessa: texto(d.promessa),
+    aviso_jev: typeof jev === "string" ? jev : jev && typeof jev === "object" ? texto(jev.aviso) : "",
+    texto_lido: texto(d.texto_lido || (d.produto && d.produto.texto_lido)),
+  };
+}
+
+export async function identificarProduto(clientId: string, imagemIds: string[]): Promise<IdentificacaoDoProduto> {
+  const ids = imagemIds.slice(0, MAX_FOTOS_NA_IDENTIFICACAO);
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "produto_identificar", client_id: clientId, imagem_ids: ids });
+  return normalizarIdentificacao(data, ids);
+}
+
+/** Nome curto do produto lido: "NTC Mouse X, grafite". */
+export function nomeDoProduto(p: ProdutoIdentificado | null | undefined): string {
+  if (!p) return "";
+  const base = [p.marca, p.modelo].filter(Boolean).join(" ");
+  return p.variante ? `${base || p.categoria || "Produto"}, ${p.variante}` : base || p.categoria;
+}
+
+/**
+ * Põe as referências da internet no kit (papel identidade, com a fonte),
+ * sem IA. Não duplica a mesma imagem no mesmo papel.
+ */
+export function kitComReferenciasWeb(kit: KitDeFoto, refs: ReferenciaDaWeb[]): KitDeFoto {
+  const novas = kit.refs.slice();
+  refs.forEach((r) => {
+    if (novas.some((x) => x.imagem_id === r.imagem_id && x.papel === "identidade")) return;
+    novas.push({ imagem_id: r.imagem_id, papel: "identidade", vista: "", prioridade: novas.length, origem_web: { url: r.url_origem, fonte: r.fonte, pagina: r.pagina } });
+  });
+  return { ...kit, refs: novas };
+}
+
+export function partesDaIdentificacao(catalogo: ModeloIa[], fotos: number): ParteDaEstimativa[] {
+  const leitor = padraoPara(catalogo, "leitura");
+  const pesquisa = padraoPara(catalogo, "estrategista") || leitor;
+  const n = Math.max(1, Math.min(MAX_FOTOS_NA_IDENTIFICACAO, fotos));
+  return [
+    { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS_DA_FOTO.lerFoto.entrada * n, tokensSaida: 900 },
+    // Pesquisa na internet: páginas e imagens do produto entram como texto.
+    { modeloId: pesquisa ? pesquisa.id : null, tipo: "texto", tokensEntrada: 30000, tokensSaida: 3000 },
+  ];
+}
+
+// ------------------------------------------------------------------ v2: variações e campanha
+
+/** Uma chamada de geração por foto: o lote vai de 1 a 16. */
+export const QUANTIDADE_MAXIMA_DO_LOTE = 16;
+export const limitarQuantidade = (n: unknown) => {
+  const v = Math.round(Number(n));
+  return isFinite(v) ? Math.max(1, Math.min(QUANTIDADE_MAXIMA_DO_LOTE, v)) : 1;
+};
+
+export const TIPOS_DE_VARIACAO: { valor: string; rotulo: string }[] = [
+  { valor: "heroi_fundo_cor", rotulo: "Herói em fundo de cor" },
+  { valor: "fundo_branco", rotulo: "Fundo branco" },
+  { valor: "lifestyle", rotulo: "Lifestyle na mesa" },
+  { valor: "na_mao", rotulo: "Na mão" },
+  { valor: "flat_lay", rotulo: "Flat lay com props" },
+  { valor: "macro", rotulo: "Macro de detalhe" },
+  { valor: "cenario_marca", rotulo: "Cenário da marca" },
+  { valor: "flutuando", rotulo: "Produto flutuando" },
+  { valor: "fora_da_caixa", rotulo: "Fora da caixa" },
+  { valor: "com_embalagem", rotulo: "Com a embalagem" },
+];
+
+export const rotuloDoTipoDeVariacao = (t?: string | null) => {
+  const achado = TIPOS_DE_VARIACAO.find((x) => x.valor === t);
+  return achado ? achado.rotulo : t ? String(t).replace(/_/g, " ") : "";
+};
+
+/** Receitas que têm tela própria (não aparecem na grade de receitas do Ensaio). */
+export const RECEITA_DA_CAMPANHA = "campanha-com-modelo";
+export const RECEITAS_COM_TELA_PROPRIA = [RECEITA_DA_CAMPANHA];
+
+const NOMES_EXTRAS_DE_RECEITA: Record<string, string> = {
+  "campanha-com-modelo": "Campanha com modelo",
+  "fora-da-embalagem": "Fora da embalagem",
+  variacoes: "Variações do produto",
+  "variacoes-do-produto": "Variações do produto",
+};
+
+/** Nome do ensaio para a tela: receita da função, nome conhecido ou o id. */
+export function nomeDaReceita(receitas: Receita[] | null | undefined, id: string): string {
+  const r = (receitas || []).find((x) => x.id === id);
+  if (r) return r.nome;
+  return NOMES_EXTRAS_DE_RECEITA[id] || id || "Ensaio";
+}
+
+export const ehCampanha = (e: Pick<Ensaio, "receita_id"> | null | undefined) => !!e && e.receita_id === RECEITA_DA_CAMPANHA;
+
+export async function planejarVariacoes(p: {
+  clientId: string;
+  kitId: string;
+  quantidade: number;
+  tipos: string[];
+  pedido: string;
+  referenciaIds?: string[];
+}): Promise<{ ensaio: Ensaio | null; estimativa_usd: number | null; lacunas: string[]; custo_usd?: number }> {
+  const corpo: Record<string, unknown> = { acao: "variacoes_planejar", client_id: p.clientId, kit_id: p.kitId, quantidade: limitarQuantidade(p.quantidade) };
+  if (p.tipos.length) corpo.tipos = p.tipos;
+  if (p.pedido.trim()) corpo.pedido = p.pedido.trim();
+  if (p.referenciaIds && p.referenciaIds.length) corpo.referencia_ids = p.referenciaIds;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return { ensaio: normalizarEnsaio(data && data.ensaio), estimativa_usd: numeroOuNulo(data && data.estimativa_usd), lacunas: listaDeTextos(data && data.lacunas), custo_usd: data && data.custo_usd };
+}
+
+/** A campanha lê até 6 referências de estilo (print de perfil, moodboard). */
+export const MAX_REFERENCIAS_DA_CAMPANHA = 6;
+
+export async function planejarCampanha(p: {
+  clientId: string;
+  kitId: string;
+  quantidade: number;
+  referenciasEstiloIds: string[];
+  modelo: PerfilDoModelo;
+  pedido: string;
+}): Promise<{ ensaio: Ensaio | null; guia_de_estilo: GuiaDeEstilo | null; estimativa_usd: number | null; lacunas: string[]; promessa: string; custo_usd?: number }> {
+  const corpo: Record<string, unknown> = { acao: "campanha_planejar", client_id: p.clientId, kit_id: p.kitId, quantidade: limitarQuantidade(p.quantidade) };
+  const refs = p.referenciasEstiloIds.filter(Boolean).slice(0, MAX_REFERENCIAS_DA_CAMPANHA);
+  if (refs.length) corpo.referencias_estilo_ids = refs;
+  const modelo: Record<string, string> = {};
+  if (p.modelo.perfil.trim()) modelo.perfil = p.modelo.perfil.trim();
+  if (p.modelo.idade_aprox.trim()) modelo.idade_aprox = p.modelo.idade_aprox.trim();
+  if (p.modelo.estilo.trim()) modelo.estilo = p.modelo.estilo.trim();
+  if (Object.keys(modelo).length) corpo.modelo = modelo;
+  if (p.pedido.trim()) corpo.pedido = p.pedido.trim();
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const ensaio = normalizarEnsaio(data && data.ensaio);
+  const guia = normalizarGuiaDeEstilo(data && data.guia_de_estilo) || (ensaio ? ensaio.direcao.guia_de_estilo : null);
+  const perfil = normalizarPerfilDoModelo(data && data.modelo) || (ensaio ? ensaio.direcao.modelo : null);
+  // O guia e o modelo ficam no ensaio (direcao): a tela mostra de lá quando volta.
+  const comGuia = ensaio ? { ...ensaio, direcao: { ...ensaio.direcao, guia_de_estilo: ensaio.direcao.guia_de_estilo || guia, modelo: ensaio.direcao.modelo || perfil } } : ensaio;
+  return {
+    ensaio: comGuia,
+    guia_de_estilo: guia,
+    estimativa_usd: numeroOuNulo(data && data.estimativa_usd),
+    lacunas: listaDeTextos(data && data.lacunas),
+    promessa: texto(data && data.promessa),
+    custo_usd: data && data.custo_usd,
+  };
+}
+
+/** Planejar variações ou campanha: texto do diretor (mais a leitura das referências). */
+export function partesDoPlanoDeLote(catalogo: ModeloIa[], referencias = 0): ParteDaEstimativa[] {
+  const partes = partesDoPlanejamento(catalogo);
+  if (referencias > 0) partes.push(partesDaLeitura(catalogo, referencias)[0]);
+  return partes;
+}
+
+// ------------------------------------------------------------------ v2: sugestões novas do diretor
+
+export interface VariacaoPlanejada {
+  nome: string;
+  tipo: string;
+  camera: string;
+  cenario: string;
+  luz: string;
+  props: string[];
+  formato: string;
+  /** Como veio do diretor: volta assim para agente_aplicar (a função confere de novo). */
+  bruto: Record<string, unknown>;
+}
+
+export interface PlanoDeVariacoes {
+  kit_id: string | null;
+  quantidade: number;
+  variacoes: VariacaoPlanejada[];
+}
+
+export interface FotoDaCampanhaPlanejada {
+  nome: string;
+  cenario: string;
+  luz: string;
+  enquadramento: string;
+  formato: string;
+  bruto: Record<string, unknown>;
+}
+
+export interface PlanoDeCampanha {
+  kit_id: string | null;
+  quantidade: number;
+  guia_de_estilo: GuiaDeEstilo | null;
+  modelo: PerfilDoModelo | null;
+  fotos: FotoDaCampanhaPlanejada[];
+}
+
+/** Tipos de sugestão que criam um ensaio novo (e um lote para gerar). */
+export const TIPOS_QUE_CRIAM_ENSAIO = ["plano_de_variacoes", "campanha"];
+export const sugestaoCriaEnsaio = (s: Pick<SugestaoDoAgente, "tipo">) => TIPOS_QUE_CRIAM_ENSAIO.indexOf(s.tipo) >= 0;
+
+/** O plano pode vir no topo da sugestão, em "plano" ou em "campos". */
+function corpoDoPlano(b: any): any {
+  if (!b || typeof b !== "object") return {};
+  if (b.plano && typeof b.plano === "object") return b.plano;
+  if (b.campos && typeof b.campos === "object" && !b.variacoes && !b.fotos && !b.imagem_ids) return b.campos;
+  return b;
+}
+
+/** Câmera em palavras: objeto { azimute, elevacao, enquadramento } ou id de preset ("a45-e30-dmedio"). */
+function textoDaCamera(v: any): string {
+  if (!v) return "";
+  if (typeof v === "string") {
+    const m = v.match(/^a(-?\d+)-e(-?\d+)-d([a-z]+)$/);
+    if (!m) return v;
+    return rotuloDaCamera({ azimute: Number(m[1]), elevacao: Number(m[2]), enquadramento: m[3] === "detalhe" || m[3] === "aberto" ? m[3] : "medio" });
+  }
+  const c = normalizarCamera(v);
+  return c ? rotuloDaCamera(c) : textoDaCamera(texto(v.preset_id || v.nome));
+}
+
+export function lerPlanoDeVariacoes(bruto: any): PlanoDeVariacoes {
+  const b = corpoDoPlano(bruto);
+  const variacoes: VariacaoPlanejada[] = [];
+  const lista = Array.isArray(b.variacoes) ? b.variacoes : Array.isArray(b.tomadas) ? b.tomadas : [];
+  lista.forEach((v: any, i: number) => {
+    if (!v || typeof v !== "object") return;
+    const tipo = texto(v.tipo || v.tipo_variacao);
+    variacoes.push({
+      nome: texto(v.nome || v.titulo) || rotuloDoTipoDeVariacao(tipo) || `Variação ${i + 1}`,
+      tipo,
+      camera: textoDaCamera(v.camera),
+      cenario: texto(v.cenario),
+      luz: texto(v.luz),
+      props: listaDeTextos(v.props),
+      formato: texto(v.formato),
+      bruto: v,
+    });
+  });
+  const q = numeroOuNulo(b.quantidade);
+  return { kit_id: textoOuNulo(b.kit_id || (bruto && bruto.kit_id)), quantidade: limitarQuantidade(q === null ? variacoes.length || 8 : q), variacoes };
+}
+
+export function lerPlanoDeCampanha(bruto: any): PlanoDeCampanha {
+  const b = corpoDoPlano(bruto);
+  const fotos: FotoDaCampanhaPlanejada[] = [];
+  (Array.isArray(b.fotos) ? b.fotos : Array.isArray(b.tomadas) ? b.tomadas : []).forEach((f: any, i: number) => {
+    if (typeof f === "string") {
+      if (f.trim()) fotos.push({ nome: f.trim(), cenario: "", luz: "", enquadramento: "", formato: "", bruto: { nome: f.trim() } });
+      return;
+    }
+    if (!f || typeof f !== "object") return;
+    fotos.push({
+      nome: texto(f.nome || f.titulo) || `Foto ${i + 1}`,
+      cenario: texto(f.cenario),
+      luz: texto(f.luz),
+      enquadramento: textoDaCamera(f.enquadramento || f.camera),
+      formato: texto(f.formato),
+      bruto: f,
+    });
+  });
+  const q = numeroOuNulo(b.quantidade);
+  return {
+    kit_id: textoOuNulo(b.kit_id || (bruto && bruto.kit_id)),
+    quantidade: limitarQuantidade(q === null ? fotos.length || 6 : q),
+    guia_de_estilo: normalizarGuiaDeEstilo(b.guia_de_estilo),
+    modelo: normalizarPerfilDoModelo(b.modelo),
+    fotos,
+  };
+}
+
+export const lerFotosParaIdentificar = (bruto: any): string[] => {
+  const b = corpoDoPlano(bruto);
+  return listaDeTextos(b.imagem_ids || (bruto && bruto.imagem_ids));
+};
+
+function tituloPadraoDaSugestao(tipo: string, b: any): string {
+  if (tipo === "plano_de_variacoes") return `Plano de ${lerPlanoDeVariacoes(b).quantidade} variações`;
+  if (tipo === "campanha") return "Campanha com modelo";
+  if (tipo === "identificar_produto") return "Identificar o produto";
+  return "";
+}
+
+// ------------------------------------------------------------------ v2: exemplo da biblioteca
+
+/** Gera a imagem de exemplo de um prompt da biblioteca (paga, uma vez; marcada "exemplo gerado"). */
+export async function gerarExemploDaBiblioteca(
+  clientId: string,
+  itemId: string,
+  modeloImagemId?: string | null,
+): Promise<{ item: ItemDaBiblioteca | null; custo_usd?: number }> {
+  // Mesma qualidade da estimativa na tela (partesDoExemplo): o preço à vista é o que se paga.
+  const corpo: Record<string, unknown> = { acao: "biblioteca_exemplo_gerar", client_id: clientId, item_id: itemId, qualidade: QUALIDADE_DO_EXEMPLO };
+  if (modeloImagemId) corpo.modelo_imagem_id = modeloImagemId;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return { item: normalizarItemDaBiblioteca(data && data.item), custo_usd: data && data.custo_usd };
+}
+
+export const QUALIDADE_DO_EXEMPLO: Qualidade = "media";
+
+export function partesDoExemplo(catalogo: ModeloIa[]): ParteDaEstimativa[] {
+  const m = padraoPara(catalogo, "imagem");
+  return partesDaGeracao(m ? m.id : null, QUALIDADE_DO_EXEMPLO);
+}
+
+// ------------------------------------------------------------------ v2: próximo passo
+
+export interface ProximoPasso {
+  etapa: string;
+  rotulo: string;
+  extras?: { kit?: string | null; ensaio?: string | null };
+}
+
+/**
+ * O caminho principal em 3 passos (1. Fotos do produto, 2. O produto,
+ * 3. Criar) e depois revisar e usar: a tela sempre mostra o próximo passo.
+ */
+export function proximoPasso(e: { fotos: number; kits: KitDeFoto[]; kitId: string | null; ensaio: Ensaio | null; selecionadas: number }): ProximoPasso {
+  if (e.fotos === 0) return { etapa: "acervo", rotulo: "Subir as fotos do produto" };
+  if (!e.kits.length) {
+    return { etapa: "kits", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
+  }
+  if (!e.kitId) return { etapa: "kits", rotulo: "Escolher o produto" };
+  if (!e.ensaio) return { etapa: "criar", rotulo: "Criar as fotos" };
+  const r = resumoDoEnsaio(e.ensaio);
+  const faltam = tomadasParaGerar(e.ensaio).filter((t) => !t.versoes.length).length;
+  if (r.paraRevisar) return { etapa: "revisar", rotulo: `Revisar ${r.paraRevisar} ${r.paraRevisar === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
+  if (faltam) return { etapa: ehCampanha(e.ensaio) ? "campanha" : "ensaio", rotulo: `Gerar ${faltam} ${faltam === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
+  if (r.aprovadas) return { etapa: "usar", rotulo: `Usar ${r.aprovadas} ${r.aprovadas === 1 ? "aprovada" : "aprovadas"}`, extras: { ensaio: e.ensaio.id } };
+  return { etapa: "criar", rotulo: "Criar mais fotos" };
 }

@@ -19,9 +19,17 @@ import {
   ENQUADRAMENTOS,
   type Enquadramento,
   type Exigencia,
+  type Foco,
+  FOCOS,
   FORMATOS,
   type Formato,
   gruposDoTipo,
+  MUDANCAS_DA_RODADA,
+  ORDEM_DAS_VARIACOES,
+  PROIBICOES_PESSOA_SINTETICA,
+  tipoDeVariacaoPorId,
+  type TipoDeVariacao,
+  type TomadaDaReceita,
   lenteDaTomada,
   type ModoTomada,
   NOMES_DAS_VISTAS,
@@ -271,7 +279,52 @@ export function tamanhoDeTrabalho(largura: number | null | undefined, altura: nu
 
 // ------------------------------------------------------------ kit
 
-export type Atributos = { observado: string[]; informado: string[]; inferido: string[] };
+/**
+ * Produto identificado pela embalagem ou foto e confirmado (ou não) na
+ * internet por produto_identificar. Fica em foto_kits.atributos.identificacao.
+ */
+export type Identificacao = {
+  marca: string | null;
+  modelo: string | null;
+  variante: string | null;
+  categoria: string | null;
+  especificacoes: string[];
+  confianca: "alta" | "media" | "baixa";
+  evidencias: string[];
+  paginas: { url: string; fonte: string | null }[];
+  identificado_em: string | null;
+};
+
+export const CONFIANCAS = ["alta", "media", "baixa"] as const;
+
+export function normalizarIdentificacao(bruto: unknown): Identificacao | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const r = bruto as Record<string, unknown>;
+  const marca = limpoOuNulo(r.marca, 120);
+  const modelo = limpoOuNulo(r.modelo, 160);
+  if (!marca && !modelo) return null;
+  const confianca = (CONFIANCAS as readonly string[]).includes(String(r.confianca)) ? (r.confianca as Identificacao["confianca"]) : "baixa";
+  const paginas: Identificacao["paginas"] = [];
+  for (const p of Array.isArray(r.paginas) ? r.paginas : []) {
+    const o = (p && typeof p === "object" ? p : { url: p }) as Record<string, unknown>;
+    const u = urlPublicaSegura(o.url);
+    if (u && !paginas.some((x) => x.url === u.toString())) paginas.push({ url: u.toString(), fonte: limpoOuNulo(o.fonte, 120) ?? u.hostname });
+    if (paginas.length >= 8) break;
+  }
+  return {
+    marca,
+    modelo,
+    variante: limpoOuNulo(r.variante, 120),
+    categoria: limpoOuNulo(r.categoria, 120),
+    especificacoes: listaDeTextos(r.especificacoes, 20, 200),
+    confianca,
+    evidencias: listaDeTextos(r.evidencias, 12, 300),
+    paginas,
+    identificado_em: typeof r.identificado_em === "string" ? r.identificado_em.slice(0, 40) : null,
+  };
+}
+
+export type Atributos = { observado: string[]; informado: string[]; inferido: string[]; identificacao?: Identificacao };
 
 export type Autorizacao = {
   confirmada: boolean;
@@ -314,7 +367,163 @@ export type RefDoKit = {
   aprovada?: boolean;
   nome?: string | null;
   descricao?: string | null;
+  /** Foto baixada da internet por produto_identificar (uso interno, não publicar). */
+  origem_web?: OrigemWeb | null;
 };
+
+// ------------------------------------------------------------ referência da internet
+
+/** De onde veio uma referência da internet: a imagem, a página e o site. */
+export type OrigemWeb = { url: string; pagina: string | null; fonte: string };
+
+export const TAG_REFERENCIA_WEB = "referencia_web";
+export const AVISO_REFERENCIA_WEB = "Referência da internet, uso interno para fidelidade, não publicar.";
+
+/** Descrição gravada em cliente_imagens.descricao (legível e relida por lerOrigemWeb). */
+export function descricaoDaReferenciaWeb(o: OrigemWeb, produto?: string | null): string {
+  return semTravessao([
+    AVISO_REFERENCIA_WEB,
+    produto ? `Produto: ${limpo(produto, 200)}.` : "",
+    `Fonte: ${limpo(o.fonte, 120)}.`,
+    o.pagina ? `Página: ${o.pagina}` : "",
+    `Imagem: ${o.url}`,
+  ].filter(Boolean).join("\n")).slice(0, 1000);
+}
+
+/** Origem de uma imagem do acervo marcada como referência da internet (ou null). */
+export function lerOrigemWeb(tags: string[] | null | undefined, descricao: string | null | undefined): OrigemWeb | null {
+  if (!(tags ?? []).includes(TAG_REFERENCIA_WEB)) return null;
+  const d = descricao ?? "";
+  const campo = (nome: string) => d.match(new RegExp(`^${nome}: (.+)$`, "m"))?.[1]?.trim() ?? null;
+  const url = urlPublicaSegura(campo("Imagem"))?.toString() ?? "";
+  const pagina = urlPublicaSegura(campo("Página"))?.toString() ?? null;
+  const fonteTag = (tags ?? []).find((t) => t.startsWith("fonte:"))?.slice(6) ?? null;
+  const fonte = (campo("Fonte") ?? fonteTag ?? "internet").replace(/\.$/, "");
+  return { url, pagina, fonte };
+}
+
+/**
+ * Endereços de imagem de produto numa página (og:image, twitter:image,
+ * image_src e o campo image do JSON-LD), absolutos e só https público.
+ */
+export function imagensDoHtml(html: string, base: string, max = 8): string[] {
+  const saida: string[] = [];
+  const pegar = (bruto: unknown) => {
+    if (typeof bruto !== "string" || !bruto.trim()) return;
+    let abs: string;
+    try {
+      abs = new URL(bruto.trim().replace(/&amp;/g, "&"), base).toString();
+    } catch {
+      return;
+    }
+    const u = urlPublicaSegura(abs);
+    if (u && !saida.includes(u.toString())) saida.push(u.toString());
+  };
+  const trecho = html.slice(0, 600_000);
+  const meta = /<meta\b[^>]*>/gi;
+  for (const [tag] of trecho.matchAll(meta)) {
+    const nome = tag.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? "";
+    if (!["og:image", "og:image:secure_url", "og:image:url", "twitter:image", "twitter:image:src"].includes(nome)) continue;
+    pegar(tag.match(/\bcontent\s*=\s*["']([^"']+)["']/i)?.[1]);
+  }
+  for (const [tag] of trecho.matchAll(/<link\b[^>]*>/gi)) {
+    if (/\brel\s*=\s*["']image_src["']/i.test(tag)) pegar(tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1]);
+  }
+  const blocos = trecho.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  const visitar = (v: unknown, fundo: number) => {
+    if (fundo > 6 || saida.length >= max) return;
+    if (Array.isArray(v)) return v.forEach((x) => visitar(x, fundo + 1));
+    if (!v || typeof v !== "object") return;
+    const o = v as Record<string, unknown>;
+    const img = o.image;
+    if (typeof img === "string") pegar(img);
+    else if (Array.isArray(img)) img.forEach((x) => (typeof x === "string" ? pegar(x) : visitar(x, fundo + 1)));
+    else if (img && typeof img === "object") pegar((img as Record<string, unknown>).url ?? (img as Record<string, unknown>).contentUrl);
+    for (const chave of ["@graph", "offers", "mainEntity", "itemListElement"]) if (o[chave]) visitar(o[chave], fundo + 1);
+  };
+  for (const [, conteudo] of blocos) {
+    try {
+      visitar(JSON.parse(conteudo.trim()), 0);
+    } catch { /* JSON-LD quebrado */ }
+  }
+  return saida.slice(0, max);
+}
+
+/** Imagem de referência pequena demais (ícone, miniatura, logotipo) não serve. */
+export const LADO_MINIMO_REFERENCIA_WEB = 400;
+export const referenciaWebServe = (d: { largura: number; altura: number } | null) =>
+  !!d && Math.min(d.largura, d.altura) >= LADO_MINIMO_REFERENCIA_WEB && Math.max(d.largura, d.altura) / Math.min(d.largura, d.altura) <= 3.2;
+
+// ------------------------------------------------------------ kit rascunho sem duplicar
+
+/** Chave do produto para achar o mesmo kit: nome e variante normalizados. */
+export const chaveDoProduto = (k: { nome: string; variante?: string | null }) => `${nomeSeguro(k.nome)}|${k.variante ? nomeSeguro(k.variante) : ""}`;
+
+export type KitExistente = { id: string; status: string; nome: string; variante: string | null; atualizado_em?: string; refs: { imagem_id: string; papel: string }[] };
+
+/**
+ * Kit rascunho do mesmo produto (mesmo nome e variante, ou alguma foto de
+ * evidência em comum). Kit confirmado ou arquivado nunca é reaproveitado.
+ */
+export function kitParecido(existentes: KitExistente[], novo: { nome: string; variante: string | null; refs: { imagem_id: string; papel: string }[] }): KitExistente | null {
+  const evid = new Set(novo.refs.filter((r) => PAPEIS_DE_EVIDENCIA.includes(r.papel as PapelRef)).map((r) => r.imagem_id));
+  const chave = chaveDoProduto(novo);
+  const rascunhos = existentes.filter((k) => k.status === "rascunho")
+    .slice().sort((a, b) => String(b.atualizado_em ?? "").localeCompare(String(a.atualizado_em ?? "")));
+  return rascunhos.find((k) => chaveDoProduto(k) === chave) ??
+    rascunhos.find((k) => k.refs.some((r) => evid.has(r.imagem_id) && PAPEIS_DE_EVIDENCIA.includes(r.papel as PapelRef))) ??
+    null;
+}
+
+export const LACUNA_SO_CAIXA = "Falta foto do produto fora da embalagem: a caixa sozinha não documenta o formato do produto.";
+export const LACUNA_SO_WEB = "O produto fora da caixa está documentado só por referências da internet (uso interno, não publicar): confirme com o cliente modelo e variante.";
+
+/**
+ * Junta o kit rascunho existente com o novo: referências somadas, o que a
+ * equipe informou fica, observado, inferido e invariantes somados, lacunas
+ * refeitas pelo que o kit tem agora.
+ */
+export function mesclarKit(
+  existente: KitFoto & { refs: RefDoKit[] },
+  novo: KitFoto & { refs: RefDoKit[] },
+  opcoes: { preferirNomeNovo?: boolean; refsWeb?: string[] } = {},
+): KitFoto & { refs: RefDoKit[] } {
+  const refs: RefDoKit[] = [];
+  for (const r of [...existente.refs, ...novo.refs]) {
+    if (!refs.some((x) => x.imagem_id === r.imagem_id && x.papel === r.papel)) refs.push(r);
+  }
+  const unir = (a: string[], b: string[], max: number) => Array.from(new Set([...a, ...b])).slice(0, max);
+  const identificacao = novo.atributos.identificacao ?? existente.atributos.identificacao;
+  const kit: KitFoto & { refs: RefDoKit[] } = {
+    ...existente,
+    tipo: novo.tipo,
+    nome: opcoes.preferirNomeNovo ? novo.nome : existente.nome,
+    variante: opcoes.preferirNomeNovo ? novo.variante ?? existente.variante : existente.variante ?? novo.variante,
+    atributos: {
+      observado: unir(existente.atributos.observado, novo.atributos.observado, 30),
+      informado: existente.atributos.informado,
+      inferido: unir(existente.atributos.inferido, novo.atributos.inferido, 30),
+      ...(identificacao ? { identificacao } : {}),
+    },
+    invariantes: unir(existente.invariantes, novo.invariantes, 20),
+    lacunas: unir(novo.lacunas, existente.lacunas.filter((l) => l !== LACUNA_SO_CAIXA && l !== LACUNA_SO_WEB), 20),
+    status: "rascunho",
+    refs,
+  };
+  kit.lacunas = lacunasDaEvidencia(kit, refs, opcoes.refsWeb ?? []);
+  return kit;
+}
+
+/** Lacunas de evidência refeitas: só caixa, ou produto documentado só pela internet. */
+export function lacunasDaEvidencia(kit: Pick<KitFoto, "tipo" | "lacunas">, refs: RefDoKit[], refsWeb: string[]): string[] {
+  const outras = kit.lacunas.filter((l) => l !== LACUNA_SO_CAIXA && l !== LACUNA_SO_WEB && !/fora da embalagem|caixa sozinha/i.test(l));
+  if (kit.tipo === "pessoa") return outras.slice(0, 20);
+  const identidades = refs.filter((r) => r.papel === "identidade");
+  const extra: string[] = [];
+  if (!identidades.length && refs.some((r) => r.papel === "embalagem")) extra.push(LACUNA_SO_CAIXA);
+  else if (identidades.length && identidades.every((r) => refsWeb.includes(r.imagem_id) || !!r.origem_web)) extra.push(LACUNA_SO_WEB);
+  return [...extra, ...outras].slice(0, 20);
+}
 
 function lerAutorizacao(v: unknown): Autorizacao | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -344,6 +553,7 @@ export function normalizarKit(bruto: unknown): KitFoto {
   const at = (r.atributos && typeof r.atributos === "object" ? r.atributos : {}) as Record<string, unknown>;
   const status = STATUS_KIT.includes(r.status as StatusKit) ? (r.status as StatusKit) : "rascunho";
   const frente = typeof r.frente_imagem_id === "string" && UUID.test(r.frente_imagem_id) ? r.frente_imagem_id : null;
+  const identificacao = normalizarIdentificacao(at.identificacao);
   return {
     ...(typeof r.id === "string" && UUID.test(r.id) ? { id: r.id } : {}),
     tipo,
@@ -353,6 +563,7 @@ export function normalizarKit(bruto: unknown): KitFoto {
       observado: listaDeTextos(at.observado, 30, 300),
       informado: listaDeTextos(at.informado, 30, 300),
       inferido: listaDeTextos(at.inferido, 30, 300),
+      ...(identificacao ? { identificacao } : {}),
     },
     invariantes: listaDeTextos(r.invariantes, 20, 200),
     lacunas: listaDeTextos(r.lacunas, 20, 300),
@@ -424,13 +635,17 @@ export const temMedidaInformada = (kit: Pick<KitFoto, "atributos">) =>
   kit.atributos.informado.some((a) => /(medida|dimens|tamanho|altura|largura|comprimento|\d\s?(cm|mm|m)\b|ml\b|litro)/i.test(a));
 
 /** Motivo do bloqueio de uma tomada (evidência ausente) ou null quando pode gerar. */
-export function motivoDoBloqueio(kit: KitFoto, refs: RefDoKit[], exige?: Exigencia | null): string | null {
+export function motivoDoBloqueio(kit: KitFoto, refs: RefDoKit[], exige?: Exigencia | null, foco?: Foco | null): string | null {
   if (kit.status === "arquivado") return "O kit está arquivado.";
   if (!autorizacaoConfirmada(kit)) return "Pessoa sem autorização de uso registrada no kit.";
-  if (!temIdentidade(kit, refs)) {
-    return kit.tipo === "pessoa"
-      ? "Falta foto real do rosto da pessoa no kit (papel rosto ou identidade)."
-      : "Falta a foto de identidade do assunto no kit. Embalagem sozinha não documenta o produto.";
+  if (foco === "embalagem") {
+    // A caixa é o assunto: basta a foto real dela.
+    if (!refs.some((r) => r.papel === "embalagem")) return "Falta uma foto real da embalagem no kit.";
+  } else if (!temIdentidade(kit, refs)) {
+    if (kit.tipo === "pessoa") return "Falta foto real do rosto da pessoa no kit (papel rosto ou identidade).";
+    return foco === "fora_da_embalagem"
+      ? "Falta foto do produto fora da caixa. Use Identificar produto (busca as fotos oficiais na internet) ou suba uma foto real do produto. Embalagem sozinha não documenta o produto."
+      : "Falta a foto de identidade do assunto no kit. Embalagem sozinha não documenta o produto: identifique o produto pela embalagem (busca as fotos oficiais na internet) ou faça a foto com a embalagem como assunto.";
   }
   if (exige?.papeis?.length && !refs.some((r) => exige.papeis!.includes(r.papel))) return `Falta ${exige.descricao} no kit.`;
   if (exige?.informado === "medida" && !temMedidaInformada(kit)) return `Falta ${exige.descricao}.`;
@@ -557,7 +772,38 @@ export type Tomada = {
   ultimo_erro: string | null;
   observacao: string | null;
   versoes: VersaoTomada[];
+  /** v2: assunto da foto (produto, embalagem ou produto fora da embalagem). */
+  foco?: Foco;
+  /** v2: tipo de variação (TIPOS_DE_VARIACAO) quando a tomada segue um. */
+  tipo_variacao?: string | null;
+  /** v2: objetos de cena pedidos (direção de arte). */
+  props?: string[];
+  /** v2: o que muda quando o tipo se repete no lote. */
+  mudanca?: string | null;
+  /** v2: cena de campanha com pessoa sintética (receita campanha-com-modelo). */
+  campanha?: CenaDeCampanha | null;
 };
+
+/** Cena de campanha: o que a pessoa sintética faz com o produto. */
+export type CenaDeCampanha = {
+  com_pessoa: boolean;
+  acao: string;
+  expressao: string;
+  figurino: string;
+};
+
+export function lerCenaDeCampanha(bruto: unknown): CenaDeCampanha | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const r = bruto as Record<string, unknown>;
+  return {
+    com_pessoa: r.com_pessoa !== false,
+    acao: limpo(r.acao, 400),
+    expressao: limpo(r.expressao, 200),
+    figurino: limpo(r.figurino, 300),
+  };
+}
+
+const focoValido = (v: unknown): Foco | undefined => (FOCOS.includes(v as Foco) ? (v as Foco) : undefined);
 
 /** Invariantes fixas por grupo, antes das invariantes escritas no kit. */
 export function invariantesDoKit(kit: KitFoto): string[] {
@@ -581,8 +827,29 @@ export function invariantesDoKit(kit: KitFoto): string[] {
   return [...fixas, ...kit.invariantes.filter((i) => !fixas.includes(i))].slice(0, 24);
 }
 
+/** Invariantes quando a caixa é o assunto: a arte da embalagem não muda. */
+export const INVARIANTES_DA_EMBALAGEM = [
+  "mesma embalagem real: arte, cores, textos e logotipos idênticos, letra por letra, na mesma posição",
+  "mesmas proporções e o mesmo formato da caixa",
+  "caixa fechada, sem inventar o produto de dentro",
+];
+
+export const invariantesDaTomada = (kit: KitFoto, foco?: Foco | null): string[] =>
+  foco === "embalagem" ? [`embalagem de ${kit.nome}${kit.variante ? ` (variante ${kit.variante})` : ""}`, ...INVARIANTES_DA_EMBALAGEM] : invariantesDoKit(kit);
+
 export const proibicoesDoKit = (kit: KitFoto): string[] =>
   [...gruposDoTipo(kit.tipo).flatMap((g) => PROIBICOES[g]), ...PROIBICOES_GERAIS];
+
+/** Proibições da tomada: as do kit e, quando aparece pessoa (mão ou campanha), as da pessoa sintética. */
+export function proibicoesDaTomada(kit: KitFoto, t: { campanha?: CenaDeCampanha | null; tipo_variacao?: string | null; foco?: Foco | null }): string[] {
+  const base = proibicoesDoKit(kit);
+  const extra: string[] = [];
+  if (t.foco === "fora_da_embalagem") extra.push("não desenhar o produto a partir da arte impressa na caixa; a caixa não aparece");
+  const comPessoa = !!t.campanha?.com_pessoa || !!tipoDeVariacaoPorId(t.tipo_variacao)?.com_maos;
+  if (comPessoa && kit.tipo !== "pessoa") extra.push(...PROIBICOES_PESSOA_SINTETICA);
+  const flutua = !!tipoDeVariacaoPorId(t.tipo_variacao)?.flutuando;
+  return [...base, ...extra].filter((p) => !(flutua && /flutuando/.test(p)));
+}
 
 export const formatoValido = (v: unknown): Formato | null => (FORMATOS as readonly string[]).includes(String(v)) ? (v as Formato) : null;
 
@@ -607,28 +874,48 @@ type BaseTomada = {
   exige?: Exigencia | null;
   observacao?: string | null;
   versoes?: VersaoTomada[];
+  foco?: Foco | null;
+  tipo_variacao?: string | null;
+  props?: string[];
+  mudanca?: string | null;
+  campanha?: CenaDeCampanha | null;
 };
+
+/**
+ * Modo da tomada: pela câmera, contra as fotos de evidência. Com a caixa como
+ * assunto, a embalagem é a evidência; na campanha o produto é refeito pelo
+ * gerador na orientação que a cena pedir (modo cenário, dito na promessa).
+ */
+export function modoDaTomada(camera: Camera, refs: RefDoKit[], foco?: Foco | null, campanha?: CenaDeCampanha | null): Extract<ModoTomada, "cenario" | "angulo"> {
+  if (campanha) return "cenario";
+  if (foco === "embalagem") return modoDaCamera(camera, refs.filter((r) => r.papel === "embalagem").map((r) => ({ ...r, papel: "identidade" as PapelRef })));
+  return modoDaCamera(camera, refs);
+}
 
 /** Monta a tomada completa: modo pela câmera, bloqueio pela evidência, lente, invariantes e proibições do kit. */
 export function montarTomada(base: BaseTomada, ctx: { kit: KitFoto; refs: RefDoKit[]; receita: Receita | null; formatos: Formato[] }): Tomada {
-  const modo = modoDaCamera(base.camera, ctx.refs);
-  const bloqueio = motivoDoBloqueio(ctx.kit, ctx.refs, base.exige ?? null);
+  const foco = focoValido(base.foco);
+  const campanha = base.campanha ?? null;
+  const modo = modoDaTomada(base.camera, ctx.refs, foco, campanha);
+  const bloqueio = motivoDoBloqueio(ctx.kit, ctx.refs, base.exige ?? null, foco);
   const versoes = base.versoes ?? [];
+  const tipoVar = tipoDeVariacaoPorId(base.tipo_variacao);
   const t: Tomada = {
     id: base.id,
     nome: limpo(base.nome, 120) || "Tomada",
     objetivo: limpo(base.objetivo, 400),
     receita_tomada_id: base.receita_tomada_id ?? null,
     camera: base.camera,
-    cenario: limpo(base.cenario, 800) || ctx.receita?.cenario || "Cenário neutro de estúdio.",
-    luz: limpo(base.luz, 800) || ctx.receita?.luz || "Luz suave de estúdio com chave, preenchimento e recorte.",
-    lente: lenteDaTomada(ctx.kit.tipo, base.camera),
+    cenario: limpo(base.cenario, 800) || tipoVar?.cenario || ctx.receita?.cenario || "Cenário neutro de estúdio.",
+    luz: limpo(base.luz, 800) || tipoVar?.luz || ctx.receita?.luz || "Luz suave de estúdio com chave, preenchimento e recorte.",
+    // Na campanha com pessoa a lente é de retrato (a pessoa define o quadro).
+    lente: lenteDaTomada(campanha?.com_pessoa ? "pessoa" : ctx.kit.tipo, base.camera),
     modo,
     gerado: true,
     angulo_novo: modo === "angulo",
     pode_mudar: (base.pode_mudar ?? []).slice(0, 12),
-    invariantes: invariantesDoKit(ctx.kit),
-    proibicoes: proibicoesDoKit(ctx.kit),
+    invariantes: invariantesDaTomada(ctx.kit, foco),
+    proibicoes: proibicoesDaTomada(ctx.kit, { campanha, tipo_variacao: base.tipo_variacao, foco }),
     formato: base.formato && ctx.formatos.includes(base.formato) ? base.formato : ctx.formatos[0],
     espaco_para_texto: base.espaco_para_texto === true,
     exige: base.exige ?? null,
@@ -638,10 +925,24 @@ export function montarTomada(base: BaseTomada, ctx: { kit: KitFoto; refs: RefDoK
     ultimo_erro: null,
     observacao: limpoOuNulo(base.observacao, 600),
     versoes,
+    foco: foco ?? "produto",
+    tipo_variacao: tipoVar?.id ?? null,
+    props: listaDeTextos(base.props, 8, 160),
+    mudanca: limpoOuNulo(base.mudanca, 300),
+    campanha,
   };
   t.status = statusDaTomada(t);
   return t;
 }
+
+/** Os campos v2 de uma tomada salva, para remontar (tomada_gerar, ajuste). */
+export const camposV2 = (t: Partial<Tomada>): Pick<BaseTomada, "foco" | "tipo_variacao" | "props" | "mudanca" | "campanha"> => ({
+  foco: t.foco ?? null,
+  tipo_variacao: t.tipo_variacao ?? null,
+  props: t.props ?? [],
+  mudanca: t.mudanca ?? null,
+  campanha: t.campanha ?? null,
+});
 
 /** Status da tomada pelas versões e pelo bloqueio. */
 export function statusDaTomada(t: Pick<Tomada, "motivo_bloqueio" | "versoes">): StatusTomada {
@@ -671,7 +972,15 @@ export type TomadaDoDiretor = {
   pode_mudar: string[];
   formato: string | null;
   observacao: string | null;
+  props?: string[];
 };
+
+/** Campos v2 que a tomada da receita carrega para a tomada do ensaio. */
+const doReceita = (t: TomadaDaReceita | null): Pick<BaseTomada, "foco" | "tipo_variacao" | "campanha"> => ({
+  foco: t?.foco ?? null,
+  tipo_variacao: t?.tipo_variacao ?? null,
+  campanha: t && t.com_pessoa !== undefined ? { com_pessoa: t.com_pessoa, acao: "", expressao: "", figurino: "" } : null,
+});
 
 /**
  * Tomadas do ensaio: as do diretor (validadas) e, se ele não devolveu nada
@@ -708,11 +1017,13 @@ export function montarTomadas(
       // Tomada nova do diretor (fora da receita) não exige nada além do básico.
       exige: daReceita?.exige ?? null,
       observacao: d.observacao,
+      props: d.props ?? [],
+      ...doReceita(daReceita),
     });
   }
   if (!base.length) {
     for (const t of receita.tomadas.slice(0, max)) {
-      base.push({ id: t.id, nome: t.nome, objetivo: t.objetivo, receita_tomada_id: t.id, camera: t.camera, espaco_para_texto: t.espaco_para_texto, exige: t.exige ?? null });
+      base.push({ id: t.id, nome: t.nome, objetivo: t.objetivo, receita_tomada_id: t.id, camera: t.camera, espaco_para_texto: t.espaco_para_texto, exige: t.exige ?? null, ...doReceita(t) });
     }
   }
   return base.map((b) => montarTomada(b, { ...ctx, receita }));
@@ -743,17 +1054,23 @@ export function limiteDeFontesDoMotor(m: { provedor: string; modelo_api: string 
  * fim, uma referência de estilo ou cenário do kit. Pose só entra em kit de
  * pessoa e nunca como identidade.
  */
-export function fontesDaTomada(refs: RefDoKit[], tomada: Pick<Tomada, "camera" | "exige">, limite: number): RefDoKit[] {
-  const pedeEmbalagem = !!tomada.exige?.papeis?.includes("embalagem");
+export function fontesDaTomada(refs: RefDoKit[], tomada: Pick<Tomada, "camera" | "exige"> & { foco?: Foco | null }, limite: number): RefDoKit[] {
+  const caixaEAssunto = tomada.foco === "embalagem";
+  // Fora da embalagem a arte da caixa nunca entra (o produto sai das fotos do produto).
+  const pedeEmbalagem = caixaEAssunto || (tomada.foco !== "fora_da_embalagem" && !!tomada.exige?.papeis?.includes("embalagem"));
   const perto = (r: RefDoKit) => {
     const v = r.vista ? VISTAS[r.vista] : null;
     if (!v || v.azimute == null) return 90;
     return distanciaAngular(v.azimute, tomada.camera.azimute);
   };
+  const grupo = (r: RefDoKit) => (caixaEAssunto && r.papel === "embalagem" ? -1 : grupoDaFonte(r.papel));
+  // Foto real do cliente antes da referência da internet no mesmo grupo.
+  const daWeb = (r: RefDoKit) => (r.origem_web ? 1 : 0);
   const candidatas = refs.filter((r) => r.papel !== "embalagem" || pedeEmbalagem);
   const ordenadas = candidatas.slice().sort((a, b) =>
-    grupoDaFonte(a.papel) - grupoDaFonte(b.papel) ||
-    (grupoDaFonte(a.papel) <= 1 ? perto(a) - perto(b) : 0) ||
+    grupo(a) - grupo(b) ||
+    daWeb(a) - daWeb(b) ||
+    (grupo(a) <= 1 ? perto(a) - perto(b) : 0) ||
     a.prioridade - b.prioridade
   );
   const evidencia = ordenadas.filter((r) => grupoDaFonte(r.papel) <= 2);
@@ -782,8 +1099,14 @@ const ROTULO_DO_PAPEL: Record<PapelRef, string> = {
   cenario: "SÓ CENÁRIO de referência: não copie objetos nem pessoas",
 };
 
-export function legendaDaFonte(r: Pick<RefDoKit, "papel" | "vista">, i: number): string {
-  return `Imagem ${i}: ${ROTULO_DO_PAPEL[r.papel]}${r.vista && r.vista !== "livre" ? `, vista ${r.vista.replace(/_/g, " ")}` : ""}.`;
+export function legendaDaFonte(r: Pick<RefDoKit, "papel" | "vista"> & { origem_web?: OrigemWeb | null }, i: number, foco?: Foco | null): string {
+  const rotulo = foco === "embalagem" && r.papel === "embalagem"
+    ? "EMBALAGEM real, que é o ASSUNTO desta foto (arte, texto e cores a manter iguais)"
+    : ROTULO_DO_PAPEL[r.papel];
+  const web = r.origem_web
+    ? ` Foto oficial ou de loja do produto achada na internet (${r.origem_web.fonte}): serve para a forma, a cor, o material e os detalhes do produto; ignore fundo, texto de loja, selos e marca d'água dela`
+    : "";
+  return `Imagem ${i}: ${rotulo}${r.vista && r.vista !== "livre" ? `, vista ${r.vista.replace(/_/g, " ")}` : ""}.${web ? `${web}.` : ""}`;
 }
 
 // ------------------------------------------------------------ guia
@@ -845,12 +1168,98 @@ export type EntradaPromptTomada = {
   tomada: Tomada;
   finalidade: string;
   marca: { nome: string; estilo?: string | null; paleta?: string[] };
-  fontes: Pick<RefDoKit, "papel" | "vista">[];
+  fontes: (Pick<RefDoKit, "papel" | "vista"> & { origem_web?: OrigemWeb | null })[];
   estilos: { titulo: string }[];
   guiaTexto: string | null;
   versoesAntes: number;
   rejeicoes: string[];
+  /** v2: guia de estilo do ensaio (campanha ou variações com referência de estilo). */
+  guiaDeEstilo?: GuiaDeEstilo | null;
+  /** v2: pessoa sintética da campanha. */
+  modelo?: ModeloSintetico | null;
+  /** v2: foto já aprovada desta campanha anexada logo depois das fontes (mesma pessoa sintética). */
+  pessoaAprovada?: boolean;
 };
+
+// ------------------------------------------------------------ guia de estilo e pessoa sintética
+
+/** Direção extraída das referências de estilo (nunca cópia de foto, marca ou pessoa). */
+export type GuiaDeEstilo = {
+  resumo: string;
+  paleta: string[];
+  luz: string;
+  cenarios: string[];
+  props: string[];
+  enquadramentos: string[];
+  clima: string;
+  figurino: string;
+  evitar: string[];
+};
+
+export function normalizarGuiaDeEstilo(bruto: unknown): GuiaDeEstilo | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const r = bruto as Record<string, unknown>;
+  const g: GuiaDeEstilo = {
+    resumo: limpo(r.resumo, 800),
+    paleta: listaDeTextos(r.paleta, 8, 80),
+    luz: limpo(r.luz, 500),
+    cenarios: listaDeTextos(r.cenarios, 8, 200),
+    props: listaDeTextos(r.props, 10, 120),
+    enquadramentos: listaDeTextos(r.enquadramentos, 8, 160),
+    clima: limpo(r.clima, 300),
+    figurino: limpo(r.figurino, 300),
+    evitar: listaDeTextos(r.evitar, 8, 200),
+  };
+  return g.resumo || g.luz || g.cenarios.length || g.paleta.length ? g : null;
+}
+
+export function guiaDeEstiloEmTexto(g: GuiaDeEstilo): string {
+  return [
+    g.resumo,
+    g.paleta.length ? `Paleta: ${g.paleta.join(", ")}.` : "",
+    g.luz ? `Luz: ${g.luz}` : "",
+    g.cenarios.length ? `Cenários do universo: ${g.cenarios.join("; ")}.` : "",
+    g.props.length ? `Props: ${g.props.join(", ")}.` : "",
+    g.enquadramentos.length ? `Enquadramentos: ${g.enquadramentos.join("; ")}.` : "",
+    g.clima ? `Clima: ${g.clima}` : "",
+    g.figurino ? `Figurino: ${g.figurino}` : "",
+    g.evitar.length ? `Evitar: ${g.evitar.join("; ")}.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+/** Pessoa sintética da campanha: perfil, idade aparente (adulta) e estilo. */
+export type ModeloSintetico = { perfil: string; idade_aprox: number; estilo: string; avisos: string[] };
+
+export const IDADE_MINIMA_MODELO = 21;
+export const IDADE_PADRAO_MODELO = 30;
+
+/** Pedido de sósia ("parecida com fulano", lookalike): removido do texto e avisado. */
+const SOSIA = /\b(parecid[oa]s? com|igual (?:a|ao|à)|a cara d[aoe]|s[oó]sia|lookalike|look-alike|estilo d[aoe] (?:famos|celebr|ator|atriz|cantor))[^.,;]*/gi;
+
+export function lerModeloSintetico(bruto: unknown): ModeloSintetico {
+  const r = (bruto && typeof bruto === "object" && !Array.isArray(bruto) ? bruto : {}) as Record<string, unknown>;
+  const avisos: string[] = [];
+  const semSosia = (v: unknown, max: number) => {
+    const t = limpo(v, max);
+    if (new RegExp(SOSIA.source, "i").test(t)) {
+      avisos.push("Pedido de semelhança com pessoa real removido: a pessoa sintética não pode parecer alguém conhecido.");
+      return t.replace(SOSIA, "").replace(/\s{2,}/g, " ").replace(/^[,;\s]+|[,;\s]+$/g, "");
+    }
+    return t;
+  };
+  let idade = Math.round(Number(r.idade_aprox));
+  if (!Number.isFinite(idade) || idade <= 0) idade = IDADE_PADRAO_MODELO;
+  if (idade < IDADE_MINIMA_MODELO) {
+    avisos.push(`Idade aparente ajustada para ${IDADE_MINIMA_MODELO} anos: a pessoa sintética é sempre adulta.`);
+    idade = IDADE_MINIMA_MODELO;
+  }
+  return {
+    perfil: semSosia(r.perfil, 300),
+    idade_aprox: Math.min(80, idade),
+    estilo: semSosia(r.estilo, 300),
+    avisos: Array.from(new Set(avisos)),
+  };
+}
 
 const ROTULO_DO_TIPO: Record<TipoKit, string> = {
   produto: "PRODUTO",
@@ -869,33 +1278,93 @@ const ROTULO_DO_TIPO: Record<TipoKit, string> = {
  * e materiais, sombra de contato e reflexo, invariantes, o que pode mudar,
  * proibições do tipo, lacunas e aviso de novo ângulo.
  */
+/** Linhas das imagens anexadas: fontes, pessoa sintética aprovada (campanha) e estilos, na ordem do envio. */
+function linhasDasImagens(e: EntradaPromptTomada): string[] {
+  if (!e.fontes.length && !e.estilos.length && !e.pessoaAprovada) return [];
+  const linhas = ["IMAGENS ANEXADAS, NA ORDEM:"];
+  e.fontes.forEach((f, i) => linhas.push(legendaDaFonte(f, i + 1, e.tomada.foco)));
+  let n = e.fontes.length;
+  if (e.pessoaAprovada) {
+    n += 1;
+    linhas.push(`Imagem ${n}: SÓ A PESSOA SINTÉTICA já aprovada nesta campanha (mesmo rosto, cabelo e tom de pele, para manter a mesma modelo); não é o produto e não copie a cena.`);
+  }
+  e.estilos.forEach((s, i) =>
+    linhas.push(`Imagem ${n + i + 1}: SÓ ESTILO, LUZ E COMPOSIÇÃO ("${s.titulo}"); não copie o objeto, as pessoas, a marca nem o texto desta imagem.`)
+  );
+  return linhas;
+}
+
+/** Direção de arte: o que diferencia esta foto (tipo de variação, props, paleta, mudança da rodada). */
+function linhaDeDirecaoDeArte(e: EntradaPromptTomada): string | null {
+  const t = e.tomada;
+  const tipo = tipoDeVariacaoPorId(t.tipo_variacao);
+  const partes = [
+    tipo ? `${tipo.nome}: ${tipo.direcao}` : "",
+    t.props?.length ? `Objetos de cena: ${t.props.join(", ")}; cada prop com função na história, sem marca, sem texto e menor que o assunto.` : "",
+    t.mudanca ? `Diferente das outras fotos do lote: ${t.mudanca}.` : "",
+    "Composição com hierarquia clara: o assunto é o herói, respiro nas bordas, linhas do cenário levando o olhar até ele.",
+  ].filter(Boolean);
+  return partes.length ? `DIREÇÃO DE ARTE: ${partes.join(" ")}` : null;
+}
+
+/** Fidelidade do produto dita como diretor de arte (forma, cor, texto e proporção). */
+function linhaDeFidelidade(e: EntradaPromptTomada): string {
+  if (e.tomada.foco === "embalagem") {
+    return "FIDELIDADE: a caixa aparece exatamente como nas fotos da embalagem: mesma arte, mesmas cores, textos e logotipos legíveis letra por letra, mesmas proporções; nada de texto inventado.";
+  }
+  return "FIDELIDADE DO PRODUTO: mesmo formato e silhueta, mesmas proporções entre as partes, mesma cor e acabamento (fosco, brilhante, texturizado), logotipo e textos do produto exatamente como nas fontes e legíveis, mesma quantidade de peças; escala real em relação ao cenário e às mãos.";
+}
+
+/**
+ * Prompt fotográfico da tomada: fontes na ordem anexada, câmera em palavras,
+ * lente e profundidade de campo, luz (chave, preenchimento, recorte), cenário
+ * e materiais, direção de arte, sombra de contato e reflexo, invariantes, o
+ * que pode mudar, proibições do tipo, lacunas e aviso de novo ângulo.
+ * Tomada de campanha sai em promptDaCampanha.
+ */
 export function promptDaTomada(e: EntradaPromptTomada): string {
   const { kit, tomada } = e;
+  if (tomada.campanha) return promptDaCampanha(e);
   const assunto = `${kit.nome}${kit.variante ? ` (variante ${kit.variante})` : ""}`;
+  const tipo = tipoDeVariacaoPorId(tomada.tipo_variacao);
   const linhas: string[] = [];
-  linhas.push(`FOTOGRAFIA PROFISSIONAL DE ${ROTULO_DO_TIPO[kit.tipo]} para ${e.finalidade || "uso comercial"} da marca ${e.marca.nome}.`);
+  linhas.push(`FOTOGRAFIA PUBLICITÁRIA PROFISSIONAL DE ${ROTULO_DO_TIPO[kit.tipo]} para ${e.finalidade || "uso comercial"} da marca ${e.marca.nome}.`);
   linhas.push(`Tomada "${tomada.nome}"${tomada.objetivo ? `: ${tomada.objetivo}` : ""}.`);
-  linhas.push(`ASSUNTO: ${assunto}. É exatamente o mesmo assunto das imagens de identidade anexadas; fotografe-o, não crie outro parecido.`);
-  if (e.fontes.length || e.estilos.length) {
-    linhas.push("IMAGENS ANEXADAS, NA ORDEM:");
-    e.fontes.forEach((f, i) => linhas.push(legendaDaFonte(f, i + 1)));
-    e.estilos.forEach((s, i) =>
-      linhas.push(`Imagem ${e.fontes.length + i + 1}: SÓ ESTILO, LUZ E COMPOSIÇÃO ("${s.titulo}"); não copie o objeto, as pessoas, a marca nem o texto desta imagem.`)
+  if (tomada.foco === "embalagem") {
+    linhas.push(`ASSUNTO: a embalagem real de ${assunto}. A caixa é o herói desta foto; fotografe exatamente a caixa das imagens de embalagem, fechada, sem abrir nem desenhar o produto de dentro.`);
+  } else {
+    linhas.push(`ASSUNTO: ${assunto}. É exatamente o mesmo assunto das imagens de identidade anexadas; fotografe-o, não crie outro parecido.`);
+  }
+  if (tomada.foco === "fora_da_embalagem") {
+    linhas.push(
+      "FORA DA EMBALAGEM: mostre o produto em si, fora da caixa, recriado a partir das fotos do produto (reais ou de referência da internet). Nunca desenhe o produto a partir da arte impressa na caixa; a caixa não aparece.",
     );
   }
+  linhas.push(...linhasDasImagens(e));
   linhas.push(
     `CÂMERA: ${azimuteEmPalavras(tomada.camera.azimute)}; ${elevacaoEmPalavras(tomada.camera.elevacao)}; ${enquadramentoEmPalavras(tomada.camera.enquadramento, kit.tipo)}. Posição relativa à frente do assunto definida no kit.`,
   );
   linhas.push(`LENTE: ${tomada.lente}.`);
-  linhas.push(`LUZ: ${tomada.luz} Luz chave, preenchimento e recorte coerentes entre si e com o cenário; balanço de branco correto.`);
+  linhas.push(`LUZ: ${tomada.luz} Luz chave, preenchimento e recorte coerentes entre si e com o cenário; balanço de branco correto; realces controlados sem estourar.`);
   linhas.push(`CENÁRIO: ${tomada.cenario} Materiais e superfícies realistas, escala coerente com o assunto.`);
+  const direcao = linhaDeDirecaoDeArte(e);
+  if (direcao) linhas.push(direcao);
+  if (tipo?.com_maos) {
+    linhas.push(
+      "MÃO: mão adulta natural, pele com textura real, cinco dedos com unhas e articulações corretas, segurando o assunto com a pegada que ele pede; só a mão e o antebraço entram no quadro, sem rosto.",
+    );
+  }
   linhas.push(
-    "SOMBRA E REFLEXO: sombra de contato suave e curta sob o assunto, na direção oposta à luz chave; reflexo na superfície só se ela for brilhante e coerente com o material; nada de sombra dupla nem assunto flutuando.",
+    tipo?.flutuando
+      ? "SOMBRA E REFLEXO: o assunto flutua de propósito, levemente inclinado; sombra projetada suave e distante no fundo, coerente com a luz chave; sem sombra de contato, sem fio nem suporte aparente; nada de sombra dupla."
+      : "SOMBRA E REFLEXO: sombra de contato suave e curta sob o assunto, na direção oposta à luz chave; reflexo na superfície só se ela for brilhante e coerente com o material; nada de sombra dupla nem assunto flutuando.",
   );
+  linhas.push(linhaDeFidelidade(e));
   linhas.push(`INVARIANTES (não mudar): ${tomada.invariantes.join("; ")}.`);
   if (tomada.pode_mudar.length) linhas.push(`PODE MUDAR: ${tomada.pode_mudar.join("; ")}.`);
   linhas.push(`PROIBIDO: ${tomada.proibicoes.join("; ")}.`);
-  if (kit.lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente, deixe fora do quadro ou discreto): ${kit.lacunas.join("; ")}.`);
+  const lacunas = tomada.foco === "embalagem" ? [] : kit.lacunas;
+  if (lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente, deixe fora do quadro ou discreto): ${lacunas.join("; ")}.`);
   if (tomada.modo === "angulo") {
     linhas.push(
       "NOVO ÂNGULO: esta vista não aparece nas fontes. Gere o mínimo necessário das partes não vistas, de forma sóbria e plausível, sem detalhes chamativos; nunca espelhe uma vista documentada.",
@@ -907,10 +1376,74 @@ export function promptDaTomada(e: EntradaPromptTomada): string {
       `MARCA: ${e.marca.estilo ? `${e.marca.estilo}. ` : ""}${e.marca.paleta?.length ? `Paleta de apoio ${e.marca.paleta.join(", ")} só no cenário e nos objetos de cena, nunca no assunto.` : ""}`.trim(),
     );
   }
+  if (e.guiaDeEstilo) linhas.push(`GUIA DE ESTILO DO ENSAIO: ${guiaDeEstiloEmTexto(e.guiaDeEstilo)} Só direção: não copie foto, marca nem pessoa das referências.`);
   if (e.guiaTexto) linhas.push(`DIREÇÃO DE ESTILO: ${e.guiaTexto} Esta direção não muda as invariantes nem as proibições acima.`);
   const variacao = blocoDeVariacao(e.versoesAntes, e.rejeicoes);
   if (variacao) linhas.push(variacao);
-  linhas.push(`FORMATO ${tomada.formato}. Fotografia realista de estúdio profissional, nitidez de câmera full frame, sem aparência de ilustração ou 3D.`);
+  linhas.push(`FORMATO ${tomada.formato}. Fotografia realista de campanha profissional, câmera full frame, nitidez onde importa, cor fiel, sem aparência de ilustração, 3D ou banco de imagens genérico.`);
+  return semTravessao(linhas.join("\n"));
+}
+
+/** Enquadramento da campanha em palavras (a pessoa define o quadro). */
+function enquadramentoDaCampanha(camera: Camera, comPessoa: boolean): string {
+  if (!comPessoa) return enquadramentoEmPalavras(camera.enquadramento, "produto");
+  if (camera.enquadramento === "detalhe") return "retrato de perto, do peito para cima, rosto e produto nítidos no mesmo plano de foco";
+  if (camera.enquadramento === "medio") return "plano médio, da cintura para cima, com o cenário legível atrás";
+  return "plano aberto, corpo inteiro no ambiente, produto ainda reconhecível";
+}
+
+/**
+ * Prompt de campanha: pessoa sintética (adulta, sem parecer ninguém real)
+ * usando o produto do kit, que é invariante; guia de estilo das referências
+ * só como direção.
+ */
+export function promptDaCampanha(e: EntradaPromptTomada): string {
+  const { kit, tomada } = e;
+  const cena = tomada.campanha ?? { com_pessoa: true, acao: "", expressao: "", figurino: "" };
+  const assunto = `${kit.nome}${kit.variante ? ` (variante ${kit.variante})` : ""}`;
+  const produto = tomada.foco === "embalagem" ? `a embalagem real de ${assunto} (caixa fechada, arte idêntica)` : assunto;
+  const m = e.modelo;
+  const linhas: string[] = [];
+  linhas.push(`FOTOGRAFIA PUBLICITÁRIA EDITORIAL de campanha da marca ${e.marca.nome}${e.finalidade ? ` (${e.finalidade})` : ""}.`);
+  linhas.push(`Cena "${tomada.nome}"${tomada.objetivo ? `: ${tomada.objetivo}` : ""}.`);
+  linhas.push(`PRODUTO (invariante): ${produto}, exatamente como nas imagens de identidade anexadas; não redesenhe, não troque a variante, não crie outro parecido.`);
+  if (cena.com_pessoa) {
+    linhas.push([
+      "PESSOA SINTÉTICA: pessoa gerada, que não existe, não é o cliente e não é ninguém real.",
+      m?.perfil ? `Perfil: ${m.perfil}.` : "",
+      `Idade aparente de cerca de ${m?.idade_aprox ?? IDADE_PADRAO_MODELO} anos, adulta.`,
+      m?.estilo ? `Estilo: ${m.estilo}.` : "",
+      "Rosto natural e único, sem parecer celebridade, influenciador ou qualquer pessoa conhecida; pele com poros e textura real, sem retoque plástico; proporções anatômicas corretas.",
+    ].filter(Boolean).join(" "));
+    linhas.push([
+      cena.acao ? `AÇÃO: ${cena.acao}.` : "AÇÃO: a pessoa usa o produto do jeito real de uso, com naturalidade.",
+      cena.expressao ? `Expressão: ${cena.expressao}.` : "",
+      cena.figurino ? `Figurino: ${cena.figurino}.` : "",
+      "Mãos naturais com cinco dedos, unhas e articulações corretas; o produto no corpo ou na mão na escala real e na posição certa de uso.",
+    ].filter(Boolean).join(" "));
+  } else {
+    linhas.push("SEM PESSOA: o produto sozinho é o herói da cena, no clima da campanha.");
+  }
+  linhas.push(...linhasDasImagens(e));
+  linhas.push(`CÂMERA: ${enquadramentoDaCampanha(tomada.camera, cena.com_pessoa)}; ${elevacaoEmPalavras(tomada.camera.elevacao)}.`);
+  linhas.push(`LENTE: ${tomada.lente}.`);
+  linhas.push(`LUZ: ${tomada.luz} Luz com intenção de campanha: chave, preenchimento e recorte coerentes entre si, na pele e no produto; balanço de branco do guia; nunca escurecer a foto para dar destaque.`);
+  linhas.push(`CENÁRIO: ${tomada.cenario} Profundidade real, materiais críveis, escala coerente.`);
+  const direcao = linhaDeDirecaoDeArte(e);
+  if (direcao) linhas.push(direcao);
+  if (e.guiaDeEstilo) linhas.push(`GUIA DE ESTILO DA CAMPANHA: ${guiaDeEstiloEmTexto(e.guiaDeEstilo)} Só direção: não copie foto, marca, texto nem pessoa das referências.`);
+  linhas.push(linhaDeFidelidade(e));
+  linhas.push(`INVARIANTES DO PRODUTO (não mudar): ${tomada.invariantes.join("; ")}.`);
+  if (tomada.pode_mudar.length) linhas.push(`PODE MUDAR: ${tomada.pode_mudar.join("; ")}.`);
+  linhas.push(`PROIBIDO: ${tomada.proibicoes.join("; ")}.`);
+  const lacunas = tomada.foco === "embalagem" ? [] : kit.lacunas;
+  if (lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente; deixe fora do quadro ou discreto): ${lacunas.join("; ")}.`);
+  if (tomada.espaco_para_texto) linhas.push("COMPOSIÇÃO: deixe uma área limpa de cerca de um terço do quadro para texto, sem escrever nada nela.");
+  if (e.marca.paleta?.length) linhas.push(`MARCA: paleta de apoio ${e.marca.paleta.join(", ")} no cenário, no figurino e nos objetos de cena, nunca no produto.`);
+  if (e.guiaTexto) linhas.push(`DIREÇÃO DE ESTILO: ${e.guiaTexto} Esta direção não muda as invariantes nem as proibições acima.`);
+  const variacao = blocoDeVariacao(e.versoesAntes, e.rejeicoes);
+  if (variacao) linhas.push(variacao);
+  linhas.push(`FORMATO ${tomada.formato}. Fotografia realista de campanha editorial, câmera full frame, pele e tecidos com textura real, sem aparência de ilustração, 3D ou banco de imagens genérico.`);
   return semTravessao(linhas.join("\n"));
 }
 
@@ -1047,8 +1580,138 @@ export function decidirVersao(
 // ------------------------------------------------------------ conferência
 
 /** Critérios da conferência da tomada: os do tipo do kit e os da própria tomada. */
-export function criteriosDaConferencia(tipo: TipoKit): string[] {
-  return [...gruposDoTipo(tipo).flatMap((g) => CRITERIOS_CONFERENCIA[g]), ...CRITERIOS_DA_TOMADA];
+export function criteriosDaConferencia(tipo: TipoKit, opcoes: { comPessoaSintetica?: boolean; embalagem?: boolean } = {}): string[] {
+  const base = opcoes.embalagem
+    ? ["Embalagem igual às fontes (arte, cores, texto e logotipos)", "Texto da embalagem legível e sem espelhamento", "Proporção da caixa"]
+    : gruposDoTipo(tipo).flatMap((g) => CRITERIOS_CONFERENCIA[g]);
+  const pessoa = opcoes.comPessoaSintetica && tipo !== "pessoa" ? CRITERIOS_PESSOA_SINTETICA : [];
+  return [...base, ...pessoa, ...CRITERIOS_DA_TOMADA];
+}
+
+export const CRITERIOS_PESSOA_SINTETICA = [
+  "Mãos com anatomia correta",
+  "Pessoa sintética adulta, natural e sem parecer pessoa real conhecida",
+  "Produto na escala e na posição certas de uso",
+];
+
+// ------------------------------------------------------------ plano de variações
+
+export type VagaDeVariacao = {
+  id: string;
+  tipo: TipoDeVariacao;
+  camera: Camera;
+  foco: Foco;
+  /** 0 na primeira vez do tipo; 1 em diante quando ele se repete no lote. */
+  rodada: number;
+  mudanca: string | null;
+};
+
+export const MAX_VARIACOES = 16;
+
+/**
+ * Vagas do lote de variações, decididas no código para serem diferentes de
+ * verdade: tipos na ordem pedida (ou a padrão), câmera trocada quando o tipo
+ * se repete e uma mudança concreta por rodada. Sem foto do produto, a caixa
+ * vira o assunto (e "fora da caixa" e "com embalagem" saem da ordem padrão).
+ */
+export function planoDeVariacoes(
+  quantidade: unknown,
+  tipos: unknown,
+  ctx: { temIdentidade: boolean; temEmbalagem: boolean },
+): VagaDeVariacao[] {
+  const q = Math.max(1, Math.min(MAX_VARIACOES, Math.round(Number(quantidade)) || 8));
+  const pedidos = Array.isArray(tipos) ? Array.from(new Set(tipos.map(String))).filter((t) => tipoDeVariacaoPorId(t)) : [];
+  let ordem = pedidos.length ? pedidos : ORDEM_DAS_VARIACOES.slice();
+  if (!pedidos.length) {
+    if (!ctx.temIdentidade) ordem = ordem.filter((t) => t !== "fora_da_caixa" && t !== "com_embalagem");
+    if (!ctx.temEmbalagem) ordem = ordem.filter((t) => t !== "com_embalagem");
+  }
+  const vagas: VagaDeVariacao[] = [];
+  for (let i = 0; i < q; i++) {
+    const tipo = tipoDeVariacaoPorId(ordem[i % ordem.length])!;
+    const rodada = Math.floor(i / ordem.length);
+    const camera = tipo.cameras[rodada % tipo.cameras.length];
+    let foco: Foco = tipo.foco;
+    if (!ctx.temIdentidade && ctx.temEmbalagem && foco === "produto" && tipo.id !== "com_embalagem") foco = "embalagem";
+    vagas.push({
+      id: rodada ? `${tipo.id}-${rodada + 1}` : tipo.id,
+      tipo,
+      camera,
+      foco,
+      rodada,
+      mudanca: rodada ? MUDANCAS_DA_RODADA[((rodada - 1) % (MUDANCAS_DA_RODADA.length - 1)) + 1] : null,
+    });
+  }
+  return vagas;
+}
+
+/**
+ * Vagas a partir das variações que o diretor escreveu na conversa: tipo
+ * conhecido, câmera pedida (preset) ou a do tipo, id único e o mesmo foco de
+ * planoDeVariacoes (sem foto do produto, a caixa é o assunto).
+ */
+export function vagasDoDiretor(variacoes: VariacaoSugerida[], ctx: { temIdentidade: boolean; temEmbalagem: boolean }): VagaDeVariacao[] {
+  const vezes = new Map<string, number>();
+  const usados = new Set<string>();
+  return variacoes.slice(0, MAX_VARIACOES).map((v) => {
+    const tipo = tipoDeVariacaoPorId(v.tipo) ?? tipoDeVariacaoPorId("cenario_marca")!;
+    const rodada = vezes.get(tipo.id) ?? 0;
+    vezes.set(tipo.id, rodada + 1);
+    const camera = v.camera && presetPorId(v.camera) ? cameraDoPreset(v.camera) : tipo.cameras[rodada % tipo.cameras.length];
+    let foco: Foco = tipo.foco;
+    if (!ctx.temIdentidade && ctx.temEmbalagem && foco === "produto" && tipo.id !== "com_embalagem") foco = "embalagem";
+    const raiz = nomeSeguro(v.nome || tipo.id).slice(0, 30) || tipo.id;
+    let id = raiz;
+    for (let n = 2; usados.has(id); n++) id = `${raiz}-${n}`;
+    usados.add(id);
+    return { id, tipo, camera, foco, rodada, mudanca: rodada ? MUDANCAS_DA_RODADA[((rodada - 1) % (MUDANCAS_DA_RODADA.length - 1)) + 1] : null };
+  });
+}
+
+/**
+ * Vagas do plano aplicado: as variações do diretor (até a quantidade) e,
+ * se a equipe pediu mais no cartão, o complemento com tipos ainda não usados.
+ */
+export function vagasDoPlano(
+  variacoes: VariacaoSugerida[],
+  quantidade: unknown,
+  tipos: string[] | null | undefined,
+  ctx: { temIdentidade: boolean; temEmbalagem: boolean },
+): VagaDeVariacao[] {
+  const q = Math.max(1, Math.min(MAX_VARIACOES, Math.round(Number(quantidade)) || variacoes.length || 8));
+  const saida = vagasDoDiretor(variacoes.slice(0, q), ctx);
+  if (saida.length >= q) return saida;
+  const usados = new Set(saida.map((v) => v.tipo.id));
+  const complemento = planoDeVariacoes(MAX_VARIACOES, tipos && tipos.length ? tipos : null, ctx)
+    .sort((a, b) => Number(usados.has(a.tipo.id)) - Number(usados.has(b.tipo.id)));
+  const ids = new Set(saida.map((v) => v.id));
+  for (const v of complemento) {
+    if (saida.length >= q) break;
+    let id = v.id;
+    for (let n = 2; ids.has(id); n++) id = `${v.id}-${n}`;
+    ids.add(id);
+    saida.push({ ...v, id });
+  }
+  return saida;
+}
+
+/** Blocos "Entendi:" e "Próximo passo:" da resposta do diretor, para a tela destacar. */
+export function blocosDaResposta(resposta: string): { entendi: string; proximo_passo: string } {
+  const bloco = (rotulo: string) => resposta.match(new RegExp(`^\\s*${rotulo}\\s*:\\s*(.+)$`, "im"))?.[1]?.trim() ?? "";
+  return { entendi: limpo(bloco("Entendi"), 600), proximo_passo: limpo(bloco("Pr[oó]ximo passo"), 600) };
+}
+
+/** Tipo de variação dito pelo diretor (id ou nome solto) ou null. */
+export function tipoDeVariacaoDoTexto(v: unknown): TipoDeVariacao | null {
+  const direto = tipoDeVariacaoPorId(v);
+  if (direto) return direto;
+  const t = nomeSeguro(String(v ?? "")).replace(/-/g, "_");
+  if (!t || t === "foto") return null;
+  const achar = (re: RegExp, id: string) => (re.test(t) ? tipoDeVariacaoPorId(id) : null);
+  return achar(/heroi|fundo_(de_)?cor|cor_solida/, "heroi_fundo_cor") ?? achar(/branco|catalogo|marketplace/, "fundo_branco") ??
+    achar(/lifestyle|uso|mesa|ambiente/, "lifestyle") ?? achar(/mao|segurando/, "na_mao") ?? achar(/flat|de_cima/, "flat_lay") ??
+    achar(/macro|detalhe|close/, "macro") ?? achar(/marca|universo/, "cenario_marca") ?? achar(/flutu|suspens|levit/, "flutuando") ??
+    achar(/fora|sem_caixa|unbox/, "fora_da_caixa") ?? achar(/embalagem|caixa/, "com_embalagem") ?? null;
 }
 
 /** Conferência do leitor normalizada: todo critério aparece (o não avaliado fica com ok null). */
@@ -1093,6 +1756,39 @@ export type ItemBiblioteca = {
   /** Quando usar o item (texto da curadoria). */
   uso: string | null;
 };
+
+/** Produto genérico (sem marca) que ilustra cada categoria no exemplo gerado da biblioteca. */
+const GENERICO_DA_CATEGORIA: Record<string, string> = {
+  produto: "uma caixa ou um frasco genérico de cor neutra",
+  alimento: "um prato simples e bem montado",
+  bebida: "um copo ou uma garrafa de vidro sem rótulo",
+  cosmetico: "um frasco de sérum ou creme sem rótulo",
+  moda: "uma bolsa ou um tênis sem marca",
+  tecnologia: "um fone de ouvido ou um mouse genérico",
+  pessoa: "uma pessoa sintética adulta, que não existe e não se parece com ninguém conhecido",
+  ambiente: "um ambiente interno simples e bem iluminado",
+  estilo: "um objeto genérico de cor neutra",
+  composicao: "três objetos genéricos de cores neutras",
+  luz: "uma esfera ou um frasco genérico que mostra bem a luz",
+  cenario: "um objeto genérico de cor neutra no cenário",
+};
+
+/**
+ * Prompt do exemplo da biblioteca: o prompt do item aplicado a um produto
+ * genérico da categoria, sem marca e sem texto, para a equipe ver como fica.
+ */
+export function promptDoExemplo(item: { categoria?: string | null; titulo: string; prompt_pt?: string | null; prompt_en?: string | null; negativo?: string | null }): string {
+  const generico = GENERICO_DA_CATEGORIA[String(item.categoria ?? "")] ?? GENERICO_DA_CATEGORIA.produto;
+  const base = (item.prompt_en || item.prompt_pt || "").trim();
+  return semTravessao([
+    `EXEMPLO ILUSTRATIVO do prompt "${limpo(item.titulo, 160)}" da biblioteca da agência, para a equipe ver como a direção fica numa foto.`,
+    `ASSUNTO: ${generico}. Sem marca, sem logotipo, sem texto legível, sem embalagem de marca real.`,
+    `DIREÇÃO (siga fielmente a luz, o cenário, a composição e o clima): ${base.slice(0, 3000)}`,
+    item.negativo ? `EVITE: ${limpo(item.negativo, 800)}.` : "",
+    item.categoria === "pessoa" ? `PESSOA: ${PROIBICOES_PESSOA_SINTETICA.join("; ")}.` : "",
+    "Fotografia realista de estúdio profissional, câmera full frame, cor fiel, sem aparência de ilustração ou 3D, sem texto sobreposto e sem marca d'água.",
+  ].filter(Boolean).join("\n"));
+}
 
 /** Categoria da biblioteca que combina com o tipo do kit. */
 export function categoriaDoKit(tipo: TipoKit): CategoriaBiblioteca {
@@ -1217,14 +1913,55 @@ export type ItemDeReferencia = {
 export const OPENVERSE_MAX_PAGINA = 12;
 
 /** Endereço da busca: só uso comercial por padrão; "modificacao" pede também permissão de alterar. */
-export function urlDoOpenverse(q: unknown, licenca: unknown, pagina: unknown = 1): string {
+export function urlDoOpenverse(q: unknown, licenca: unknown, pagina: unknown = 1, opcoes: { categoria?: "photograph"; porPagina?: number } = {}): string {
   const termo = limpo(q, 200);
   if (termo.length < 2) throw new ErroDeRegra(400, "busca_curta", "Escreva ao menos 2 letras para buscar referências.");
   const p = Math.max(1, Math.min(OPENVERSE_MAX_PAGINA, Math.round(Number(pagina) || 1)));
   const tipo = licenca === "todas" ? null : licenca === "modificacao" ? "commercial,modification" : "commercial";
-  const qs = new URLSearchParams({ q: termo, page_size: "20", page: String(p), mature: "false" });
+  const qs = new URLSearchParams({ q: termo, page_size: String(Math.max(1, Math.min(20, opcoes.porPagina ?? 20))), page: String(p), mature: "false" });
   if (tipo) qs.set("license_type", tipo);
+  if (opcoes.categoria) qs.set("category", opcoes.categoria);
   return `${OPENVERSE_URL}?${qs.toString()}`;
+}
+
+/** Categoria da biblioteca em inglês, para a busca de exemplo no Openverse. */
+const CATEGORIA_EM_INGLES: Record<string, string> = {
+  produto: "product", alimento: "food", bebida: "drink", cosmetico: "cosmetics", moda: "fashion", tecnologia: "gadget",
+  pessoa: "portrait", ambiente: "interior", estilo: "product", composicao: "still life", luz: "studio light", cenario: "set",
+};
+
+const PALAVRAS_VAZIAS = new Set((
+  "a an the of and or with without for on in at to from by into onto over under near its it is are be as this that these those very " +
+  "photo photograph photography image picture shot style professional high quality detailed realistic ultra hd 4k 8k " +
+  "lens mm f aperture iso camera lighting light soft hard shadow shadows background composition frame framing subject " +
+  "product premium commercial editorial minimal minimalist clean sharp focus depth field bokeh angle view close up closeup"
+).split(" "));
+
+/**
+ * Termos curtos para achar no Openverse uma foto que ilustre o prompt:
+ * palavras concretas do prompt em inglês (sem jargão de fotografia) e a
+ * categoria em inglês. Sem prompt em inglês, usa as tags.
+ */
+export function termosDeBusca(item: { categoria?: string | null; prompt_en?: string | null; titulo?: string | null; tags?: string[] | null }, max = 4): string {
+  const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const texto = semAcento(String(item.prompt_en ?? "")).replace(/[^a-z\s-]/g, " ");
+  const palavras: string[] = [];
+  for (const p of texto.split(/\s+/)) {
+    const w = p.replace(/^-+|-+$/g, "");
+    if (w.length < 3 || PALAVRAS_VAZIAS.has(w) || palavras.includes(w)) continue;
+    palavras.push(w);
+    if (palavras.length >= max) break;
+  }
+  if (!palavras.length) {
+    for (const t of item.tags ?? []) {
+      const w = semAcento(t).replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (w && !palavras.includes(w)) palavras.push(w);
+      if (palavras.length >= max) break;
+    }
+  }
+  const cat = CATEGORIA_EM_INGLES[String(item.categoria ?? "")] ?? "product";
+  if (!palavras.some((p) => cat.includes(p))) palavras.push(cat);
+  return palavras.join(" ").slice(0, 200);
 }
 
 /** Licença legível a partir do código e da versão do Openverse. */
@@ -1271,8 +2008,97 @@ export function itensDoOpenverse(json: unknown): ItemDeReferencia[] {
 
 // ------------------------------------------------------------ agente
 
-export const TIPOS_DE_SUGESTAO = ["tomada_nova", "ajuste_tomada", "prompt", "busca_referencia"] as const;
+export const TIPOS_DE_SUGESTAO = [
+  "tomada_nova", "ajuste_tomada", "prompt", "busca_referencia", "plano_de_variacoes", "campanha", "identificar_produto",
+] as const;
 export type TipoSugestao = typeof TIPOS_DE_SUGESTAO[number];
+
+/** Variação de um plano do diretor (camera = preset_id da grade). */
+export type VariacaoSugerida = { nome: string; tipo: string; camera: string | null; cenario: string; luz: string; props: string[]; formato: string | null };
+
+export const ENQUADRAMENTOS_DE_CAMPANHA = ["close", "medio", "aberto"] as const;
+export type EnquadramentoDeCampanha = typeof ENQUADRAMENTOS_DE_CAMPANHA[number];
+
+/** Foto de campanha planejada (pelo diretor ou por campanha_planejar). */
+export type FotoDeCampanha = {
+  nome: string;
+  objetivo: string;
+  acao: string;
+  expressao: string;
+  figurino: string;
+  enquadramento: EnquadramentoDeCampanha;
+  camera: string | null;
+  cenario: string;
+  luz: string;
+  props: string[];
+  formato: string | null;
+  com_pessoa: boolean;
+};
+
+export const MAX_FOTOS_CAMPANHA = 16;
+
+export function lerFotosDeCampanha(bruto: unknown, formatos: readonly string[], max = MAX_FOTOS_CAMPANHA): FotoDeCampanha[] {
+  if (!Array.isArray(bruto)) return [];
+  const saida: FotoDeCampanha[] = [];
+  for (const item of bruto) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const nome = limpo(r.nome, 120);
+    const cenario = limpo(r.cenario ?? r.cena, 800);
+    if (!nome && !cenario) continue;
+    const enq = String(r.enquadramento ?? "");
+    saida.push({
+      nome: nome || `Foto ${saida.length + 1}`,
+      objetivo: limpo(r.objetivo ?? r.cena, 400),
+      acao: limpo(r.acao, 400),
+      expressao: limpo(r.expressao, 200),
+      figurino: limpo(r.figurino, 300),
+      enquadramento: (ENQUADRAMENTOS_DE_CAMPANHA as readonly string[]).includes(enq) ? (enq as EnquadramentoDeCampanha) : "medio",
+      camera: typeof r.camera === "string" && presetPorId(r.camera) ? r.camera : typeof r.preset_id === "string" && presetPorId(r.preset_id) ? r.preset_id : null,
+      cenario,
+      luz: limpo(r.luz, 800),
+      props: listaDeTextos(r.props, 8, 160),
+      formato: typeof r.formato === "string" && formatos.includes(r.formato) ? r.formato : null,
+      com_pessoa: r.com_pessoa !== false,
+    });
+    if (saida.length >= max) break;
+  }
+  return saida;
+}
+
+/** Câmera da foto de campanha: preset pedido ou a do enquadramento. */
+export function cameraDaCampanha(f: Pick<FotoDeCampanha, "camera" | "enquadramento" | "com_pessoa">): Camera {
+  if (f.camera && presetPorId(f.camera)) return cameraDoPreset(f.camera);
+  if (!f.com_pessoa) return cameraDoPreset("a45-e-30-dmedio");
+  return cameraDoPreset(f.enquadramento === "close" ? "a0-e0-ddetalhe" : f.enquadramento === "aberto" ? "a315-e0-daberto" : "a45-e0-dmedio");
+}
+
+export function lerVariacoesSugeridas(bruto: unknown, formatos: readonly string[], max = MAX_VARIACOES): VariacaoSugerida[] {
+  if (!Array.isArray(bruto)) return [];
+  const saida: VariacaoSugerida[] = [];
+  for (const item of bruto) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    const tipo = tipoDeVariacaoDoTexto(r.tipo) ?? tipoDeVariacaoDoTexto(r.nome);
+    const nome = limpo(r.nome, 120) || tipo?.nome || "";
+    if (!nome) continue;
+    const camera = typeof r.camera === "string" && presetPorId(r.camera) ? r.camera : typeof r.preset_id === "string" && presetPorId(r.preset_id) ? r.preset_id : null;
+    saida.push({
+      nome,
+      tipo: tipo?.id ?? "cenario_marca",
+      camera,
+      cenario: limpo(r.cenario, 800),
+      luz: limpo(r.luz, 800),
+      props: listaDeTextos(r.props, 8, 160),
+      formato: typeof r.formato === "string" && formatos.includes(r.formato) ? r.formato : null,
+    });
+    if (saida.length >= max) break;
+  }
+  return saida;
+}
+
+const idsValidos = (v: unknown, max: number) =>
+  Array.isArray(v) ? Array.from(new Set(v.map((x) => String(x ?? "").trim()).filter((x) => UUID.test(x)))).slice(0, max) : [];
 
 export type CamposDaTomada = {
   nome?: string;
@@ -1296,6 +2122,19 @@ export type Sugestao = {
   negativo: string | null;
   categoria: CategoriaBiblioteca | null;
   busca: string | null;
+  /** v2: kit do plano de variações ou da campanha. */
+  kit_id?: string | null;
+  quantidade?: number | null;
+  variacoes?: VariacaoSugerida[];
+  /** Tipos escolhidos no cartão para completar o plano. */
+  tipos?: string[];
+  guia_de_estilo?: GuiaDeEstilo | null;
+  modelo?: ModeloSintetico | null;
+  fotos?: FotoDeCampanha[];
+  /** v2: fotos para identificar_produto (acervo do cliente). */
+  imagem_ids?: string[];
+  /** v2: referências de estilo da campanha (acervo ou biblioteca). */
+  referencias_estilo_ids?: string[];
 };
 
 function lerCampos(v: unknown, formatos: readonly string[]): CamposDaTomada | null {
@@ -1321,7 +2160,10 @@ function lerCampos(v: unknown, formatos: readonly string[]): CamposDaTomada | nu
  * Sugestões do agente, conferidas: ajuste só de tomada que existe, tomada
  * nova com nome, prompt com texto, busca com termo. No máximo 6.
  */
-export function normalizarSugestoes(bruto: unknown, ctx: { tomadaIds: string[]; formatos?: readonly string[] }): Sugestao[] {
+export function normalizarSugestoes(
+  bruto: unknown,
+  ctx: { tomadaIds: string[]; formatos?: readonly string[]; kitIds?: string[]; kitPadrao?: string | null },
+): Sugestao[] {
   if (!Array.isArray(bruto)) return [];
   const formatos = ctx.formatos ?? FORMATOS;
   const saida: Sugestao[] = [];
@@ -1350,6 +2192,33 @@ export function normalizarSugestoes(bruto: unknown, ctx: { tomadaIds: string[]; 
     if (tipo === "tomada_nova" && !campos?.nome) continue;
     if (tipo === "prompt" && !s.prompt_pt && !s.prompt_en) continue;
     if (tipo === "busca_referencia" && !s.busca) continue;
+    if (tipo === "plano_de_variacoes" || tipo === "campanha") {
+      // Kit precisa ser do cliente (lista da conversa); sem ele, o kit aberto.
+      const pedido = typeof r.kit_id === "string" && UUID.test(r.kit_id) ? r.kit_id : null;
+      const kitId = pedido && (!ctx.kitIds || ctx.kitIds.includes(pedido)) ? pedido : ctx.kitPadrao ?? null;
+      if (!kitId) continue;
+      s.kit_id = kitId;
+      // Quantidade ajustada no cartão vale sobre a contagem da lista (a função completa ou corta).
+      const q = Math.round(Number(r.quantidade));
+      const qPedida = Number.isFinite(q) && q > 0 ? q : 0;
+      if (tipo === "plano_de_variacoes") {
+        s.variacoes = lerVariacoesSugeridas(r.variacoes, formatos);
+        s.quantidade = Math.min(MAX_VARIACOES, qPedida || s.variacoes.length);
+        s.tipos = Array.isArray(r.tipos) ? Array.from(new Set(r.tipos.map(String))).filter((t) => tipoDeVariacaoPorId(t)) : [];
+        if (!s.quantidade) continue;
+      } else {
+        s.fotos = lerFotosDeCampanha(r.fotos, formatos);
+        s.quantidade = Math.min(MAX_FOTOS_CAMPANHA, qPedida || s.fotos.length);
+        if (!s.quantidade) continue;
+        s.guia_de_estilo = normalizarGuiaDeEstilo(r.guia_de_estilo);
+        s.modelo = lerModeloSintetico(r.modelo);
+        s.referencias_estilo_ids = idsValidos(r.referencias_estilo_ids, 4);
+      }
+    }
+    if (tipo === "identificar_produto") {
+      s.imagem_ids = idsValidos(r.imagem_ids, 6);
+      if (!s.imagem_ids.length) continue;
+    }
     saida.push(s);
     if (saida.length >= 6) break;
   }
@@ -1401,6 +2270,7 @@ export function aplicarSugestaoDeTomada(
     exige: atual.exige,
     observacao: atual.observacao,
     versoes: atual.versoes,
+    ...camposV2(atual),
   }, ctx);
   const nova = tomadas.slice();
   nova[i] = tomada;

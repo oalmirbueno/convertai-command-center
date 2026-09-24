@@ -1,8 +1,8 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check, Globe, Sparkles } from "lucide-react";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
-import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo } from "./fotoApi";
+import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type ProximoPasso } from "./fotoApi";
 
 /**
  * Peças comuns da Mesa Foto: o contexto da página (kit, ensaio, fotos
@@ -14,17 +14,58 @@ import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo } from "
  * em pílulas claras no canto ou embaixo da imagem, nunca em véu escuro.
  */
 
+/**
+ * Todas as telas da Mesa Foto (o valor vai no endereço: ?etapa=...). A
+ * navegação mostra só o caminho principal em 3 passos e, discretas ao lado,
+ * as etapas de apoio; Variações, Campanha e Preparar ficam dentro de Criar.
+ */
 export const ETAPAS_DA_MESA_FOTO = [
-  { valor: "acervo", rotulo: "Acervo" },
-  { valor: "kits", rotulo: "Kits" },
+  { valor: "acervo", rotulo: "Fotos" },
+  { valor: "kits", rotulo: "Produto" },
+  { valor: "criar", rotulo: "Criar" },
+  { valor: "ensaio", rotulo: "Variações" },
+  { valor: "campanha", rotulo: "Campanha" },
   { valor: "preparar", rotulo: "Preparar" },
-  { valor: "ensaio", rotulo: "Ensaio" },
   { valor: "revisar", rotulo: "Revisar" },
   { valor: "usar", rotulo: "Usar" },
   { valor: "biblioteca", rotulo: "Biblioteca" },
 ] as const;
 
 export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
+
+/** O caminho principal: 1. Fotos do produto, 2. O produto (kit), 3. Criar. */
+export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo: string; dica: string; inclui: EtapaDaMesaFoto[] }[] = [
+  { passo: 1, etapa: "acervo", rotulo: "Fotos", dica: "Fotos do produto", inclui: ["acervo"] },
+  { passo: 2, etapa: "kits", rotulo: "Produto", dica: "O produto identificado e confirmado", inclui: ["kits"] },
+  { passo: 3, etapa: "criar", rotulo: "Criar", dica: "Variações, campanha ou preparar", inclui: ["criar", "ensaio", "campanha", "preparar"] },
+];
+
+/** Etapas de apoio: à mão, sem disputar com o caminho principal. */
+export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
+  { etapa: "revisar", rotulo: "Revisar" },
+  { etapa: "usar", rotulo: "Usar" },
+  { etapa: "biblioteca", rotulo: "Biblioteca" },
+];
+
+/**
+ * Abas que chegam na próxima leva (Modelos e Canvas). A navegação já sabe
+ * delas: quando a tela existir, basta marcar disponivel e pôr o valor em
+ * ETAPAS_DA_MESA_FOTO. Até lá não aparecem.
+ */
+export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean; depoisDe: string }[] = [
+  // docs/mesa-foto/MODELOS-E-CANVAS.md: Modelos depois do Produto, Canvas depois de Criar.
+  { etapa: "modelos", rotulo: "Modelos", disponivel: false, depoisDe: "kits" },
+  { etapa: "canvas", rotulo: "Canvas", disponivel: false, depoisDe: "criar" },
+];
+
+/** As três formas de criar (passo 3). */
+export const FORMAS_DE_CRIAR: { etapa: EtapaDaMesaFoto; rotulo: string; dica: string }[] = [
+  { etapa: "ensaio", rotulo: "Variações", dica: "Várias fotos do produto: fundo de cor, lifestyle, na mão, flat lay, macro." },
+  { etapa: "campanha", rotulo: "Campanha", dica: "Modelo sintético usando o produto, com a pegada da marca." },
+  { etapa: "preparar", rotulo: "Preparar", dica: "Ajuste fino de uma foto: fundo branco, luz, cenário." },
+];
+
+export const passoDaEtapa = (etapa: string) => PASSOS_PRINCIPAIS.find((p) => (p.inclui as string[]).indexOf(etapa) >= 0) || null;
 
 export interface MesaFotoValor {
   kitId: string | null;
@@ -37,6 +78,12 @@ export interface MesaFotoValor {
   selecionadas: string[];
   setSelecionadas: (ids: string[]) => void;
   abrirAgente: () => void;
+  /** A etapa aberta (para a navegação de dentro de Criar). */
+  etapa?: string;
+  /** O próximo passo do caminho principal, sempre em destaque. */
+  proximo?: ProximoPasso | null;
+  /** Abre o diretor já com um pedido (atalhos das etapas). */
+  pedirAoDiretor?: (mensagem: string) => void;
 }
 
 const Contexto = createContext<MesaFotoValor | null>(null);
@@ -91,10 +138,25 @@ export function Cartao({
 }
 
 /** Pílula da classe da foto. Gerada sempre aparece: é imagem sintética. */
-export function SeloDaFoto({ foto, compacto = false }: { foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada">; compacto?: boolean }) {
+export function SeloDaFoto({
+  foto,
+  compacto = false,
+}: {
+  foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean };
+  compacto?: boolean;
+}) {
   const classe = classeDaFoto(foto);
   return (
     <span className="inline-flex min-w-0 flex-wrap items-center">
+      {foto.referencia_web && (
+        <span
+          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[10px] font-semibold text-warning"
+          title="Referência da internet: uso interno para fidelidade, não publicar"
+          data-selo="internet"
+        >
+          <Globe className="mr-0.5 h-2.5 w-2.5" /> {compacto ? "internet" : "da internet, uso interno"}
+        </span>
+      )}
       {classe === "gerada" && (
         <span
           className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10px] font-semibold text-primary"
@@ -109,7 +171,7 @@ export function SeloDaFoto({ foto, compacto = false }: { foto: Pick<FotoDoAcervo
           tratada{!compacto && foto.modo ? ` · ${rotuloDoModo(foto.modo)}` : ""}
         </span>
       )}
-      {classe === "original" && !compacto && (
+      {classe === "original" && !compacto && !foto.referencia_web && (
         <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo="original">
           original
         </span>
@@ -138,9 +200,9 @@ export function MiniaturaDaFoto({ foto, selo = true, className = "" }: { foto: F
   return (
     <Moldura proporcao={1} className={className}>
       <MiniaturaDoStorage bucket={foto.storage_bucket || "mesa"} caminho={foto.storage_path} alt={foto.nome} className="h-full w-full" />
-      {selo && classeDaFoto(foto) === "gerada" && (
-        <span className="pointer-events-none absolute left-1.5 top-1.5">
-          <SeloDaFoto foto={foto} compacto />
+      {selo && (classeDaFoto(foto) === "gerada" || foto.referencia_web) && (
+        <span className="pointer-events-none absolute left-1 top-1">
+          <SeloDaFoto foto={{ ...foto, aprovada: false }} compacto />
         </span>
       )}
     </Moldura>
@@ -219,5 +281,35 @@ export function Pilulas<T extends string | number>({
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * Dentro do passo 3 (Criar): as três formas lado a lado, para trocar sem
+ * voltar. Variações, Campanha e Preparar usam o mesmo produto (kit) aberto.
+ */
+export function NavDoCriar({ atual }: { atual: EtapaDaMesaFoto }) {
+  const { irPara } = useMesaFoto();
+  return (
+    <nav aria-label="Formas de criar" className="mb-3 flex min-w-0 flex-wrap items-center" data-nav-do-criar="">
+      <button type="button" onClick={() => irPara("criar")} className="mb-1 mr-2 h-7 rounded-md px-1.5 text-[12px] text-muted-foreground hover:bg-muted hover:text-foreground">
+        Criar
+      </button>
+      <span aria-hidden="true" className="mb-1 mr-2 text-[11px] text-muted-foreground/60">/</span>
+      <div className="mb-1 grid min-w-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5">
+        {FORMAS_DE_CRIAR.map((f) => (
+          <button
+            key={f.etapa}
+            type="button"
+            onClick={() => irPara(f.etapa)}
+            aria-current={atual === f.etapa ? "page" : undefined}
+            title={f.dica}
+            className={`min-w-0 truncate rounded-md px-2.5 py-1 text-[12px] font-medium ${atual === f.etapa ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            {f.rotulo}
+          </button>
+        ))}
+      </div>
+    </nav>
   );
 }

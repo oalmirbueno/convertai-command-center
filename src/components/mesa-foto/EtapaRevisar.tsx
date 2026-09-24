@@ -18,6 +18,7 @@ import {
   gerarTomada,
   guardarEnsaio,
   invalidarFotos,
+  nomeDaReceita,
   partesDaConferencia,
   partesDaGeracao,
   proporcaoDoFormato,
@@ -27,6 +28,7 @@ import {
   useEnsaios,
   useFotos,
   useKits,
+  useReceitas,
   type Conferencia,
   type Ensaio,
   type FotoDoAcervo,
@@ -291,7 +293,7 @@ function LinhaDaTomada({
         {tomada.versoes.length === 0 ? (
           <p className="self-center text-[12px] text-muted-foreground">{tomada.status === "bloqueada" ? tomada.motivo_bloqueio || "Bloqueada por falta de evidência." : "Ainda sem versão. Gere na etapa Ensaio."}</p>
         ) : (
-          <ul className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
             {tomada.versoes
               .slice()
               .reverse()
@@ -373,6 +375,7 @@ export default function EtapaRevisar() {
   const ensaios = useEnsaios(clientId);
   const kits = useKits(clientId);
   const fotos = useFotos(clientId);
+  const receitas = useReceitas();
   const lista = useMemo(() => ensaios.data || [], [ensaios.data]);
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const ensaio = ensaioId ? lista.find((e) => e.id === ensaioId) || null : null;
@@ -396,7 +399,7 @@ export default function EtapaRevisar() {
                 return (
                   <li key={e.id}>
                     <button type="button" onClick={() => escolherEnsaio(e.id)} className="flex w-full min-w-0 items-center rounded-lg border border-border px-3 py-2 text-left hover:border-primary/40">
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{e.receita_id || "Ensaio"}</span>
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{nomeDaReceita(receitas.data ? receitas.data.receitas : null, e.receita_id)}</span>
                       <span className="ml-2 shrink-0 text-[11.5px] text-muted-foreground">
                         {r.paraRevisar} para revisar · {r.aprovadas} aprovadas
                       </span>

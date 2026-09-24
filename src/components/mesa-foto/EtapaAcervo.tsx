@@ -67,7 +67,7 @@ export function filtrarFotos(fotos: FotoDoAcervo[], classe: FiltroDaClasse, kitF
   });
 }
 
-function ZonaDeEnvio({ compacta, onArquivos, andamento }: { compacta: boolean; onArquivos: (a: File[]) => void; andamento: string | null }) {
+export function ZonaDeEnvio({ compacta, onArquivos, andamento }: { compacta: boolean; onArquivos: (a: File[]) => void; andamento: string | null }) {
   const [arrastando, setArrastando] = useState(false);
   const entrada = useRef<HTMLInputElement>(null);
   const soltar = (e: DragEvent<HTMLDivElement>) => {
@@ -288,19 +288,16 @@ function CartaoDaFoto({
 }) {
   return (
     <div
-      className={`relative min-w-0 rounded-xl border bg-card p-1.5 transition-colors ${
+      className={`relative min-w-0 rounded-lg border bg-card p-1 transition-colors ${
         aberta ? "border-primary" : marcada ? "border-primary/60" : "border-border hover:border-primary/40"
       }`}
       data-foto={foto.id}
     >
       <button type="button" onClick={onAbrir} className="block w-full min-w-0 text-left" title={foto.descricao || foto.nome} aria-label={`Abrir ${foto.nome}`}>
         <MiniaturaDaFoto foto={foto} />
-        <span className="mt-1.5 block truncate px-0.5 text-[11.5px] font-medium">{foto.nome}</span>
-        <span className="block min-h-[18px] px-0.5">
-          <SeloDaFoto foto={foto} compacto />
-        </span>
+        <span className="mt-1 block truncate px-0.5 text-[10.5px] font-medium">{foto.nome}</span>
       </button>
-      <label className="absolute right-2.5 top-2.5 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
+      <label className="absolute right-1.5 top-1.5 flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border border-border bg-card shadow-sm">
         <input type="checkbox" checked={marcada} onChange={onMarcar} className="h-3.5 w-3.5 accent-[hsl(var(--primary))]" aria-label={`Selecionar ${foto.nome}`} />
       </label>
     </div>
@@ -404,11 +401,11 @@ export default function EtapaAcervo() {
   return (
     <div className="min-w-0 space-y-4 pb-40">
       <Cartao
-        titulo="Acervo do cliente"
+        titulo="1. Fotos do produto"
         dica={
           todas.length
-            ? `${todas.length} ${todas.length === 1 ? "foto" : "fotos"}: ${contagem.original} originais, ${contagem.derivada} tratadas, ${contagem.gerada} geradas, ${contagem.aprovada} aprovadas. É o mesmo acervo da Mesa e da Mesa Ads.`
-            : "É o mesmo acervo da Mesa e da Mesa Ads. Suba as fotos que o cliente mandou."
+            ? `${todas.length} ${todas.length === 1 ? "foto" : "fotos"}: ${contagem.original} originais, ${contagem.derivada} tratadas, ${contagem.gerada} geradas, ${contagem.aprovada} aprovadas. Marque as do produto e siga para o passo 2.`
+            : "Suba as fotos que o cliente mandou: produto, embalagem, detalhes. Mesmo acervo da Mesa e da Mesa Ads."
         }
       >
         <ZonaDeEnvio compacta={!vazio && todas.length > 0} onArquivos={(a) => void enviar(a)} andamento={andamento} />
@@ -465,7 +462,7 @@ export default function EtapaAcervo() {
             {filtradas.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
             ) : (
-              <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+              <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-8">
                 {visiveis.map((f) => (
                   <CartaoDaFoto
                     key={f.id}
@@ -515,7 +512,7 @@ export default function EtapaAcervo() {
               {escolhidas.length} {escolhidas.length === 1 ? "selecionada" : "selecionadas"}
             </span>
             <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("kits")}>
-              <Layers className="mr-1.5 h-3.5 w-3.5" /> Montar kit
+              <Layers className="mr-1.5 h-3.5 w-3.5" /> Identificar o produto
             </Button>
             <BotoesDeUso fotos={escolhidas} compacto />
             <button type="button" className="mb-1.5 h-8 rounded-lg px-2 text-[12px] text-muted-foreground hover:bg-muted" onClick={() => setSelecionadas([])}>

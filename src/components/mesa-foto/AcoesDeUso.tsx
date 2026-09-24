@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { acrescentarFotos, baixarZip, classeDaFoto, decidirFoto, enviarFotos, invalidarFotos, type Destino, type FotoDoAcervo } from "./fotoApi";
+import { acrescentarFotos, baixarZip, classeDaFoto, decidirFoto, ehReferenciaWeb, enviarFotos, invalidarFotos, type Destino, type FotoDoAcervo } from "./fotoApi";
 
 /**
  * Ações de uso de um grupo de fotos, iguais no Acervo e no Usar: baixar em
@@ -34,8 +34,18 @@ export function useAcoesDeUso() {
     }
   };
 
-  const enviar = async (fotos: FotoDoAcervo[], destino: Destino) => {
-    if (!fotos.length || enviando) return;
+  const enviar = async (todas: FotoDoAcervo[], destino: Destino) => {
+    if (!todas.length || enviando) return;
+    // Referência da internet é só para fidelidade: nunca vai ao cliente nem para Arquivos.
+    const daInternet = todas.filter((f) => ehReferenciaWeb(f));
+    const fotos = todas.filter((f) => !ehReferenciaWeb(f));
+    if (daInternet.length) {
+      toast.warning(`${daInternet.length} ${daInternet.length === 1 ? "referência da internet ficou" : "referências da internet ficaram"} de fora`, {
+        description: "Fotos oficiais baixadas da internet são de uso interno, para o produto sair fiel. Não vão ao cliente.",
+        duration: 9000,
+      });
+    }
+    if (!fotos.length) return;
     // A função recusa foto gerada sem aprovação da equipe (gerada_sem_aprovacao_interna): avisa antes.
     const semAprovacao = destino === "aprovacao" ? fotos.filter((f) => f.gerada && !f.aprovada) : [];
     if (semAprovacao.length) {

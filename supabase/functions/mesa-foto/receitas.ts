@@ -14,7 +14,7 @@
  * mesa-foto usa e o teste do painel importa direto. Sem travessão.
  */
 
-export const VERSAO_RECEITAS = "mesa-foto-1";
+export const VERSAO_RECEITAS = "mesa-foto-2";
 
 // ------------------------------------------------------------------ tipos
 
@@ -59,6 +59,14 @@ export type Exigencia = {
   descricao: string;
 };
 
+/**
+ * O que a foto mostra como assunto: o produto (padrão), a embalagem (quando
+ * só há a caixa) ou o produto fora da embalagem (recriado das fotos do
+ * produto, nunca da arte da caixa).
+ */
+export type Foco = "produto" | "embalagem" | "fora_da_embalagem";
+export const FOCOS: Foco[] = ["produto", "embalagem", "fora_da_embalagem"];
+
 export type TomadaDaReceita = {
   id: string;
   nome: string;
@@ -67,6 +75,11 @@ export type TomadaDaReceita = {
   exige?: Exigencia;
   /** Pede área livre no quadro para texto (anúncio, banner). */
   espaco_para_texto?: boolean;
+  foco?: Foco;
+  /** Tipo de variação (TIPOS_DE_VARIACAO) quando a tomada segue um deles. */
+  tipo_variacao?: string;
+  /** Tomada de campanha com pessoa sintética usando o produto. */
+  com_pessoa?: boolean;
 };
 
 export type Receita = {
@@ -510,6 +523,222 @@ export const RECEITAS: Receita[] = [
     regra: REGRA,
     testada: false,
   },
+  {
+    id: "fora-da-embalagem",
+    nome: "Produto fora da embalagem",
+    tipos_de_kit: ["produto", "tecnologia", "cosmetico", "moda", "bebida", "outro"],
+    direcao:
+      "O produto em si, fora da caixa, recriado a partir das fotos do produto (reais ou referências oficiais da internet), nunca da arte impressa na embalagem. Sem foto do produto, a embalagem vira o assunto.",
+    luz: "Softbox grande como chave a 45 graus e um pouco acima, rebatedor branco do lado oposto, recorte suave por trás para separar as bordas; reflexos desenhados com bandeiras nas partes brilhantes. Balanço de branco neutro.",
+    cenario: "Superfície neutra e limpa, fundo com gradiente suave na paleta da marca, sem objetos que disputem atenção.",
+    tomadas: [
+      { id: "heroi", nome: "Herói fora da caixa", objetivo: "O produto sozinho, inteiro, como página de loja premium.", camera: c("a45-e30-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "fora_da_caixa" },
+      { id: "frente", nome: "Frente limpa", objetivo: "Frente comercial do produto fora da caixa.", camera: c("a0-e0-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "fundo_branco" },
+      { id: "na-mao", nome: "Na mão", objetivo: "Escala e uso: o produto na mão de uma pessoa adulta.", camera: c("a45-e0-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "na_mao" },
+      { id: "em-uso", nome: "Em uso", objetivo: "O produto no ambiente de uso do público.", camera: c("a45-e30-daberto"), foco: "fora_da_embalagem", tipo_variacao: "lifestyle" },
+      {
+        id: "com-caixa",
+        nome: "Produto e caixa",
+        objetivo: "O produto ao lado da embalagem real: o que o cliente recebe.",
+        camera: c("a45-e30-daberto"),
+        exige: { papeis: ["embalagem"], descricao: "uma foto real da embalagem" },
+        tipo_variacao: "com_embalagem",
+      },
+      { id: "embalagem", nome: "Embalagem em destaque", objetivo: "A caixa real como assunto (serve mesmo sem foto do produto).", camera: c("a45-e30-dmedio"), foco: "embalagem", tipo_variacao: "heroi_fundo_cor" },
+    ],
+    atributos_criticos: ["Modelo", "Variante", "Cor", "Texto", "Proporção"],
+    regra: "Produto fora da caixa só com foto do produto (real ou referência oficial da internet, uso interno). A arte da caixa nunca vira o produto.",
+    testada: false,
+  },
+  {
+    id: "campanha-com-modelo",
+    nome: "Campanha com modelo",
+    tipos_de_kit: ["produto", "tecnologia", "cosmetico", "moda", "bebida", "alimento", "outro"],
+    direcao:
+      "Fotografia publicitária editorial: uma pessoa sintética (gerada, adulta, sem parecer ninguém real) usando o produto do kit em cenários que complementam a identidade do cliente, com guia de estilo tirado das referências. O produto é invariante.",
+    luz: "Luz de campanha com intenção: chave marcada e suave (octabox grande ou sol filtrado), preenchimento baixo para dar volume, recorte no cabelo e no produto; temperatura de cor coerente com o guia de estilo.",
+    cenario: "Cenários do guia de estilo da campanha, coerentes com a marca e o público do cliente.",
+    tomadas: [
+      { id: "retrato", nome: "Retrato de perto com o produto", objetivo: "Rosto e produto juntos, olhar para a câmera.", camera: c("a0-e0-ddetalhe"), com_pessoa: true },
+      { id: "meio-corpo", nome: "Meio corpo em cenário da marca", objetivo: "Atitude e estilo da campanha.", camera: c("a45-e0-dmedio"), com_pessoa: true },
+      { id: "lifestyle", nome: "Lifestyle", objetivo: "A pessoa vivendo a rotina com o produto.", camera: c("a315-e0-daberto"), com_pessoa: true },
+      { id: "produto-destaque", nome: "Produto em destaque", objetivo: "O produto sozinho, no clima da campanha.", camera: c("a45-e-30-dmedio"), com_pessoa: false, espaco_para_texto: true },
+    ],
+    atributos_criticos: ["Produto idêntico", "Mãos", "Pessoa sintética adulta", "Escala do produto no corpo"],
+    regra: "Pessoa sintética nunca parecida com pessoa real conhecida; adulta; sem sexualização; marcada como gerada. O produto do kit não muda.",
+    testada: false,
+  },
+];
+
+/** Receitas que só existem na Mesa Foto v2 (fora da pesquisa original). */
+export const RECEITAS_V2 = ["fora-da-embalagem", "campanha-com-modelo"];
+export const RECEITA_CAMPANHA = "campanha-com-modelo";
+/** receita_id gravado nos ensaios feitos por variacoes_planejar. */
+export const RECEITA_VARIACOES = "variacoes";
+
+// ---------------------------------------------------------------- variações
+
+export type TipoDeVariacao = {
+  id: string;
+  nome: string;
+  /** O que diferencia esta variação das outras, dito ao gerador. */
+  direcao: string;
+  /** Câmeras em ordem: a segunda vale quando o tipo se repete no lote. */
+  cameras: Camera[];
+  cenario: string;
+  luz: string;
+  props: string[];
+  formato: "1:1" | "4:5" | "9:16" | "16:9";
+  foco: Foco;
+  exige?: Exigencia;
+  /** Mostra mão ou corpo de pessoa (sintética). */
+  com_maos?: boolean;
+  /** Assunto suspenso no ar: a regra de sombra de contato muda. */
+  flutuando?: boolean;
+};
+
+export const TIPOS_DE_VARIACAO: TipoDeVariacao[] = [
+  {
+    id: "heroi_fundo_cor",
+    nome: "Herói em fundo de cor",
+    direcao: "Foto herói de anúncio: o assunto grande, imponente e centralizado sobre cor sólida da marca.",
+    cameras: [c("a45-e-30-dmedio"), c("a0-e0-dmedio")],
+    cenario: "Fundo contínuo de papel sem costura em cor sólida saturada da paleta da marca, piso da mesma cor, sem objetos.",
+    luz: "Softbox grande a 45 graus como chave, rebatedor branco do lado oposto, recorte por trás desenhando o contorno, leve gradiente de luz no fundo atrás do assunto.",
+    props: [],
+    formato: "4:5",
+    foco: "produto",
+  },
+  {
+    id: "fundo_branco",
+    nome: "Fundo branco de catálogo",
+    direcao: "Foto de catálogo e marketplace: limpa, fiel e sem distração.",
+    cameras: [c("a0-e0-dmedio"), c("a45-e30-dmedio")],
+    cenario: "Fundo branco puro (#FFFFFF) infinito, sem costura, sem textura e sem objetos.",
+    luz: "Luz ampla e uniforme de duas softboxes laterais e uma de cima, sombras suaves e curtas, cor fiel ao material.",
+    props: [],
+    formato: "1:1",
+    foco: "produto",
+  },
+  {
+    id: "lifestyle",
+    nome: "Lifestyle em uso",
+    direcao: "O assunto no ambiente real do público, como se fosse flagrado em uso, com profundidade de campo.",
+    cameras: [c("a45-e30-daberto"), c("a315-e30-daberto")],
+    cenario: "Ambiente real de uso coerente com o público do cliente (mesa de trabalho, bancada, sala ou rua), com planos de profundidade e fundo levemente desfocado.",
+    luz: "Luz natural de janela lateral, temperatura levemente quente, preenchimento suave de rebatedor, sem flash direto.",
+    props: ["objetos do dia a dia do público, discretos, sem marca e sem texto"],
+    formato: "4:5",
+    foco: "produto",
+  },
+  {
+    id: "na_mao",
+    nome: "Na mão",
+    direcao: "Escala e toque: o assunto seguro por uma mão adulta, de forma natural e crível.",
+    cameras: [c("a45-e0-dmedio"), c("a0-e30-dmedio")],
+    cenario: "Mão adulta segurando ou usando o assunto em primeiro plano, fundo de ambiente desfocado na paleta da marca.",
+    luz: "Luz suave lateral com pele natural e textura real, recorte discreto no contorno do assunto.",
+    props: [],
+    formato: "4:5",
+    foco: "produto",
+    com_maos: true,
+  },
+  {
+    id: "flat_lay",
+    nome: "Flat lay com props",
+    direcao: "Composição editorial vista de cima, geométrica, com respiro e objetos que contam o uso.",
+    cameras: [{ azimute: 0, elevacao: 90, enquadramento: "medio", preset_id: null }, { azimute: 0, elevacao: 90, enquadramento: "aberto", preset_id: null }],
+    cenario: "Superfície texturizada vista de cima (pedra, madeira clara, linho ou papel na cor da paleta), composição geométrica com espaço negativo.",
+    luz: "Luz difusa de cima e levemente lateral, sombras curtas e suaves, sem brilho estourado.",
+    props: ["3 a 5 objetos que contam o uso do produto, sem marca e sem texto"],
+    formato: "1:1",
+    foco: "produto",
+  },
+  {
+    id: "macro",
+    nome: "Macro de detalhe",
+    direcao: "Close extremo do detalhe que vende (acabamento, textura, logotipo, material).",
+    cameras: [c("a0-e0-ddetalhe"), c("a45-e30-ddetalhe")],
+    cenario: "Fundo escuro neutro ou da cor da marca muito desfocado; o detalhe ocupa o quadro.",
+    luz: "Luz rasante lateral para revelar textura, pequena luz de recorte para o brilho do material.",
+    props: [],
+    formato: "4:5",
+    foco: "produto",
+  },
+  {
+    id: "cenario_marca",
+    nome: "Cenário da marca",
+    direcao: "Cena construída com o universo do cliente: materiais, cores e objetos que contam a história da marca.",
+    cameras: [c("a45-e30-dmedio"), c("a315-e0-dmedio")],
+    cenario: "Cenário construído com as cores, materiais e texturas da identidade do cliente, com um ou dois elementos que remetem à história e ao público dele.",
+    luz: "Luz de campanha: chave marcada e suave, recorte colorido discreto na cor da marca, preenchimento baixo para volume.",
+    props: ["elementos do universo da marca, sem logotipo de terceiros"],
+    formato: "4:5",
+    foco: "produto",
+  },
+  {
+    id: "flutuando",
+    nome: "Produto flutuando",
+    direcao: "Assunto suspenso no ar, levemente inclinado, com formas geométricas simples da paleta: clima de campanha surreal e limpo.",
+    cameras: [c("a45-e-30-dmedio"), c("a0-e0-dmedio")],
+    cenario: "Assunto suspenso no ar sobre fundo de cor da marca ou céu limpo, com duas ou três formas geométricas simples ao redor.",
+    luz: "Luz de estúdio limpa e brilhante, chave suave de cima, recorte nas bordas; sombra projetada suave e distante no fundo.",
+    props: ["formas geométricas simples na paleta da marca"],
+    formato: "4:5",
+    foco: "produto",
+    flutuando: true,
+  },
+  {
+    id: "fora_da_caixa",
+    nome: "Fora da caixa",
+    direcao: "O produto em si, fora da embalagem, inteiro e nítido, recriado das fotos do produto (nunca da arte da caixa).",
+    cameras: [c("a45-e30-dmedio"), c("a315-e30-dmedio")],
+    cenario: "Superfície neutra e limpa com gradiente suave na paleta da marca, sem a caixa.",
+    luz: "Softbox grande a 45 graus, rebatedor do lado oposto, recorte por trás, reflexos controlados nas partes brilhantes.",
+    props: [],
+    formato: "4:5",
+    foco: "fora_da_embalagem",
+  },
+  {
+    id: "com_embalagem",
+    nome: "Produto com a embalagem",
+    direcao: "O produto ao lado da caixa real: o que o cliente recebe ao comprar.",
+    cameras: [c("a45-e30-daberto"), c("a0-e30-daberto")],
+    cenario: "Produto em primeiro plano e a caixa real logo atrás ou ao lado, superfície limpa da paleta da marca.",
+    luz: "Luz ampla e suave para o texto da caixa ficar legível, recorte para separar produto e caixa.",
+    props: [],
+    formato: "4:5",
+    foco: "produto",
+    exige: { papeis: ["embalagem"], descricao: "uma foto real da embalagem" },
+  },
+];
+
+const TIPOS_DE_VARIACAO_POR_ID = new Map(TIPOS_DE_VARIACAO.map((t) => [t.id, t]));
+
+export function tipoDeVariacaoPorId(id: unknown): TipoDeVariacao | null {
+  return typeof id === "string" ? TIPOS_DE_VARIACAO_POR_ID.get(id) ?? null : null;
+}
+
+/** Ordem padrão do lote: o mais útil primeiro e o mais diferente do anterior. */
+export const ORDEM_DAS_VARIACOES = [
+  "heroi_fundo_cor", "lifestyle", "na_mao", "flat_lay", "macro", "cenario_marca", "fundo_branco", "flutuando", "com_embalagem", "fora_da_caixa",
+];
+
+/** Quando um tipo se repete no lote, a rodada seguinte muda algo concreto. */
+export const MUDANCAS_DA_RODADA = [
+  "",
+  "outra cor de apoio da paleta e outro material de superfície",
+  "outra hora do dia e outra direção da luz chave",
+  "outro cenário do mesmo universo e composição espelhada no quadro (sem espelhar o assunto)",
+];
+
+/** Regras da pessoa sintética (campanha e mãos), escritas como instrução ao gerador. */
+export const PROIBICOES_PESSOA_SINTETICA = [
+  "a pessoa é sintética: nunca parecida com pessoa real conhecida (celebridade, influenciador, político, atleta, modelo famoso)",
+  "pessoa adulta, sem aparência de menor de idade",
+  "sem sexualização, sem nudez e sem roupa reveladora",
+  "mãos com cinco dedos, unhas e articulações corretas, segurando o produto de forma crível",
+  "não copiar rosto, corpo, tatuagem nem pose exata de pessoas das referências de estilo",
 ];
 
 const RECEITAS_POR_ID = new Map(RECEITAS.map((r) => [r.id, r]));
@@ -694,3 +923,9 @@ export const PROMESSA_DO_MODO: Record<ModoTomada | "ensaio", string> = {
   angulo: "Novo ângulo: gera partes que não aparecem nas fontes. Imagem gerada, sem garantia de fidelidade.",
   ensaio: "Tomada de ensaio gerada a partir das fontes do kit.",
 };
+
+/** Promessas da v2, ditas junto com a do modo. */
+export const PROMESSA_CAMPANHA =
+  "Campanha: pessoa sintética gerada por IA (não é pessoa real) usando o produto refeito a partir das fontes do kit; partes do produto que não aparecem nas fontes são geradas.";
+export const PROMESSA_REFERENCIA_WEB =
+  "Referência da internet: foto oficial ou de loja usada só internamente para a fidelidade do produto. Não publicar nem enviar ao cliente como foto final.";
