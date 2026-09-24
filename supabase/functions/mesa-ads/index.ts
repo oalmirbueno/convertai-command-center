@@ -2510,6 +2510,9 @@ DIAGNÓSTICO (código): ${JSON.stringify({ situacao: diagnostico.situacao, sinai
 
 const AGENTE_HTTP = "Mozilla/5.0 (compatible; AceleriqMesaAds/2.0)";
 const AVISO_INSTAGRAM = "O Instagram não liberou a imagem sem login. Suba o print da peça na referência para completar a ficha.";
+const AVISO_BEHANCE = "O Behance bloqueia a leitura automática da página. Abra o projeto, clique com o botão direito em cada imagem, copie o endereço da imagem e cole aqui em Adicionar imagens (ou suba prints).";
+/** Máximo de links de imagem colados pela equipe numa abertura. */
+const MAX_IMAGENS_COLADAS = 12;
 
 /** Confere no DNS que o host não aponta para rede interna (quando o runtime deixa resolver). */
 async function hostResolvePublico(host: string): Promise<boolean> {
@@ -2746,9 +2749,26 @@ async function enriquecerLink(bruto: string): Promise<Enriquecido> {
     };
   }
 
-  const b = await buscarSeguro(link, { maxBytes: MAX_BYTES_PAGINA, aceitar: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", cortar: true });
+  const [b, oembedBehance] = await Promise.all([
+    buscarSeguro(link, { maxBytes: MAX_BYTES_PAGINA, aceitar: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5", cortar: true }),
+    tipo === "behance" ? buscarJson(`https://www.behance.net/services/oembed?url=${encodeURIComponent(link)}`) : Promise.resolve(null),
+  ]);
   if (!b) {
-    return { pagina: null, imagens: [], aviso: tipo === "instagram" ? AVISO_INSTAGRAM : "Não consegui abrir a página deste link (fora do ar, bloqueada ou lenta). Suba um print para completar." };
+    if (tipo === "behance" && oembedBehance) {
+      // A página do Behance devolve 403 para servidor; o oEmbed oficial traz título e autor.
+      return {
+        pagina: {
+          titulo: strOuNulo(oembedBehance.title, 300),
+          descricao: oembedBehance.author_name ? `Projeto de ${String(oembedBehance.author_name)} no Behance` : null,
+          site: "Behance",
+          tipo: "behance",
+          extra: { autor: strOuNulo(oembedBehance.author_name, 200), autor_url: strOuNulo(oembedBehance.author_url, 400) },
+        },
+        imagens: [],
+        aviso: AVISO_BEHANCE,
+      };
+    }
+    return { pagina: null, imagens: [], aviso: tipo === "instagram" ? AVISO_INSTAGRAM : tipo === "behance" ? AVISO_BEHANCE : "Não consegui abrir a página deste link (fora do ar, bloqueada ou lenta). Suba um print para completar." };
   }
   if (b.tipo.startsWith("image/")) {
     return { pagina: { titulo: null, descricao: null, site: u.hostname, tipo: "imagem", extra: {} }, imagens: [{ url: b.url.toString(), legenda: "Imagem do link" }], aviso: null };
@@ -2922,7 +2942,7 @@ async function abrirAnuncioProprio(servico: SupabaseClient, clientId: string, re
 }
 
 /** Link de catálogo ou URL: página e até 12 imagens no bucket mesa; enriquece uma vez (ou com forcar). */
-async function abrirLink(servico: SupabaseClient, clientId: string, ref: LinhaReferencia, forcar: boolean): Promise<Aberta> {
+async function abrirLink(servico: SupabaseClient, clientId: string, ref: LinhaReferencia, forcar: boolean, coladas: string[] = []): Promise<Aberta> {
   const ficha = ref.ficha ?? {};
   type ItemGaleria = { caminho: string; legenda: string; origem_url: string | null };
   let galeriaSalva: ItemGaleria[] = (Array.isArray(ficha.galeria) ? ficha.galeria as ItemGaleria[] : []).filter((g) => caminhoPermitido(ref, clientId, g?.caminho));
@@ -2953,6 +2973,28 @@ async function abrirLink(servico: SupabaseClient, clientId: string, ref: LinhaRe
       referencia = await gravarReferencia(servico, ref, campos);
     }
   }
+  // Imagens coladas pela equipe (sites que bloqueiam leitura, como o Behance): somam à galeria.
+  if (coladas.length) {
+    const pasta = ref.client_id ? `${ref.client_id}/referencias/${ref.id}` : `biblioteca/${ref.id}`;
+    const jaTem = new Set(galeriaSalva.map((g) => g.origem_url).filter(Boolean));
+    const novasUrls = coladas.filter((u) => !jaTem.has(u)).slice(0, MAX_IMAGENS_REFERENCIA * 2);
+    const base = galeriaSalva.length;
+    const guardadas = await emParalelo(novasUrls, DOWNLOADS_EM_PARALELO, async (url, i): Promise<ItemGaleria | null> => {
+      const g = await guardarImagem(servico, url, `${pasta}/colada-${String(base + i + 1).padStart(2, "0")}`);
+      return g ? { caminho: g.caminho, legenda: `Imagem ${base + i + 1}`, origem_url: url } : null;
+    });
+    const novas = guardadas.filter((g): g is ItemGaleria => !!g);
+    if (novas.length) {
+      galeriaSalva = [...galeriaSalva, ...novas];
+      aviso = novas.length < novasUrls.length ? `${novasUrls.length - novas.length} imagem(ns) não puderam ser baixadas.` : null;
+      const fichaAtual = (referencia.ficha ?? {}) as Record<string, unknown>;
+      const campos: Record<string, unknown> = { ficha: { ...fichaAtual, galeria: galeriaSalva, aberta_em: fichaAtual.aberta_em ?? new Date().toISOString(), aviso_abertura: aviso } };
+      if (!referencia.storage_path) campos.storage_path = galeriaSalva[0].caminho;
+      referencia = await gravarReferencia(servico, referencia, campos);
+    } else {
+      aviso = "Nenhuma das imagens coladas pôde ser baixada. Confira se o link é da imagem (termina em .png, .jpg ou .webp).";
+    }
+  }
   const itens: { caminho: string; legenda: string }[] = [...galeriaSalva];
   if (caminhoPermitido(ref, clientId, referencia.storage_path) && !itens.some((g) => g.caminho === referencia.storage_path)) {
     itens.unshift({ caminho: referencia.storage_path!, legenda: "Imagem enviada pela equipe" });
@@ -2962,13 +3004,31 @@ async function abrirLink(servico: SupabaseClient, clientId: string, ref: LinhaRe
   return { referencia, galeria, pagina, anuncio: null, aviso };
 }
 
-async function abrirReferenciaInterna(servico: SupabaseClient, clientId: string, ref: LinhaReferencia, forcar: boolean): Promise<Aberta> {
+async function abrirReferenciaInterna(servico: SupabaseClient, clientId: string, ref: LinhaReferencia, forcar: boolean, coladas: string[] = []): Promise<Aberta> {
   if (ref.ad_id && ref.client_id) return await abrirAnuncioProprio(servico, clientId, ref, forcar);
-  return await abrirLink(servico, clientId, ref, forcar);
+  return await abrirLink(servico, clientId, ref, forcar, coladas);
+}
+
+/** Links de imagem colados pela equipe: só https público, sem repetir, no máximo MAX_IMAGENS_COLADAS. */
+function imagensColadas(v: unknown): string[] {
+  const lista = Array.isArray(v) ? v : typeof v === "string" ? v.split(/\s+/) : [];
+  const vistas = new Set<string>();
+  const saida: string[] = [];
+  for (const bruto of lista) {
+    const u = urlPublicaSegura(bruto);
+    if (!u) continue;
+    // Behance: a versão webp pequena vira a original em png de 1200 px.
+    const url = u.toString().replace(/\/project_modules\/(?:max_1200_webp|1400_webp|disp_webp|fs_webp)\//, "/project_modules/max_1200/");
+    if (vistas.has(url)) continue;
+    vistas.add(url);
+    saida.push(url);
+    if (saida.length >= MAX_IMAGENS_COLADAS) break;
+  }
+  return saida;
 }
 
 /**
- * referencia_abrir { client_id, referencia_id, forcar? }
+ * referencia_abrir { client_id, referencia_id, forcar?, imagens_urls? (links de imagem colados pela equipe) }
  * -> { referencia, galeria: [{ url, legenda }], pagina, anuncio, aviso, custo_usd: 0 }
  * Sem IA: enriquece uma vez (ficha.aberta_em) e devolve tudo para a janela de detalhe.
  */
@@ -2976,7 +3036,7 @@ async function referenciaAbrir(servico: SupabaseClient, chamador: Chamador, corp
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
   const ref = await carregarReferencia(servico, clientId, corpo.referencia_id);
-  const aberta = await abrirReferenciaInterna(servico, clientId, ref, corpo.forcar === true);
+  const aberta = await abrirReferenciaInterna(servico, clientId, ref, corpo.forcar === true, imagensColadas(corpo.imagens_urls));
   return json({ ...aberta, custo_usd: 0 });
 }
 

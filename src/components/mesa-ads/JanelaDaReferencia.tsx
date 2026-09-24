@@ -262,6 +262,8 @@ export default function JanelaDaReferencia({
   const [salvando, setSalvando] = useState(false);
   const [desde, rodar] = useAndamento();
   const [lendoSozinho, setLendoSozinho] = useState(false);
+  const [coladas, setColadas] = useState("");
+  const [colando, setColando] = useState(false);
 
   const detalhe = useQuery({
     queryKey: chavesAds.referenciaAberta(clientId, id || ""),
@@ -290,6 +292,27 @@ export default function JanelaDaReferencia({
   const atualizar = async () => {
     await queryClient.invalidateQueries({ queryKey: chavesAds.referencias(clientId) });
     if (id) await queryClient.invalidateQueries({ queryKey: chavesAds.referenciaAberta(clientId, id) });
+  };
+
+  /** Links de imagem colados (sites que bloqueiam leitura automática, como o Behance). */
+  const adicionarImagens = async () => {
+    const links = coladas.split(/\s+/).filter((l) => l.indexOf("https://") === 0);
+    if (!links.length || !id) {
+      toast.error("Cole ao menos um link de imagem que comece com https://");
+      return;
+    }
+    setColando(true);
+    try {
+      const novo = normalizarDetalhe(await chamarAds("referencia_abrir", { client_id: clientId, referencia_id: id, imagens_urls: links }));
+      queryClient.setQueryData(chavesAds.referenciaAberta(clientId, id), novo);
+      setColadas("");
+      toast.success(novo.aviso ? "Imagens adicionadas com aviso" : "Imagens adicionadas à referência");
+      void queryClient.invalidateQueries({ queryKey: chavesAds.referencias(clientId) });
+    } catch (e) {
+      avisarErro(e, "As imagens não foram adicionadas");
+    } finally {
+      setColando(false);
+    }
   };
 
   const ler = () => chamarAds<any>("referencia_ler", { client_id: clientId, referencia_id: id });
@@ -451,6 +474,19 @@ export default function JanelaDaReferencia({
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
           {d && d.aviso && <p className="mb-3 rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[12px]">{d.aviso}</p>}
+          {r && aba === "visao" && !r.ad_id && (galeria.length === 0 || (d && d.aviso)) && (
+            <div className="mb-3 rounded-lg border border-border/70 bg-muted/30 p-3">
+              <p className="text-[12px] font-medium">Adicionar imagens</p>
+              <p className="mb-2 text-[11.5px] text-muted-foreground">Cole os links das imagens, um por linha. No Behance: botão direito na imagem, Copiar endereço da imagem.</p>
+              <Textarea aria-label="Links das imagens" className="min-h-[64px] text-[12px]" placeholder="https://mir-s3-cdn-cf.behance.net/project_modules/..." value={coladas} onChange={(e) => setColadas(e.target.value)} />
+              <div className="mt-2 flex justify-end">
+                <Button type="button" size="sm" disabled={colando || !coladas.trim()} onClick={() => void adicionarImagens()}>
+                  {colando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  Adicionar imagens
+                </Button>
+              </div>
+            </div>
+          )}
           {detalhe.isError && (
             <div className="mb-3">
               <AvisoDeErro erro={detalhe.error} />

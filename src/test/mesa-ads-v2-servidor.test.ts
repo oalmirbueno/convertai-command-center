@@ -466,3 +466,17 @@ describe("SQL da v2", () => {
     expect(sql).toContain("'padrao', 'url'");
   });
 });
+
+describe("referência do Behance (página bloqueia servidor)", () => {
+  it("usa o oEmbed oficial e aceita links de imagem colados pela equipe", () => {
+    expect(fonte).toContain("https://www.behance.net/services/oembed?url=");
+    expect(fonte).toContain("const AVISO_BEHANCE =");
+    expect(fonte).toContain("imagensColadas(corpo.imagens_urls)");
+    expect(fonte).toContain("/project_modules/max_1200/");
+  });
+  it("a janela da referência oferece Adicionar imagens", () => {
+    const janela = ler("src/components/mesa-ads/JanelaDaReferencia.tsx");
+    expect(janela).toContain("imagens_urls: links");
+    expect(janela).toContain("Adicionar imagens");
+  });
+});
