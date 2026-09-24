@@ -155,7 +155,8 @@ beforeEach(() => {
 
 describe("agente do mês", () => {
   it("enviar o pedido com um print sobe a imagem em pedidos/ e chama pedido_livre com o caminho", async () => {
-    montar(h(AgenteDoMes, {}));
+    // Criar conteúdos (pedido livre); o padrão do agente agora é Planejar o mês.
+    montar(h(AgenteDoMes, { modoInicial: "criar" }));
     const entrada = screen.getByTestId("entrada-de-anexos") as HTMLInputElement;
     const arquivo = new File(["x"], "print.png", { type: "image/png" });
     fireEvent.change(entrada, { target: { files: [arquivo] } });
@@ -178,7 +179,7 @@ describe("agente do mês", () => {
   });
 
   it("os atalhos só preenchem o campo, sem gastar", () => {
-    montar(h(AgenteDoMes, {}));
+    montar(h(AgenteDoMes, { modoInicial: "criar" }));
     fireEvent.click(screen.getByRole("button", { name: "Prepare a agenda de hoje" }));
     expect((screen.getByLabelText("Pedido ao agente do mês") as HTMLTextAreaElement).value).toBe("Prepare a agenda de hoje.");
     expect(mock.invoke).not.toHaveBeenCalled();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ChevronLeft, ChevronRight, ImagePlus, Maximize2, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, ImagePlus, Maximize2, MessageSquare, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "@/components/mesa/CardDoEstudio";
+import DiretorDoEstudio from "@/components/mesa/DiretorDoEstudio";
 import EstudioFotos from "@/components/mesa/EstudioFotos";
 import EstudioLaminaGrande from "@/components/mesa/EstudioLaminaGrande";
 import PranchetaDoEstudio, {
@@ -62,9 +63,11 @@ const QUALIDADES: { valor: Qualidade; rotulo: string }[] = [
 
 const CODIGOS_SEM_CONFERENCIA = ["acao_desconhecida", "servico_indisponivel"];
 
-type Ferramenta = "lamina" | "fotos" | "referencias";
+type Ferramenta = "lamina" | "diretor" | "fotos" | "referencias";
 const FERRAMENTAS: { valor: Ferramenta; rotulo: string; icone: typeof PenLine }[] = [
   { valor: "lamina", rotulo: "Arte", icone: PenLine },
+  // Conversa com o diretor de arte (pedido do dono em 24/09): o mesmo agente do Estúdio da Mesa.
+  { valor: "diretor", rotulo: "Diretor", icone: MessageSquare },
   { valor: "fotos", rotulo: "Fotos", icone: ImagePlus },
   { valor: "referencias", rotulo: "Referências", icone: Bookmark },
 ];
@@ -544,14 +547,30 @@ export default function ArteDoCriativo({
                   type="button"
                   aria-pressed={ativa}
                   onClick={() => setFerramenta(t.valor)}
-                  className={`mr-1 inline-flex h-8 flex-1 items-center justify-center rounded-md text-[12px] ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  title={t.valor === "diretor" ? "Conversar com o diretor de arte sobre estilo, cenário, luz e cores" : undefined}
+                  className={`mr-1 inline-flex h-8 min-w-0 flex-1 items-center justify-center rounded-md px-1 text-[12px] ${ativa ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
                 >
-                  <Icone className="mr-1 h-3.5 w-3.5" /> {t.rotulo}
+                  <Icone className="mr-1 h-3.5 w-3.5 shrink-0" /> <span className="truncate">{t.rotulo}</span>
                 </button>
               );
             })}
           </nav>
-          <div className="p-3">
+          {ferramenta === "diretor" && (
+            <div className="flex h-[560px] min-w-0 flex-col">
+              <DiretorDoEstudio
+                key={trabalho.id}
+                trabalho={trabalho}
+                ordemEmFoco={card ? card.ordem : null}
+                ocupado={algoGerando}
+                bloqueado={trabalho.status === "entregue"}
+                partesRefazer={(ordens) => partesGerar(ordens.length)}
+                onRefazer={(ordens) => gerarVarias(ordens)}
+                onAtualizar={onAtualizar}
+                className="h-full"
+              />
+            </div>
+          )}
+          <div className={ferramenta === "diretor" ? "hidden" : "p-3"}>
             {ferramenta === "lamina" && card && (
               <CardDoEstudio
                 key={card.ordem}

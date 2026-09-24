@@ -52,6 +52,7 @@ import {
 } from "@/lib/mesa/api";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "./CardDoEstudio";
+import DiretorDoEstudio from "./DiretorDoEstudio";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { emColunas, encaixarNaJanela, rolarAte, useAlturaDaEsteira, useFaixa } from "./EstudioAltura";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
@@ -173,11 +174,12 @@ export function precosPorQualidade(
 }
 
 type Filtro = FiltroDoEstudio;
-type Ferramenta = "lamina" | "fotos" | "referencias" | "conjunto" | "legenda" | "entrega" | "post" | "pauta";
+type Ferramenta = "lamina" | "diretor" | "fotos" | "referencias" | "conjunto" | "legenda" | "entrega" | "post" | "pauta";
 type EstadoDoItem = "producao" | "agenda" | "preparar";
 
 const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typeof PenLine }> = {
   lamina: { rotulo: "Lâmina", dica: "Texto, conferência, ajustes e versões da lâmina escolhida", icone: PenLine },
+  diretor: { rotulo: "Diretor", dica: "Conversar com o diretor de arte: estilo, cenário, luz e cores, com mudanças que você aplica com um clique", icone: MessageSquare },
   fotos: { rotulo: "Fotos", dica: "Fotos reais para compor: fundo, pessoa ou objeto (cole com Ctrl+V)", icone: ImagePlus },
   referencias: { rotulo: "Referências", dica: "Referências que o gerador segue de perto, com a identidade da marca", icone: Bookmark },
   conjunto: { rotulo: "Conjunto", dica: "Conceito, fio visual, carrossel contínuo e pedido ao diretor", icone: Layers },
@@ -188,7 +190,7 @@ const FERRAMENTAS: Record<Ferramenta, { rotulo: string; dica: string; icone: typ
 };
 
 export const FERRAMENTAS_DO_ESTADO: Record<EstadoDoItem, Ferramenta[]> = {
-  producao: ["lamina", "fotos", "referencias", "conjunto", "legenda", "entrega"],
+  producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"],
   agenda: ["post"],
   preparar: ["pauta"],
 };
@@ -948,6 +950,21 @@ function DetalheDoItem({
     </button>
   );
 
+  /** Pedido do dono (24/09): o diretor de arte à mão, para conversar sobre estilo, cenário e luz. */
+  const botaoDoDiretor = (
+    <Button
+      type="button"
+      size="sm"
+      variant={ferramenta === "diretor" ? "default" : "outline"}
+      className="mb-1 mr-2 mt-1 h-10 shrink-0 gap-1 px-3 text-[12.5px]"
+      onClick={() => abrirFerramenta("diretor")}
+      aria-pressed={ferramenta === "diretor"}
+      title="Converse com o diretor de arte para mudar o estilo, o cenário, a luz ou as cores. Ele lê o conteúdo e propõe mudanças que você aplica com um clique."
+    >
+      <MessageSquare className="h-3.5 w-3.5" /> Conversar com o diretor
+    </Button>
+  );
+
   const acaoPrincipal = (
     <div className="mb-1 mt-1 flex shrink-0 items-center">
       {emLote ? (
@@ -1016,6 +1033,7 @@ function DetalheDoItem({
             {seletorDeQualidade}
             {seletorDeGerador}
             {chaveCorrigirSozinho}
+            {botaoDoDiretor}
             {acaoPrincipal}
           </>
         )}
@@ -1190,6 +1208,29 @@ function DetalheDoItem({
     <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
   );
 
+  /** Refazer depois de aplicar: no contínuo com a cena nova, o fundo panorâmico inteiro entra no preço. */
+  const partesDoRefazer = (ordens: number[], refazFundo: boolean): ParteDaEstimativa[] => {
+    const fundo = refazFundo && comFundoContinuo
+      ? partesDoPanorama(ordens.filter((o) => cardsDaDirecao.some((c) => c.ordem === o && usaFundoContinuo(c))), cardsDaDirecao.length, null, modeloImagem, qualidade)
+      : partesDoFundo(ordens);
+    return partesGerar(ordens.length).concat(fundo);
+  };
+
+  const ferramentaDiretor = trabalho ? (
+    <DiretorDoEstudio
+      key={trabalho.id}
+      trabalho={trabalho}
+      ordemEmFoco={cardSelecionado ? cardSelecionado.ordem : null}
+      ocupado={algoGerando || entregando}
+      bloqueado={entregue}
+      continuo={ordemTravada}
+      partesRefazer={partesDoRefazer}
+      onRefazer={(ordens) => gerarVarias(ordens)}
+      onAtualizar={atualizar}
+      className="h-full"
+    />
+  ) : null;
+
   const ferramentaFotos = cardSelecionado && trabalho ? (
     <div className="min-w-0 space-y-3">
       <p className="text-[12.5px] font-semibold">Lâmina {cardSelecionado.ordem}</p>
@@ -1246,6 +1287,14 @@ function DetalheDoItem({
           <Rotulo>Fio visual</Rotulo>
           <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="O que se repete em todas as lâminas">
             {trabalho.direcao.fio_visual}
+          </p>
+        </section>
+      )}
+      {(trabalho.direcao as { estilo_pedido?: string | null } | undefined)?.estilo_pedido && (
+        <section>
+          <Rotulo>Estilo pedido</Rotulo>
+          <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]" title="Pedido na conversa com o diretor; vale em todas as lâminas">
+            {(trabalho.direcao as { estilo_pedido?: string | null }).estilo_pedido}
           </p>
         </section>
       )}
@@ -1427,6 +1476,8 @@ function DetalheDoItem({
     switch (f) {
       case "lamina":
         return ferramentaLamina;
+      case "diretor":
+        return ferramentaDiretor;
       case "fotos":
         return ferramentaFotos;
       case "referencias":
@@ -1478,7 +1529,12 @@ function DetalheDoItem({
             {ferramenta && (
               <div ref={painelRef} className="flex h-full min-h-0 flex-col" style={{ width: LARGURA_DO_PAINEL }} role="region" aria-label={FERRAMENTAS[ferramenta].rotulo}>
                 {cabecalhoDoPainel}
-                <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-16">{conteudoDaFerramenta(ferramenta)}</div>
+                {ferramenta === "diretor" ? (
+                  // A conversa tem rolagem própria e o campo fica fixo embaixo.
+                  <div className="flex min-h-0 flex-1 flex-col">{conteudoDaFerramenta(ferramenta)}</div>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-16">{conteudoDaFerramenta(ferramenta)}</div>
+                )}
               </div>
             )}
           </div>
@@ -1497,7 +1553,11 @@ function DetalheDoItem({
       {ferramenta && (
         <div ref={painelRef} className="border-t border-border" role="region" aria-label={FERRAMENTAS[ferramenta].rotulo}>
           {cabecalhoDoPainel}
-          <div className="p-4">{conteudoDaFerramenta(ferramenta)}</div>
+          {ferramenta === "diretor" ? (
+            <div className="flex h-[560px] flex-col">{conteudoDaFerramenta(ferramenta)}</div>
+          ) : (
+            <div className="p-4">{conteudoDaFerramenta(ferramenta)}</div>
+          )}
         </div>
       )}
       {ampliar}

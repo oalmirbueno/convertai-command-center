@@ -38,6 +38,17 @@
  *   quem chamou), pasta materiais, carrossel com pai e filhos "(n/N)", legenda
  *   no pai, ligado ao projeto do item. Nao pede aprovacao (isso e da Entrega).
  * - referencias { subacao: importar_pinterest | sincronizar_workspace | ler }.
+ * - conversar { trabalho_id, mensagem, ordem? }: conversa com o diretor de
+ *   arte dentro do Estúdio (pedido do dono em 24/09). O diretor lê o conteúdo
+ *   inteiro do trabalho, a marca, as referências e o acervo, olha a lâmina em
+ *   foco e responde com `resposta` e até 6 `mudancas` estruturadas
+ *   ({ id, alvo: conjunto | lamina, ordem, titulo, motivo, campos, regerar }).
+ *   A conversa fica em agente_conversas (referencia_tipo 'estudio_trabalho').
+ *   Nada muda no trabalho; o texto exato só entra com pedido explícito.
+ * - aplicar_mudancas { trabalho_id, mudancas, regerar?, mensagem_id? }: grava
+ *   as mudanças aprovadas na direção (layout da lâmina, conceito, fio visual,
+ *   estilo pedido), sem custo, pelas regras da casa (conversa-do-diretor.ts).
+ *   Quem refaz as lâminas é a tela, pelo fluxo normal de gerar e conferir.
  *
  * Estúdio Ads (docs/mesa-ads/SPEC.md): trabalho com tipo 'ads' é um conjunto
  * de criativos de anúncio, não um carrossel. Cada card tem `formato`
@@ -94,8 +105,21 @@ import {
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
 import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
+import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
+import {
+  aplicarNaDirecao,
+  blocoDoEstiloPedido,
+  ESQUEMA_CONVERSA,
+  INSTRUCOES_CONVERSA,
+  limparTexto,
+  type MudancaProposta,
+  normalizarMudancas,
+  pedidoMexeNoTexto,
+  regraProibeCaixa,
+  SEM_FOTO,
+} from "./conversa-do-diretor.ts";
 import {
   ampliar,
   type Area,
@@ -323,6 +347,8 @@ type Direcao = {
   pedido?: string | null;
   /** Protagonista, cenário, luz e tratamento que se repetem em todas as lâminas (a série). */
   fio_visual?: string | null;
+  /** Estilo pedido pela equipe na conversa com o diretor (vale em todas as lâminas; entra no prompt). */
+  estilo_pedido?: string | null;
   /** Campanha (mesa_campanhas) do conteúdo: identidade do tema e selo entram em cada lâmina. */
   campanha_id?: string | null;
   /** Carrossel contínuo: fundo panorâmico fatiado por lâmina (ordem -> caminho no bucket mesa). */
@@ -1851,6 +1877,7 @@ async function garantirFundoContinuo(
     `UMA ÚNICA FOTOGRAFIA PANORÂMICA de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px: um só lugar, visto por uma só câmera, na mesma altura e no mesmo ângulo, com o mesmo chão, a mesma parede, o mesmo horizonte e a mesma luz de ponta a ponta. NÃO é um tríptico nem uma colagem: nada de quadros separados, cenas diferentes, mudança de ângulo (por exemplo, de frente para vista de cima), bordas ou divisões. Depois ela será cortada em ${k} partes verticais 4:5 de ${LARGURA_LAMINA} px (cortes em x = ${divisas.join(" e ")} px) para um carrossel do Instagram, então a cena atravessa esses cortes sem emenda: móveis, objetos e o chão continuam de uma parte para a outra; nenhum rosto fica cortado num corte. É só o fundo: nenhum texto, letra, número ou logo.`,
     ligacao ? "A imagem 1 já traz o PRIMEIRO quadro pronto (à esquerda): não mude nada nele e continue a cena exatamente a partir da borda direita dele." : "",
     atual.direcao.fio_visual ? `Fio visual da série (igual em todos os quadros): ${texto(atual.direcao.fio_visual, 800)}` : "",
+    atual.direcao.estilo_pedido ? `Estilo pedido pela equipe: ${texto(atual.direcao.estilo_pedido, 600)}. Sem escurecer a cena.` : "",
     `Conceito: ${texto(atual.direcao.conceito, 600)}`,
     `O que aparece ao longo da cena, da esquerda para a direita (tudo no mesmo ambiente; adapte o que for de outro ambiente para caber neste mesmo lugar):\n${quadros}`,
     paleta ? `Paleta da marca para luz, objetos e ambiente: ${paleta}.` : "",
@@ -2065,7 +2092,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       anuncio: quadro.formato ? { formato: quadro.formato } : null,
     })
     : card.prompt_imagem;
-  const baseComCampanha = campanha ? `${base}\n\n${blocoDaCampanha(campanha)}` : base;
+  // Estilo pedido na conversa com o diretor: entra em todas as lâminas, depois da campanha.
+  const baseComCampanha = [base, campanha ? blocoDaCampanha(campanha) : "", blocoDoEstiloPedido(t.direcao.estilo_pedido)].filter(Boolean).join("\n\n");
   const comum = {
     clientId: t.client_id,
     modeloId: t.modelo_imagem_id!,
@@ -3206,6 +3234,425 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
   return json({ trabalho: gravado });
 }
 
+// ------------------------------------------------ conversa com o diretor
+
+/**
+ * Conversa do diretor de arte com a equipe dentro do Estúdio (pedido do dono
+ * em 24/09). Uma conversa por trabalho em agente_conversas (agente
+ * diretor_arte, referencia_tipo 'estudio_trabalho', referencia_id = id do
+ * trabalho), lida direto pela tela. estudio_trabalhos.conversa_id continua
+ * vazio de propósito: o CardDoEstudio lê os pedidos de ajuste por ele.
+ */
+const REFERENCIA_DA_CONVERSA = "estudio_trabalho";
+const MAX_HISTORICO_CONVERSA = 12;
+
+type ResultadoDaAplicacao = { direcao: Direcao; afetadas: number[]; fundoApagado: boolean; textoMudou: number[] };
+
+type LinhaDaMensagem = { id: string; conversa_id: string; client_id: string; papel: string; conteudo: string; anexos: unknown; criado_em: string };
+
+/** Conversa do trabalho (a mais recente); com `criar`, abre uma se não houver. */
+async function conversaDoTrabalho(t: Trabalho, criadoPor: string | null, criar: boolean): Promise<string | null> {
+  const { data, error } = await servico()
+    .from("agente_conversas")
+    .select("id")
+    .eq("client_id", t.client_id)
+    .eq("agente", "diretor_arte")
+    .eq("referencia_tipo", REFERENCIA_DA_CONVERSA)
+    .eq("referencia_id", t.id)
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  if (error) throw new ErroEstudio(503, "conversa_indisponivel", "Não foi possível ler a conversa com o diretor.");
+  const achada = ((data as { id: string }[] | null) ?? [])[0];
+  if (achada) return achada.id;
+  if (!criar) return null;
+  const { data: nova, error: erroNova } = await servico()
+    .from("agente_conversas")
+    .insert({ client_id: t.client_id, agente: "diretor_arte", referencia_tipo: REFERENCIA_DA_CONVERSA, referencia_id: t.id, criado_por: criadoPor })
+    .select("id")
+    .single();
+  if (erroNova || !nova) throw new ErroEstudio(503, "conversa_nao_criada", "Não foi possível abrir a conversa com o diretor.");
+  return (nova as { id: string }).id;
+}
+
+/** Grava mensagens em ordem (criado_em crescente) e devolve os ids na mesma ordem. */
+async function gravarMensagens(
+  conversaId: string,
+  clientId: string,
+  msgs: { papel: "usuario" | "agente" | "sistema"; conteudo: string; anexos?: unknown[]; uso_id?: string | null }[],
+): Promise<string[]> {
+  const base = Date.now();
+  const linhas = msgs.map((m, i) => ({
+    conversa_id: conversaId,
+    client_id: clientId,
+    criado_em: new Date(base + i).toISOString(),
+    papel: m.papel,
+    conteudo: m.conteudo.slice(0, 20000),
+    anexos: m.anexos ?? [],
+    uso_id: m.uso_id || null,
+  }));
+  const { data, error } = await servico().from("agente_mensagens").insert(linhas).select("id, criado_em");
+  if (error) {
+    // A resposta já foi cobrada: a tela recebe a resposta mesmo sem o histórico gravado.
+    console.error("estudio-arte: mensagens nao gravadas", { conversa_id: conversaId, code: error.code });
+    return [];
+  }
+  return ((data as { id: string; criado_em: string }[] | null) ?? [])
+    .slice()
+    .sort((a, b) => (a.criado_em < b.criado_em ? -1 : 1))
+    .map((m) => m.id);
+}
+
+/** Resumo curto da última conferência, para o diretor saber o que está errado na arte. */
+function resumoDaConferencia(v: VersaoCard | null): Record<string, unknown> | null {
+  if (!v) return null;
+  const c = v.verificacao as Verificacao | VerificacaoPendente;
+  if (!c || (c as VerificacaoPendente).pendente) return { pendente: true };
+  const ver = c as Verificacao;
+  const nota = (n: NotaJev | null | undefined) => (n && "nota" in n ? n.nivel : null);
+  return {
+    ortografia_ok: ver.ortografia_ok,
+    faltando: ver.faltando?.slice(0, 8) ?? [],
+    sobrando: ver.sobrando?.slice(0, 8) ?? [],
+    logo_ok: ver.logo_ok ?? null,
+    identidade: nota(ver.identidade),
+    descricao_visual: texto(ver.descricao_visual, 400) || null,
+    motivos_da_autocorrecao: ver.autocorrecao?.precisa ? ver.autocorrecao.motivos : [],
+  };
+}
+
+/** Lâminas em que o texto vai direto na cena (sem caixa): foto real, contínuo ou regra da marca. */
+function laminasSemCaixa(t: Trabalho, kit: Kit): Set<number> {
+  const todas = regraProibeCaixa(kit?.regras);
+  const continuo = !ehAds(t) && !!t.direcao.carrossel_infinito && totalCards(t) > 1;
+  const saida = new Set<number>();
+  for (const c of t.direcao.cards) {
+    const fotoReal = !!c.imagens_ids?.length || (c.fotos_livres ?? []).some((f) => f.papel === "fundo");
+    if (todas || fotoReal || continuo) saida.add(c.ordem);
+  }
+  return saida;
+}
+
+function hexDaPaleta(kit: Kit): string[] {
+  const p = (kit as { paleta?: unknown } | null)?.paleta;
+  return (Array.isArray(p) ? (p as { hex?: string }[]) : [])
+    .map((x) => String(x?.hex || "").trim().toUpperCase())
+    .filter((h) => /^#[0-9A-F]{6}$/.test(h));
+}
+
+/**
+ * conversar { trabalho_id, mensagem, ordem? }: o diretor de arte lê o
+ * conteúdo inteiro do trabalho (conceito, fio visual, lâminas com texto
+ * exato, layout, fotos reais, referências, conferências), a marca e o acervo,
+ * olha a versão atual da lâmina em foco (quando o modelo aceita imagem) e
+ * responde conversando, com até 6 `mudancas` estruturadas que a equipe aplica
+ * com um clique (aplicar_mudancas). Nada muda no trabalho aqui: só a conversa
+ * é gravada. O texto exato só entra nas mudanças quando a mensagem pede.
+ */
+async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const mensagem = limparTexto(corpo.mensagem, 2000);
+  if (!mensagem) throw new ErroEstudio(400, "mensagem_vazia", "Escreva o que você quer mudar ou perguntar ao diretor.");
+  if (!t.direcao.cards.length) throw new ErroEstudio(409, "trabalho_sem_direcao", "Este trabalho ainda não tem direção de arte. Prepare a direção antes de conversar.");
+  const total = totalCards(t);
+  const ordemPedida = Number(corpo.ordem);
+  const emFoco = Number.isInteger(ordemPedida) && t.direcao.cards.some((c) => c.ordem === ordemPedida) ? ordemPedida : null;
+  const textoPodeMudar = pedidoMexeNoTexto(mensagem);
+
+  const conversaExistente = await conversaDoTrabalho(t, ch.userId, false);
+  const idsDasFotos = t.direcao.cards.flatMap((c) => c.imagens_ids ?? []);
+  const idsDasReferencias = [...new Set([...(t.direcao.referencias_ids ?? []), ...t.direcao.cards.flatMap((c) => c.referencias_ids ?? [])])].slice(0, 12);
+  const [kit, fontes, memoria, acervo, fotosEmUso, prompt, refsEscolhidas, refsDoCliente, campanha, item, historico, modelo] = await Promise.all([
+    lerKit(t.client_id),
+    lerFontes(t.client_id),
+    memoriaDoDiretor(t.client_id),
+    lerAcervo(t.client_id, 30),
+    imagensDoAcervo(t.client_id, idsDasFotos),
+    // Sem o prompt global ativo a conversa ainda ajuda: a base de conhecimento vale.
+    promptDoDiretor(t.client_id).catch(() => ""),
+    idsDasReferencias.length ? referenciasPorId(t.client_id, idsDasReferencias) : Promise.resolve([] as Referencia[]),
+    servico()
+      .from("cliente_referencias")
+      .select("id, papel, leitura, tags")
+      .eq("client_id", t.client_id)
+      .eq("ativa", true)
+      .not("leitura", "is", null)
+      .order("criado_em", { ascending: false })
+      .limit(8),
+    t.direcao.campanha_id ? lerCampanha(t.client_id, t.direcao.campanha_id) : Promise.resolve(null),
+    t.task_id ? lerItemDaAgenda(t.task_id).catch(() => null) : Promise.resolve(null),
+    conversaExistente
+      ? servico().from("agente_mensagens").select("papel, conteudo, anexos").eq("conversa_id", conversaExistente).order("criado_em", { ascending: false }).limit(MAX_HISTORICO_CONVERSA)
+      : Promise.resolve({ data: [] }),
+    modeloDoPapel("diretor_arte"),
+  ]);
+  const marca = await marcaDoCliente(t.client_id, kit, fontes);
+  const semCaixa = laminasSemCaixa(t, kit);
+  const fotoPorId = new Map<string, ImagemAcervo>();
+  for (const a of [...acervo, ...fotosEmUso]) fotoPorId.set(a.id, a);
+
+  const laminas = t.direcao.cards.slice().sort((a, b) => a.ordem - b.ordem).map((bruto) => {
+    const c = comLayout(bruto, total);
+    const versoes = t.cards.filter((v) => v.ordem === c.ordem);
+    const atual = versaoAtual(t, c.ordem);
+    const ultimoAjuste = versoes.filter((v) => v.origem === "ajuste" && v.instrucao).sort((a, b) => b.versao - a.versao)[0];
+    const foto = (c.imagens_ids ?? []).map((id) => fotoPorId.get(id)).find(Boolean);
+    return {
+      ordem: c.ordem,
+      funcao: c.funcao,
+      formato: c.formato ?? null,
+      texto_exato: c.texto_exato,
+      blocos: c.blocos ?? [],
+      layout: c.layout,
+      evitar: c.evitar || null,
+      foto_real: foto ? { id: foto.id, resumo: resumoDaFoto(foto) } : null,
+      fotos_da_equipe: (c.fotos_livres ?? []).map((f) => ({ papel: f.papel, nota: f.nota ?? null })),
+      referencias_proprias: (c.referencias_ids ?? []).length,
+      versoes: versoes.length,
+      ultima_conferencia: resumoDaConferencia(atual),
+      ultimo_ajuste: ultimoAjuste ? texto(ultimoAjuste.instrucao, 300) : null,
+      sem_caixa_atras_do_texto: semCaixa.has(c.ordem),
+    };
+  });
+
+  const contexto = {
+    tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
+    texto_pode_mudar: textoPodeMudar,
+    lamina_em_foco: emFoco,
+    trabalho: {
+      status: t.status,
+      conceito: t.direcao.conceito,
+      fio_visual: t.direcao.fio_visual ?? null,
+      estilo_pedido: t.direcao.estilo_pedido ?? null,
+      carrossel_continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
+      total_de_laminas: total,
+      ultimo_pedido_ao_diretor: t.direcao.pedido ?? null,
+      campanha: campanha ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade } : null,
+    },
+    item: item
+      ? {
+        titulo: item.tarefa.title,
+        formato: item.tarefa.delivery_type,
+        roteiro_e_contexto: texto(item.tarefa.description, 3000),
+        objetivo_do_post: item.post?.objective ?? null,
+        legenda_prevista: texto(item.post?.default_caption, 1200) || null,
+      }
+      : null,
+    laminas,
+    marca: {
+      nome: marca.nomeCliente,
+      paleta: marca.paleta,
+      estilo: marca.estilo,
+      regras: marca.regras,
+      fontes: marca.fontes,
+      tipografia_citada: marca.tipografiaCitada,
+      tom_de_voz: marca.tomDeVoz,
+      tem_logo_oficial: marca.temLogo,
+    },
+    referencias_escolhidas: refsEscolhidas.map((r) => ({ id: r.id, papel: r.papel ?? null, tecnica: texto(r.leitura, 500) || null })),
+    referencias_do_cliente: (((refsDoCliente as { data: unknown }).data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
+      .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 400), tags: r.tags })),
+    acervo: acervo.map((a) => ({ id: a.id, nome: texto(a.nome, 80), categoria: a.categoria, descricao: texto(a.descricao, 200) || null })),
+    memoria_do_diretor: memoria,
+  };
+
+  // A versão atual da lâmina em foco vai junto quando o modelo aceita imagem.
+  const aceitaImagem = !modelo.modalidades?.entrada?.length || modelo.modalidades.entrada.indexOf("image") >= 0;
+  const versaoEmFoco = emFoco !== null ? versaoAtual(t, emFoco) : null;
+  let imagens: ImagemEntrada[] | undefined;
+  if (aceitaImagem && versaoEmFoco) {
+    try {
+      imagens = [await baixarImagem("mesa", versaoEmFoco.storage_path, `lamina-${emFoco}-v${versaoEmFoco.versao}`)];
+    } catch {
+      imagens = undefined;
+    }
+  }
+
+  const anteriores = (((historico as { data: unknown }).data as { papel: string; conteudo: string; anexos: unknown }[] | null) ?? [])
+    .slice()
+    .reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente")
+    .map((m) => {
+      const extra = m.papel === "agente" ? resumoDasPropostas(m.anexos) : "";
+      return { papel: m.papel as "usuario" | "agente", conteudo: `${texto(m.conteudo, 2500)}${extra ? `\n${extra}` : ""}` };
+    });
+
+  const sistema = [
+    CONHECIMENTO_DIRETOR,
+    prompt,
+    ehAds(t) ? `${ANATOMIA_DO_ESTATICO}\n\n${POLITICAS_META}\n\n${REGRAS_DE_HONESTIDADE}` : "",
+    INSTRUCOES_CONVERSA,
+  ].filter(Boolean).join("\n\n");
+  const pedido = [
+    `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
+    emFoco !== null ? `Lâmina em foco: ${emFoco}${imagens ? " (a imagem anexada é a versão atual dela)" : versaoEmFoco ? "" : " (ainda sem arte gerada)"}.` : "",
+    `MENSAGEM DA EQUIPE: ${mensagem}`,
+  ].filter(Boolean).join("\n\n");
+
+  const r = await chamarTexto({
+    clientId: t.client_id,
+    tarefa: "estudio",
+    agente: "diretor_arte",
+    modeloId: modelo.id,
+    raciocinio: raciocinioPara(modelo, ["low", "medium"]),
+    sistema,
+    mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens }],
+    esquemaJson: ESQUEMA_CONVERSA,
+    maxTokensSaida: 6_000,
+    referencia: { tipo: REFERENCIA_DA_CONVERSA, id: t.id },
+    criadoPor: ch.userId,
+  });
+  const bruto = (r.json ?? {}) as Record<string, unknown>;
+  const { mudancas, avisos } = normalizarMudancas(bruto.mudancas, {
+    ordens: t.direcao.cards.map((c) => c.ordem),
+    paleta: hexDaPaleta(kit),
+    acervo: new Set(acervo.map((a) => a.id).concat(fotosEmUso.map((a) => a.id))),
+    permitirTexto: textoPodeMudar,
+    semCaixa,
+    continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
+  });
+  const resposta = limparTexto(bruto.resposta, 4000);
+  const memoriaNova = limparTexto(bruto.memoria, 400);
+  if (!resposta && !mudancas.length) {
+    throw new ErroEstudio(502, "conversa_vazia", "O diretor não respondeu desta vez. Tente de novo ou pergunte de outro jeito.", { uso_id: r.usoId, custo_usd: r.custoUsd });
+  }
+
+  const conversaId = conversaExistente ?? await conversaDoTrabalho(t, ch.userId, true);
+  const [, mensagemId] = await gravarMensagens(conversaId!, t.client_id, [
+    { papel: "usuario", conteudo: mensagem, anexos: [{ tipo: "pedido", em_foco: emFoco }] },
+    {
+      papel: "agente",
+      conteudo: resposta || "Seguem as mudanças que eu sugiro.",
+      anexos: [{ tipo: "mudancas", mudancas, avisos, memoria: memoriaNova || null, em_foco: emFoco, aplicadas: [] }],
+      uso_id: r.usoId,
+    },
+  ]);
+  await mutarTrabalho(t.id, (x) => ({ custo_usd: arred(num(x.custo_usd) + r.custoUsd) }));
+
+  return json({
+    trabalho_id: t.id,
+    conversa_id: conversaId,
+    mensagem_id: mensagemId ?? null,
+    resposta: resposta || "Seguem as mudanças que eu sugiro.",
+    mudancas,
+    avisos,
+    em_foco: emFoco,
+    texto_pode_mudar: textoPodeMudar,
+    custo_usd: r.custoUsd,
+    saldo_usd: r.saldoUsd,
+    reserva_usada: r.reservaUsada ?? null,
+  });
+}
+
+/** Linha curta com as mudanças propostas numa resposta (para o histórico que volta ao diretor). */
+function resumoDasPropostas(anexos: unknown): string {
+  const a = (Array.isArray(anexos) ? anexos : []).find((x) => x && typeof x === "object" && (x as { tipo?: string }).tipo === "mudancas") as
+    | { mudancas?: MudancaProposta[]; aplicadas?: string[] }
+    | undefined;
+  if (!a || !Array.isArray(a.mudancas) || !a.mudancas.length) return "";
+  const aplicadas = Array.isArray(a.aplicadas) ? a.aplicadas : [];
+  return `Mudanças que propus: ${a.mudancas.map((m) => `${m.titulo}${aplicadas.indexOf(m.id) >= 0 ? " (aplicada)" : ""}`).join("; ")}.`;
+}
+
+/**
+ * aplicar_mudancas { trabalho_id, mudancas, regerar?, mensagem_id? }: grava
+ * na direção as mudanças que a equipe aprovou (a tela manda as mesmas que
+ * `conversar` devolveu; aqui passam de novo pelas regras da casa). Sem custo.
+ * O texto exato só muda quando a mudança traz texto_exato. `regerar` (lista
+ * de ordens ou true para todas as afetadas) só volta validado: quem refaz as
+ * lâminas é a tela, pelo fluxo normal (gerar_card, conferência e
+ * autocorreção). Com `mensagem_id`, a resposta do diretor fica marcada como
+ * aplicada e o que ela ensinou vai para a memória do diretor.
+ */
+async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  if (t.status === "entregue") {
+    throw new ErroEstudio(409, "trabalho_entregue", "Este trabalho já foi entregue. Prepare um novo para refazer as artes.");
+  }
+  if (!t.direcao.cards.length) throw new ErroEstudio(409, "trabalho_sem_direcao", "Este trabalho ainda não tem direção de arte.");
+  const brutas = Array.isArray(corpo.mudancas) ? (corpo.mudancas as unknown[]).slice(0, 12) : [];
+  if (!brutas.length) throw new ErroEstudio(400, "sem_mudancas", "Escolha pelo menos uma mudança para aplicar.");
+
+  const kit = await lerKit(t.client_id);
+  const idsDeFoto = brutas
+    .map((m) => (m && typeof m === "object" ? ((m as { campos?: Record<string, unknown> }).campos ?? {}).foto_acervo : null))
+    .map((v) => texto(v, 64))
+    .filter((v) => v && v !== SEM_FOTO);
+  const fotos = idsDeFoto.length ? await imagensDoAcervo(t.client_id, idsDeFoto) : [];
+  const total = totalCards(t);
+  const { mudancas, avisos } = normalizarMudancas(brutas, {
+    ordens: t.direcao.cards.map((c) => c.ordem),
+    paleta: hexDaPaleta(kit),
+    acervo: new Set(fotos.map((f) => f.id)),
+    // Quem clica em Aplicar viu o texto novo no cartão da mudança.
+    permitirTexto: true,
+    semCaixa: laminasSemCaixa(t, kit),
+    continuo: !ehAds(t) && !!t.direcao.carrossel_infinito && total > 1,
+  });
+  if (!mudancas.length) {
+    throw new ErroEstudio(400, "mudancas_invalidas", avisos[0] || "Nenhuma das mudanças pôde ser aplicada.", { avisos });
+  }
+
+  // mutarTrabalho pode reler e refazer: vale a aplicação sobre a direção que foi gravada.
+  let r: ResultadoDaAplicacao = { direcao: t.direcao, afetadas: [], fundoApagado: false, textoMudou: [] };
+  const gravado = await mutarTrabalho(t.id, (x) => {
+    r = aplicarNaDirecao<Direcao>(x.direcao, mudancas);
+    return { direcao: r.direcao };
+  });
+  const ordensValidas = new Set(gravado.direcao.cards.map((c) => c.ordem));
+  const regerar = corpo.regerar === true
+    ? r.afetadas
+    : Array.isArray(corpo.regerar)
+      ? [...new Set((corpo.regerar as unknown[]).map((o) => Number(o)).filter((o) => Number.isInteger(o) && ordensValidas.has(o)))].sort((a, b) => a - b)
+      : [];
+
+  // Marca a resposta do diretor como aplicada e leva o que ela ensinou para a memória.
+  const mensagemId = texto(corpo.mensagem_id, 64);
+  if (UUID.test(mensagemId)) {
+    const conversaId = await conversaDoTrabalho(t, ch.userId, false);
+    const { data } = conversaId
+      ? await servico().from("agente_mensagens").select("id, conversa_id, client_id, papel, conteudo, anexos, criado_em").eq("id", mensagemId).eq("conversa_id", conversaId).maybeSingle()
+      : { data: null };
+    const linha = data as LinhaDaMensagem | null;
+    if (linha && linha.papel === "agente") {
+      const anexos = (Array.isArray(linha.anexos) ? linha.anexos : []) as Record<string, unknown>[];
+      let memoria: string | null = null;
+      const novos = anexos.map((a) => {
+        if (!a || a.tipo !== "mudancas") return a;
+        const ja = Array.isArray(a.aplicadas) ? (a.aplicadas as string[]) : [];
+        if (!a.memorizada && typeof a.memoria === "string" && a.memoria.trim()) memoria = a.memoria.trim();
+        return { ...a, aplicadas: [...new Set([...ja, ...mudancas.map((m) => m.id)])], aplicadas_em: new Date().toISOString(), memorizada: a.memorizada || !!memoria };
+      });
+      await servico().from("agente_mensagens").update({ anexos: novos }).eq("id", linha.id);
+      if (memoria) {
+        await servico().from("agente_memoria").insert({
+          client_id: t.client_id,
+          agente: "diretor_arte",
+          tipo: "preferencia",
+          texto: `${texto(memoria, 300)} (conversa no estúdio, aplicada)`,
+          origem: "ajuste",
+          referencia_id: t.id,
+        });
+      }
+      await gravarMensagens(conversaId!, t.client_id, [{
+        papel: "sistema",
+        conteudo: `Aplicado: ${mudancas.map((m) => m.titulo).join("; ")}.${regerar.length ? ` Refazendo ${regerar.length === 1 ? `a lâmina ${regerar[0]}` : `as lâminas ${regerar.join(", ")}`}.` : ""}`,
+        anexos: [{ tipo: "aplicadas", mensagem_id: linha.id, ids: mudancas.map((m) => m.id), regerar }],
+      }]);
+    }
+  }
+
+  return json({
+    trabalho: gravado,
+    aplicadas: mudancas.map((m) => m.id),
+    afetadas: r.afetadas,
+    regerar,
+    fundo_apagado: r.fundoApagado,
+    texto_mudou: r.textoMudou,
+    avisos,
+    custo_usd: 0,
+  });
+}
+
 // ------------------------------------------------------------------ porta
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
@@ -3219,10 +3666,12 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   legenda,
   entregar,
   referencias,
+  conversar,
+  aplicar_mudancas: aplicarMudancas,
 };
 
-/** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo e entrega. */
-const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar"]);
+/** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo, entrega e a conversa com o diretor. */
+const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar", "conversar"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

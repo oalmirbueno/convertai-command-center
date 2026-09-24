@@ -4,6 +4,7 @@ import { CalendarCheck2, ChevronDown, ExternalLink, Layers, Loader2, Pencil, X }
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { useAvisarErro } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import {
@@ -25,7 +26,16 @@ import {
  * de ações da proposta: gravar na agenda (sem custo), ajustar e descartar.
  */
 
-export function CartaoDoConteudo({ item, onAbrir }: { item: ItemProposto; onAbrir?: (taskId: string, mes: string) => void }) {
+export function CartaoDoConteudo({
+  item,
+  onAbrir,
+  apagar,
+}: {
+  item: ItemProposto;
+  onAbrir?: (taskId: string, mes: string) => void;
+  /** Com esta função, o cartão ganha a lixeira com confirmação curta. */
+  apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar>;
+}) {
   const [aberto, setAberto] = useState(false);
   const laminas = laminasDoItem(item);
   const cards = (item.cards || []).slice().sort((a, b) => a.ordem - b.ordem);
@@ -43,6 +53,7 @@ export function CartaoDoConteudo({ item, onAbrir }: { item: ItemProposto; onAbri
             </span>
           )}
           {item.carrossel_infinito && <span className="mr-2">contínuo</span>}
+          {apagar && <BotaoDeApagar onApagar={apagar} className="ml-auto" />}
         </div>
         {item.tema && <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-snug [overflow-wrap:anywhere]">{item.tema}</p>}
         {item.gancho && <p className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{item.gancho}</p>}
@@ -119,6 +130,8 @@ interface BlocoDaPropostaProps {
   compacto?: boolean;
   /** Cartões em grade (campanha); no painel do agente, um embaixo do outro. */
   grade?: boolean;
+  /** Cada cartão ganha a lixeira: tira da proposta ou, já gravado, da agenda. */
+  permitirApagar?: boolean;
 }
 
 export function BlocoDaProposta({
@@ -132,10 +145,12 @@ export function BlocoDaProposta({
   onAbrirNoEstudio,
   compacto = false,
   grade = false,
+  permitirApagar = false,
 }: BlocoDaPropostaProps) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
+  const apagarConteudo = useApagarConteudo();
   const [gravando, setGravando] = useState(false);
   const [escolhido, setEscolhido] = useState("");
   const gravada = proposta.status === "gravada";
@@ -144,6 +159,15 @@ export function BlocoDaProposta({
   const projeto = projetoDaProposta || escolhido || (projetos.candidatos.length === 1 ? projetos.candidatos[0].id : "");
   const itens = (proposta.itens || []).slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")));
   const primeiraTarefa = itens.find((i) => !!i.task_id);
+
+  /** Lixeira do cartão: gravado sai da agenda; na proposta, sai da proposta. */
+  const apagarDoCartao = (it: ItemProposto) => {
+    if (!permitirApagar || proposta.status === "descartada") return undefined;
+    if (it.task_id) return (extra: boolean) => apagarConteudo.daAgenda(it.task_id as string, it.tema || "Conteúdo", extra);
+    if (gravada || !it.tema_id) return undefined;
+    const indice = (proposta.itens || []).indexOf(it);
+    return () => apagarConteudo.daProposta(proposta.id, it, indice);
+  };
 
   const gravar = async () => {
     if (!projeto || gravando) return;
@@ -169,7 +193,7 @@ export function BlocoDaProposta({
     <div className="min-w-0 space-y-2">
       {!compacto && (
         <div className={grade ? "grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3" : "space-y-1.5"}>
-          {itens.map((it, i) => <CartaoDoConteudo key={it.tema_id || i} item={it} onAbrir={onAbrirNoEstudio} />)}
+          {itens.map((it, i) => <CartaoDoConteudo key={it.tema_id || i} item={it} onAbrir={onAbrirNoEstudio} apagar={apagarDoCartao(it)} />)}
         </div>
       )}
       {gravada ? (

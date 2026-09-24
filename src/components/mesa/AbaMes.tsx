@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, Check, ChevronDown, Loader2, MessageSquare, PanelRightClose, PanelRightOpen, Plus, Send, Sparkles, X } from "lucide-react";
+import { CalendarCheck2, CalendarRange, Check, ChevronDown, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import {
   chamarFuncao,
@@ -27,18 +27,27 @@ import AgendaDoMes from "./AgendaDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
-import { atualizarAgenda, useMidia } from "./mesaV4Api";
+import { atualizarAgenda, type ItemProposto } from "./mesaV4Api";
+import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
+import {
+  chavesDoPlano,
+  corpoDoPlano,
+  lerPlanosCombinados,
+  mesesAPartirDe,
+  nomeDoMes,
+  resumoDoPlano,
+  type ModoDoAgente,
+} from "./planoDoMes";
 import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
- * Aba Mês. No alto, os Hypes da semana (HypesDaSemana.tsx) e, sempre à mão,
- * o Agente do mês (AgenteDoMes.tsx). O agente nunca espreme o calendário:
- * até 1800 px de tela ele é uma gaveta à direita (botão fixo "Agente do
- * mês"); acima disso fica em coluna ao lado, que dá para recolher, porque aí
- * sobram pelo menos 150 px por dia. Depois, a Agenda do mês: o mesmo calendário da Agenda do painel,
+ * Aba Mês. No alto, o plano combinado do mês e os Hypes da semana
+ * (HypesDaSemana.tsx); o Agente do mês (AgenteDoMes.tsx) abre num pop-up
+ * centralizado pelo botão flutuante no centro da base da tela, então nunca
+ * espreme o calendário. Depois, a Agenda do mês: o mesmo calendário da Agenda do painel,
  * onde a equipe seleciona os itens, completa e melhora com o agente e abre no
  * Estúdio (AgendaDoMes.tsx). Logo abaixo, o planejamento de conteúdos novos,
  * de dois jeitos: "Planejar e preencher a agenda" faz sozinho mês a mês
@@ -69,6 +78,8 @@ interface CardDoRoteiro {
 
 interface Item {
   id?: string;
+  tema_id?: string;
+  task_id?: string | null;
   data?: string;
   formato?: string;
   tema?: string;
@@ -153,21 +164,24 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
   );
 }
 
-function LinhaDoItem({ item }: { item: Item }) {
+function LinhaDoItem({ item, apagar }: { item: Item; apagar?: (confirmarExtra: boolean) => Promise<ResultadoDoApagar> }) {
   const texto = item.copy || item.legenda || item.resumo;
   return (
     <Collapsible className="rounded-xl border border-border bg-card">
-      <CollapsibleTrigger className="flex w-full items-start px-3.5 py-3 text-left">
-        <div className="mr-3 w-16 shrink-0 text-[11.5px] text-muted-foreground">
-          <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
-          <p>{item.formato || "formato?"}</p>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
-          {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
-        </div>
-        <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      </CollapsibleTrigger>
+      <div className="flex min-w-0 items-start">
+        <CollapsibleTrigger className="flex min-w-0 flex-1 items-start px-3.5 py-3 text-left">
+          <div className="mr-3 w-16 shrink-0 text-[11.5px] text-muted-foreground">
+            <p className="font-medium text-foreground">{dataCurta(item.data)}</p>
+            <p>{item.formato === "estatico" ? "estático" : item.formato || "formato?"}</p>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium leading-snug [overflow-wrap:anywhere]">{item.gancho || item.tema || "Sem gancho"}</p>
+            {item.tema && item.gancho && <p className="mt-0.5 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{item.tema}</p>}
+          </div>
+          <ChevronDown className="ml-3 mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+        </CollapsibleTrigger>
+        {apagar && <BotaoDeApagar onApagar={apagar} className="mr-2 mt-2.5 shrink-0" />}
+      </div>
       <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
         {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
         <p className="text-[11.5px] text-muted-foreground">
@@ -274,6 +288,8 @@ function PlanejarComEstrategista() {
   const { clientId, catalogo } = mesa;
   const queryClient = useQueryClient();
   const confirmar = useConfirm();
+  const apagarConteudo = useApagarConteudo();
+  const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
 
   const proximo = limitesDoMes(somarMeses(inicioDoMes(), 1));
   const [propostaId, setPropostaId] = useState<string | null>(null);
@@ -402,6 +418,8 @@ function PlanejarComEstrategista() {
     }
   };
 
+  const planoDoPeriodo = (planos.data || []).find((p) => p.mes === String(inicio).slice(0, 7)) || null;
+
   // O estrategista recebe quantas publicações cabem no período (por semana vezes as semanas).
   const parametros = { frequencia: itensPrevistos, objetivo: objetivo.trim() || undefined, oferta: oferta.trim() || undefined, modelo_id: modeloId, raciocinio: raciocinio || undefined };
 
@@ -422,6 +440,14 @@ function PlanejarComEstrategista() {
         <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
       </div>
+      {planoDoPeriodo && (
+        <p className="flex items-start rounded-lg bg-success/10 px-3 py-2 text-[12px] leading-relaxed">
+          <Check className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            O plano combinado de <span className="capitalize">{nomeDoMes(planoDoPeriodo.mes)}</span> entra no estrategista: {resumoDoPlano(planoDoPeriodo.texto)}
+          </span>
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-end">
         {nova && (propostas.data || []).length > 0 && (
           <Button type="button" variant="ghost" size="sm" className="mr-2" onClick={() => setNova(false)}>Voltar à proposta</Button>
@@ -542,7 +568,17 @@ function PlanejarComEstrategista() {
             <section className="space-y-3">
               <TituloDeSecao>Publicações ({itens.length})</TituloDeSecao>
               <div className="space-y-2">
-                {itens.map((it, i) => <LinhaDoItem key={it.id || i} item={it} />)}
+                {itens.map((it, i) => (
+                  <LinhaDoItem
+                    key={it.tema_id || it.id || i}
+                    item={it}
+                    apagar={
+                      proposta.status !== "gravada" && !it.task_id && it.tema_id
+                        ? () => apagarConteudo.daProposta(proposta.id, it as ItemProposto, (proposta.itens || []).indexOf(it))
+                        : undefined
+                    }
+                  />
+                ))}
               </div>
             </section>
           )}
@@ -594,20 +630,99 @@ function lerModo(): ModoDePlanejar {
   }
 }
 
-/** Tela a partir da qual o agente pode ficar em coluna ao lado sem espremer os dias. */
-export const TELA_DO_AGENTE_AO_LADO = "(min-width: 1800px)";
+/** Mês da URL (?mes=AAAA-MM-01), igual à Agenda do mês; sem ele, o mês corrente. */
+const MES_VALIDO = /^\d{4}-\d{2}-01$/;
 
-const chaveDoAgenteRecolhido = "mesa:agente:recolhido";
+/**
+ * Faixa do alto da aba: o plano combinado do mês que está na agenda e os dois
+ * caminhos com o agente (planejar conversando ou criar conteúdos), mais o
+ * estado dos próximos meses. Poucos cliques, sem poluir.
+ */
+function PlanoDoMesEmDestaque({ mes, onConversar }: { mes: string; onConversar: (modo: ModoDoAgente, mes: string) => void }) {
+  const { clientId } = useMesa();
+  const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
+  const [aberto, setAberto] = useState(false);
+  const lista = planos.data || [];
+  const doMes = lista.find((p) => p.mes === mes.slice(0, 7)) || null;
+  const proximos = mesesAPartirDe(somarMeses(mes, 1), 3);
+  const nome = nomeDoMes(mes);
+  const corpo = doMes ? corpoDoPlano(doMes.texto) : "";
 
-function lerAgenteRecolhido(): boolean {
-  try {
-    return window.localStorage.getItem(chaveDoAgenteRecolhido) === "1";
-  } catch {
-    return false;
-  }
+  return (
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border bg-card" aria-label={`Plano de ${nome}`}>
+      <div className="flex min-w-0 flex-col p-4 sm:flex-row sm:items-start sm:p-5">
+        <div className="min-w-0 flex-1 sm:mr-4">
+          <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
+            Plano de <span className="ml-1 normal-case">{nome}</span>
+          </p>
+          {doMes ? (
+            <>
+              <p className={`mt-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed [overflow-wrap:anywhere] ${aberto ? "" : "line-clamp-3"}`}>{corpo}</p>
+              {corpo.length > 180 && (
+                <button type="button" onClick={() => setAberto((v) => !v)} className="mt-1 text-[12px] font-medium text-primary hover:underline">
+                  {aberto ? "Mostrar menos" : "Ver o plano inteiro"}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="mt-1.5 text-[15px] font-semibold leading-snug">Nada combinado para {nome} ainda</p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                Converse com o agente sobre estratégia, datas, campanhas, frequência e formatos. O que ficar combinado entra no gerador de meses.
+              </p>
+            </>
+          )}
+        </div>
+        <div className="mt-3 flex shrink-0 flex-wrap items-center sm:mt-0 sm:justify-end">
+          <Button type="button" size="sm" className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
+            <MessagesSquare className="mr-1.5 h-4 w-4" />
+            {doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
+          </Button>
+          <Button type="button" size="sm" variant="outline" className="mb-1 h-9" onClick={() => onConversar("criar", mes)}>
+            <Sparkles className="mr-1.5 h-4 w-4" />
+            Criar conteúdos
+          </Button>
+        </div>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center border-t border-border bg-muted/40 px-4 py-2 sm:px-5">
+        <span className="mr-2 text-[11.5px] text-muted-foreground">Próximos meses</span>
+        {proximos.map((m) => {
+          const tem = lista.some((p) => p.mes === m.slice(0, 7));
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onConversar("planejar", m)}
+              className={`my-0.5 mr-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] capitalize transition-colors ${
+                tem ? "bg-success/15 text-foreground hover:bg-success/25" : "bg-card text-muted-foreground hover:text-foreground"
+              }`}
+              title={tem ? "Plano combinado. Clique para conversar sobre ele." : "Sem plano. Clique para planejar com o agente."}
+            >
+              {tem && <Check className="mr-1 h-3 w-3" />}
+              {nomeDoMes(m).split(" ")[0]}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 /**
+ * Aba Mês (pedido do dono em 24/09): organizada de cima para baixo.
+ * 1. O plano combinado do mês e os dois caminhos com o agente.
+ * 2. Os hypes da semana.
+ * 3. A Agenda do mês: o mesmo calendário da Agenda do painel, com seleção,
+ *    completar com o agente, abrir no Estúdio e apagar o que não serviu.
+ * 4. O gerador de meses: "Planejar e preencher a agenda" faz sozinho mês a mês
+ *    (PlanejamentoAutomatico.tsx); "Uma proposta por vez" é o caminho manual.
+ *    Os dois seguem o plano combinado de cada mês.
+ *
+ * O Agente do mês fica sempre à vista: botão flutuante no centro da base da
+ * tela (acima da barra do celular) que abre o agente num pop-up grande,
+ * centralizado, com histórico, microfone, anexos e custo estimado.
+ *
  * `onAbrirNoEstudio` leva um item da agenda para a aba Estúdio. Sem ela, a
  * agenda troca a URL (aba=estudio&task=<id>&mes=<AAAA-MM-01>, mantendo client).
  * `onCriarCampanha` abre a aba Campanhas com o hype escolhido já preenchido.
@@ -619,14 +734,16 @@ export default function AbaMes({
   onAbrirNoEstudio?: (taskId: string, mes: string) => void;
   onCriarCampanha?: (hypeIndice: number) => void;
 } = {}) {
+  const [params] = useSearchParams();
+  const mesDaUrl = params.get("mes") || "";
+  const mes = MES_VALIDO.test(mesDaUrl) ? mesDaUrl : inicioDoMes();
+
   const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
-  // Coluna ao lado só em tela muito larga (e se a pessoa não recolheu);
-  // abaixo disso, gaveta. Assim cada dia do calendário tem largura de leitura.
-  const larga = useMidia(TELA_DO_AGENTE_AO_LADO);
-  const [recolhido, setRecolhido] = useState(lerAgenteRecolhido);
-  const aoLado = larga && !recolhido;
-  const [gaveta, setGaveta] = useState(false);
+  const [agenteAberto, setAgenteAberto] = useState(false);
+  const [modoAoAbrir, setModoAoAbrir] = useState<ModoDoAgente | undefined>(undefined);
+  const [mesDoAgente, setMesDoAgente] = useState(mes);
   const [pendente, setPendente] = useState<PedidoEmAndamento | null>(null);
+
   const trocarModo = (m: ModoDePlanejar) => {
     setModo(m);
     try {
@@ -635,91 +752,104 @@ export default function AbaMes({
       /* sem armazenamento: vale só nesta visita */
     }
   };
-  const fixarAoLado = (fixar: boolean) => {
-    setRecolhido(!fixar);
-    if (fixar) setGaveta(false);
-    try {
-      window.localStorage.setItem(chaveDoAgenteRecolhido, fixar ? "0" : "1");
-    } catch {
-      /* sem armazenamento: vale só nesta visita */
-    }
-  };
-  const acao = larga ? (
-    <button
-      type="button"
-      onClick={() => fixarAoLado(!aoLado)}
-      className="inline-flex h-8 shrink-0 items-center rounded-md px-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-      aria-label={aoLado ? "Recolher o agente" : "Fixar o agente ao lado"}
-      title={aoLado ? "Recolher o agente e dar a largura toda ao calendário" : "Fixar o agente ao lado do calendário"}
-    >
-      {aoLado ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-    </button>
-  ) : null;
-  const agente = <AgenteDoMes onAbrirNoEstudio={onAbrirNoEstudio} pendenteExterno={pendente} className="h-full" acaoDoCabecalho={acao} />;
-  return (
-    <div className={aoLado ? "grid min-w-0 grid-cols-[minmax(0,1fr)_400px] gap-6" : "min-w-0"} data-agente={aoLado ? "ao-lado" : "gaveta"}>
-      <div className="min-w-0 space-y-6">
-        <HypesDaSemana
-          onCriarCampanha={(i) => onCriarCampanha?.(i)}
-          onPedidoInicio={(p) => {
-            setPendente(p);
-            if (!aoLado) setGaveta(true);
-          }}
-          onPedidoFim={() => setPendente(null)}
-        />
-        <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
-        <section className="space-y-3 border-t border-border pt-6">
-          <TituloDeSecao>Planejar novos conteúdos com o estrategista</TituloDeSecao>
-          <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
-            {(
-              [
-                { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
-                { valor: "proposta", rotulo: "Uma proposta por vez" },
-              ] as { valor: ModoDePlanejar; rotulo: string }[]
-            ).map((m) => (
-              <button
-                key={m.valor}
-                type="button"
-                role="tab"
-                aria-selected={modo === m.valor}
-                onClick={() => trocarModo(m.valor)}
-                className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
-                  modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m.rotulo}
-              </button>
-            ))}
-          </div>
-          {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
-        </section>
-      </div>
 
-      {aoLado ? (
-        <aside className="min-w-0" aria-label="Agente do mês">
-          {/* Abaixo do cabeçalho fixo da Mesa (80px do painel mais a barra de custo e as etapas). */}
-          <div className="sticky top-[212px] h-[calc(100vh-228px)] min-h-[480px] overflow-hidden rounded-xl border border-border bg-card">
-            {agente}
-          </div>
-        </aside>
-      ) : (
-        <>
+  const abrirAgente = (modoDoAgente?: ModoDoAgente, mesAlvo?: string) => {
+    setModoAoAbrir(modoDoAgente);
+    setMesDoAgente(mesAlvo && MES_VALIDO.test(mesAlvo) ? mesAlvo : mes);
+    setAgenteAberto(true);
+  };
+
+  return (
+    // Espaço no fim para o botão flutuante nunca cobrir o último conteúdo.
+    <div className="min-w-0 space-y-6 pb-28" data-agente="pop-up">
+      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} />
+
+      <HypesDaSemana
+        onCriarCampanha={(i) => onCriarCampanha?.(i)}
+        onPedidoInicio={(p) => {
+          setPendente(p);
+          abrirAgente("criar");
+        }}
+        onPedidoFim={() => setPendente(null)}
+      />
+
+      <AgendaDoMes onAbrirNoEstudio={onAbrirNoEstudio} />
+
+      <section className="space-y-3 border-t border-border pt-6">
+        <TituloDeSecao>Gerador de meses</TituloDeSecao>
+        <p className="-mt-1 max-w-3xl text-[12.5px] leading-relaxed text-muted-foreground">
+          O estrategista propõe e detalha os conteúdos de cada mês seguindo o prompt geral do cliente e o plano combinado com o agente do mês.
+        </p>
+        <div role="tablist" aria-label="Como planejar" className="grid max-w-xl grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+          {(
+            [
+              { valor: "automatico", rotulo: "Planejar e preencher a agenda" },
+              { valor: "proposta", rotulo: "Uma proposta por vez" },
+            ] as { valor: ModoDePlanejar; rotulo: string }[]
+          ).map((m) => (
+            <button
+              key={m.valor}
+              type="button"
+              role="tab"
+              aria-selected={modo === m.valor}
+              onClick={() => trocarModo(m.valor)}
+              className={`min-w-0 rounded-lg px-2 py-2 text-[12.5px] font-medium ${
+                modo === m.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {m.rotulo}
+            </button>
+          ))}
+        </div>
+        {modo === "automatico" ? <PlanejamentoAutomatico /> : <PlanejarComEstrategista />}
+      </section>
+
+      {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
+      {!agenteAberto && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[72px] z-40 flex justify-center px-4 md:bottom-6">
           <button
             type="button"
-            onClick={() => setGaveta(true)}
-            className="fixed bottom-[72px] right-4 z-30 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-medium text-primary-foreground shadow-lg md:bottom-6 md:right-6"
+            onClick={() => abrirAgente()}
+            className="pointer-events-auto inline-flex h-12 max-w-full items-center rounded-full bg-primary px-5 text-[13.5px] font-semibold text-primary-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
+            aria-label="Abrir o Agente do mês"
           >
-            {pendente ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1.5 h-4 w-4" />}
-            Agente do mês
+            {pendente ? <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 shrink-0" />}
+            <span className="truncate">Agente do mês</span>
+            <span className="ml-2 hidden rounded-full bg-primary-foreground/15 px-2 py-0.5 text-[11px] font-medium sm:inline">planejar e criar</span>
           </button>
-          <Sheet open={gaveta} onOpenChange={setGaveta}>
-            <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
-              <SheetTitle className="sr-only">Agente do mês</SheetTitle>
-              {agente}
-            </SheetContent>
-          </Sheet>
-        </>
+        </div>
       )}
+
+      <Dialog open={agenteAberto} onOpenChange={setAgenteAberto}>
+        <DialogContent
+          className="flex h-[92vh] w-[calc(100vw-16px)] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:h-[86vh] sm:w-[calc(100vw-48px)]"
+          onInteractOutside={(e) => {
+            // Clicar no aviso (ex.: Desfazer) não fecha o agente.
+            const alvo = e.target as HTMLElement | null;
+            if (alvo && typeof alvo.closest === "function" && alvo.closest("[data-sonner-toaster]")) e.preventDefault();
+          }}
+        >
+          {/* Com o pop-up aberto, o resto da página não recebe clique; os avisos (Desfazer) precisam receber. */}
+          <style>{"[data-sonner-toaster]{pointer-events:auto}"}</style>
+          <DialogTitle className="sr-only">Agente do mês</DialogTitle>
+          <DialogDescription className="sr-only">Converse com o estrategista para planejar o mês e criar conteúdos.</DialogDescription>
+          <AgenteDoMes
+            onAbrirNoEstudio={
+              onAbrirNoEstudio
+                ? (taskId, m) => {
+                    setAgenteAberto(false);
+                    onAbrirNoEstudio(taskId, m);
+                  }
+                : undefined
+            }
+            pendenteExterno={pendente}
+            className="min-h-0 flex-1"
+            mesInicial={mesDoAgente}
+            modoInicial={modoAoAbrir}
+            painelDoPlano
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

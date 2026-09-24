@@ -24,6 +24,7 @@ import {
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { atualizarAgenda } from "./mesaV4Api";
+import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 
 /**
@@ -488,6 +489,9 @@ export default function PlanejamentoAutomatico() {
 
   const porSemana = Math.max(1, Math.min(14, Number(frequencia) || 3));
   const meses = mesesEntre(de, ate);
+  // O plano combinado com o agente do mês entra no estrategista de cada mês.
+  const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
+  const mesesComPlano = meses.filter((m) => (planos.data || []).some((p) => p.mes === m.slice(0, 7)));
   const alvos = meses.map((m) => publicacoesDoMes(m, porSemana));
   const totalPublicacoes = alvos.reduce((t, n) => t + n, 0);
   const modelo = catalogo.find((m) => m.id === modeloId) || null;
@@ -604,6 +608,14 @@ export default function PlanejamentoAutomatico() {
           <p className="min-w-0 flex-1 text-[12px] text-muted-foreground sm:mr-3">
             {meses.length} {meses.length === 1 ? "mês" : "meses"} · cerca de {totalPublicacoes} publicações
             {meses.length ? ` (${alvos.join(", ")} por mês)` : ""}. A estimativa soma temas e detalhe de cada mês.
+            {mesesComPlano.length > 0 && (
+              <span className="mt-0.5 flex items-center text-foreground">
+                <Check className="mr-1 h-3.5 w-3.5 shrink-0 text-success" />
+                {mesesComPlano.length === meses.length
+                  ? "Todos os meses têm plano combinado com o agente do mês: o estrategista segue cada um."
+                  : `Com plano combinado: ${mesesComPlano.map((m) => rotuloDoMes(m).split(" ")[0]).join(", ")}. O estrategista segue esses planos.`}
+              </span>
+            )}
           </p>
           <div className="mt-2 flex flex-wrap items-center sm:mt-0 sm:justify-end">
             {rodando && (

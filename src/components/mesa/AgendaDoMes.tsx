@@ -13,6 +13,7 @@ import {
   somarMeses,
   TAMANHOS,
 } from "@/lib/mesa/api";
+import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { AvisoDeErro, BotaoComCusto, avisarCustoReal } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import { TituloDeSecao } from "./Seletores";
@@ -186,6 +187,7 @@ function ItemSelecionado({
   abertoDeInicio,
   onTirar,
   onAbrir,
+  onApagar,
 }: {
   item: ItemDaAgenda;
   selo: Selo;
@@ -195,6 +197,8 @@ function ItemSelecionado({
   abertoDeInicio: boolean;
   onTirar: () => void;
   onAbrir: (() => void) | null;
+  /** Apaga da agenda (com desfazer); o servidor recusa o aprovado, agendado ou publicado. */
+  onApagar?: (confirmarArte: boolean) => Promise<ResultadoDoApagar>;
 }) {
   const [aberto, setAberto] = useState(abertoDeInicio);
   const deArte = ehFormatoDeArte(item.delivery_type);
@@ -230,15 +234,23 @@ function ItemSelecionado({
               {posts.map((p) => `${rotuloDaPublicacao(p.status)} em ${dataCurta(p.dia)} às ${horaCurta(p.scheduled_at)}`).join(" · ")}
             </p>
           )}
-          {deArte ? (
-            onAbrir && (
-              <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={onAbrir}>
-                <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
-              </Button>
-            )
-          ) : (
-            <p className="text-[11px] text-muted-foreground">Formato fora do estúdio.</p>
-          )}
+          <div className="flex min-w-0 flex-wrap items-center">
+            {deArte ? (
+              onAbrir && (
+                <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" onClick={onAbrir}>
+                  <Palette className="mr-1.5 h-3.5 w-3.5" /> Abrir no Estúdio
+                </Button>
+              )
+            ) : (
+              <p className="mb-1 mr-2 text-[11px] text-muted-foreground">Formato fora do estúdio.</p>
+            )}
+            {onApagar && (
+              <span className="mb-1 ml-auto inline-flex min-w-0 items-center">
+                <span className="mr-1 text-[11.5px] text-muted-foreground">Apagar da agenda</span>
+                <BotaoDeApagar onApagar={onApagar} pergunta="Apagar este conteúdo da agenda?" rotulo="Apagar da agenda" />
+              </span>
+            )}
+          </div>
         </div>
       )}
     </li>
@@ -282,6 +294,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   const agenda = useAgendaDoMes(clientId, mes);
   const dados = agenda.data;
+  const apagarConteudo = useApagarConteudo();
 
   const artes = useArtesDoMes(
     clientId,
@@ -761,6 +774,11 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                   abertoDeInicio={escolhidos.length === 1}
                   onTirar={() => alternar(i.id)}
                   onAbrir={ehFormatoDeArte(i.delivery_type) ? () => abrirNoEstudio(i) : null}
+                  onApagar={async (confirmarArte) => {
+                    const r = await apagarConteudo.daAgenda(i.id, i.title, confirmarArte);
+                    if (r.ok) mudarSelecao((s) => s.filter((x) => x !== i.id));
+                    return r;
+                  }}
                 />
               ))}
             </ul>

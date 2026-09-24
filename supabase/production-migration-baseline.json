@@ -1029,9 +1029,9 @@
     {
       "version": "20260924134019",
       "path": "supabase/migrations/20260924134019_mesa_ads_biblioteca_padroes_3.sql",
-      "local_sha256": "118932303c997a79dc728dca70bb355e3203eaf091dcec06d803cad1f0c509c8",
+      "local_sha256": "5b891cb0111c9abae657eac030397aaeee0ffb01659e72303563dd4bb152e86c",
       "remote_name": "mesa_ads_biblioteca_padroes_3",
-      "remote_statements_sha256": "b191c09c319e238169f111ab5ba86342bc7012677d037c88a8f837d60c0b69c2",
+      "remote_statements_sha256": "21f9ec08719118b545ab475574aad72cf63259ba6867d2adc94b61636828284c",
       "remote_hash_mode": "supabase_cli_split"
     },
     {

@@ -22,6 +22,18 @@
  *   servico do MCP (createEditorialItem), idempotente por proposta mais indice
  *   do item, preserva o que existe, guarda task_ids, status gravada e registra
  *   na memoria do agente o que foi escolhido e descartado.
+ * - planejar_mes { client_id, mensagem, mes, proposta_id?, anexos?, modelo_id?,
+ *   raciocinio? }: o agente do mes conversando sobre o planejamento do mes e dos
+ *   proximos (prompt geral do cliente mais publicado, aprovado, metricas,
+ *   campanhas, hypes e agenda). O que a conversa decide vira o plano combinado
+ *   do mes (agente_memoria, "Plano do mês AAAA-MM:"), que propor_temas e
+ *   detalhar seguem. Mudanca na proposta volta so como sugestao (anexo mudanca).
+ * - aplicar_mudanca { mensagem_id, descartar? }: aplica (ou descarta) a sugestao.
+ * - tirar_item / repor_item { proposta_id, tema_id, ... }: apaga um conteudo da
+ *   proposta antes de gravar e desfaz.
+ * - arquivar_item_agenda / restaurar_item_agenda { client_id, task_id, ... }:
+ *   tira da agenda um conteudo gravado (deleted_at, com desfazer), nunca o
+ *   aprovado, agendado ou publicado; com arte feita pede confirmar_arte.
  *
  * Regras: contexto so com dado real (nunca inventar); toda leitura e escrita
  * presa ao client_id da proposta; nenhuma falha responde 200.
@@ -35,6 +47,7 @@ import {
   createEditorialItem,
   createEditorialItemSchema,
   deterministicEditorialTaskId,
+  requestIdFromTaskSource,
   WriteError,
   type WriteCtx,
 } from "../_shared/mcp-write-services.ts";
@@ -163,6 +176,8 @@ type Proposta = {
   criado_por: string | null;
   criado_em: string;
   gravada_em: string | null;
+  /** Tocado pelo gatilho a cada mudança: a sugestão do agente só vale sobre a versão que ela leu. */
+  atualizado_em?: string;
 };
 
 type Chamador = { userId: string; token: string };
@@ -526,11 +541,49 @@ type Contexto = {
   titulos_recentes: string[];
   kit_marca: unknown | null;
   memoria: Array<{ tipo: string; texto: string }>;
+  /** O que a conversa com o agente do mês combinou para cada mês (o mais novo de cada mês). */
+  planos: Array<{ mes: string; texto: string }>;
   datasOcupadas: Set<string>;
   prompt: string;
 };
 
 const corta = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : v ?? null);
+
+// ------------------------------------------------------------ plano combinado
+
+/**
+ * O plano de cada mês que a equipe combina conversando com o agente do mês
+ * mora na memória do estrategista (agente_memoria), uma linha ativa por mês,
+ * com o texto começando por "Plano do mês AAAA-MM:". Assim ele entra no
+ * contexto de todas as ações (propor temas, detalhar, conversar) sem tabela nova.
+ */
+export const PREFIXO_PLANO = "Plano do mês ";
+const MES_DO_PLANO = /^Plano do mês (\d{4}-\d{2}):/;
+
+export function mesDoPlano(t: string): string | null {
+  const m = MES_DO_PLANO.exec(String(t ?? ""));
+  return m ? m[1] : null;
+}
+
+/** O plano mais novo de cada mês, na ordem em que chegaram (mais novo primeiro). */
+export function planosUnicos(linhas: Array<{ texto: string }>): Array<{ mes: string; texto: string }> {
+  const vistos = new Set<string>();
+  const saida: Array<{ mes: string; texto: string }> = [];
+  for (const l of linhas) {
+    const mes = mesDoPlano(l.texto);
+    if (!mes || vistos.has(mes)) continue;
+    vistos.add(mes);
+    saida.push({ mes, texto: l.texto });
+  }
+  return saida;
+}
+
+/** Bloco do plano combinado para o mês do período (vazio quando não há). */
+export function blocoDoPlano(ctx: Pick<Contexto, "planos">, inicio: string): string {
+  const plano = ctx.planos.find((p) => p.mes === inicio.slice(0, 7));
+  if (!plano) return "";
+  return `\n\nPLANO COMBINADO COM A EQUIPE PARA ESTE MÊS (decidido na conversa com o agente do mês; siga, a não ser que o pedido desta execução diga outra coisa):\n${plano.texto}`;
+}
 
 /**
  * Monta o contexto do estrategista so com dado real do banco. O que nao existe
@@ -562,6 +615,7 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     kit,
     memoria,
     prompts,
+    planos,
   ] = await Promise.all([
     servico.from("profiles").select("full_name, company_name").eq("id", clientId).maybeSingle(),
     servico.from("external_accounts").select("handle, display_name").eq("client_id", clientId).eq("platform", "instagram").eq("status", "active").limit(1),
@@ -594,6 +648,9 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
       .order("criado_em", { ascending: false }).limit(60),
     servico.from("agente_prompts").select("client_id, conteudo, versao").eq("agente", AGENTE).eq("ativo", true)
       .or(`client_id.is.null,client_id.eq.${clientId}`),
+    // Planos combinados na conversa do agente do mês (uma linha ativa por mês).
+    servico.from("agente_memoria").select("texto, criado_em").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
+      .like("texto", `${PREFIXO_PLANO}%`).order("criado_em", { ascending: false }).limit(24),
   ]);
 
   // Prompt efetivo: global ativo + complemento ativo do cliente.
@@ -659,7 +716,9 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     agenda_no_periodo: { tarefas, posts: postsNoPeriodo },
     titulos_recentes: ((tarefasRecentes.data ?? []) as Array<{ title: string }>).map((t) => t.title).slice(0, 60),
     kit_marca: kit.data ?? null,
-    memoria: (memoria.data ?? []) as Array<{ tipo: string; texto: string }>,
+    // O plano do mês vai em campo próprio (planos), não misturado na memória.
+    memoria: ((memoria.data ?? []) as Array<{ tipo: string; texto: string }>).filter((m) => !mesDoPlano(m.texto)),
+    planos: planosUnicos((planos.data ?? []) as Array<{ texto: string }>),
     datasOcupadas,
     prompt,
   };
@@ -681,6 +740,7 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     titulos_publicados_ou_planejados_nos_ultimos_60_dias: ctx.titulos_recentes,
     kit_de_marca: ctx.kit_marca,
     memoria_do_estrategista: ctx.memoria,
+    planos_combinados_com_a_equipe: ctx.planos,
   };
   return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados, null, 1)}`;
 }
@@ -884,7 +944,7 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
 
   const instrucao = `${contextoEmTexto(ctx, { inicio, fim, parametros })}
 
-TAREFA: ${pedido}
+TAREFA: ${pedido}${blocoDoPlano(ctx, inicio)}
 Antes, pesquise na web dúvidas, buscas, comportamentos, datas sazonais e oportunidades do nicho e da região deste cliente.
 Devolva:
 - diagnostico: diagnóstico resumido a partir dos dados reais (melhores e piores conteúdos, o que as métricas mostram, o que falta).
@@ -1024,7 +1084,7 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
   const lotes: Tema[][] = [];
   for (let i = 0; i < pendentes.length; i += TEMAS_POR_LOTE) lotes.push(pendentes.slice(i, i + TEMAS_POR_LOTE));
 
-  const base = `${contextoEmTexto(ctx, { inicio: p.periodo_inicio, fim: p.periodo_fim, parametros: p.parametros })}
+  const base = `${contextoEmTexto(ctx, { inicio: p.periodo_inicio, fim: p.periodo_fim, parametros: p.parametros })}${blocoDoPlano(ctx, p.periodo_inicio)}
 
 DIAGNÓSTICO JÁ FEITO:
 ${p.diagnostico ?? ""}
@@ -2433,7 +2493,734 @@ ${REGRAS_DOS_ITENS}`;
   return json({ campanha, proposta: propostaFinal, resposta, conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
+// ------------------------------------------ planejar o mês conversando
+
+const ESQUEMA_PLANO_DO_MES = obj({
+  resumo: S("string"),
+  frequencia_semanal: S(["integer", "null"]),
+  pilares: { type: "array", items: S("string") },
+  formatos: S("string"),
+  datas: { type: "array", items: S("string") },
+  campanhas: { type: "array", items: S("string") },
+});
+
+export const ESQUEMA_PLANEJAMENTO = {
+  nome: "planejamento_do_mes",
+  schema: obj({
+    resposta: S("string"),
+    plano_do_mes: { ...ESQUEMA_PLANO_DO_MES, type: ["object", "null"] },
+    proximos_meses: { type: ["array", "null"], items: obj({ mes: S("string"), plano: ESQUEMA_PLANO_DO_MES }) },
+    mudancas: {
+      ...obj({
+        resumo: S("string"),
+        temas: { type: "array", items: ESQUEMA_TEMA },
+        temas_removidos: { type: "array", items: S("string") },
+        itens: { type: "array", items: ESQUEMA_ITEM },
+        itens_removidos: { type: "array", items: S("string") },
+      }),
+      type: ["object", "null"],
+    },
+  }),
+};
+
+/** Mudança que o agente sugere na proposta: só o que entra, muda ou sai. */
+type PatchDaProposta = { temas: Tema[]; temas_removidos: string[]; itens: Item[]; itens_removidos: string[] };
+
+/** "AAAA-MM" a partir de "AAAA-MM" ou "AAAA-MM-DD"; null quando não é um mês. */
+export function mesDoPedido(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  if (!/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return null;
+  const n = Number(s.slice(5, 7));
+  return n >= 1 && n <= 12 ? s.slice(0, 7) : null;
+}
+
+/** Último dia do mês "AAAA-MM", em AAAA-MM-DD. */
+export function fimDoMes(mes: string): string {
+  const [a, m] = mes.split("-").map(Number);
+  return new Date(Date.UTC(a, m, 0, 12)).toISOString().slice(0, 10);
+}
+
+/** Mês "AAAA-MM" mais n meses. */
+export function somarMesesAoMes(mes: string, n: number): string {
+  const [a, m] = mes.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1 + n, 1, 12)).toISOString().slice(0, 7);
+}
+
+const listaDeTextos = (v: unknown, max: number, tam = 200) =>
+  (Array.isArray(v) ? v : []).map((x) => texto(x, tam)).filter(Boolean).slice(0, max);
+
+/** Texto do plano combinado de um mês, como vai para a memória do estrategista. */
+export function textoDoPlano(mes: string, bruto: unknown): string | null {
+  const o = (bruto ?? {}) as Record<string, unknown>;
+  const resumo = texto(o.resumo, 1500);
+  if (!resumo) return null;
+  const linhas = [`${PREFIXO_PLANO}${mes}: ${resumo}`];
+  const freq = Number(o.frequencia_semanal);
+  if (Number.isFinite(freq) && freq > 0) linhas.push(`Frequência: ${Math.min(14, Math.round(freq))} publicações por semana.`);
+  const pilares = listaDeTextos(o.pilares, 8);
+  if (pilares.length) linhas.push(`Pilares: ${pilares.join("; ")}.`);
+  const formatos = texto(o.formatos, 400);
+  if (formatos) linhas.push(`Formatos: ${formatos}`);
+  const datas = listaDeTextos(o.datas, 12);
+  if (datas.length) linhas.push(`Datas: ${datas.join("; ")}.`);
+  const campanhas = listaDeTextos(o.campanhas, 8);
+  if (campanhas.length) linhas.push(`Campanhas: ${campanhas.join("; ")}.`);
+  return linhas.join("\n").slice(0, 3500);
+}
+
+/** Troca o plano ativo do mês pelo novo (o anterior fica inativo, como histórico). */
+async function salvarPlano(servico: SupabaseClient, clientId: string, mes: string, textoPlano: string, conversaId: string): Promise<string | null> {
+  await servico
+    .from("agente_memoria")
+    .update({ ativa: false })
+    .eq("client_id", clientId)
+    .eq("agente", AGENTE)
+    .eq("ativa", true)
+    .like("texto", `${PREFIXO_PLANO}${mes}:%`);
+  const { data, error } = await servico
+    .from("agente_memoria")
+    .insert({ client_id: clientId, agente: AGENTE, tipo: "preferencia", origem: "ajuste", referencia_id: conversaId, texto: textoPlano })
+    .select("id")
+    .single();
+  if (error || !data) {
+    console.error("[agente-calendario] plano nao gravado", { client_id: clientId, mes, code: error?.code });
+    return null;
+  }
+  return (data as { id: string }).id;
+}
+
+/**
+ * Contexto extra do planejamento, só com dado real: o que saiu publicado e o
+ * que foi aprovado nos últimos 90 dias, campanhas ativas, os hypes da semana e
+ * a agenda do mês e dos 3 seguintes (quantos, formatos e títulos).
+ */
+async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string, mes: string) {
+  const inicio = `${mes}-01`;
+  const ate = fimDoMes(somarMesesAoMes(mes, 3));
+  const ha90 = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  const { data: projetos } = await servico.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200);
+  const projectIds = ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id);
+  const vazio = Promise.resolve({ data: [] as unknown[] });
+  const [publicados, aprovados, campanhas, hypes, agenda] = await Promise.all([
+    servico.from("editorial_publications").select("scheduled_at, editorial_posts(title, content_type)")
+      .eq("client_id", clientId).eq("status", "published").gte("scheduled_at", ha90)
+      .order("scheduled_at", { ascending: false }).limit(40),
+    servico.from("estudio_trabalhos").select("task_id, entrega_status, atualizado_em")
+      .eq("client_id", clientId).in("entrega_status", ["aprovado", "agendado"]).gte("atualizado_em", ha90)
+      .order("atualizado_em", { ascending: false }).limit(40),
+    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status")
+      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(12),
+    servico.from("mesa_hypes").select("semana, resumo, itens").eq("client_id", clientId).order("semana", { ascending: false }).limit(1),
+    projectIds.length
+      ? servico.from("tasks").select("title, due_date, delivery_type")
+        .in("project_id", projectIds).is("deleted_at", null).gte("due_date", inicio).lte("due_date", ate).order("due_date").limit(400)
+      : vazio,
+  ]);
+
+  const idsAprovados = ((aprovados.data ?? []) as Array<{ task_id: string | null }>).map((a) => a.task_id).filter((x): x is string => !!x && UUID.test(x));
+  const { data: tarefasAprovadas } = idsAprovados.length
+    ? await servico.from("tasks").select("id, title, due_date").in("id", idsAprovados)
+    : { data: [] as unknown[] };
+  const tituloDaTarefa = new Map(((tarefasAprovadas ?? []) as Array<{ id: string; title: string; due_date: string | null }>).map((t) => [t.id, t]));
+
+  const porMes: Record<string, { total: number; formatos: Record<string, number>; titulos: string[] }> = {};
+  for (const t of (agenda.data ?? []) as Array<{ title: string; due_date: string | null; delivery_type: string | null }>) {
+    const m = String(t.due_date ?? "").slice(0, 7);
+    if (!m) continue;
+    const linha = porMes[m] ?? (porMes[m] = { total: 0, formatos: {}, titulos: [] });
+    linha.total++;
+    const f = t.delivery_type || "sem formato";
+    linha.formatos[f] = (linha.formatos[f] ?? 0) + 1;
+    if (linha.titulos.length < 20) linha.titulos.push(`${t.due_date}: ${String(t.title ?? "").slice(0, 120)}`);
+  }
+
+  const hype = ((hypes.data ?? []) as Array<{ semana: string; resumo: string | null; itens: unknown }>)[0] ?? null;
+  return {
+    publicados_nos_ultimos_90_dias: ((publicados.data ?? []) as Array<{ scheduled_at: string; editorial_posts: { title?: string; content_type?: string } | null }>)
+      .map((p) => ({ data: String(p.scheduled_at ?? "").slice(0, 10), titulo: corta(p.editorial_posts?.title ?? "", 160), formato: p.editorial_posts?.content_type ?? null })),
+    aprovados_pelo_cliente_nos_ultimos_90_dias: ((aprovados.data ?? []) as Array<{ task_id: string; entrega_status: string }>)
+      .map((a) => {
+        const t = tituloDaTarefa.get(a.task_id);
+        return { titulo: corta(t?.title ?? "", 160), data: t?.due_date ?? null, situacao: a.entrega_status };
+      })
+      .filter((a) => a.titulo),
+    campanhas_ativas: ((campanhas.data ?? []) as Array<Record<string, unknown>>).map((c) => ({
+      nome: c.nome, objetivo: corta(c.objetivo, 300), conceito: corta(c.conceito, 400), periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim }, status: c.status,
+    })),
+    hypes_da_semana: hype
+      ? {
+        semana: hype.semana,
+        resumo: hype.resumo,
+        itens: (Array.isArray(hype.itens) ? hype.itens : []).slice(0, 8).map((h) => {
+          const o = (h ?? {}) as Record<string, unknown>;
+          return { titulo: o.titulo, janela: o.janela, como_usar: corta(o.como_usar, 300), nota: o.nota ?? null };
+        }),
+      }
+      : null,
+    agenda_do_mes_e_dos_3_seguintes: Object.keys(porMes).sort().map((m) => ({ mes: m, ...porMes[m] })),
+  };
+}
+
+/** A proposta pedida ou a aberta mais recente do estrategista que começa neste mês. */
+async function propostaDoPlanejamento(servico: SupabaseClient, clientId: string, pedida: unknown, inicio: string, fim: string): Promise<Proposta | null> {
+  if (pedida != null && pedida !== "") {
+    const p = await carregarProposta(servico, pedida);
+    if (p.client_id !== clientId) throw new ErroHttp(403, "proposta_de_outro_cliente", "A proposta não é deste cliente.");
+    return p;
+  }
+  const { data } = await servico
+    .from("calendario_propostas")
+    .select("id")
+    .eq("client_id", clientId)
+    .is("parametros->>origem", null)
+    .in("status", ["temas", "detalhando", "pronta"])
+    .gte("periodo_inicio", inicio)
+    .lte("periodo_inicio", fim)
+    .order("criado_em", { ascending: false })
+    .limit(1);
+  const id = ((data as Array<{ id: string }> | null) ?? [])[0]?.id;
+  return id ? await carregarProposta(servico, id) : null;
+}
+
+/** Item alterado: o que veio vazio fica como estava (datas, cards e textos não se perdem). */
+export function mesclarItem(antigo: Item, novo: Item): Item {
+  const out: Item = { ...antigo };
+  for (const k of Object.keys(novo) as Array<keyof Item>) {
+    const v = novo[k];
+    if (v === "" || v === null || v === undefined) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    (out as Record<string, unknown>)[k] = v;
+  }
+  if (out.formato === "estatico") {
+    out.cards = out.cards.slice(0, 1);
+    out.carrossel_infinito = false;
+  }
+  out.task_id = antigo.task_id ?? null;
+  if (antigo.campanha_id) out.campanha_id = antigo.campanha_id;
+  return out;
+}
+
+/** Status da proposta depois de uma mudança nos temas ou nos itens. */
+export function statusDaProposta(p: Pick<Proposta, "status">, temas: Tema[], itens: Item[]): string {
+  // Pedido livre, campanha e completar não têm temas: com itens, pronta.
+  if (temas.length === 0) return itens.length ? "pronta" : p.status;
+  if (itens.length === 0) return "temas";
+  const faltam = temas.filter((t) => t.escolhido && !itens.some((i) => i.tema_id === t.id));
+  return faltam.length ? "detalhando" : "pronta";
+}
+
+/** Normaliza a mudança sugerida pelo modelo sobre a proposta atual; null quando não muda nada. */
+function normalizarPatch(p: Proposta, bruto: unknown): { patch: PatchDaProposta; ajustes: string[] } | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const o = bruto as Record<string, unknown>;
+  const uteis = diasUteisDaProposta(p);
+  const ajustes: string[] = [];
+
+  const porTema = new Map(p.temas.map((t) => [t.id, t]));
+  const numero = (id: string) => Number(String(id).replace(/\D/g, "")) || 0;
+  let seqTema = Math.max(p.temas.length, ...p.temas.map((t) => numero(t.id)));
+  const usadosT = new Set<string>();
+  const temas: Tema[] = [];
+  for (const b of (Array.isArray(o.temas) ? o.temas : []).slice(0, 30)) {
+    let id = texto((b as Record<string, unknown>)?.id, 40);
+    if (!id || usadosT.has(id)) {
+      do id = `t${++seqTema}`; while (porTema.has(id) || usadosT.has(id));
+    }
+    usadosT.add(id);
+    const t = normalizarTema(b, id, porTema.get(id));
+    if (!t.tema) continue;
+    temas.push(porTema.has(id) ? t : { ...t, escolhido: true });
+  }
+
+  const porItem = new Map(p.itens.map((i) => [i.tema_id, i]));
+  let seqItem = p.itens.length;
+  const usadosI = new Set<string>();
+  const itens: Item[] = [];
+  for (const b of (Array.isArray(o.itens) ? o.itens : []).slice(0, 60)) {
+    const dataCrua = String((b as Record<string, unknown>)?.data ?? "");
+    const novo = normalizarItem(b, uteis);
+    if (!novo.tema_id || usadosI.has(novo.tema_id)) {
+      do novo.tema_id = `n${++seqItem}`; while (porItem.has(novo.tema_id) || usadosI.has(novo.tema_id));
+    }
+    usadosI.add(novo.tema_id);
+    const antigo = porItem.get(novo.tema_id);
+    if (antigo && antigo.task_id) {
+      ajustes.push(`"${antigo.tema}" já está na agenda e não muda por aqui.`);
+      continue;
+    }
+    // Sem data válida no alterado, a data fica a de antes.
+    if (antigo && !DATA.test(dataCrua)) novo.data = antigo.data;
+    const item = antigo ? mesclarItem(antigo, novo) : novo;
+    if (typeof p.parametros.campanha_id === "string") item.campanha_id = p.parametros.campanha_id;
+    if (DATA.test(dataCrua) && dataCrua !== item.data) ajustes.push(`"${item.tema}" foi de ${dataCrua} para ${item.data} (só segunda a sexta dentro do período).`);
+    if (item.tema) itens.push(item);
+  }
+
+  const temasRemovidos = listaDeTextos(o.temas_removidos, 30, 40).filter((id) => porTema.has(id));
+  const itensRemovidos = listaDeTextos(o.itens_removidos, 60, 40).filter((id) => {
+    const i = porItem.get(id);
+    if (i && i.task_id) ajustes.push(`"${i.tema}" já está na agenda e não sai por aqui: apague pela Agenda do mês.`);
+    return !!i && !i.task_id;
+  });
+  if (!temas.length && !itens.length && !temasRemovidos.length && !itensRemovidos.length) return null;
+  return { patch: { temas, temas_removidos: temasRemovidos, itens, itens_removidos: itensRemovidos }, ajustes };
+}
+
+/** A proposta com a mudança aplicada (temas, itens e status), sem gravar. */
+export function aplicarPatch(p: Pick<Proposta, "temas" | "itens" | "status">, patch: PatchDaProposta): { temas: Tema[]; itens: Item[]; status: string } {
+  const foraT = new Set(patch.temas_removidos);
+  const novosT = new Map(patch.temas.map((t) => [t.id, t]));
+  let temas = p.temas.filter((t) => !foraT.has(t.id)).map((t) => novosT.get(t.id) ?? t);
+  for (const t of patch.temas) if (!p.temas.some((x) => x.id === t.id)) temas.push(t);
+
+  const foraI = new Set(patch.itens_removidos);
+  const novosI = new Map(patch.itens.map((i) => [i.tema_id, i]));
+  // Conteúdo de tema que saiu também sai (o que já está na agenda fica).
+  const itens = p.itens
+    .filter((i) => i.task_id || (!foraI.has(i.tema_id) && !foraT.has(i.tema_id)))
+    .map((i) => (i.task_id ? i : novosI.get(i.tema_id) ?? i));
+  for (const i of patch.itens) if (!p.itens.some((x) => x.tema_id === i.tema_id)) itens.push(i);
+  itens.sort((a, b) => a.data.localeCompare(b.data));
+
+  // Tema com conteúdo fica escolhido; tema que perdeu o conteúdo deixa de ser escolhido.
+  const comItem = new Set(itens.map((i) => i.tema_id));
+  temas = temas.map((t) => {
+    if (comItem.has(t.id)) return t.escolhido ? t : { ...t, escolhido: true };
+    if (foraI.has(t.id) && t.escolhido) return { ...t, escolhido: false };
+    return t;
+  });
+  return { temas, itens, status: statusDaProposta(p, temas, itens) };
+}
+
+const CAMPOS_DA_DIFERENCA: Array<[keyof Item, string]> = [
+  ["data", "data"], ["formato", "formato"], ["tema", "tema"], ["gancho", "gancho"], ["copy", "legenda"],
+  ["cta", "CTA"], ["cards", "roteiro dos cards"], ["pilar", "pilar"], ["fase", "fase"], ["objetivo", "objetivo"],
+];
+
+/** O que muda na proposta, para a equipe ver antes de aplicar. */
+export function diferencaDaProposta(antes: { temas: Tema[]; itens: Item[] }, depois: { temas: Tema[]; itens: Item[] }) {
+  const resumo = (i: Item) => ({ tema_id: i.tema_id, tema: i.tema, data: i.data, formato: i.formato });
+  const porId = new Map(antes.itens.map((i) => [i.tema_id, i]));
+  const idsDepois = new Set(depois.itens.map((i) => i.tema_id));
+  const mudam: Array<ReturnType<typeof resumo> & { data_antes: string | null; campos: string[] }> = [];
+  for (const d of depois.itens) {
+    const a = porId.get(d.tema_id);
+    if (!a) continue;
+    const campos = CAMPOS_DA_DIFERENCA.filter(([k]) => JSON.stringify(a[k] ?? null) !== JSON.stringify(d[k] ?? null)).map(([, r]) => r);
+    if (campos.length) mudam.push({ ...resumo(d), data_antes: a.data !== d.data ? a.data : null, campos });
+  }
+  return {
+    entram: depois.itens.filter((i) => !porId.has(i.tema_id)).map(resumo),
+    saem: antes.itens.filter((i) => !idsDepois.has(i.tema_id)).map(resumo),
+    mudam,
+    temas_entram: depois.temas.filter((t) => !antes.temas.some((a) => a.id === t.id)).map((t) => t.tema),
+    temas_saem: antes.temas.filter((t) => !depois.temas.some((d) => d.id === t.id)).map((t) => t.tema),
+    temas_mudam: depois.temas.filter((t) => {
+      const a = antes.temas.find((x) => x.id === t.id);
+      return !!a && a.tema !== t.tema;
+    }).map((t) => t.tema),
+  };
+}
+
+/**
+ * planejar_mes { client_id, mensagem, mes (AAAA-MM ou AAAA-MM-01), proposta_id?,
+ * anexos?, modelo_id?, raciocinio? }: o agente do mês conversando sobre o
+ * planejamento (estratégia, datas, campanhas, frequência, formatos, pilares)
+ * deste mês e dos próximos, com o prompt geral do cliente e mais contexto
+ * (publicado, aprovado, métricas, campanhas, hypes e a agenda dos próximos
+ * meses). O que a conversa decide vira o plano combinado do mês (memória do
+ * estrategista, que o gerador de meses segue). Mudança na proposta aberta do
+ * mês NÃO é gravada aqui: volta como sugestão na mensagem do agente
+ * (anexo tipo mudanca, com a diferença) e só entra com aplicar_mudanca.
+ */
+async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const mensagem = texto(corpo.mensagem, 4000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o que você quer conversar sobre o mês.");
+  const mes = mesDoPedido(corpo.mes);
+  if (!mes) throw new ErroHttp(400, "mes_invalido", "Informe o mês do planejamento (AAAA-MM).");
+  const inicio = `${mes}-01`;
+  const fim = fimDoMes(mes);
+
+  const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim);
+  const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
+
+  const [ctx, extra, imagens, conversaId] = await Promise.all([
+    montarContexto(servico, clientId, inicio, fim),
+    contextoDoPlanejamento(servico, clientId, mes),
+    baixarAnexos(servico, clientId, corpo.anexos),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+
+  const { data: historico } = await servico
+    .from("agente_mensagens")
+    .select("papel, conteudo")
+    .eq("conversa_id", conversaId)
+    .eq("client_id", clientId)
+    .order("criado_em", { ascending: false })
+    .limit(16);
+  const anteriores = ((historico ?? []) as Array<{ papel: string; conteudo: string }>)
+    .reverse()
+    .filter((m) => m.papel === "usuario" || m.papel === "agente")
+    .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 3000) }));
+
+  const blocoDaProposta = proposta
+    ? `\nPROPOSTA DO ESTRATEGISTA PARA ESTE MÊS (JSON; ${editavel ? "pode sugerir mudanças" : "já gravada na agenda: não muda por aqui"}):\n${JSON.stringify({
+      periodo: { inicio: proposta.periodo_inicio, fim: proposta.periodo_fim },
+      status: proposta.status,
+      diagnostico: corta(proposta.diagnostico, 3000),
+      temas: proposta.temas.map((t) => ({ id: t.id, tema: t.tema, pilar: t.pilar, fase: t.fase, objetivo: t.objetivo, escolhido: t.escolhido, formato_sugerido: t.formato_sugerido, data_sazonal: t.data_sazonal })),
+      itens: proposta.itens.map((i) => ({ ...i, gravado: !!i.task_id, task_id: undefined })),
+    })}\n`
+    : "\nAinda não existe proposta aberta do estrategista para este mês.\n";
+
+  const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: proposta?.parametros ?? {} })}
+
+CONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):
+${JSON.stringify(extra)}${blocoDoPlano(ctx, inicio)}
+${blocoDaProposta}
+MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hojeSaoPaulo()}.
+MENSAGEM DA EQUIPE: ${mensagem}
+${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências ou fotos). Use o conteúdo delas com fidelidade.\n` : ""}
+TAREFA: você é o estrategista planejando o mês junto com a equipe, numa conversa de verdade (não um formulário). Siga o prompt geral do cliente e use os dados reais acima: o que já foi publicado e aprovado, as métricas do Instagram, as campanhas, os hypes, a agenda e o plano combinado.
+- Converse sobre estratégia, datas, campanhas, frequência, formatos e pilares deste mês e, quando fizer sentido, dos próximos meses. Traga números reais quando existirem e diga quando um dado não existe.
+- Se faltar algo importante para decidir, faça no máximo 2 perguntas objetivas no fim da resposta.
+- Nunca invente dado, resultado, data ou evento.
+Devolva:
+- resposta: sua fala na conversa, em português claro, de 2 a 10 frases (pode usar lista curta).
+- plano_do_mes: o plano COMPLETO combinado para ${mes} (resumo de 2 a 6 frases com o que foi decidido, frequencia_semanal, pilares, formatos, datas e campanhas), só quando esta conversa decidiu ou mudou algo do mês; senão null. Mantenha o que já estava combinado e continua valendo.
+- proximos_meses: para cada mês seguinte sobre o qual a conversa decidiu algo, { mes: "AAAA-MM", plano } com o plano completo daquele mês; senão null.
+- mudancas: ${editavel
+    ? `só quando a equipe pedir para mudar a proposta do mês (trocar, tirar ou acrescentar temas ou conteúdos, mudar datas). resumo: o que muda, em 1 a 3 frases. temas: só os temas novos ou alterados (mantenha o id do alterado; tema novo recebe id novo). temas_removidos: ids dos temas que saem. itens: só os conteúdos novos ou alterados, completos (mantenha o tema_id do alterado). itens_removidos: tema_id dos conteúdos que saem. Conteúdo com "gravado": true já está na agenda e não muda aqui. A equipe vê a mudança antes de aplicar. Sem pedido de mudança, null.`
+    : "sempre null (não há proposta aberta para este mês; para gerar o mês, a equipe usa o gerador de meses, que segue o plano combinado)."}
+Datas só de segunda a sexta entre ${inicio} e ${fim}. Formato só carrossel ou estatico.
+${editavel ? REGRAS_DOS_ITENS : ""}`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "conversa",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
+    raciocinio,
+    esquemaJson: ESQUEMA_PLANEJAMENTO,
+    referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
+    criadoPor: chamador.userId,
+  });
+  const r = (s.json ?? {}) as Record<string, unknown>;
+
+  // Plano combinado do mês e dos próximos meses: vai para a memória do estrategista.
+  const planos: Array<{ mes: string; texto: string; id: string | null }> = [];
+  const doMes = r.plano_do_mes ? textoDoPlano(mes, r.plano_do_mes) : null;
+  if (doMes) planos.push({ mes, texto: doMes, id: await salvarPlano(servico, clientId, mes, doMes, conversaId) });
+  for (const x of (Array.isArray(r.proximos_meses) ? r.proximos_meses : []).slice(0, 6)) {
+    const o = (x ?? {}) as Record<string, unknown>;
+    const m = mesDoPedido(o.mes);
+    if (!m || m <= mes || planos.some((p) => p.mes === m)) continue;
+    const t = textoDoPlano(m, o.plano);
+    if (t) planos.push({ mes: m, texto: t, id: await salvarPlano(servico, clientId, m, t, conversaId) });
+  }
+
+  // Mudança na proposta: só sugestão, com a diferença calculada aqui.
+  let mudanca: Record<string, unknown> | null = null;
+  if (editavel && proposta) {
+    const n = normalizarPatch(proposta, r.mudancas);
+    if (n) {
+      const depois = aplicarPatch(proposta, n.patch);
+      mudanca = {
+        tipo: "mudanca",
+        alvo_proposta_id: proposta.id,
+        base: proposta.atualizado_em ?? null,
+        periodo: { inicio: proposta.periodo_inicio, fim: proposta.periodo_fim },
+        resumo: texto((r.mudancas as Record<string, unknown>)?.resumo, 1000),
+        patch: n.patch,
+        diferenca: diferencaDaProposta(proposta, depois),
+        ajustes: n.ajustes,
+      };
+    }
+  }
+
+  const resposta = texto(r.resposta, 6000) || "Anotado.";
+  const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
+  if (mudanca) anexosDaResposta.push(mudanca);
+  await registrarMensagens(servico, conversaId, clientId, [
+    { papel: "usuario", conteudo: mensagem, anexos: imagens.caminhos.map((c) => ({ caminho: c })) },
+  ]);
+  const { data: msgAgente, error: erroMsg } = await servico
+    .from("agente_mensagens")
+    .insert({
+      conversa_id: conversaId,
+      client_id: clientId,
+      criado_em: new Date(Date.now() + 5).toISOString(),
+      papel: "agente",
+      conteudo: resposta,
+      anexos: anexosDaResposta,
+      uso_id: s.usoId,
+    })
+    .select("id")
+    .single();
+  if (erroMsg || !msgAgente) {
+    throw new ErroHttp(503, "resposta_nao_guardada", "O agente respondeu, mas a resposta não foi guardada. Tente de novo.", { uso_id: s.usoId, custo_usd: s.custoUsd });
+  }
+
+  return json({
+    resposta,
+    planos,
+    mudanca,
+    mensagem_id: (msgAgente as { id: string }).id,
+    conversa_id: conversaId,
+    proposta_id: proposta?.id ?? null,
+    custo_usd: s.custoUsd,
+    saldo_usd: s.saldoUsd,
+    reserva_usada: s.reservaUsada ?? null,
+  });
+}
+
+/**
+ * aplicar_mudanca { mensagem_id, descartar? }: aplica na proposta a mudança
+ * que o agente sugeriu naquela mensagem (ou descarta). Só vale sobre a versão
+ * da proposta que o agente leu; se ela mudou depois, pede para conversar de novo.
+ */
+async function aplicarMudanca(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const id = String(corpo.mensagem_id ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: msg, error } = await servico.from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(500, "mensagem_indisponivel", "Não foi possível ler a mensagem do agente.");
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  const m = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
+  await exigirAcessoAoCliente(chamador, m.client_id);
+  const anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+  const i = anexos.findIndex((a) => a && a.tipo === "mudanca");
+  if (i < 0) throw new ErroHttp(404, "mudanca_inexistente", "Esta mensagem não tem mudança sugerida.");
+  const sugestao = anexos[i];
+  if (sugestao.aplicada_em) throw new ErroHttp(409, "mudanca_ja_aplicada", "Esta mudança já foi aplicada.");
+  if (sugestao.descartada_em) throw new ErroHttp(409, "mudanca_descartada", "Esta mudança foi descartada. Peça de novo ao agente.");
+
+  const marcar = async (campo: "aplicada_em" | "descartada_em") => {
+    const novos = anexos.slice();
+    novos[i] = { ...sugestao, [campo]: new Date().toISOString() };
+    await servico.from("agente_mensagens").update({ anexos: novos }).eq("id", m.id).eq("client_id", m.client_id);
+    return novos[i];
+  };
+
+  if (corpo.descartar === true) return json({ anexo: await marcar("descartada_em") });
+
+  const p = await carregarProposta(servico, sugestao.alvo_proposta_id);
+  if (p.client_id !== m.client_id) throw new ErroHttp(403, "proposta_de_outro_cliente", "A proposta não é deste cliente.");
+  exigirEditavel(p);
+  if (p.task_ids.length > 0) {
+    throw new ErroHttp(409, "proposta_ja_na_agenda", "Parte desta proposta já entrou na agenda. Grave o resto primeiro e ajuste pela Agenda do mês.");
+  }
+  if (sugestao.base && p.atualizado_em && String(sugestao.base) !== String(p.atualizado_em)) {
+    throw new ErroHttp(409, "proposta_mudou", "A proposta mudou depois desta sugestão. Peça de novo ao agente para ele ler a versão atual.");
+  }
+  const patch = (sugestao.patch ?? {}) as Partial<PatchDaProposta>;
+  const depois = aplicarPatch(p, {
+    temas: Array.isArray(patch.temas) ? patch.temas : [],
+    temas_removidos: Array.isArray(patch.temas_removidos) ? patch.temas_removidos.map(String) : [],
+    itens: Array.isArray(patch.itens) ? patch.itens : [],
+    itens_removidos: Array.isArray(patch.itens_removidos) ? patch.itens_removidos.map(String) : [],
+  });
+  const atualizada = await salvarProposta(servico, p, depois);
+  const anexo = await marcar("aplicada_em");
+  await registrarMensagens(servico, m.conversa_id, m.client_id, [
+    { papel: "sistema", conteudo: `Mudanças aplicadas na proposta de ${p.periodo_inicio} a ${p.periodo_fim}.` },
+  ]);
+  return json({ proposta: atualizada, anexo });
+}
+
+// ------------------------------------------- apagar conteúdo que não serviu
+
+/** Memória do estrategista: o que a equipe apagou, para não voltar a propor. */
+async function lembrarDoApagado(servico: SupabaseClient, clientId: string, referenciaId: string, textoMemoria: string): Promise<string | null> {
+  const { data, error } = await servico
+    .from("agente_memoria")
+    .insert({ client_id: clientId, agente: AGENTE, tipo: "evitar", origem: "ajuste", referencia_id: referenciaId, texto: textoMemoria.slice(0, 4000) })
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return (data as { id: string }).id;
+}
+
+/** Desfazer: a memória do apagado deixa de valer. */
+async function esquecerMemoria(servico: SupabaseClient, clientId: string, id: unknown) {
+  const mid = String(id ?? "");
+  if (!UUID.test(mid)) return;
+  await servico.from("agente_memoria").update({ ativa: false }).eq("id", mid).eq("client_id", clientId).eq("agente", AGENTE);
+}
+
+/**
+ * tirar_item { proposta_id, tema_id, indice? }: apaga um conteúdo da proposta
+ * antes de gravar. O tema dele deixa de ser escolhido (detalhar não recria) e
+ * a memória do estrategista guarda o que não serviu. Conteúdo que já entrou na
+ * agenda sai pela Agenda do mês (arquivar_item_agenda).
+ */
+async function tirarItem(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const p = await carregarProposta(servico, corpo.proposta_id);
+  await exigirAcessoAoCliente(chamador, p.client_id);
+  exigirEditavel(p);
+  const temaId = texto(corpo.tema_id, 40);
+  if (!temaId) throw new ErroHttp(400, "tema_id_ausente", "Informe o conteúdo (tema_id) que sai da proposta.");
+  const pedido = Number(corpo.indice);
+  let indice = Number.isInteger(pedido) && p.itens[pedido] && p.itens[pedido].tema_id === temaId ? pedido : -1;
+  if (indice < 0) indice = p.itens.findIndex((i) => i.tema_id === temaId);
+  if (indice < 0) throw new ErroHttp(404, "item_inexistente", "Este conteúdo não está mais na proposta. Atualize a tela.");
+  const item = p.itens[indice];
+  if (item.task_id || p.task_ids.length > 0) {
+    throw new ErroHttp(409, "item_na_agenda", "Esta proposta já começou a entrar na agenda. Apague o conteúdo pela Agenda do mês.");
+  }
+  const itens = p.itens.filter((_, k) => k !== indice);
+  const tema = p.temas.find((t) => t.id === item.tema_id);
+  const temas = itens.some((i) => i.tema_id === item.tema_id) ? p.temas : p.temas.map((t) => (t.id === item.tema_id ? { ...t, escolhido: false } : t));
+  const atualizada = await salvarProposta(servico, p, { itens, temas, status: statusDaProposta(p, temas, itens) });
+  const memoriaId = await lembrarDoApagado(
+    servico,
+    p.client_id,
+    p.id,
+    `A equipe apagou o conteúdo proposto "${item.tema}"${item.gancho ? ` (gancho: ${item.gancho})` : ""}. Não proponha de novo o mesmo tema e gancho sem pedido.`,
+  );
+  return json({ proposta: atualizada, removido: { item, indice, tema_escolhido: tema ? tema.escolhido : null }, memoria_id: memoriaId });
+}
+
+/** repor_item { proposta_id, item, indice?, tema_escolhido?, memoria_id? }: desfaz o tirar_item. */
+async function reporItem(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const p = await carregarProposta(servico, corpo.proposta_id);
+  await exigirAcessoAoCliente(chamador, p.client_id);
+  exigirEditavel(p);
+  if (p.task_ids.length > 0) throw new ErroHttp(409, "item_na_agenda", "Esta proposta já começou a entrar na agenda.");
+  const bruto = corpo.item;
+  if (!bruto || typeof bruto !== "object") throw new ErroHttp(400, "item_ausente", "Informe o conteúdo que volta para a proposta.");
+  const temaId = texto((bruto as Record<string, unknown>).tema_id, 40);
+  if (!temaId) throw new ErroHttp(400, "tema_id_ausente", "O conteúdo precisa do tema_id.");
+  await esquecerMemoria(servico, p.client_id, corpo.memoria_id);
+  if (p.itens.some((i) => i.tema_id === temaId)) return json({ proposta: p, ja_estava: true });
+
+  const item = normalizarItem(bruto, diasUteisDaProposta(p));
+  item.tema_id = temaId;
+  if (typeof p.parametros.campanha_id === "string") item.campanha_id = p.parametros.campanha_id;
+  const itens = p.itens.slice();
+  const indice = Number(corpo.indice);
+  if (Number.isInteger(indice) && indice >= 0 && indice <= itens.length) itens.splice(indice, 0, item);
+  else itens.push(item);
+  const temas = corpo.tema_escolhido === false ? p.temas : p.temas.map((t) => (t.id === temaId ? { ...t, escolhido: true } : t));
+  const atualizada = await salvarProposta(servico, p, { itens, temas, status: statusDaProposta(p, temas, itens) });
+  return json({ proposta: atualizada });
+}
+
+type TarefaDaAgenda = { id: string; title: string; due_date: string | null; source: string | null; deleted_at: string | null; project_id: string };
+
+async function tarefaDoCliente(servico: SupabaseClient, taskId: unknown, clientId: string): Promise<TarefaDaAgenda> {
+  const id = String(taskId ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "task_id_invalido", "task_id precisa ser um UUID.");
+  const { data, error } = await servico.from("tasks").select("id, title, due_date, source, deleted_at, project_id").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(500, "item_indisponivel", "Não foi possível ler o item da agenda.");
+  if (!data) throw new ErroHttp(404, "item_inexistente", "Este item não está mais na agenda.");
+  const t = data as TarefaDaAgenda;
+  const { data: projeto } = await servico.from("projects").select("client_id").eq("id", t.project_id).maybeSingle();
+  if (!projeto || (projeto as { client_id: string }).client_id !== clientId) {
+    throw new ErroHttp(403, "item_de_outro_cliente", "Este item não é deste cliente.");
+  }
+  return t;
+}
+
+/** Entrega que trava o apagar: a aprovação do cliente não pode sumir. */
+const ENTREGAS_QUE_TRAVAM = ["aprovado", "agendado"];
+
+/**
+ * arquivar_item_agenda { client_id, task_id, confirmar_arte? }: tira da agenda
+ * um conteúdo que não serviu, arquivando a tarefa (deleted_at, dá para
+ * desfazer com restaurar_item_agenda). Não sai: tarefa de pedido do cliente,
+ * pauta com publicação agendada ou no ar, arte aprovada ou agendada. Com arte
+ * já feita no Estúdio pede confirmar_arte; nenhum arquivo é apagado.
+ */
+async function arquivarItemDaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const t = await tarefaDoCliente(servico, corpo.task_id, clientId);
+  const titulo = String(t.title || "").trim() || "conteúdo sem título";
+  if (t.deleted_at) return json({ task_id: t.id, titulo, ja_estava_apagado: true, arte: false, memoria_id: null });
+  if (requestIdFromTaskSource(t.source)) {
+    throw new ErroHttp(409, "item_de_pedido", "Este item veio de um pedido do cliente. Desvincule e reabra o pedido em vez de apagar.");
+  }
+  const { data: vinculo } = await servico.from("editorial_post_internal").select("post_id").eq("task_id", t.id).maybeSingle();
+  const postId = (vinculo as { post_id?: string } | null)?.post_id ?? null;
+  if (postId) {
+    const { data: pubs } = await servico.from("editorial_publications").select("status").eq("post_id", postId).in("status", ["scheduled", "published"]).limit(1);
+    const pub = ((pubs ?? []) as Array<{ status: string }>)[0];
+    if (pub) {
+      throw new ErroHttp(
+        409,
+        pub.status === "published" ? "item_publicado" : "item_agendado",
+        pub.status === "published"
+          ? "Este conteúdo já foi publicado. Ele fica na agenda como histórico."
+          : "A publicação deste conteúdo está agendada. Cancele o agendamento na Agenda antes de apagar.",
+      );
+    }
+  }
+  const { data: trabalhos } = await servico
+    .from("estudio_trabalhos")
+    .select("status, entrega_status, cards")
+    .eq("client_id", clientId)
+    .eq("task_id", t.id)
+    .order("atualizado_em", { ascending: false })
+    .limit(5);
+  const lista = (trabalhos ?? []) as Array<{ status: string; entrega_status: string | null; cards: unknown }>;
+  if (lista.some((w) => w.entrega_status && ENTREGAS_QUE_TRAVAM.includes(w.entrega_status))) {
+    throw new ErroHttp(409, "arte_aprovada", "A arte deste conteúdo já foi aprovada ou agendada. Ele não sai por aqui para a aprovação não se perder.");
+  }
+  const temArte = lista.some((w) => ["gerando", "pronto", "entregue"].includes(w.status) || !!w.entrega_status || (Array.isArray(w.cards) && w.cards.length > 0));
+  if (temArte && corpo.confirmar_arte !== true) {
+    throw new ErroHttp(409, "item_com_arte", "Este conteúdo já tem arte no Estúdio. Confirme para apagar: a arte fica guardada no Estúdio e nenhum arquivo é apagado.", { arte: true });
+  }
+
+  const inicio = Date.now();
+  const { error } = await servico.from("tasks").update({ deleted_at: new Date().toISOString() }).eq("id", t.id).is("deleted_at", null);
+  if (error) throw new ErroHttp(500, "item_nao_apagado", "Não foi possível apagar o item da agenda. Tente de novo.");
+  const memoriaId = await lembrarDoApagado(
+    servico,
+    clientId,
+    t.id,
+    `A equipe apagou da agenda o conteúdo "${titulo}"${t.due_date ? ` de ${t.due_date}` : ""}. Não proponha de novo o mesmo tema sem pedido.`,
+  );
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_apagar_item_da_agenda", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { client_id: clientId, task_id: t.id, confirmar_arte: corpo.confirmar_arte === true },
+    success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
+  });
+  return json({ task_id: t.id, titulo, arte: temArte, memoria_id: memoriaId });
+}
+
+/** restaurar_item_agenda { client_id, task_id, memoria_id? }: desfaz o arquivar_item_agenda. */
+async function restaurarItemDaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const t = await tarefaDoCliente(servico, corpo.task_id, clientId);
+  await esquecerMemoria(servico, clientId, corpo.memoria_id);
+  if (!t.deleted_at) return json({ task_id: t.id, ja_estava_na_agenda: true });
+  const inicio = Date.now();
+  const { error } = await servico.from("tasks").update({ deleted_at: null }).eq("id", t.id);
+  if (error) throw new ErroHttp(500, "item_nao_restaurado", "Não foi possível devolver o item para a agenda. Tente de novo.");
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_restaurar_item_da_agenda", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { client_id: clientId, task_id: t.id },
+    success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: t.id,
+  });
+  return json({ task_id: t.id, titulo: t.title });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  planejar_mes: planejarMes,
+  aplicar_mudanca: aplicarMudanca,
+  tirar_item: tirarItem,
+  repor_item: reporItem,
+  arquivar_item_agenda: arquivarItemDaAgenda,
+  restaurar_item_agenda: restaurarItemDaAgenda,
   pedido_livre: pedidoLivre,
   buscar_hypes: buscarHypes,
   campanha_criar: campanhaCriar,
@@ -2449,7 +3236,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["pedido_livre", "buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
+const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

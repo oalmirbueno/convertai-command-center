@@ -430,7 +430,7 @@ describe("foto real composta (fotos_livres)", () => {
 
   it("a ferramenta Fotos está na barra do estúdio e grava pelo configurar da lâmina", () => {
     const estudio = ler("src/components/mesa/AbaEstudio.tsx");
-    expect(estudio).toContain('producao: ["lamina", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
+    expect(estudio).toContain('producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
     expect(estudio).toContain("onSalvar={(corpo) => configurar(corpo)}");
     expect(estudio).toContain('await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });');
   });

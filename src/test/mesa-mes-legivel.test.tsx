@@ -231,14 +231,19 @@ describe("artes do mês e cores da Agenda", () => {
 });
 
 describe("agente do mês não espreme o calendário", () => {
-  it("coluna ao lado só a partir de 1800 px e recolhível; abaixo disso, gaveta com botão fixo", () => {
+  // Pedido do dono em 24/09: o agente ficava escondido na gaveta ou na coluna
+  // ao lado. Agora é um botão flutuante no centro da base da tela que abre o
+  // agente num pop-up grande e centralizado; o calendário fica com a largura toda.
+  it("botão flutuante centralizado abre o agente num pop-up; nada de coluna ao lado nem gaveta", () => {
     const aba = ler("src/components/mesa/AbaMes.tsx");
-    expect(aba).toContain('export const TELA_DO_AGENTE_AO_LADO = "(min-width: 1800px)"');
-    expect(aba).toContain("useMidia(TELA_DO_AGENTE_AO_LADO)");
+    expect(aba).not.toContain("TELA_DO_AGENTE_AO_LADO");
+    expect(aba).not.toContain("<SheetContent");
     expect(aba).not.toContain("xl:grid-cols-[minmax(0,1fr)_380px]");
-    expect(aba).toContain('<SheetContent side="right"');
+    expect(aba).toContain("fixed inset-x-0 bottom-[72px] z-40 flex justify-center");
+    expect(aba).toContain("<DialogContent");
     expect(aba).toContain("Agente do mês");
-    expect(aba).toContain("const aoLado = larga && !recolhido;");
+    // Espaço no fim para o botão nunca cobrir o último conteúdo.
+    expect(aba).toContain("pb-28");
   });
 });
 

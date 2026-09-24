@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, ChevronsUpDown, KeyRound, Loader2, Plus, Search, Settings2, Sparkles, Wallet } from "lucide-react";
+import { Building2, Calculator, Check, ChevronsUpDown, KeyRound, ListOrdered, Loader2, Plus, Search, Settings2, Sparkles, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCusto";
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, usd, type PrevisaoDoPlano } from "@/lib/mesa/api";
+import { montarFila, useFilaDePrioridades, type AbaDaMesa } from "@/lib/mesa/fila";
 
 /**
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
@@ -21,6 +22,10 @@ import { inicioDoMes, lerPrevisao, usd, type PrevisaoDoPlano } from "@/lib/mesa/
  * /mesa?client=<id>&aba=estudio&task=<id>&mes=AAAA-MM-01
  * (na aba Campanhas: &campanha=<id>, ou &hype=<n> para abrir a campanha nova
  * a partir do hype n da busca mais recente)
+ *
+ * Painéis da equipe no mesmo topo (pedido do dono em 24/09): &painel=prioridades
+ * (fila do que fazer, também a entrada da Mesa sem cliente) e &painel=custos
+ * (custos de produção, só admin e gestor; o cliente nunca vê a Mesa).
  *
  * Abre rápido (pedido do dono em 23/09): o cliente sai do endereço na hora,
  * sem esperar a lista de clientes; cada aba baixa só quando é aberta (as
@@ -43,6 +48,9 @@ const AbaEntrega = lazy(carregarEntrega);
 // Janelas do admin: só baixam na primeira vez que abrem.
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
+// Painéis da equipe: fila de prioridades e custos de produção.
+const FilaDePrioridades = lazy(() => import("@/components/mesa/FilaDePrioridades"));
+const PainelDeCustos = lazy(() => import("@/components/mesa/PainelDeCustos"));
 
 const ABAS = [
   { valor: "contexto", rotulo: "Contexto" },
@@ -451,6 +459,11 @@ export default function MesaDoCliente() {
   const role = profile?.role || "";
   const isAdmin = role === "admin";
   const podeRecarregar = role === "admin" || role === "manager";
+  // Custos de produção: admin e gestor (a RPC confere de novo no banco).
+  const podeVerCustos = role === "admin" || role === "manager";
+  const painelUrl = params.get("painel");
+  const painel: "prioridades" | "custos" | null =
+    painelUrl === "custos" && podeVerCustos ? "custos" : painelUrl === "prioridades" ? "prioridades" : null;
 
   const clientes = useMemo(
     () =>
@@ -499,8 +512,20 @@ export default function MesaDoCliente() {
   // Trocar de cliente volta para a aba, o mês e o item em que parou nele.
   const trocarCliente = (id: string) => {
     const onde = lerOnde(id);
-    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null });
+    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null, painel: null });
   };
+
+  // Da fila de prioridades direto para a aba certa do cliente certo.
+  const abrirDaFila = (id: string, abaDaAcao: AbaDaMesa, mesDaAcao: string | null) => {
+    mudar({ client: id, aba: abaDaAcao, mes: mesDaAcao, task: null, campanha: null, hype: null, painel: null });
+  };
+
+  const alternarPainel = (p: "prioridades" | "custos") => mudar({ painel: painel === p ? null : p });
+
+  // Fila da equipe: a mesma consulta alimenta o número do botão e a tela.
+  const filaDoTopo = useFilaDePrioridades(clientes, clientesQuery.isSuccess);
+  const urgentes = useMemo(() => (filaDoTopo.data ? montarFila(filaDoTopo.data).resumo.agora : 0), [filaDoTopo.data]);
+  const mostrarFila = painel === "prioridades" || (!clientId && painel === null);
 
   // Endereço só com o cliente (sem aba): abre onde parou da última vez.
   useEffect(() => {
@@ -621,10 +646,10 @@ export default function MesaDoCliente() {
                 <button
                   key={a.valor}
                   type="button"
-                  onClick={() => mudar({ aba: a.valor, hype: null })}
-                  aria-current={aba === a.valor ? "page" : undefined}
+                  onClick={() => mudar({ aba: a.valor, hype: null, painel: null })}
+                  aria-current={aba === a.valor && !painel ? "page" : undefined}
                   className={`min-w-0 truncate rounded-md px-1 py-1.5 text-[12px] font-medium transition-colors lg:flex-1 lg:px-2 ${
-                    aba === a.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    aba === a.valor && !painel ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline">{i + 1}</span>
@@ -633,6 +658,35 @@ export default function MesaDoCliente() {
               ))}
             </nav>
           )}
+          <div className={`flex shrink-0 items-center ${clientId ? "" : "ml-auto"}`}>
+            <button
+              type="button"
+              onClick={() => alternarPainel("prioridades")}
+              aria-pressed={mostrarFila}
+              aria-label={urgentes > 0 ? `Prioridades: ${urgentes} para agora` : "Prioridades"}
+              title="Prioridades"
+              className={`${botaoPequeno} ${mostrarFila ? "bg-muted text-foreground" : ""}`}
+            >
+              <ListOrdered className="h-3.5 w-3.5" />
+              <span className="ml-1 hidden xl:inline">Prioridades</span>
+              {urgentes > 0 && (
+                <span className="ml-1 rounded-full bg-destructive px-1.5 text-[10.5px] font-semibold leading-4 text-destructive-foreground tabular-nums">{urgentes}</span>
+              )}
+            </button>
+            {podeVerCustos && (
+              <button
+                type="button"
+                onClick={() => alternarPainel("custos")}
+                aria-pressed={painel === "custos"}
+                aria-label="Custos de produção"
+                title="Custos de produção"
+                className={`${botaoPequeno} ${painel === "custos" ? "bg-muted text-foreground" : ""}`}
+              >
+                <Calculator className="h-3.5 w-3.5" />
+                <span className="ml-1 hidden xl:inline">Custos</span>
+              </button>
+            )}
+          </div>
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}
@@ -649,18 +703,23 @@ export default function MesaDoCliente() {
         </div>
       </header>
 
-      {!clientId && (
-        <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a mesa dele.</p>
-          <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Contexto, calendário do mês, estúdio de arte e entrega, com o custo de IA sempre à vista.
-          </p>
-        </div>
+      {!clientId && !painel && <p className="text-[12.5px] text-muted-foreground">Escolha um cliente para abrir a mesa dele.</p>}
+
+      {mostrarFila && (
+        <Suspense fallback={<EsqueletoDaAba />}>
+          <FilaDePrioridades clientes={clientes} clientesProntos={clientesQuery.isSuccess} onAbrir={abrirDaFila} />
+        </Suspense>
+      )}
+
+      {painel === "custos" && (
+        <Suspense fallback={<EsqueletoDaAba />}>
+          <PainelDeCustos key={clientId || "todos"} clientes={clientes} clienteInicial={clientId || null} />
+        </Suspense>
       )}
 
       {valor && (
         <MesaProvider valor={valor}>
-          <div key={valor.clientId} className="min-w-0">
+          <div key={valor.clientId} className={painel ? "hidden" : "min-w-0"}>
             <Suspense fallback={<EsqueletoDaAba />}>
               {aba === "contexto" && <AbaContexto />}
               {aba === "mes" && (
