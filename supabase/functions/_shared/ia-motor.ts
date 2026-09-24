@@ -103,6 +103,12 @@ export type EntradaTexto = {
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   maxTokensSaida?: number;
+  /**
+   * Tempo limite da chamada ao provedor (padrão TIMEOUT_TEXTO_MS). Tarefas longas
+   * (planejar o mês com raciocínio alto) pedem mais; a função precisa responder
+   * com fôlego (resposta-com-folego.ts) para a plataforma não cortar em 150 s.
+   */
+  timeoutMs?: number;
 };
 
 export type SaidaTexto = {
@@ -824,7 +830,7 @@ async function textoOpenAi(m: ModeloIa, chave: string, e: EntradaTexto): Promise
     method: "POST",
     headers: { "Authorization": `Bearer ${chave}`, "Content-Type": "application/json" },
     body: JSON.stringify(corpo),
-  }, TIMEOUT_TEXTO_MS);
+  }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
   const data = await res.json() as {
     output_text?: string;
     output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string; refusal?: string }> }>;
@@ -884,7 +890,7 @@ async function textoAnthropic(m: ModeloIa, chave: string, e: EntradaTexto): Prom
     method: "POST",
     headers: { "x-api-key": chave, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify(corpo),
-  }, TIMEOUT_TEXTO_MS);
+  }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
   const data = await res.json() as {
     stop_reason?: string;
     content?: Array<{ type?: string; text?: string }>;
@@ -955,7 +961,7 @@ async function textoOpenRouter(m: ModeloIa, chave: string, e: EntradaTexto): Pro
     method: "POST",
     headers: cabecalhosOpenRouter(chave),
     body: JSON.stringify(corpo),
-  }, TIMEOUT_TEXTO_MS);
+  }, e.timeoutMs ?? TIMEOUT_TEXTO_MS);
   const data = await res.json() as { choices?: Array<{ message?: { content?: string | null } }>; usage?: UsoOpenRouter };
   const u = data.usage ?? {};
   return {

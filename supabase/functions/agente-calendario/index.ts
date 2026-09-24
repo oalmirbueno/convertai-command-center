@@ -41,6 +41,14 @@ import {
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { direcaoDoRoteiro } from "../_shared/direcao-arte.ts";
 import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+
+/**
+ * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
+ * mês com raciocínio alto passam dos 120 s padrão do motor (Outubro, Novembro e
+ * Dezembro caíram em 504 em 24/09/2026). A função responde com fôlego.
+ */
+const TIMEOUT_CALENDARIO_MS = 300_000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -892,6 +900,7 @@ Devolva:
       tarefa: "calendario",
       agente: AGENTE,
       modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
       mensagens: [{ papel: "usuario", conteudo: instrucao }],
       raciocinio,
@@ -1048,6 +1057,7 @@ Regras dos itens:
       tarefa: "calendario",
       agente: AGENTE,
       modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
@@ -1158,6 +1168,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
     tarefa: "conversa",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -1581,6 +1592,7 @@ Regras dos itens:
     tarefa: "calendario",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -1829,6 +1841,7 @@ ${REGRAS_DOS_ITENS}`;
     tarefa: "calendario",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
@@ -1937,6 +1950,7 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
     tarefa: "calendario",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
@@ -2079,6 +2093,7 @@ ${REGRAS_DOS_ITENS}`;
     tarefa: "calendario",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
@@ -2177,6 +2192,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
     tarefa: "conversa",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `Você é o estrategista da agência ajustando uma campanha já criada. Mantenha tudo o que o pedido não manda mudar. Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
     mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade) e em resposta o que mudou.` }],
     raciocinio,
@@ -2359,6 +2375,7 @@ ${REGRAS_DOS_ITENS}`;
     tarefa: "conversa",
     agente: AGENTE,
     modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
@@ -2431,6 +2448,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   completar_itens: completarItens,
 };
 
+/** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
+const ACOES_LONGAS = new Set(["pedido_livre", "buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "metodo_nao_permitido" }, 405);
@@ -2442,6 +2462,15 @@ Deno.serve(async (req) => {
     const acao = String(corpo.acao ?? corpo.action ?? "");
     const fn = ACOES[acao];
     if (!fn) return json({ error: "acao_desconhecida", aceitas: Object.keys(ACOES) }, 400);
+    if (ACOES_LONGAS.has(acao)) {
+      return respostaComFolego(async () => {
+        try {
+          return await fn(servico, chamador, corpo);
+        } catch (err) {
+          return respostaDeErro(err);
+        }
+      }, corsHeaders);
+    }
     return await fn(servico, chamador, corpo);
   } catch (err) {
     return respostaDeErro(err);
