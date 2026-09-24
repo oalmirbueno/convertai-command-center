@@ -309,6 +309,8 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_ads_campaigns: 'reports:read',
   aceleriq_get_ads_creatives: 'reports:read',
   aceleriq_get_ads_performance: 'reports:read',
+  aceleriq_mesa_ads_contexto: 'reports:read',
+  aceleriq_mesa_foto_contexto: 'files:read',
   aceleriq_get_report: 'reports:read',
   aceleriq_create_report_draft: 'reports:write',
   aceleriq_list_briefings: 'briefings:read',
@@ -2048,6 +2050,75 @@ const getAdsPerformanceTool: ToolDefinition = {
   },
 };
 
+// ─── Mesas: estudar o que foi gerado antes de rodar tráfego (v1.46.0) ──────
+import { mesaAdsContexto as _mesaAdsContexto, mesaFotoContexto as _mesaFotoContexto } from './mcp-mesas-services.ts';
+
+const mesaAdsContextoTool: ToolDefinition = {
+  name: 'aceleriq_mesa_ads_contexto',
+  title: 'Mesa Ads: estudar antes de subir anúncios',
+  description:
+    'Tudo o que a Mesa Ads produziu para um cliente, numa chamada, para quem vai rodar o tráfego ESTUDAR antes de propor ou subir campanha: o briefing atual (oferta, público, objeções, provas autorizadas, destino, objetivo, verba e restrições), as ofertas (a escolhida em destaque, com riscos e provas necessárias), os planos de teste com cada ângulo e o PORQUÊ dele (hipótese, mecanismo, prova, ganchos, estilo visual, pontuação e notas do Jev), os ângulos DESCARTADOS com o motivo, a estrutura de conjuntos e as lacunas, os criativos com a copy escolhida, o pacote completo de copy (variações de texto, títulos, descrições, CTAs, ganchos e a orientação ao gestor: objetivo, evento de otimização, público, UTM, regras de corte e escala) e a arte final de cada um com URL assinada (vale 1 hora; entregue em Arquivos quando já entregue, senão a versão mais recente do Estúdio), mais as análises da conta mais recentes e os aprendizados. Leia `como_estudar` e respeite: nada fora do briefing vira promessa, verba só se o briefing tiver, nunca invente prova, número, depoimento ou urgência, e as políticas da Meta são regra dura. Use `plano_id` para focar em um plano. Só leitura.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid', description: 'Id do cliente (aceleriq_list_clients).' },
+      plano_id: { type: 'string', format: 'uuid', description: 'Só este plano de teste e os criativos dele.' },
+      limite_planos: { type: 'integer', minimum: 1, maximum: 20, description: 'Planos mais recentes. Padrão 5.' },
+      limite_criativos: { type: 'integer', minimum: 1, maximum: 80, description: 'Criativos mais recentes. Padrão 30.' },
+      incluir_urls: { type: 'boolean', description: 'URL assinada das artes (padrão sim). Falso deixa a resposta menor.' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: UUID,
+      plano_id: UUID.optional(),
+      limite_planos: limite(20),
+      limite_criativos: limite(80),
+      incluir_urls: z.boolean().optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await _mesaAdsContexto(parsed.data as { client_id: string }, ctx);
+  },
+};
+
+const mesaFotoContextoTool: ToolDefinition = {
+  name: 'aceleriq_mesa_foto_contexto',
+  title: 'Mesa Foto: kits, ensaios e fotos aprovadas',
+  description:
+    'O estúdio fotográfico do cliente (Mesa Foto) para estudar antes de montar criativo ou propor tráfego: os kits (produto, pessoa, alimento e outros) com o que é invariável, o que foi observado ou informado e as LACUNAS de evidência, com as fotos de referência (URL assinada); os ensaios com as tomadas, o modo de cada uma (preservar, luz e cor, cenário, ângulo), as versões, a conferência e qual foi aprovada; e as fotos APROVADAS do acervo com URL assinada (vale 1 hora). Só foto aprovada serve para anúncio; versão em modo ângulo mostra partes geradas e não prova detalhe do produto; o que está em lacuna não se promete. Se a Mesa Foto ainda não estiver no banco deste ambiente, a resposta diz isso em `avisos` e volta vazia (disponivel=false). Só leitura.',
+  scopes: ['files:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid', description: 'Id do cliente (aceleriq_list_clients).' },
+      limite: { type: 'integer', minimum: 1, maximum: 100, description: 'Fotos aprovadas mais recentes. Padrão 40.' },
+      incluir_urls: { type: 'boolean', description: 'URL assinada das fotos (padrão sim).' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: UUID,
+      limite: limite(100),
+      incluir_urls: z.boolean().optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    return await _mesaFotoContexto(parsed.data as { client_id: string }, ctx);
+  },
+};
+
 // ─── Project Memory (persistent, large context per client/project) ─────────
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
 
@@ -2888,6 +2959,8 @@ const MAPA_DO_PAINEL = [
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
+  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha.', pelo_mcp: 'aceleriq_mesa_ads_contexto' },
+  { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas.', pelo_mcp: 'aceleriq_mesa_foto_contexto' },
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
   { area: 'Contratos', rota: '/contratos', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
@@ -3542,6 +3615,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getAdsCampaignsTool,
   getAdsCreativesTool,
   getAdsPerformanceTool,
+  // Mesas (v1.46.0): estudar o que foi gerado antes de rodar tráfego.
+  mesaAdsContextoTool,
+  mesaFotoContextoTool,
   // Files v2 (Bloco B — v1.7.0)
   ...(FILE_WRITE_ENABLED ? [
     prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,

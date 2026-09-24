@@ -1,0 +1,187 @@
+{
+  "status": "Receitas editoriais propostas; nao testadas",
+  "recipes": [
+    {
+      "id": "catalogo-fiel",
+      "nome": "Catalogo fiel",
+      "tipo": "produto",
+      "direcao": "Fundo neutro, produto original recomposto.",
+      "tomadas": [
+        "Principal limpa",
+        "Frente",
+        "Tres quartos",
+        "Lateral",
+        "Verso documentado",
+        "Detalhe documentado",
+        "Produto e embalagem",
+        "Escala com medida confirmada"
+      ],
+      "atributos_criticos": [
+        "Modelo",
+        "Variante",
+        "Cor",
+        "Texto",
+        "Proporcao"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "tecnologia",
+      "nome": "Tecnologia e acessorios",
+      "tipo": "produto",
+      "direcao": "Luz suave lateral, superficies e reflexos controlados.",
+      "tomadas": [
+        "Principal em tres quartos",
+        "Frente",
+        "Lateral",
+        "Portas documentadas",
+        "Botoes documentados",
+        "Embalagem",
+        "Uso em mesa",
+        "Composicao para campanha"
+      ],
+      "atributos_criticos": [
+        "Conectores",
+        "Cameras",
+        "Botoes",
+        "Tela",
+        "Espessura"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "cosmeticos",
+      "nome": "Cosmeticos e frascos",
+      "tipo": "produto",
+      "direcao": "Luz ampla, rotulo legivel, materiais coerentes.",
+      "tomadas": [
+        "Frasco principal",
+        "Frasco e caixa",
+        "Rotulo",
+        "Tampa",
+        "Textura documentada",
+        "Contexto de bancada",
+        "Cena de campanha"
+      ],
+      "atributos_criticos": [
+        "Volume",
+        "Rotulo",
+        "Transparencia",
+        "Cor",
+        "Quantidade"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "alimentos",
+      "nome": "Alimentos e pratos",
+      "tipo": "alimento",
+      "direcao": "Textura natural e luz lateral; preservar a receita real.",
+      "tomadas": [
+        "Prato principal",
+        "Vista a 45 graus",
+        "Vista superior quando adequada",
+        "Detalhe real",
+        "Embalagem de entrega",
+        "Contexto de mesa"
+      ],
+      "atributos_criticos": [
+        "Ingredientes",
+        "Porcao",
+        "Ponto de preparo",
+        "Cor",
+        "Montagem"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "bebidas",
+      "nome": "Bebidas e embalagens",
+      "tipo": "alimento",
+      "direcao": "Reflexos controlados e escala fiel.",
+      "tomadas": [
+        "Embalagem principal",
+        "Rotulo",
+        "Bebida servida documentada",
+        "Detalhe",
+        "Composicao de mesa",
+        "Cena com espaco para texto"
+      ],
+      "atributos_criticos": [
+        "Marca",
+        "Volume",
+        "Composicao",
+        "Recipiente",
+        "Cor"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "retrato-profissional",
+      "nome": "Retrato profissional",
+      "tipo": "pessoa",
+      "direcao": "Pele natural, iluminacao suave e roupa coerente.",
+      "tomadas": [
+        "Retrato frontal",
+        "Tres quartos",
+        "Meio corpo",
+        "Sentado",
+        "Ambiente profissional",
+        "Foto com espaco para texto"
+      ],
+      "atributos_criticos": [
+        "Identidade",
+        "Idade aparente",
+        "Pele",
+        "Oculos",
+        "Maos"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "ensaio-editorial",
+      "nome": "Ensaio pessoal editorial",
+      "tipo": "pessoa",
+      "direcao": "Variar direcao e ambiente com identidade aprovada.",
+      "tomadas": [
+        "Retrato",
+        "Meio corpo",
+        "Corpo inteiro",
+        "Pose alternativa",
+        "Ambiente externo",
+        "Ambiente de estudio"
+      ],
+      "atributos_criticos": [
+        "Identidade",
+        "Anatomia",
+        "Expressao",
+        "Cabelo",
+        "Acessorios"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    },
+    {
+      "id": "moda-acessorios",
+      "nome": "Moda e acessorios",
+      "tipo": "produto",
+      "direcao": "Material, cor e proporcao consistentes.",
+      "tomadas": [
+        "Frente",
+        "Costas documentadas",
+        "Tres quartos",
+        "Detalhe de material",
+        "Fecho ou costura",
+        "Escala no corpo",
+        "Composicao editorial"
+      ],
+      "atributos_criticos": [
+        "Estampa",
+        "Costura",
+        "Cor",
+        "Proporcao",
+        "Modelo"
+      ],
+      "rule": "Tomadas dependem das evidencias do kit; nao preencher detalhes desconhecidos como reais."
+    }
+  ]
+}

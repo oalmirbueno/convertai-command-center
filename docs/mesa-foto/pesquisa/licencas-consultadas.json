@@ -1,0 +1,47 @@
+[
+  {
+    "name": "PhotoMaker",
+    "url": "https://github.com/TencentARC/PhotoMaker/blob/main/LICENSE",
+    "review": "Apache-2.0 com excecoes de componentes de terceiros; verificar versao e pesos."
+  },
+  {
+    "name": "PuLID",
+    "url": "https://github.com/ToTheBeginning/PuLID/blob/main/LICENSE",
+    "review": "Codigo Apache-2.0; nao prova licenca comercial dos modelos dependentes."
+  },
+  {
+    "name": "SUPIR",
+    "url": "https://github.com/Fanghua-Yu/SUPIR/blob/master/LICENSE",
+    "review": "Licenca propria e declaracao nao comercial. Nao selecionado para producao comercial sem permissao adequada."
+  },
+  {
+    "name": "Hunyuan3D-2.1",
+    "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1/blob/main/LICENSE",
+    "review": "Licenca comunitaria com limitacoes territoriais. Revisar aplicabilidade antes de qualquer integracao."
+  },
+  {
+    "name": "SAM3",
+    "url": "https://github.com/facebookresearch/sam3/blob/main/LICENSE",
+    "review": "Licenca propria SAM; distinta da Apache-2.0 do SAM2."
+  },
+  {
+    "name": "IC-Light",
+    "url": "https://github.com/lllyasviel/IC-Light",
+    "review": "Codigo Apache-2.0; README alerta para dependencia de recorte BRIA nao comercial. A variante dos pesos precisa de revisao propria."
+  },
+  {
+    "name": "InstantID",
+    "url": "https://github.com/instantX-research/InstantID",
+    "review": "README distingue codigo Apache-2.0 de checkpoints de pesquisa e modelos InsightFace nao comerciais."
+  },
+  {
+    "name": "FLUX.2",
+    "url": "https://github.com/black-forest-labs/flux2",
+    "review": "Codigo Apache-2.0; pesos Klein 4B e 9B/dev possuem condicoes diferentes."
+  },
+  {
+    "name": "RMBG-2.0",
+    "url": "https://huggingface.co/briaai/RMBG-2.0",
+    "review": "Pesos publicos com condicao nao comercial; uso comercial depende de licenciamento apropriado."
+  }
+]

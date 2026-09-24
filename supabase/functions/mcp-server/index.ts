@@ -186,6 +186,8 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         + "Se a sua lista de funcoes tiver menos que isso, ela esta velha: chame tools/list de novo "
         + "(o servidor nao empurra aviso de mudanca, entao a lista so atualiza quando voce pergunta). "
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
+        + "Antes de propor ou subir trafego pago, estude o que a Mesa Ads gerou com aceleriq_mesa_ads_contexto "
+        + "(briefing, oferta, angulos e porques, notas do Jev, copy e artes) e as fotos aprovadas com aceleriq_mesa_foto_contexto. "
         + "Tools com escopo exigem OAuth Bearer antes de tools/call.",
     });
   }

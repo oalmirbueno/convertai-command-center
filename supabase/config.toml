@@ -89,6 +89,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.mesa-ads]
     verify_jwt = true
+  [functions.mesa-foto]
+    verify_jwt = true
   [functions.notify-admin]
     verify_jwt = true
   [functions.ops-quiz-list]

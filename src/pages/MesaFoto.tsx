@@ -8,75 +8,83 @@ import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCu
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { CustoCompacto, SeletorDeCliente } from "@/pages/MesaDoCliente";
-import type { PedidoDePlano } from "@/components/mesa-ads/adsApi";
+import { ETAPAS_DA_MESA_FOTO, MesaFotoProvider, type EtapaDaMesaFoto, type MesaFotoValor } from "@/components/mesa-foto/Comuns";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 
 /**
- * Mesa Ads (/mesa-ads, só equipe: admin, gestor e design): criativos de
- * anúncio de alta conversão para o tráfego pago do Meta
- * (docs/mesa-ads/SPEC.md e docs/mesa-ads/v2/CONTRATO-V2.md). Mesma casca da
- * Mesa do cliente: barra fina com o seletor de cliente, as seis etapas e o
- * saldo. Endereço completo:
- * /mesa-ads?client=<id>&etapa=estudio&plano=<id>&criativo=<id>
+ * Mesa Foto (/mesa-foto, só equipe: admin, gestor e design): o estúdio
+ * fotográfico do cliente (docs/mesa-foto/CONTRATO.md). Mesma casca da Mesa e
+ * da Mesa Ads: barra fina com o seletor de cliente, as etapas, a troca entre
+ * as mesas e o saldo; embaixo, o kit e o ensaio abertos com o estado e o
+ * custo. Endereço completo:
+ * /mesa-foto?client=<id>&etapa=ensaio&kit=<id>&ensaio=<id>&imagem=<id>
  *
- * Etapas: Oferta (agente de oferta e briefing), Referências (biblioteca com
- * a escala de evidência e a janela de detalhe), Plano de teste (ângulos
- * conferidos pelo Jev), Estúdio Ads (arte, copy e entrega), Conta (tudo o que
- * roda na conta de anúncios, ao vivo) e Resultados (criativos ligados,
- * diagnóstico e aprendizado). "Criar criativos desta oferta", "Criar
- * variações deste" e os próximos testes da análise levam ao Plano com o
- * pedido pronto (pedidoDePlano), que gera o plano uma vez.
+ * Etapas: Acervo (upload em lote, filtros, leitura, ZIP e envio), Kits
+ * (identidade do assunto, papéis, atributos, invariantes, lacunas e
+ * autorização), Preparar (antes e depois, modos e áreas protegidas), Ensaio
+ * (receita, tomadas, câmera por botões, custo antes), Revisar (versões lado a
+ * lado com as fontes, conferência como aviso, aprovar ou rejeitar), Usar
+ * (ZIP, Arquivos, aprovação, Mesa e Mesa Ads) e Biblioteca (prompts e
+ * referências públicas com licença e autor). O diretor de fotografia fica à
+ * mão em todas, no botão do centro da base da tela.
+ *
+ * Regra da fotografia: nunca escurecer a foto para dar destaque; foto
+ * sintética sempre marcada como gerada.
  */
 
-const carregarOferta = () => import("@/components/mesa-ads/AbaOferta");
-const carregarReferencias = () => import("@/components/mesa-ads/AbaReferencias");
-const carregarPlano = () => import("@/components/mesa-ads/AbaPlano");
-const carregarEstudio = () => import("@/components/mesa-ads/AbaEstudioAds");
-const carregarConta = () => import("@/components/mesa-ads/AbaConta");
-const carregarResultados = () => import("@/components/mesa-ads/AbaResultados");
-const AbaOferta = lazy(carregarOferta);
-const AbaReferencias = lazy(carregarReferencias);
-const AbaPlano = lazy(carregarPlano);
-const AbaEstudioAds = lazy(carregarEstudio);
-const AbaConta = lazy(carregarConta);
-const AbaResultados = lazy(carregarResultados);
+const carregarAcervo = () => import("@/components/mesa-foto/EtapaAcervo");
+const carregarKits = () => import("@/components/mesa-foto/EtapaKits");
+const carregarPreparar = () => import("@/components/mesa-foto/EtapaPreparar");
+const carregarEnsaio = () => import("@/components/mesa-foto/EtapaEnsaio");
+const carregarRevisar = () => import("@/components/mesa-foto/EtapaRevisar");
+const carregarUsar = () => import("@/components/mesa-foto/EtapaUsar");
+const carregarBiblioteca = () => import("@/components/mesa-foto/EtapaBiblioteca");
+const EtapaAcervo = lazy(carregarAcervo);
+const EtapaKits = lazy(carregarKits);
+const EtapaPreparar = lazy(carregarPreparar);
+const EtapaEnsaio = lazy(carregarEnsaio);
+const EtapaRevisar = lazy(carregarRevisar);
+const EtapaUsar = lazy(carregarUsar);
+const EtapaBiblioteca = lazy(carregarBiblioteca);
+const BarraDoEnsaio = lazy(() => import("@/components/mesa-foto/BarraDoEnsaio"));
+const AgenteDiretor = lazy(() => import("@/components/mesa-foto/AgenteDiretor"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
-export const ETAPAS_DA_MESA_ADS = [
-  { valor: "oferta", rotulo: "Oferta" },
-  { valor: "referencias", rotulo: "Referências" },
-  { valor: "plano", rotulo: "Plano de teste" },
-  { valor: "estudio", rotulo: "Estúdio Ads" },
-  { valor: "conta", rotulo: "Conta" },
-  { valor: "resultados", rotulo: "Resultados" },
-] as const;
-
-type Etapa = (typeof ETAPAS_DA_MESA_ADS)[number]["valor"];
+export { ETAPAS_DA_MESA_FOTO };
 
 const UUID_VALIDO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOuNulo = (v: string | null) => (v && UUID_VALIDO.test(v) ? v : null);
 
-const chaveOnde = (clientId: string) => `mesa-ads:onde:${clientId}`;
+interface OndeParou {
+  etapa: string | null;
+  kit: string | null;
+  ensaio: string | null;
+  nome: string | null;
+}
 
-function lerOnde(clientId: string): { etapa: string | null; nome: string | null } {
+const chaveOnde = (clientId: string) => `mesa-foto:onde:${clientId}`;
+
+function lerOnde(clientId: string): OndeParou {
   try {
     const v = JSON.parse(window.localStorage.getItem(chaveOnde(clientId)) || "null");
-    if (!v || typeof v !== "object") return { etapa: null, nome: null };
+    if (!v || typeof v !== "object") return { etapa: null, kit: null, ensaio: null, nome: null };
     return {
-      etapa: ETAPAS_DA_MESA_ADS.some((e) => e.valor === v.etapa) ? String(v.etapa) : null,
+      etapa: ETAPAS_DA_MESA_FOTO.some((e) => e.valor === v.etapa) ? String(v.etapa) : null,
+      kit: uuidOuNulo(typeof v.kit === "string" ? v.kit : null),
+      ensaio: uuidOuNulo(typeof v.ensaio === "string" ? v.ensaio : null),
       nome: typeof v.nome === "string" && v.nome ? v.nome.slice(0, 120) : null,
     };
   } catch {
-    return { etapa: null, nome: null };
+    return { etapa: null, kit: null, ensaio: null, nome: null };
   }
 }
 
-function gravarOnde(clientId: string, etapa: string, nome: string | null) {
+function gravarOnde(clientId: string, onde: OndeParou) {
   try {
-    window.localStorage.setItem(chaveOnde(clientId), JSON.stringify({ etapa, nome }));
+    window.localStorage.setItem(chaveOnde(clientId), JSON.stringify(onde));
   } catch {
-    /* armazenamento indisponível: abre sempre na Oferta */
+    /* armazenamento indisponível: abre sempre no Acervo */
   }
 }
 
@@ -102,7 +110,7 @@ function EsqueletoDaEtapa() {
   );
 }
 
-export default function MesaAds() {
+export default function MesaFoto() {
   const { profile, user } = useAuth();
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -111,9 +119,10 @@ export default function MesaAds() {
 
   const clientIdUrl = params.get("client") || "";
   const etapaUrl = params.get("etapa");
-  const etapa: Etapa = ETAPAS_DA_MESA_ADS.some((e) => e.valor === etapaUrl) ? (etapaUrl as Etapa) : "oferta";
-  const planoUrl = uuidOuNulo(params.get("plano"));
-  const criativoUrl = uuidOuNulo(params.get("criativo"));
+  const etapa: EtapaDaMesaFoto = ETAPAS_DA_MESA_FOTO.some((e) => e.valor === etapaUrl) ? (etapaUrl as EtapaDaMesaFoto) : "acervo";
+  const kitUrl = uuidOuNulo(params.get("kit"));
+  const ensaioUrl = uuidOuNulo(params.get("ensaio"));
+  const imagemUrl = uuidOuNulo(params.get("imagem"));
 
   const [recargaAberta, setRecargaAberta] = useState(false);
   const [chavesAbertas, setChavesAbertas] = useState(false);
@@ -121,7 +130,8 @@ export default function MesaAds() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
-  const [pedidoDePlano, setPedidoDePlano] = useState<PedidoDePlano | null>(null);
+  const [selecionadas, setSelecionadas] = useState<string[]>([]);
+  const [agenteAberto, setAgenteAberto] = useState(false);
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -152,32 +162,26 @@ export default function MesaAds() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
-    setPedidoDePlano(null);
-    mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null });
+    setSelecionadas([]);
+    mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null });
   };
 
-  /** Pedido de plano vindo de outra etapa: vai ao Plano de teste, que gera uma vez. */
-  const criarPlano = (p: PedidoDePlano) => {
-    setPedidoDePlano(p);
-    mudar({ etapa: "plano", plano: null, criativo: null });
-  };
-
-  // Endereço só com o cliente: abre na etapa em que parou.
+  // Endereço só com o cliente: abre onde parou.
   useEffect(() => {
     if (!clientId || etapaUrl) return;
     const o = lerOnde(clientId);
-    if (o.etapa) mudar({ etapa: o.etapa }, true);
+    if (o.etapa) mudar({ etapa: o.etapa, kit: kitUrl || o.kit, ensaio: ensaioUrl || o.ensaio }, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
   useEffect(() => {
-    if (clientId && etapaUrl) gravarOnde(clientId, etapa, nomeDoCliente || null);
-  }, [clientId, etapaUrl, etapa, nomeDoCliente]);
+    if (clientId && etapaUrl) gravarOnde(clientId, { etapa, kit: kitUrl, ensaio: ensaioUrl, nome: nomeDoCliente || null });
+  }, [clientId, etapaUrl, etapa, kitUrl, ensaioUrl, nomeDoCliente]);
 
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarOferta, carregarReferencias, carregarPlano, carregarEstudio, carregarConta, carregarResultados]) {
+        for (const carregar of [carregarAcervo, carregarKits, carregarPreparar, carregarEnsaio, carregarRevisar, carregarUsar, carregarBiblioteca]) {
           carregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -187,7 +191,7 @@ export default function MesaAds() {
   );
 
   const mesAtual = inicioDoMes();
-  // Mesmas chaves da Mesa do cliente: o saldo é o mesmo nas duas telas.
+  // Mesmas chaves da Mesa e da Mesa Ads: o saldo é o mesmo nas três telas.
   const consumo = useQuery({
     queryKey: ["mesa", "consumo", clientId, mesAtual],
     enabled: !!clientId,
@@ -237,21 +241,39 @@ export default function MesaAds() {
       }
     : null;
 
+  const valorDaFoto: MesaFotoValor = {
+    kitId: kitUrl,
+    ensaioId: ensaioUrl,
+    imagemId: imagemUrl,
+    escolherKit: (id) => mudar({ kit: id }, true),
+    escolherEnsaio: (id) => mudar({ ensaio: id }, true),
+    irPara: (e, extras) => {
+      const m: Record<string, string | null> = { etapa: e };
+      if (extras && extras.imagem !== undefined) m.imagem = extras.imagem;
+      if (extras && extras.kit !== undefined) m.kit = extras.kit;
+      if (extras && extras.ensaio !== undefined) m.ensaio = extras.ensaio;
+      mudar(m);
+    },
+    selecionadas,
+    setSelecionadas,
+    abrirAgente: () => setAgenteAberto(true),
+  };
+
   return (
     <div className="relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6">
       <header className="sticky top-0 z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
-        <h1 className="sr-only">Mesa Ads</h1>
+        <h1 className="sr-only">Mesa Foto</h1>
         <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
           <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
-            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Ads</span>
+            <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Foto</span>
             <SeletorDeCliente clientes={clientes} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
           </div>
           {clientId && (
             <nav
-              aria-label="Etapas da Mesa Ads"
-              className="order-last mt-2 grid w-full grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:grid-cols-6 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
+              aria-label="Etapas da Mesa Foto"
+              className="order-last mt-2 grid w-full grid-cols-4 gap-0.5 rounded-lg bg-muted p-0.5 sm:grid-cols-7 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
             >
-              {ETAPAS_DA_MESA_ADS.map((e, i) => (
+              {ETAPAS_DA_MESA_FOTO.map((e, i) => (
                 <button
                   key={e.valor}
                   type="button"
@@ -267,7 +289,7 @@ export default function MesaAds() {
               ))}
             </nav>
           )}
-          {clientId && <TrocaDeMesas atual="ads" clientId={clientId} />}
+          {clientId && <TrocaDeMesas atual="foto" clientId={clientId} />}
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}
@@ -282,44 +304,44 @@ export default function MesaAds() {
             />
           )}
         </div>
+        {valor && (
+          <MesaProvider valor={valor}>
+            <MesaFotoProvider valor={valorDaFoto}>
+              <Suspense fallback={<div className="mt-2 h-5" />}>
+                <BarraDoEnsaio />
+              </Suspense>
+            </MesaFotoProvider>
+          </MesaProvider>
+        )}
       </header>
 
       {!clientId && (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
-          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Ads dele.</p>
+          <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Foto dele.</p>
           <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Oferta, referências com evidência, plano de teste, criativos, a conta de anúncios ao vivo e resultados reais, com o custo de IA sempre à vista.
+            Acervo com as fotos reais, kits de produto, pessoa ou alimento, preparo com o original intacto, ensaios com custo à vista e entrega para Arquivos, aprovação, Mesa e Mesa Ads.
           </p>
         </div>
       )}
 
       {valor && (
         <MesaProvider valor={valor}>
-          <div key={valor.clientId} className="min-w-0">
-            <Suspense fallback={<EsqueletoDaEtapa />}>
-              {etapa === "oferta" && <AbaOferta onCriarCriativos={criarPlano} />}
-              {etapa === "referencias" && <AbaReferencias />}
-              {etapa === "plano" && (
-                <AbaPlano
-                  planoId={planoUrl}
-                  onPlano={(id) => mudar({ plano: id }, true)}
-                  onProduzido={(id) => mudar({ etapa: "estudio", plano: id, criativo: null })}
-                  pedidoPendente={pedidoDePlano}
-                  onPedidoConsumido={() => setPedidoDePlano(null)}
-                />
-              )}
-              {etapa === "estudio" && (
-                <AbaEstudioAds
-                  criativoId={criativoUrl}
-                  onCriativo={(id) => mudar({ criativo: id }, true)}
-                  planoId={planoUrl}
-                  onVerTodos={() => mudar({ plano: null }, true)}
-                />
-              )}
-              {etapa === "conta" && <AbaConta onCriarPlano={criarPlano} />}
-              {etapa === "resultados" && <AbaResultados />}
+          <MesaFotoProvider valor={valorDaFoto}>
+            <div key={valor.clientId} className="min-w-0">
+              <Suspense fallback={<EsqueletoDaEtapa />}>
+                {etapa === "acervo" && <EtapaAcervo />}
+                {etapa === "kits" && <EtapaKits />}
+                {etapa === "preparar" && <EtapaPreparar />}
+                {etapa === "ensaio" && <EtapaEnsaio />}
+                {etapa === "revisar" && <EtapaRevisar />}
+                {etapa === "usar" && <EtapaUsar />}
+                {etapa === "biblioteca" && <EtapaBiblioteca />}
+              </Suspense>
+            </div>
+            <Suspense fallback={null}>
+              <AgenteDiretor key={`agente-${valor.clientId}`} aberto={agenteAberto} onAberto={setAgenteAberto} />
             </Suspense>
-          </div>
+          </MesaFotoProvider>
 
           {podeRecarregar && (
             <DialogoDeRecarga

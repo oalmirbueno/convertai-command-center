@@ -134,6 +134,14 @@ export type EntradaImagem = {
   /** Sem reserva em 2:3: a tela dupla do carrossel contínuo só serve no tamanho pedido. */
   tamanhoFixo?: boolean;
   editar?: { bytes: Uint8Array; mascara?: Uint8Array };
+  /**
+   * Fundo transparente (Mesa Foto): vai como `background: "transparent"` no
+   * GPT Image (OpenAI direto e API de imagens do OpenRouter). Modelo que não
+   * aceita (Gemini pelo chat do OpenRouter) recusa antes de cobrar, com
+   * entrada_invalida e motivo fundo_transparente_nao_suportado: nunca cai
+   * calado para fundo opaco.
+   */
+  fundo?: "transparente";
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   tarefa?: Tarefa;
@@ -1087,12 +1095,14 @@ async function imagemOpenAi(m: ModeloIa, chave: string, e: EntradaImagem): Promi
 async function imagemOpenAiNoTamanho(m: ModeloIa, chave: string, e: EntradaImagem, tamanho: string, prompt: string): Promise<RespostaProvedorImagem> {
   const qualidade = QUALIDADE_OPENAI[e.qualidade] ?? "medium";
   const usarEdicao = !!e.editar || e.referencias.length > 0;
+  // Fundo transparente (Mesa Foto): parâmetro background do GPT Image.
+  const fundo: Record<string, string> = e.fundo === "transparente" ? { background: "transparent" } : {};
   let res: Response;
   if (!usarEdicao) {
     res = await buscar("openai", "https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { "Authorization": `Bearer ${chave}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: m.modelo_api, prompt, n: 1, size: tamanho, quality: qualidade, output_format: "png" }),
+      body: JSON.stringify({ model: m.modelo_api, prompt, n: 1, size: tamanho, quality: qualidade, output_format: "png", ...fundo }),
     }, TIMEOUT_IMAGEM_MS);
   } else {
     // Edicao: a imagem a editar vai primeiro; depois as referencias, na ordem.
@@ -1103,6 +1113,7 @@ async function imagemOpenAiNoTamanho(m: ModeloIa, chave: string, e: EntradaImage
     form.append("size", tamanho);
     form.append("quality", qualidade);
     form.append("output_format", "png");
+    if (e.fundo === "transparente") form.append("background", "transparent");
     if (e.editar) form.append("image[]", paraBlob(e.editar.bytes, "image/png"), "atual.png");
     e.referencias.forEach((ref, i) => {
       form.append("image[]", paraBlob(ref.bytes, ref.mime), ref.nome || `referencia_${i + 1}.png`);
@@ -1174,6 +1185,7 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
     output_format: "png",
   };
   if (imagens.length) corpo.input_references = imagens.map((img) => ({ type: "image_url", image_url: { url: dataUrl(img) } }));
+  if (e.fundo === "transparente") corpo.background = "transparent";
   const res = await buscar("openrouter", "https://openrouter.ai/api/v1/images", {
     method: "POST",
     headers: cabecalhosOpenRouter(chave),
@@ -1203,8 +1215,26 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
   };
 }
 
+/**
+ * Modelos que devolvem fundo transparente de verdade: GPT Image direto na
+ * OpenAI e pela API de imagens do OpenRouter. O chat do OpenRouter (Gemini e
+ * outros) não tem esse parâmetro.
+ */
+export function aceitaFundoTransparente(m: Pick<ModeloIa, "provedor" | "modelo_api">): boolean {
+  if (m.provedor === "openai") return /^gpt-image/.test(m.modelo_api);
+  return m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api);
+}
+
+function erroFundoTransparente(m: ModeloIa): IaMotorErro {
+  return new IaMotorErro("entrada_invalida", `O modelo ${m.id} não gera fundo transparente.`, {
+    motivo: "fundo_transparente_nao_suportado",
+    modelo_id: m.id,
+  });
+}
+
 async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
   if (usaApiDeImagensDoOpenRouter(m)) return await imagemOpenRouterImages(m, chave, e);
+  if (e.fundo === "transparente") throw erroFundoTransparente(m);
   const imagens = [
     ...(e.editar ? [{ bytes: e.editar.bytes, mime: "image/png" }] : []),
     ...e.referencias,
@@ -1257,6 +1287,8 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
     throw new IaMotorErro("provedor_sem_imagem", "A Anthropic nao gera imagem.", { modelo_id: pedido.id });
   }
   const rota = await resolverRota(e.clientId, pedido);
+  // Fundo transparente é pedido explícito: recusa antes de cobrar quando o modelo não faz.
+  if (e.fundo === "transparente" && !aceitaFundoTransparente(rota.m)) throw erroFundoTransparente(rota.m);
 
   const qtdImagensEntrada = e.referencias.length + (e.editar ? 1 : 0);
   const estimativaPara = (mod: ModeloIa) => estimarComModelo(mod, {

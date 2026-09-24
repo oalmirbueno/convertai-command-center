@@ -1,0 +1,52 @@
+{
+  "status": "Proposta ilustrativa de contrato interno; nao implementada nem enviada a provedores",
+  "schema_version": "proposta-1",
+  "kit_exemplo": {
+    "client_id": "CLIENTE_EXEMPLO",
+    "entity_id": "PRODUTO_EXEMPLO",
+    "kind": "produto",
+    "name": "Mouse do cliente",
+    "variant": null,
+    "references": [
+      {"asset_id": "ORIGINAL_PRODUTO", "role": "identidade", "observed_view": "tres_quartos", "origin": "upload_cliente"},
+      {"asset_id": "ORIGINAL_CAIXA", "role": "embalagem", "observed_view": "frente", "origin": "upload_cliente"}
+    ],
+    "attributes": [],
+    "unknowns": ["Vista inferior nao documentada", "Modelo e variante a confirmar"],
+    "approved_identity_references": ["ORIGINAL_PRODUTO"]
+  },
+  "tomada_exemplo": {
+    "client_id": "CLIENTE_EXEMPLO",
+    "entity_id": "PRODUTO_EXEMPLO",
+    "recipe_id": "catalogo-fiel",
+    "recipe_version": "proposta-1",
+    "operation": "compor_fundo",
+    "preservation_mode": "primeiro_plano_original",
+    "reference_asset_ids": ["ORIGINAL_PRODUTO"],
+    "camera": {"change_viewpoint": false},
+    "scene": {"surface": "neutra", "background": "branco", "lighting": "compativel_com_a_foto"},
+    "protected_regions": [{"mask_asset_id": "MASCARA_ASSUNTO", "purpose": "preservar_assunto"}],
+    "output": {"aspect_ratio": "1:1", "format": "png", "size": "validar_com_provedor"},
+    "provider": null,
+    "model_version": null,
+    "estimated_cost_usd": null,
+    "requires_human_review": true
+  },
+  "job_proposto": {
+    "idempotency_key": "IDENTIFICADOR_INTERNO_EXEMPLO",
+    "state": "criado",
+    "provider_request_id": null,
+    "attempts": 0,
+    "reserved_cost_usd": null,
+    "actual_cost_usd": null,
+    "output_asset_id": null,
+    "error_code": null
+  },
+  "avaliacao_proposta": {
+    "asset_version_id": "VERSAO_EXEMPLO",
+    "critical_failures": [],
+    "scores": {"fidelidade": null, "acabamento": null, "composicao": null, "marca": null},
+    "reviewed_by": null,
+    "decision": "pendente"
+  }
+}

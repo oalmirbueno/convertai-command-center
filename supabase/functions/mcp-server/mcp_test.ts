@@ -193,18 +193,28 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
   const names = TOOLS.map(t => t.name).sort();
   assertEquals(new Set(names).size, names.length, 'tool names must be unique');
   assertEquals(names, [
+    'aceleriq_add_opportunity_note',
     'aceleriq_archive_file',
+    'aceleriq_archive_opportunity',
     'aceleriq_archive_project',
     'aceleriq_audit_integrity',
     'aceleriq_cancel_contract',
     'aceleriq_capabilities',
+    'aceleriq_central_review_decidir',
+    'aceleriq_central_review_fila',
+    'aceleriq_central_review_marcar_enviado',
+    'aceleriq_central_review_preparar',
+    'aceleriq_complete_commercial_activity',
     'aceleriq_complete_task',
+    'aceleriq_create_commercial_activity',
     'aceleriq_create_contract',
     'aceleriq_create_editorial_item',
     'aceleriq_create_file_version',
+    'aceleriq_create_opportunity',
     'aceleriq_create_project',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
+    'aceleriq_delete_opportunity',
     'aceleriq_delete_task',
     'aceleriq_fetch',
     'aceleriq_finalize_file_upload',
@@ -228,6 +238,7 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_get_finance_client_summaries',
     'aceleriq_get_finance_dashboard',
     'aceleriq_get_finance_overview',
+    'aceleriq_get_opportunity',
     'aceleriq_get_project',
     'aceleriq_get_project_memory',
     'aceleriq_get_report',
@@ -238,6 +249,8 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_link_project_to_client',
     'aceleriq_list_briefings',
     'aceleriq_list_clients',
+    'aceleriq_list_commercial_activities',
+    'aceleriq_list_commercial_organizations',
     'aceleriq_list_contracts',
     'aceleriq_list_editorial_calendar',
     'aceleriq_list_files',
@@ -254,6 +267,9 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_list_social_posts',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_mesa_ads_contexto',
+    'aceleriq_mesa_foto_contexto',
+    'aceleriq_move_opportunity',
     'aceleriq_operator_assign',
     'aceleriq_operator_board',
     'aceleriq_operator_diary',
@@ -276,10 +292,13 @@ Deno.test('registry exposes the complete reviewed tool catalogue without duplica
     'aceleriq_update_client',
     'aceleriq_update_contract',
     'aceleriq_update_file_metadata',
+    'aceleriq_update_opportunity',
     'aceleriq_update_project',
     'aceleriq_update_task',
     'aceleriq_upload_file',
     'aceleriq_upload_file_inline',
+    'aceleriq_upsert_commercial_contact',
+    'aceleriq_upsert_commercial_organization',
     'aceleriq_upsert_current_dossier',
     'aceleriq_upsert_project_memory',
     'aceleriq_vault_overview',
@@ -917,4 +936,107 @@ Deno.test('every mapped granular scope is on the resolved tool', () => {
     assert(t, `missing tool ${name}`);
     assert(t!.scopes.includes(scope as any), `${name} missing scope ${scope}`);
   }
+});
+
+// ─── Mesas (v1.46.0): estudar antes de rodar tráfego ──────────
+import { arteDoTrabalho, faltaNoBanco, kitParaLer, planoParaLer, tomadaParaLer } from '../_shared/mcp-mesas-formato.ts';
+
+const MESAS = ['aceleriq_mesa_ads_contexto', 'aceleriq_mesa_foto_contexto'];
+
+Deno.test('mesas: as duas leituras estão registradas, só leem e pedem o escopo certo', () => {
+  for (const nome of MESAS) {
+    const t = TOOL_MAP.get(nome);
+    assert(t, `missing ${nome}`);
+    assertEquals(t!.annotations?.readOnlyHint, true);
+    assertEquals(t!.annotations?.destructiveHint, false);
+    assert(canInvoke(readCtx, t!), `${nome} should allow aceleriq:read`);
+    assert(!canInvoke(emptyCtx, t!), `${nome} should be gated`);
+    assertEquals((t!.inputSchema as any).required, ['client_id']);
+    assertEquals((t!.inputSchema as any).additionalProperties, false);
+    // Português, orientando a estudar antes, e sem travessão.
+    assert(/estudar/i.test(t!.description), `${nome} should tell the agent to study first`);
+    assert(!/[–—]/.test(t!.description + (t!.title ?? '')), `${nome} must not use dashes`);
+  }
+  assert(TOOL_MAP.get('aceleriq_mesa_ads_contexto')!.scopes.includes('reports:read'));
+  assert(TOOL_MAP.get('aceleriq_mesa_foto_contexto')!.scopes.includes('files:read'));
+  const soRelatorio: AuthContext = { ...readCtx, scopes: ['reports:read'] };
+  assert(canInvoke(soRelatorio, TOOL_MAP.get('aceleriq_mesa_ads_contexto')!));
+  assert(!canInvoke(soRelatorio, TOOL_MAP.get('aceleriq_mesa_foto_contexto')!));
+});
+
+Deno.test('mesas: principal restrito a cliente não alcança (despachante e handler)', async () => {
+  for (const nome of MESAS) {
+    const t = TOOL_MAP.get(nome)!;
+    assert(!canUseToolWithDataScope(restrictedCtx, t), `${nome} is not tenant-scoped`);
+    await assertRejects(
+      () => t.handler({ client_id: '00000000-0000-0000-0000-0000000000bb' }, restrictedCtx),
+      Error,
+      'outside this MCP principal data scope',
+    );
+  }
+});
+
+Deno.test('mesas: entrada inválida é recusada pelo Zod', async () => {
+  for (const nome of MESAS) {
+    const t = TOOL_MAP.get(nome)!;
+    await assertRejects(() => t.handler({ client_id: 'nao-e-uuid' }, readCtx), Error, 'Invalid input');
+    await assertRejects(() => t.handler({ client_id: '00000000-0000-0000-0000-0000000000aa', extra: 1 }, readCtx), Error, 'Invalid input');
+  }
+});
+
+Deno.test('mesas: o mapa do painel aponta Mesa Ads e Mesa Foto para as leituras novas', async () => {
+  const out = await TOOL_MAP.get('aceleriq_capabilities')!.handler({}, readCtx) as Record<string, unknown>;
+  const mapa = out.mapa_do_painel as Array<{ area: string; rota: string; pelo_mcp: string }>;
+  const ads = mapa.find((m) => m.area === 'Mesa Ads');
+  const foto = mapa.find((m) => m.area === 'Mesa Foto');
+  assert(ads && ads.rota === '/mesa-ads' && ads.pelo_mcp.includes('aceleriq_mesa_ads_contexto'));
+  assert(foto && foto.rota === '/mesa-foto' && foto.pelo_mcp.includes('aceleriq_mesa_foto_contexto'));
+});
+
+Deno.test('mesas: arte entregue vale mais que a do Estúdio; sem entrega, a versão mais recente de cada lâmina', () => {
+  const entregue = arteDoTrabalho({
+    status: 'entregue',
+    direcao: { entrega_ads: { arquivos: [{ ordem: 2, versao: 1, storage_path: 'c/f/v1/2.png' }, { ordem: 1, versao: 3, storage_path: 'c/f/v1/1.png' }] } },
+    cards: [{ ordem: 1, versao: 9, storage_path: 'c/estudio/1-9.png' }],
+  });
+  assertEquals(entregue.fonte, 'entregue');
+  assertEquals(entregue.imagens.map((i) => [i.bucket, i.ordem]), [['files', 1], ['files', 2]]);
+
+  const estudio = arteDoTrabalho({
+    status: 'pronto',
+    direcao: { cards: [{ ordem: 2 }, { ordem: 1 }] },
+    cards: [
+      { ordem: 1, versao: 1, storage_path: 'a/1-1.png' },
+      { ordem: 1, versao: 2, storage_path: 'a/1-2.png' },
+      { ordem: 2, versao: 1, storage_path: 'a/2-1.png' },
+    ],
+  });
+  assertEquals(estudio.fonte, 'estudio');
+  assertEquals(estudio.imagens.map((i) => [i.bucket, i.caminho]), [['mesa', 'a/1-2.png'], ['mesa', 'a/2-1.png']]);
+  assertEquals(arteDoTrabalho(null).fonte, 'sem_arte');
+});
+
+Deno.test('mesas: o plano traz o porquê, as notas do Jev e os descartados com motivo', () => {
+  const p = planoParaLer({
+    id: 'p1',
+    nome: 'Plano',
+    angulos: [{ id: 'a1', nome: 'Dor', hipotese: 'Quem sente a dor clica', jev: { clareza: 8, alerta_politica: false }, aprovado: true, motivos: [] }],
+    estrutura: { descartados: [{ id: 'd1', nome: 'Antes e depois', motivos: ['Antes e depois viola política'] }], lacunas: ['Sem preço confirmado'], conjuntos: [{ nome: 'Frio', angulo_ids: ['a1'] }] },
+  });
+  const angulo = (p.angulos as any[])[0];
+  assertEquals(angulo.por_que, 'Quem sente a dor clica');
+  assertEquals(angulo.notas_do_jev.clareza, 8);
+  assertEquals((p.descartados as any[])[0].motivos_do_jev, ['Antes e depois viola política']);
+  assertEquals(p.lacunas, ['Sem preço confirmado']);
+});
+
+Deno.test('mesas: foto sem tabela vira aviso; kit não expõe dados da autorização', () => {
+  assert(faltaNoBanco({ code: 'PGRST205', message: "Could not find the table 'public.foto_kits' in the schema cache" }));
+  assert(faltaNoBanco({ code: '42703', message: 'column cliente_imagens.aprovada does not exist' }));
+  assert(!faltaNoBanco({ code: '42501', message: 'permission denied' }));
+  const kit = kitParaLer({ id: 'k', nome: 'Pessoa', autorizacao: { nome: 'Fulana', documento: '123' } }, []);
+  assertEquals(kit.autorizacao_registrada, true);
+  assert(!JSON.stringify(kit).includes('Fulana'));
+  const { paraAssinar } = tomadaParaLer({ versoes: [{ versao: 1, storage_path: 'x/1.png', aprovada: true }, { versao: 2, storage_path: 'x/2.png' }, { versao: 3, storage_path: 'x/3.png' }] });
+  assertEquals(paraAssinar.map((v) => v.versao).sort(), [1, 3]);
 });

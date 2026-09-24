@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-24T13:40:12.274961+00:00",
+  "repositories": 32,
+  "metadata_verified": 32,
+  "readmes_checked": 32,
+  "angle_presets": 96,
+  "unique_presets": 96,
+  "recipes": 8,
+  "planned_benchmark_cases": 80,
+  "benchmarks_executed": 0,
+  "public_source_links": 51,
+  "private_client_images_used": 0,
+  "scope": "Documental e verificacao estrutural dos artefatos; sem teste visual de geradores"
+}

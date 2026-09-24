@@ -1,0 +1,223 @@
+import { createContext, useContext, type ReactNode } from "react";
+import { Check, Sparkles } from "lucide-react";
+import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
+import { ImagemDaMesa } from "@/components/mesa/MesaContexto";
+import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo } from "./fotoApi";
+
+/**
+ * Peças comuns da Mesa Foto: o contexto da página (kit, ensaio, fotos
+ * selecionadas e a troca de etapa), o cartão das etapas, o selo que separa
+ * original, tratada e gerada, e as molduras de foto (proporção pelo
+ * padding-bottom, sem a proporção nativa do CSS, que o Safari 11 não tem).
+ *
+ * Regra da fotografia: nada escurece a foto para dar destaque. Selos ficam
+ * em pílulas claras no canto ou embaixo da imagem, nunca em véu escuro.
+ */
+
+export const ETAPAS_DA_MESA_FOTO = [
+  { valor: "acervo", rotulo: "Acervo" },
+  { valor: "kits", rotulo: "Kits" },
+  { valor: "preparar", rotulo: "Preparar" },
+  { valor: "ensaio", rotulo: "Ensaio" },
+  { valor: "revisar", rotulo: "Revisar" },
+  { valor: "usar", rotulo: "Usar" },
+  { valor: "biblioteca", rotulo: "Biblioteca" },
+] as const;
+
+export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
+
+export interface MesaFotoValor {
+  kitId: string | null;
+  ensaioId: string | null;
+  imagemId: string | null;
+  escolherKit: (id: string | null) => void;
+  escolherEnsaio: (id: string | null) => void;
+  /** Troca de etapa levando junto o que for preciso (imagem, kit, ensaio). */
+  irPara: (etapa: EtapaDaMesaFoto, extras?: { imagem?: string | null; kit?: string | null; ensaio?: string | null }) => void;
+  selecionadas: string[];
+  setSelecionadas: (ids: string[]) => void;
+  abrirAgente: () => void;
+}
+
+const Contexto = createContext<MesaFotoValor | null>(null);
+
+export function MesaFotoProvider({ valor, children }: { valor: MesaFotoValor; children: ReactNode }) {
+  return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
+}
+
+const SEM_PAGINA: MesaFotoValor = {
+  kitId: null,
+  ensaioId: null,
+  imagemId: null,
+  escolherKit: () => undefined,
+  escolherEnsaio: () => undefined,
+  irPara: () => undefined,
+  selecionadas: [],
+  setSelecionadas: () => undefined,
+  abrirAgente: () => undefined,
+};
+
+/** Fora da página (testes de uma etapa sozinha), vale um contexto neutro. */
+export function useMesaFoto(): MesaFotoValor {
+  return useContext(Contexto) || SEM_PAGINA;
+}
+
+/** Cartão das etapas: título pequeno em caixa alta, ação à direita, corpo livre. */
+export function Cartao({
+  titulo,
+  dica,
+  acao,
+  children,
+  className = "",
+}: {
+  titulo: ReactNode;
+  dica?: ReactNode;
+  acao?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`min-w-0 rounded-xl border border-border bg-card p-4 ${className}`}>
+      <div className="mb-3 flex min-w-0 flex-wrap items-start">
+        <div className="mr-2 min-w-0 flex-1">
+          <h3 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</h3>
+          {dica && <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{dica}</p>}
+        </div>
+        {acao && <div className="flex min-w-0 max-w-full flex-wrap items-center">{acao}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Pílula da classe da foto. Gerada sempre aparece: é imagem sintética. */
+export function SeloDaFoto({ foto, compacto = false }: { foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada">; compacto?: boolean }) {
+  const classe = classeDaFoto(foto);
+  return (
+    <span className="inline-flex min-w-0 flex-wrap items-center">
+      {classe === "gerada" && (
+        <span
+          className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10px] font-semibold text-primary"
+          title="Imagem gerada por IA: pode ter partes que não existem nas fotos originais"
+          data-selo="gerada"
+        >
+          <Sparkles className="mr-0.5 h-2.5 w-2.5" /> gerada
+        </span>
+      )}
+      {classe === "derivada" && (
+        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] font-medium text-foreground" data-selo="derivada">
+          tratada{!compacto && foto.modo ? ` · ${rotuloDoModo(foto.modo)}` : ""}
+        </span>
+      )}
+      {classe === "original" && !compacto && (
+        <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo="original">
+          original
+        </span>
+      )}
+      {foto.aprovada && (
+        <span className="mb-0.5 mr-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[10px] font-medium text-success" data-selo="aprovada">
+          <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Moldura com a proporção dada (largura/altura), por padding-bottom. */
+export function Moldura({ proporcao, children, className = "" }: { proporcao: number; children: ReactNode; className?: string }) {
+  const p = proporcao > 0 && isFinite(proporcao) ? proporcao : 1;
+  return (
+    <div className={`relative w-full overflow-hidden rounded-lg bg-muted ${className}`} style={{ paddingBottom: `${Math.round((100 / p) * 100) / 100}%` }}>
+      <div className="absolute inset-0">{children}</div>
+    </div>
+  );
+}
+
+/** Miniatura quadrada leve (Storage reduzido), com o selo no canto em pílula clara. */
+export function MiniaturaDaFoto({ foto, selo = true, className = "" }: { foto: FotoDoAcervo; selo?: boolean; className?: string }) {
+  return (
+    <Moldura proporcao={1} className={className}>
+      <MiniaturaDoStorage bucket={foto.storage_bucket || "mesa"} caminho={foto.storage_path} alt={foto.nome} className="h-full w-full" />
+      {selo && classeDaFoto(foto) === "gerada" && (
+        <span className="pointer-events-none absolute left-1.5 top-1.5">
+          <SeloDaFoto foto={foto} compacto />
+        </span>
+      )}
+    </Moldura>
+  );
+}
+
+/** A foto inteira, na proporção real, sem corte. */
+export function FotoInteira({ foto, className = "" }: { foto: FotoDoAcervo; className?: string }) {
+  return (
+    <Moldura proporcao={proporcaoDaFoto(foto)} className={`border border-border ${className}`}>
+      <ImagemDaMesa caminho={foto.storage_path} bucket={foto.storage_bucket || "mesa"} alt={foto.nome} className="h-full w-full !object-contain" />
+    </Moldura>
+  );
+}
+
+/** Lista curta de textos com rótulo (observado, invariantes, lacunas). */
+export function ListaCurta({ titulo, itens, vazio, tom = "normal" }: { titulo: string; itens: string[]; vazio?: string; tom?: "normal" | "alerta" }) {
+  return (
+    <div className="min-w-0">
+      <p className={`text-[11px] font-medium ${tom === "alerta" ? "text-warning" : "text-muted-foreground"}`}>{titulo}</p>
+      {itens.length ? (
+        <ul className="mt-1 space-y-0.5">
+          {itens.map((t) => (
+            <li key={t} className="text-[12px] leading-snug [overflow-wrap:anywhere]">
+              {t}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        vazio && <p className="mt-1 text-[11.5px] text-muted-foreground">{vazio}</p>
+      )}
+    </div>
+  );
+}
+
+/** Estado vazio de uma etapa: frase curta e o próximo passo. */
+export function Vazio({ titulo, children, acao }: { titulo: string; children?: ReactNode; acao?: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center">
+      <p className="text-[13.5px] font-medium">{titulo}</p>
+      {children && <div className="mx-auto mt-1 max-w-xl text-[12.5px] leading-relaxed text-muted-foreground">{children}</div>}
+      {acao && <div className="mt-3 flex flex-wrap items-center justify-center">{acao}</div>}
+    </div>
+  );
+}
+
+/** Grupo de botões em forma de pílula (presets, filtros). */
+export function Pilulas<T extends string | number>({
+  opcoes,
+  valor,
+  onEscolher,
+  rotulo,
+  className = "",
+}: {
+  opcoes: { valor: T; rotulo: string; dica?: string }[];
+  valor: NoInfer<T> | null;
+  onEscolher: (v: NoInfer<T>) => void;
+  rotulo: string;
+  className?: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={rotulo} className={`flex min-w-0 flex-wrap ${className}`}>
+      {opcoes.map((o) => (
+        <button
+          key={String(o.valor)}
+          type="button"
+          role="radio"
+          aria-checked={valor === o.valor}
+          title={o.dica}
+          onClick={() => onEscolher(o.valor)}
+          className={`mb-1.5 mr-1.5 h-7 max-w-full truncate rounded-full border px-2.5 text-[12px] transition-colors ${
+            valor === o.valor ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:border-primary/50"
+          }`}
+        >
+          {o.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}

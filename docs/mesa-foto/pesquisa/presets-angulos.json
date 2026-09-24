@@ -1,0 +1,876 @@
+{
+  "status": "Proposta de presets; nao gerados ou testados",
+  "source_grid": "https://huggingface.co/fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA",
+  "source_zoom_mapping": "https://fal.ai/models/fal-ai/qwen-image-edit-2511-multiple-angles/api",
+  "notes": [
+    "Angulos relativos a referencia; definir a frente do assunto no kit.",
+    "Nao representam medidas garantidas na imagem resultante.",
+    "Vista superior de 90 graus fora desta grade; testar separadamente."
+  ],
+  "presets": [
+    {
+      "id": "a0-e-30-ddetalhe",
+      "nome": "Frente / Camera baixa / detalhe",
+      "azimute_graus": 0,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a0-e-30-dmedio",
+      "nome": "Frente / Camera baixa / medio",
+      "azimute_graus": 0,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a0-e-30-daberto",
+      "nome": "Frente / Camera baixa / aberto",
+      "azimute_graus": 0,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a0-e0-ddetalhe",
+      "nome": "Frente / Na altura do assunto / detalhe",
+      "azimute_graus": 0,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a0-e0-dmedio",
+      "nome": "Frente / Na altura do assunto / medio",
+      "azimute_graus": 0,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a0-e0-daberto",
+      "nome": "Frente / Na altura do assunto / aberto",
+      "azimute_graus": 0,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a0-e30-ddetalhe",
+      "nome": "Frente / Elevada / detalhe",
+      "azimute_graus": 0,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a0-e30-dmedio",
+      "nome": "Frente / Elevada / medio",
+      "azimute_graus": 0,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a0-e30-daberto",
+      "nome": "Frente / Elevada / aberto",
+      "azimute_graus": 0,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a0-e60-ddetalhe",
+      "nome": "Frente / Vista alta / detalhe",
+      "azimute_graus": 0,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a0-e60-dmedio",
+      "nome": "Frente / Vista alta / medio",
+      "azimute_graus": 0,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a0-e60-daberto",
+      "nome": "Frente / Vista alta / aberto",
+      "azimute_graus": 0,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a45-e-30-ddetalhe",
+      "nome": "Tres quartos direito / Camera baixa / detalhe",
+      "azimute_graus": 45,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a45-e-30-dmedio",
+      "nome": "Tres quartos direito / Camera baixa / medio",
+      "azimute_graus": 45,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a45-e-30-daberto",
+      "nome": "Tres quartos direito / Camera baixa / aberto",
+      "azimute_graus": 45,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a45-e0-ddetalhe",
+      "nome": "Tres quartos direito / Na altura do assunto / detalhe",
+      "azimute_graus": 45,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a45-e0-dmedio",
+      "nome": "Tres quartos direito / Na altura do assunto / medio",
+      "azimute_graus": 45,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a45-e0-daberto",
+      "nome": "Tres quartos direito / Na altura do assunto / aberto",
+      "azimute_graus": 45,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a45-e30-ddetalhe",
+      "nome": "Tres quartos direito / Elevada / detalhe",
+      "azimute_graus": 45,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a45-e30-dmedio",
+      "nome": "Tres quartos direito / Elevada / medio",
+      "azimute_graus": 45,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a45-e30-daberto",
+      "nome": "Tres quartos direito / Elevada / aberto",
+      "azimute_graus": 45,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a45-e60-ddetalhe",
+      "nome": "Tres quartos direito / Vista alta / detalhe",
+      "azimute_graus": 45,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a45-e60-dmedio",
+      "nome": "Tres quartos direito / Vista alta / medio",
+      "azimute_graus": 45,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a45-e60-daberto",
+      "nome": "Tres quartos direito / Vista alta / aberto",
+      "azimute_graus": 45,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a90-e-30-ddetalhe",
+      "nome": "Lateral direita / Camera baixa / detalhe",
+      "azimute_graus": 90,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a90-e-30-dmedio",
+      "nome": "Lateral direita / Camera baixa / medio",
+      "azimute_graus": 90,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a90-e-30-daberto",
+      "nome": "Lateral direita / Camera baixa / aberto",
+      "azimute_graus": 90,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a90-e0-ddetalhe",
+      "nome": "Lateral direita / Na altura do assunto / detalhe",
+      "azimute_graus": 90,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a90-e0-dmedio",
+      "nome": "Lateral direita / Na altura do assunto / medio",
+      "azimute_graus": 90,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a90-e0-daberto",
+      "nome": "Lateral direita / Na altura do assunto / aberto",
+      "azimute_graus": 90,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a90-e30-ddetalhe",
+      "nome": "Lateral direita / Elevada / detalhe",
+      "azimute_graus": 90,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a90-e30-dmedio",
+      "nome": "Lateral direita / Elevada / medio",
+      "azimute_graus": 90,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a90-e30-daberto",
+      "nome": "Lateral direita / Elevada / aberto",
+      "azimute_graus": 90,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a90-e60-ddetalhe",
+      "nome": "Lateral direita / Vista alta / detalhe",
+      "azimute_graus": 90,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a90-e60-dmedio",
+      "nome": "Lateral direita / Vista alta / medio",
+      "azimute_graus": 90,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a90-e60-daberto",
+      "nome": "Lateral direita / Vista alta / aberto",
+      "azimute_graus": 90,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a135-e-30-ddetalhe",
+      "nome": "Posterior direito / Camera baixa / detalhe",
+      "azimute_graus": 135,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a135-e-30-dmedio",
+      "nome": "Posterior direito / Camera baixa / medio",
+      "azimute_graus": 135,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a135-e-30-daberto",
+      "nome": "Posterior direito / Camera baixa / aberto",
+      "azimute_graus": 135,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a135-e0-ddetalhe",
+      "nome": "Posterior direito / Na altura do assunto / detalhe",
+      "azimute_graus": 135,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a135-e0-dmedio",
+      "nome": "Posterior direito / Na altura do assunto / medio",
+      "azimute_graus": 135,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a135-e0-daberto",
+      "nome": "Posterior direito / Na altura do assunto / aberto",
+      "azimute_graus": 135,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a135-e30-ddetalhe",
+      "nome": "Posterior direito / Elevada / detalhe",
+      "azimute_graus": 135,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a135-e30-dmedio",
+      "nome": "Posterior direito / Elevada / medio",
+      "azimute_graus": 135,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a135-e30-daberto",
+      "nome": "Posterior direito / Elevada / aberto",
+      "azimute_graus": 135,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a135-e60-ddetalhe",
+      "nome": "Posterior direito / Vista alta / detalhe",
+      "azimute_graus": 135,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a135-e60-dmedio",
+      "nome": "Posterior direito / Vista alta / medio",
+      "azimute_graus": 135,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a135-e60-daberto",
+      "nome": "Posterior direito / Vista alta / aberto",
+      "azimute_graus": 135,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a180-e-30-ddetalhe",
+      "nome": "Verso / Camera baixa / detalhe",
+      "azimute_graus": 180,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a180-e-30-dmedio",
+      "nome": "Verso / Camera baixa / medio",
+      "azimute_graus": 180,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a180-e-30-daberto",
+      "nome": "Verso / Camera baixa / aberto",
+      "azimute_graus": 180,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a180-e0-ddetalhe",
+      "nome": "Verso / Na altura do assunto / detalhe",
+      "azimute_graus": 180,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a180-e0-dmedio",
+      "nome": "Verso / Na altura do assunto / medio",
+      "azimute_graus": 180,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a180-e0-daberto",
+      "nome": "Verso / Na altura do assunto / aberto",
+      "azimute_graus": 180,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a180-e30-ddetalhe",
+      "nome": "Verso / Elevada / detalhe",
+      "azimute_graus": 180,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a180-e30-dmedio",
+      "nome": "Verso / Elevada / medio",
+      "azimute_graus": 180,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a180-e30-daberto",
+      "nome": "Verso / Elevada / aberto",
+      "azimute_graus": 180,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a180-e60-ddetalhe",
+      "nome": "Verso / Vista alta / detalhe",
+      "azimute_graus": 180,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a180-e60-dmedio",
+      "nome": "Verso / Vista alta / medio",
+      "azimute_graus": 180,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a180-e60-daberto",
+      "nome": "Verso / Vista alta / aberto",
+      "azimute_graus": 180,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a225-e-30-ddetalhe",
+      "nome": "Posterior esquerdo / Camera baixa / detalhe",
+      "azimute_graus": 225,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a225-e-30-dmedio",
+      "nome": "Posterior esquerdo / Camera baixa / medio",
+      "azimute_graus": 225,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a225-e-30-daberto",
+      "nome": "Posterior esquerdo / Camera baixa / aberto",
+      "azimute_graus": 225,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a225-e0-ddetalhe",
+      "nome": "Posterior esquerdo / Na altura do assunto / detalhe",
+      "azimute_graus": 225,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a225-e0-dmedio",
+      "nome": "Posterior esquerdo / Na altura do assunto / medio",
+      "azimute_graus": 225,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a225-e0-daberto",
+      "nome": "Posterior esquerdo / Na altura do assunto / aberto",
+      "azimute_graus": 225,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a225-e30-ddetalhe",
+      "nome": "Posterior esquerdo / Elevada / detalhe",
+      "azimute_graus": 225,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a225-e30-dmedio",
+      "nome": "Posterior esquerdo / Elevada / medio",
+      "azimute_graus": 225,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a225-e30-daberto",
+      "nome": "Posterior esquerdo / Elevada / aberto",
+      "azimute_graus": 225,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a225-e60-ddetalhe",
+      "nome": "Posterior esquerdo / Vista alta / detalhe",
+      "azimute_graus": 225,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a225-e60-dmedio",
+      "nome": "Posterior esquerdo / Vista alta / medio",
+      "azimute_graus": 225,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a225-e60-daberto",
+      "nome": "Posterior esquerdo / Vista alta / aberto",
+      "azimute_graus": 225,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a270-e-30-ddetalhe",
+      "nome": "Lateral esquerda / Camera baixa / detalhe",
+      "azimute_graus": 270,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a270-e-30-dmedio",
+      "nome": "Lateral esquerda / Camera baixa / medio",
+      "azimute_graus": 270,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a270-e-30-daberto",
+      "nome": "Lateral esquerda / Camera baixa / aberto",
+      "azimute_graus": 270,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a270-e0-ddetalhe",
+      "nome": "Lateral esquerda / Na altura do assunto / detalhe",
+      "azimute_graus": 270,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a270-e0-dmedio",
+      "nome": "Lateral esquerda / Na altura do assunto / medio",
+      "azimute_graus": 270,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a270-e0-daberto",
+      "nome": "Lateral esquerda / Na altura do assunto / aberto",
+      "azimute_graus": 270,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a270-e30-ddetalhe",
+      "nome": "Lateral esquerda / Elevada / detalhe",
+      "azimute_graus": 270,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a270-e30-dmedio",
+      "nome": "Lateral esquerda / Elevada / medio",
+      "azimute_graus": 270,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a270-e30-daberto",
+      "nome": "Lateral esquerda / Elevada / aberto",
+      "azimute_graus": 270,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a270-e60-ddetalhe",
+      "nome": "Lateral esquerda / Vista alta / detalhe",
+      "azimute_graus": 270,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a270-e60-dmedio",
+      "nome": "Lateral esquerda / Vista alta / medio",
+      "azimute_graus": 270,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a270-e60-daberto",
+      "nome": "Lateral esquerda / Vista alta / aberto",
+      "azimute_graus": 270,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a315-e-30-ddetalhe",
+      "nome": "Tres quartos esquerdo / Camera baixa / detalhe",
+      "azimute_graus": 315,
+      "elevacao_graus": -30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a315-e-30-dmedio",
+      "nome": "Tres quartos esquerdo / Camera baixa / medio",
+      "azimute_graus": 315,
+      "elevacao_graus": -30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a315-e-30-daberto",
+      "nome": "Tres quartos esquerdo / Camera baixa / aberto",
+      "azimute_graus": 315,
+      "elevacao_graus": -30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a315-e0-ddetalhe",
+      "nome": "Tres quartos esquerdo / Na altura do assunto / detalhe",
+      "azimute_graus": 315,
+      "elevacao_graus": 0,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a315-e0-dmedio",
+      "nome": "Tres quartos esquerdo / Na altura do assunto / medio",
+      "azimute_graus": 315,
+      "elevacao_graus": 0,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a315-e0-daberto",
+      "nome": "Tres quartos esquerdo / Na altura do assunto / aberto",
+      "azimute_graus": 315,
+      "elevacao_graus": 0,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a315-e30-ddetalhe",
+      "nome": "Tres quartos esquerdo / Elevada / detalhe",
+      "azimute_graus": 315,
+      "elevacao_graus": 30,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a315-e30-dmedio",
+      "nome": "Tres quartos esquerdo / Elevada / medio",
+      "azimute_graus": 315,
+      "elevacao_graus": 30,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a315-e30-daberto",
+      "nome": "Tres quartos esquerdo / Elevada / aberto",
+      "azimute_graus": 315,
+      "elevacao_graus": 30,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    },
+    {
+      "id": "a315-e60-ddetalhe",
+      "nome": "Tres quartos esquerdo / Vista alta / detalhe",
+      "azimute_graus": 315,
+      "elevacao_graus": 60,
+      "enquadramento": "detalhe",
+      "zoom_fal_sugerido": 10,
+      "testado": false
+    },
+    {
+      "id": "a315-e60-dmedio",
+      "nome": "Tres quartos esquerdo / Vista alta / medio",
+      "azimute_graus": 315,
+      "elevacao_graus": 60,
+      "enquadramento": "medio",
+      "zoom_fal_sugerido": 5,
+      "testado": false
+    },
+    {
+      "id": "a315-e60-daberto",
+      "nome": "Tres quartos esquerdo / Vista alta / aberto",
+      "azimute_graus": 315,
+      "elevacao_graus": 60,
+      "enquadramento": "aberto",
+      "zoom_fal_sugerido": 0,
+      "testado": false
+    }
+  ]
+}

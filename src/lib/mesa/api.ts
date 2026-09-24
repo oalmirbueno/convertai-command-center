@@ -10,7 +10,7 @@ import { toast } from "sonner";
  */
 import { supabase } from "@/integrations/supabase/client";
 
-export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads";
+export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto";
 
 export type AcaoDeErro = "recarregar" | "cota" | "chave" | "modelo" | null;
 
@@ -37,6 +37,7 @@ const NOMES_DAS_FUNCOES: Record<FuncaoDaMesa, string> = {
   "estudio-arte": "estúdio de arte",
   "agente-contexto": "agente de contexto",
   "mesa-ads": "estrategista de ads",
+  "mesa-foto": "diretor de fotografia",
 };
 
 const PROVEDORES: Record<string, string> = {

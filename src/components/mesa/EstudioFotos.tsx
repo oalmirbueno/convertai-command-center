@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ClipboardPaste, ImagePlus, Images, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -231,7 +232,16 @@ export default function EstudioFotos({
   const mudou = JSON.stringify(fotosParaSalvar(rascunho)) !== chaveSalvas;
   const cheio = papelParaNova(rascunho) === null;
   const antigas = card.imagens_ids || [];
-  const acervo = useAcervo(antigas.length > 0);
+  // Fotos aprovadas que vieram da Mesa Foto ("Usar na Mesa": &fotos=<ids>).
+  const [params, setParams] = useSearchParams();
+  const daMesaFoto = (params.get("fotos") || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const acervo = useAcervo(antigas.length > 0 || daMesaFoto.length > 0);
+  const vindasDaMesaFoto = daMesaFoto.length ? (acervo.data || []).filter((i) => daMesaFoto.indexOf(i.id) >= 0) : [];
+  const dispensarMesaFoto = () => {
+    const p = new URLSearchParams(params);
+    p.delete("fotos");
+    setParams(p, { replace: true });
+  };
   const fotoAntiga = antigas.length ? (acervo.data || []).find((i) => i.id === antigas[0]) || null : null;
 
   const adicionarCaminho = (caminho: string): boolean => {
@@ -353,6 +363,31 @@ export default function EstudioFotos({
 
   return (
     <div className="min-w-0 space-y-4">
+      {vindasDaMesaFoto.length > 0 && (
+        <section aria-label="Fotos da Mesa Foto" className="rounded-lg border border-primary/40 bg-primary/5 p-2.5">
+          <div className="mb-2 flex min-w-0 items-center">
+            <p className="min-w-0 flex-1 text-[12px] font-medium">Fotos que vieram da Mesa Foto</p>
+            <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground" onClick={dispensarMesaFoto}>Dispensar</button>
+          </div>
+          <ul className="grid grid-cols-3 gap-2">
+            {vindasDaMesaFoto.map((imagem) => (
+              <li key={imagem.id} className="min-w-0">
+                <FotoDoAcervo imagem={imagem} />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-1 h-7 w-full px-1 text-[11px]"
+                  disabled={ocupado || cheio || enviando > 0}
+                  onClick={() => void escolherDoAcervo(imagem)}
+                >
+                  Usar nesta lâmina
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="text-[12px] leading-relaxed text-muted-foreground">
         Foto real não é arte: é a foto que você traz para compor esta lâmina. <span className="text-foreground">Fundo</span> fica como está, com o texto
         e o design por cima. <span className="text-foreground">Elemento</span> é pessoa, rosto ou objeto que entra exatamente como é.

@@ -66,6 +66,7 @@ const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
 const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));
 const MesaAds = lazy(() => import("@/pages/MesaAds"));
+const MesaFoto = lazy(() => import("@/pages/MesaFoto"));
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
@@ -295,6 +296,8 @@ export function AppRoutes() {
         <Route path="/mesa" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaDoCliente /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Ads: criativos de anúncio (docs/mesa-ads/SPEC.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
         <Route path="/mesa-ads" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Foto: estúdio fotográfico (docs/mesa-foto/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-foto" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaFoto /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
         <Route path="/novidades" element={<Novidades />} />

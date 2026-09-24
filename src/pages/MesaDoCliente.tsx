@@ -10,6 +10,7 @@ import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCu
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, usd, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { montarFila, useFilaDePrioridades, type AbaDaMesa } from "@/lib/mesa/fila";
+import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 
 /**
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
@@ -687,6 +688,7 @@ export default function MesaDoCliente() {
               </button>
             )}
           </div>
+          {clientId && <TrocaDeMesas atual="mesa" clientId={clientId} />}
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}

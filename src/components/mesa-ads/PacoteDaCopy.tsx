@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, Loader2, Package, Send } from "lucide-react";
+import { Download, FileArchive, Loader2, Package, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -25,6 +25,7 @@ import {
   type PacoteDeCopy,
 } from "./adsApi";
 import { Andamento, BotaoCopiar, useAndamento } from "./Comuns";
+import { carregarDadosDoZip, gerarZipDoGestor, salvarBlob, type ProgressoDoZip } from "./zipDoGestor";
 
 /**
  * Pacote completo de copy de um criativo (copy_pacote): textos principais por
@@ -76,7 +77,61 @@ function BotaoUsar({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Enviar o pacote ao gestor: vira arquivo em Arquivos e, se marcado, tarefa para ele. */
+/** Texto do andamento do zip ("Baixando artes 3 de 8"). */
+export function textoDoProgresso(p: ProgressoDoZip | null): string {
+  if (!p) return "";
+  if (p.etapa === "lendo") return "Lendo o plano e as copies";
+  if (p.etapa === "imagens") return p.total ? `Baixando artes ${p.feitas} de ${p.total}` : "Sem artes para baixar";
+  if (p.etapa === "compactando") return "Compactando o pacote";
+  return "Pacote pronto";
+}
+
+/**
+ * Baixar o pacote completo em .zip, montado no navegador (sem IA, custo zero):
+ * LEIA-ME, estratégia, copies em .md e .csv e as artes finais em criativos/.
+ * `corpo` é o mesmo do envio: { criativo_ids } ou { plano_id }.
+ */
+export function BaixarZipDoGestor({ corpo, className = "" }: { corpo: () => Record<string, unknown>; className?: string }) {
+  const { clientId, clientName } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [progresso, setProgresso] = useState<ProgressoDoZip | null>(null);
+  const ocupado = progresso !== null;
+  const baixar = async () => {
+    setProgresso({ etapa: "lendo", feitas: 0, total: 0 });
+    try {
+      const dados = await carregarDadosDoZip(queryClient, clientId, clientName, corpo());
+      if (!dados.criativos.length) {
+        toast.error("Nenhum criativo para o pacote", { description: "Gere os criativos do plano antes de baixar o pacote." });
+        return;
+      }
+      const r = await gerarZipDoGestor(dados, { aoProgredir: setProgresso });
+      salvarBlob(r.nome, r.blob);
+      toast.success("Pacote baixado", {
+        description: r.faltando.length
+          ? `${r.imagens} arte(s) no zip. ${r.faltando.length} não baixaram: a lista está no LEIA-ME.`
+          : `${dados.criativos.length} criativo(s) e ${r.imagens} arte(s), com LEIA-ME, estratégia e copies.`,
+      });
+    } catch (e) {
+      avisarErro(e, "Pacote não baixado");
+    } finally {
+      setProgresso(null);
+    }
+  };
+  return (
+    <span className={`inline-flex min-w-0 flex-wrap items-center ${className}`}>
+      <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8" disabled={ocupado} onClick={() => void baixar()} title="Montado no seu navegador, sem custo de IA">
+        {ocupado ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <FileArchive className="mr-1 h-3.5 w-3.5" />}
+        Baixar pacote completo (.zip)
+      </Button>
+      <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground" aria-live="polite">
+        {ocupado ? textoDoProgresso(progresso) : "sem custo"}
+      </span>
+    </span>
+  );
+}
+
+/** Enviar o pacote ao gestor: vira arquivo em Arquivos e, se marcado, tarefa para ele. Ao lado, o .zip completo. */
 export function EnvioAoGestor({ corpo, rotulo = "Enviar ao gestor de tráfego", className = "" }: { corpo: () => Record<string, unknown>; rotulo?: string; className?: string }) {
   const { clientId } = useMesa();
   const avisarErro = useAvisarErro();
@@ -107,6 +162,7 @@ export function EnvioAoGestor({ corpo, rotulo = "Enviar ao gestor de tráfego", 
         <input type="checkbox" checked={criarTarefa} onChange={(e) => setCriarTarefa(e.target.checked)} className="mr-1.5 h-3.5 w-3.5 accent-primary" />
         criar tarefa para o gestor
       </label>
+      <BaixarZipDoGestor corpo={corpo} className="ml-0 sm:ml-2" />
     </span>
   );
 }
