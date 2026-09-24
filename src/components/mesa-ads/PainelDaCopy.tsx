@@ -100,7 +100,18 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
   );
 }
 
-export default function PainelDaCopy({ criativo, caminhoDaArte, nome }: { criativo: CriativoAds; caminhoDaArte: string | null; nome?: string }) {
+export default function PainelDaCopy({
+  criativo,
+  caminhoDaArte,
+  nome,
+  aoMudarCopy,
+}: {
+  criativo: CriativoAds;
+  caminhoDaArte: string | null;
+  nome?: string;
+  /** Quem desenha as prévias fora do painel recebe a copy ao vivo (e o painel não as desenha). */
+  aoMudarCopy?: (c: CopyDoAnuncio) => void;
+}) {
   const { clientId, clientName, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [copy, setCopy] = useState<CopyDoAnuncio>(limpa(criativo.copy));
@@ -117,6 +128,10 @@ export default function PainelDaCopy({ criativo, caminhoDaArte, nome }: { criati
   useEffect(() => setVariacoes([]), [criativo.id]);
 
   const mudou = JSON.stringify(limpa(copy)) !== salvo;
+  useEffect(() => {
+    if (aoMudarCopy) aoMudarCopy(copy);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(copy)]);
 
   const salvar = async (silencioso = false) => {
     if (!mudou) return;
@@ -239,7 +254,7 @@ export default function PainelDaCopy({ criativo, caminhoDaArte, nome }: { criati
         }}
       />
 
-      <PosicionamentosDoAnuncio copy={copy} caminho={caminhoDaArte} formato={criativo.formato} nome={clientName} />
+      {!aoMudarCopy && <PosicionamentosDoAnuncio copy={copy} caminho={caminhoDaArte} formato={criativo.formato} nome={clientName} />}
     </div>
   );
 }

@@ -28,6 +28,8 @@ import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
 import { Andamento, pilula, useAndamento } from "./Comuns";
 import { laminasSemArte, produzirLamina, situacaoDe, situacaoDoTrabalho, SITUACOES, type EtapaDoLote, type SituacaoDoCriativo } from "./loteDoEstudio";
 import PainelDaCopy from "./PainelDaCopy";
+import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
+import type { CopyDoAnuncio } from "./adsApi";
 import { EnvioAoGestor } from "./PacoteDaCopy";
 
 /**
@@ -102,7 +104,9 @@ export default function AbaEstudioAds({
   onVerTodos?: () => void;
 }) {
   const mesa = useMesa();
-  const { clientId, catalogo } = mesa;
+  const { clientId, catalogo, clientName } = mesa;
+  // Copy ao vivo do painel, para as prévias de posicionamento na faixa de baixo.
+  const [copyAoVivo, setCopyAoVivo] = useState<{ id: string; copy: CopyDoAnuncio } | null>(null);
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const criativos = useQuery({ queryKey: chavesAds.criativos(clientId), queryFn: () => lerCriativos(clientId) });
@@ -448,10 +452,22 @@ export default function AbaEstudioAds({
 
         {aberto && (
           <div className="min-w-0 lg:col-start-2 2xl:col-start-auto">
-            <PainelDaCopy key={aberto.id} criativo={aberto} caminhoDaArte={capaDoTrabalho(trabalho)} nome={nomeDoCriativo(aberto, listaDePlanos)} />
+            <PainelDaCopy key={aberto.id} criativo={aberto} caminhoDaArte={capaDoTrabalho(trabalho)} nome={nomeDoCriativo(aberto, listaDePlanos)} aoMudarCopy={(c) => setCopyAoVivo({ id: aberto.id, copy: c })} />
           </div>
         )}
       </div>
+
+      {aberto && (
+        // Posicionamentos numa faixa larga embaixo, lado a lado, em tamanho de celular.
+        <div className="min-w-0 rounded-xl border border-border bg-card p-3 lg:ml-[266px] 2xl:ml-[276px]">
+          <PosicionamentosDoAnuncio
+            copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
+            caminho={capaDoTrabalho(trabalho)}
+            formato={aberto.formato}
+            nome={clientName}
+          />
+        </div>
+      )}
     </div>
   );
 }
