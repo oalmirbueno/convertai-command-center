@@ -3318,7 +3318,16 @@ MENSAGEM DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `A equipe anexou ${anexos.imagens.length} imagem(ns) (exemplos ou material do cliente); use o conteúdo com fidelidade.\n` : ""}
 Responda como o estrategista de ofertas da agência. Devolva:
 - resposta: a conversa, direta, em até 8 frases. Se faltar dado para uma oferta honesta, pergunte objetivamente o que falta.
-- ofertas: de 0 a 3 ofertas NOVAS e específicas, só quando a equipe pediu ou quando já há dado suficiente. Cada campo segue a montagem de oferta: para_quem, promessa (sem promessa de resultado garantido), mecanismo (por que funciona), entregaveis, bonus (só reais ou propostos como sugestão para o cliente confirmar), garantia, urgencia_real e ancoragem só quando reais (senão null), cta, provas_necessarias (o que o cliente precisa confirmar ou enviar) e riscos (de política e de entrega).
+- ofertas: de 0 a 3 ofertas NOVAS e específicas, só quando a equipe pediu ou quando já há dado suficiente. Oferta VENDEDORA e agressiva dentro da política (equação de valor: resultado desejado grande, prova de que acontece, pouco tempo, pouco esforço, risco revertido). Cada campo segue a montagem de oferta:
+  - nome: nome de oferta que dá vontade (até 6 palavras), não descrição de serviço.
+  - para_quem: a situação concreta de quem compra.
+  - promessa: o resultado que o comprador quer, na língua dele, forte e específico (ex.: "árvore podada com segurança e quintal limpo no mesmo dia"). Sem garantia absoluta de resultado e sem número inventado, mas SEM ressalva dentro da promessa: ressalvas e limites vão em riscos e provas_necessarias.
+  - mecanismo: por que funciona, em uma frase concreta.
+  - entregaveis: tudo que a pessoa leva, item por item, para o valor ficar visível.
+  - bonus: bônus que resolvem o próximo problema do comprador; os que o cliente ainda não confirmou vêm com "(sugestão, confirmar com o cliente)".
+  - garantia, urgencia_real e ancoragem: as reais; se não houver, proponha uma possível marcada "(sugestão, confirmar com o cliente)" ou null. Nunca urgência falsa.
+  - cta: verbo de ação e o próximo passo em até 8 palavras (ex.: "Mande a foto da árvore no Direct").
+  - provas_necessarias (o que o cliente precisa confirmar ou enviar) e riscos (de política e de entrega).
 - briefing_sugerido: o briefing COMPLETO atualizado só quando a conversa trouxe dado novo para ele; senão null.
 - ideias: de 0 a 6 ideias de criativo quando a equipe pedir criativos a partir de uma oferta ou de exemplos; cada uma com gancho verbal, gancho visual (sem escurecer a foto), estilo_visual da lista e formato.`;
 
@@ -3351,8 +3360,9 @@ Responda como o estrategista de ofertas da agência. Devolva:
   let notas = conferencia.notas;
   let jevErro = conferencia.jev_erro;
 
-  // Alerta de política: reescreve uma vez e confere de novo antes de responder.
-  const alertadas = notas.map((n, i) => (n?.alerta_politica ? i : -1)).filter((i) => i >= 0);
+  // Alerta de política ou oferta fraca (força ou clareza abaixo de 7): reescreve uma vez e confere de novo antes de responder.
+  const precisaReforco = (n: (typeof notas)[number]) => !!n && (n.alerta_politica || (n.forca != null && n.forca < 7) || (n.clareza != null && n.clareza < 7));
+  const alertadas = notas.map((n, i) => (precisaReforco(n) ? i : -1)).filter((i) => i >= 0);
   if (alertadas.length && restanteMs(chamador) > TEMPO_DE_UMA_RODADA_MS) {
     try {
       const re = await chamarTexto({
@@ -3364,10 +3374,14 @@ Responda como o estrategista de ofertas da agência. Devolva:
         mensagens: [{
           papel: "usuario",
           conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
-OFERTAS COM ALERTA DE POLÍTICA DA META (indice = posição):
+OFERTAS QUE A CONFERÊNCIA DO JEV REPROVOU (indice = posição; notas de 0 a 10: clareza e força, quanto maior melhor; risco_politica 10 = sem risco):
 ${JSON.stringify(alertadas.map((i) => ({ indice: i, ...novas[i], notas: notas[i] })))}
 
-Reescreva cada uma mantendo o valor da oferta e tirando o risco: sem atributo pessoal, sem promessa de resultado garantido, sem antes e depois, sem urgência ou escassez que não seja real, sem número ou prova fora do briefing. Devolva cada oferta com o mesmo indice.`,
+Reescreva cada uma para passar: força e clareza 7 ou mais e sem alerta de política.
+- Força baixa: promessa mais desejável e específica na língua do comprador, entregáveis concretos, bônus que resolvem o próximo problema, reversão de risco e CTA curto com verbo de ação. Ressalvas saem da promessa e vão para riscos.
+- Clareza baixa: em 1 segundo precisa ficar claro o que é, para quem e qual o próximo passo.
+- Alerta de política: sem atributo pessoal, sem promessa de resultado garantido, sem antes e depois, sem urgência ou escassez que não seja real, sem número ou prova fora do briefing.
+Devolva cada oferta com o mesmo indice.`,
         }],
         raciocinio,
         esquemaJson: ESQUEMA_OFERTAS_REESCRITAS,
@@ -3388,8 +3402,16 @@ Reescreva cada uma mantendo o valor da oferta e tirando o risco: sem atributo pe
         const segunda = await conferirOfertasComJev(idx.map((i) => trocadas.get(i)!), briefing, cobranca);
         custo += segunda.custo;
         if (segunda.jev_erro) jevErro = segunda.jev_erro;
-        novas = novas.map((o, i) => trocadas.get(i) ?? o);
-        notas = notas.map((n, i) => (trocadas.has(i) ? segunda.notas[idx.indexOf(i)] ?? null : n));
+        // Só troca quando a reescrita ficou melhor (sem alerta e força mais clareza maior ou igual).
+        const valor = (n: NotasOferta | null) => (n ? (n.forca ?? 0) + (n.clareza ?? 0) : -1);
+        const melhorou = (i: number) => {
+          const nova = segunda.notas[idx.indexOf(i)] ?? null;
+          if (!nova || nova.alerta_politica) return !!notas[i]?.alerta_politica && !!nova && !nova.alerta_politica;
+          return !!notas[i]?.alerta_politica || valor(nova) >= valor(notas[i]);
+        };
+        const aceitas = new Set(idx.filter(melhorou));
+        novas = novas.map((o, i) => (aceitas.has(i) ? trocadas.get(i)! : o));
+        notas = notas.map((n, i) => (aceitas.has(i) ? segunda.notas[idx.indexOf(i)] ?? null : n));
       }
     } catch (err) {
       console.error("[mesa-ads] reescrita da oferta falhou", { nome: err instanceof Error ? err.name : "desconhecido" });
