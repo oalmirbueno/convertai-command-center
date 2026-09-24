@@ -24,6 +24,7 @@ import {
 } from "./adsApi";
 import { Andamento, useAndamento } from "./Comuns";
 import PacoteDaCopy from "./PacoteDaCopy";
+import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 
 /**
  * A copy do anúncio ao lado da arte: texto principal (o Meta mostra cerca de
@@ -238,10 +239,7 @@ export default function PainelDaCopy({ criativo, caminhoDaArte, nome }: { criati
         }}
       />
 
-      <section aria-label="Como fica no feed">
-        <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Como fica no feed</h3>
-        <PreviaDoFeed copy={copy} caminho={caminhoDaArte} formato={criativo.formato} nome={clientName} />
-      </section>
+      <PosicionamentosDoAnuncio copy={copy} caminho={caminhoDaArte} formato={criativo.formato} nome={clientName} />
     </div>
   );
 }
