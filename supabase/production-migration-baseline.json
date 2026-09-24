@@ -977,6 +977,14 @@
       "remote_name": "mesa_gpt_image_pelo_openrouter",
       "remote_statements_sha256": "214b34007567f6466da2bf49f2af884e58155f9727f4640b839f1c0e10109d3b",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924015930",
+      "path": "supabase/migrations/20260924015930_mesa_ads.sql",
+      "local_sha256": "5b1f78a13a4d4e6c86bd8e5b9220bf0c6ee45899d1b4308b09a33a56b0873b2d",
+      "remote_name": "mesa_ads",
+      "remote_statements_sha256": "826415089c923d86d7b7a0289e77420404e9a649c7c9b3217f749cf130111ceb",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
