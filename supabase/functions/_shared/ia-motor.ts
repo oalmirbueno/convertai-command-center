@@ -347,7 +347,7 @@ export function equivalenteDireto(m: Pick<ModeloIa, "provedor" | "modelo_api">):
   return null;
 }
 
-export type ReservaUsada = "openrouter_sem_chave" | "openrouter_sem_credito";
+export type ReservaUsada = "openrouter_sem_chave" | "openrouter_sem_credito" | "direto_sem_credito";
 
 /**
  * Equivalente direto com chave, para a rota de reserva. A linha direta nao
@@ -395,6 +395,41 @@ export async function resolverRota(
   }
 }
 
+/**
+ * Caminho inverso: a conta DIRETA do provedor (OpenAI, Anthropic) ficou sem
+ * credito. A agencia paga pelo OpenRouter (dono, 23/09): o motor procura o
+ * mesmo modelo no OpenRouter; sem ele, e for imagem, o gerador de imagem da
+ * mesma familia no OpenRouter (o mais barato disponivel); sem isso, qualquer
+ * gerador de imagem ativo no OpenRouter. Precisa da chave do OpenRouter.
+ */
+export async function rotaOpenRouter(clientId: string, pedido: ModeloIa): Promise<{ m: ModeloIa; chave: ChaveResolvida } | null> {
+  if (pedido.provedor === "openrouter") return null;
+  const db = clienteServico();
+  const base = () => db.from("ia_modelos").select("*").eq("provedor", "openrouter").eq("tipo", pedido.tipo).neq("disponivel", false);
+  let achado: ModeloIa | null = null;
+  const { data: igual } = await base().eq("modelo_api", `${pedido.provedor}/${pedido.modelo_api}`).limit(1);
+  achado = ((igual ?? [])[0] as ModeloIa | undefined) ?? null;
+  if (!achado && pedido.tipo === "imagem") {
+    const { data: familia } = await base().like("modelo_api", `${pedido.provedor}/%`).limit(20);
+    const { data: ativos } = await base().eq("ativo", true).limit(20);
+    const preco = (m: ModeloIa) => num((m.preco_imagem as Record<string, unknown> | null)?.media) || 999;
+    const lista = [...((familia ?? []) as ModeloIa[]), ...((ativos ?? []) as ModeloIa[])];
+    const daFamilia = ((familia ?? []) as ModeloIa[]).sort((a, b) => preco(a) - preco(b));
+    achado = daFamilia[0] ?? lista.sort((a, b) => preco(a) - preco(b))[0] ?? null;
+  }
+  if (!achado) return null;
+  try {
+    return { m: achado, chave: await resolverChave(clientId, "openrouter") };
+  } catch {
+    return null;
+  }
+}
+
+/** A conta direta (nao OpenRouter) recusou por falta de credito. */
+export function ehDiretoSemCredito(err: unknown, m: ModeloIa): boolean {
+  return m.provedor !== "openrouter" && err instanceof IaMotorErro && err.codigo === "provedor_sem_credito";
+}
+
 /** O OpenRouter recusou por falta de credito (402) ou chave invalida (401). */
 export function ehOpenRouterSemCredito(err: unknown, m: ModeloIa): boolean {
   if (m.provedor !== "openrouter" || !(err instanceof IaMotorErro) || err.codigo !== "provedor_erro") return false;
@@ -426,6 +461,20 @@ async function comReservaOpenRouter<R>(
   try {
     return { r: await despachar(rota.m, rota.chave.segredo), m: rota.m, chave: rota.chave, reserva: rota.reserva };
   } catch (err) {
+    // Conta direta sem credito: a mesma chamada vai pelo OpenRouter.
+    if (ehDiretoSemCredito(err, rota.m)) {
+      const viaOpenRouter = await rotaOpenRouter(clientId, rota.m);
+      if (!viaOpenRouter) throw err;
+      const estimativa = estimativaPara(viaOpenRouter.m);
+      garantirCota(viaOpenRouter.chave, estimativa);
+      await garantirSaldo(clientId, estimativa);
+      return {
+        r: await despachar(viaOpenRouter.m, viaOpenRouter.chave.segredo),
+        m: viaOpenRouter.m,
+        chave: viaOpenRouter.chave,
+        reserva: "direto_sem_credito",
+      };
+    }
     if (!ehOpenRouterSemCredito(err, rota.m)) throw err;
     const direta = await rotaDireta(clientId, rota.m);
     if (!direta) throw erroOpenRouterSemCredito(err as IaMotorErro, rota.m);
@@ -1076,15 +1125,79 @@ async function imagemOpenAiNoTamanho(m: ModeloIa, chave: string, e: EntradaImage
   };
 }
 
-function proporcao(tamanho: string): string {
+/** Proporções que os geradores do OpenRouter aceitam (Gemini e GPT pelo OpenRouter). */
+const PROPORCOES_ACEITAS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
+
+/** Proporção do tamanho pedido, arredondada para a aceita mais próxima (o código recorta depois). */
+export function proporcao(tamanho: string): string {
   const [l, a] = tamanho.split("x").map((v) => Number(v));
   if (!l || !a) return "2:3";
-  const mdc = (x: number, y: number): number => (y ? mdc(y, x % y) : x);
-  const d = mdc(l, a);
-  return `${l / d}:${a / d}`;
+  const alvo = l / a;
+  let melhor = PROPORCOES_ACEITAS[0];
+  let dif = Infinity;
+  for (const p of PROPORCOES_ACEITAS) {
+    const [x, y] = p.split(":").map(Number);
+    const d = Math.abs(Math.log((x / y) / alvo));
+    if (d < dif) { dif = d; melhor = p; }
+  }
+  return melhor;
+}
+
+/**
+ * GPT Image pelo OpenRouter: vai pela API dedicada de imagens
+ * (POST /api/v1/images), não pelo chat. Tamanho em pixels, qualidade e as
+ * imagens de entrada (a editada primeiro, depois as referências) em
+ * input_references como data URL. Não aceita máscara: quem precisa de área
+ * travada (foto real, fundo contínuo) já devolve o original fora da área no
+ * código. Resposta: data[0].b64_json e usage.cost.
+ */
+export const usaApiDeImagensDoOpenRouter = (m: ModeloIa) => m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api);
+
+async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
+  const imagens = [
+    ...(e.editar ? [{ bytes: e.editar.bytes, mime: "image/png" }] : []),
+    ...e.referencias,
+  ].slice(0, 16);
+  const tamanho = e.tamanho || TAMANHO_2X3;
+  const corpo: Record<string, unknown> = {
+    model: m.modelo_api,
+    prompt: e.prompt,
+    n: 1,
+    size: tamanho,
+    quality: QUALIDADE_OPENAI[e.qualidade] ?? "medium",
+    output_format: "png",
+  };
+  if (imagens.length) corpo.input_references = imagens.map((img) => ({ type: "image_url", image_url: { url: dataUrl(img) } }));
+  const res = await buscar("openrouter", "https://openrouter.ai/api/v1/images", {
+    method: "POST",
+    headers: cabecalhosOpenRouter(chave),
+    body: JSON.stringify(corpo),
+  }, TIMEOUT_IMAGEM_MS);
+  const data = await res.json() as {
+    data?: Array<{ b64_json?: string; media_type?: string; url?: string }>;
+    usage?: UsoOpenRouter;
+  };
+  const item = data.data?.[0];
+  let bytes: Uint8Array | null = item?.b64_json ? deBase64(item.b64_json) : null;
+  if (!bytes && item?.url) {
+    const baixada = await fetch(item.url, { signal: AbortSignal.timeout(60_000) });
+    if (baixada.ok) bytes = new Uint8Array(await baixada.arrayBuffer());
+  }
+  if (!bytes || !bytes.length) throw new IaMotorErro("resposta_vazia", "O gerador nao devolveu imagem.", { provedor: "openrouter" });
+  const u = data.usage ?? {};
+  return {
+    bytes,
+    mime: item?.media_type || "image/png",
+    tamanho,
+    entrada: num(u.prompt_tokens),
+    entradaImagem: 0,
+    saida: num(u.completion_tokens),
+    custoProvedor: typeof u.cost === "number" && Number.isFinite(u.cost) ? u.cost : null,
+  };
 }
 
 async function imagemOpenRouter(m: ModeloIa, chave: string, e: EntradaImagem): Promise<RespostaProvedorImagem> {
+  if (usaApiDeImagensDoOpenRouter(m)) return await imagemOpenRouterImages(m, chave, e);
   const imagens = [
     ...(e.editar ? [{ bytes: e.editar.bytes, mime: "image/png" }] : []),
     ...e.referencias,

@@ -1980,7 +1980,7 @@ async function gravarVersao(
   ch: Chamador,
   t: Trabalho,
   card: CardDirecao,
-  img: { png: Uint8Array; mime: string; usoId: string; custoUsd: number; saldoUsd: number },
+  img: { png: Uint8Array; mime: string; usoId: string; custoUsd: number; saldoUsd: number; reservaUsada?: string | null },
   meta: { origem: "gerar" | "ajuste"; instrucao?: string; referencias?: string[]; custoExtraUsd?: number; extra?: Record<string, unknown> },
 ) {
   const proxima = Math.max(0, ...t.cards.filter((c) => c.ordem === card.ordem).map((c) => c.versao)) + 1;
@@ -2016,6 +2016,8 @@ async function gravarVersao(
     proximo_passo: "conferir_card",
     custo_usd: arred(custo + num(meta.custoExtraUsd)),
     saldo_usd: img.saldoUsd,
+    // Qual rota atendeu (ex.: conta direta sem crédito e a chamada foi pelo OpenRouter): a tela avisa.
+    reserva_usada: img.reservaUsada ?? null,
     status: gravado.status,
   });
 }

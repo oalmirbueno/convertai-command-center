@@ -143,7 +143,9 @@ export async function chamarFuncao<T = any>(funcao: FuncaoDaMesa, corpo: Record<
     toast.info(
       motivo === "openrouter_sem_credito"
         ? "O OpenRouter está sem crédito. Esta chamada foi feita direto na OpenAI, com o mesmo modelo."
-        : "Esta chamada foi feita direto no provedor do modelo, sem passar pelo OpenRouter.",
+        : motivo === "direto_sem_credito"
+          ? "A conta direta do provedor está sem crédito. Esta chamada foi feita pelo OpenRouter."
+          : "Esta chamada foi feita direto no provedor do modelo, sem passar pelo OpenRouter.",
     );
   }
   return data as T;

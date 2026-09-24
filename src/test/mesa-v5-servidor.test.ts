@@ -225,3 +225,41 @@ describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica,
     expect(motor).toContain("/credit|quota|billing|insufficient|saldo/i");
   });
 });
+
+describe("conta direta sem crédito vai pelo OpenRouter (dono, 23/09)", () => {
+  const motor = ler("supabase/functions/_shared/ia-motor.ts");
+  it("o motor desvia a mesma chamada para o OpenRouter quando a conta direta está sem crédito", () => {
+    expect(motor).toContain('export type ReservaUsada = "openrouter_sem_chave" | "openrouter_sem_credito" | "direto_sem_credito";');
+    expect(motor).toContain("if (ehDiretoSemCredito(err, rota.m)) {");
+    expect(motor).toContain('reserva: "direto_sem_credito",');
+    // Mesmo modelo no OpenRouter; sem ele, gerador de imagem da mesma família (o mais barato).
+    expect(motor).toContain('.eq("modelo_api", `${pedido.provedor}/${pedido.modelo_api}`)');
+    expect(motor).toContain('.like("modelo_api", `${pedido.provedor}/%`)');
+    expect(motor).toContain('resolverChave(clientId, "openrouter")');
+  });
+  it("proporção enviada ao OpenRouter é uma das aceitas (o panorama 12:5 vira 21:9)", () => {
+    expect(motor).toContain('const PROPORCOES_ACEITAS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];');
+    expect(motor).toContain("Math.abs(Math.log((x / y) / alvo))");
+  });
+  it("a tela avisa quando a chamada foi pelo OpenRouter e o estúdio devolve a rota usada", () => {
+    expect(ler("src/lib/mesa/api.ts")).toContain("A conta direta do provedor está sem crédito. Esta chamada foi feita pelo OpenRouter.");
+    expect(corpoDe(estudio, "gravarVersao")).toContain("reserva_usada: img.reservaUsada ?? null,");
+  });
+});
+
+describe("GPT Image 2.5 pelo OpenRouter (dono, 23/09)", () => {
+  const motor = ler("supabase/functions/_shared/ia-motor.ts");
+  const migration = ler("supabase/migrations/20260924012047_mesa_gpt_image_pelo_openrouter.sql");
+  it("GPT Image pelo OpenRouter usa a API dedicada de imagens com tamanho, qualidade e imagens de entrada", () => {
+    expect(motor).toContain('m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)');
+    expect(motor).toContain('"https://openrouter.ai/api/v1/images"');
+    expect(motor).toContain("corpo.input_references = imagens.map(");
+    expect(motor).toContain("if (usaApiDeImagensDoOpenRouter(m)) return await imagemOpenRouterImages(m, chave, e);");
+  });
+  it("catálogo: Sunburst e Flare pelo OpenRouter, Sunburst vira o padrão e a sincronização não os derruba", () => {
+    expect(migration).toContain("'openrouter:openai/gpt-image-2.5-sunburst'");
+    expect(migration).toContain("'openrouter:openai/gpt-image-2.5-flare'");
+    expect(migration).toContain("AND NOT (_provedor = 'openrouter' AND modelo_api LIKE 'openai/gpt-image%');");
+    expect(migration).toContain("array_append(array_remove(padrao_para, 'imagem'), 'imagem') WHERE id = 'openrouter:openai/gpt-image-2.5-sunburst'");
+  });
+});

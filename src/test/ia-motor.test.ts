@@ -306,9 +306,11 @@ describe("reserva por credito: OpenRouter 402 ou 401 cai no direto na mesma cham
 
   it("confere cota e saldo do modelo direto antes de tentar e avisa a tela", () => {
     const direta = reserva.indexOf("const direta = await rotaDireta(clientId, rota.m);");
-    const cota = reserva.indexOf("garantirCota(direta.chave, estimativa);");
-    const saldo = reserva.indexOf("await garantirSaldo(clientId, estimativa);");
-    const chamada = reserva.indexOf("await despachar(direta.m, direta.chave.segredo)");
+    // Busca a partir da rota direta: antes dela vem o caminho inverso (conta direta
+    // sem crédito vai pelo OpenRouter), que também confere cota e saldo.
+    const cota = reserva.indexOf("garantirCota(direta.chave, estimativa);", direta);
+    const saldo = reserva.indexOf("await garantirSaldo(clientId, estimativa);", direta);
+    const chamada = reserva.indexOf("await despachar(direta.m, direta.chave.segredo)", direta);
     expect(direta).toBeGreaterThan(-1);
     expect(cota).toBeGreaterThan(direta);
     expect(saldo).toBeGreaterThan(cota);
