@@ -1041,6 +1041,14 @@
       "remote_name": "aprovacao_pendente_por_email",
       "remote_statements_sha256": "0813b9f6ea2072b940a1438e8a8fe98a06a500af12214424a488f51583a9d3da",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924144000",
+      "path": "supabase/migrations/20260924144000_mesa_custos_e_fila.sql",
+      "local_sha256": "7cec01d26b24cfb4d8733b32129349c3f81506aa4f8f71076bd1274eb919d39c",
+      "remote_name": "mesa_custos_e_fila",
+      "remote_statements_sha256": "70006309b3f734f5052490372c22647540627735fa184e047567d356401c8bc7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
