@@ -251,7 +251,7 @@ describe("GPT Image 2.5 pelo OpenRouter (dono, 23/09)", () => {
   const motor = ler("supabase/functions/_shared/ia-motor.ts");
   const migration = ler("supabase/migrations/20260924012047_mesa_gpt_image_pelo_openrouter.sql");
   it("GPT Image pelo OpenRouter usa a API dedicada de imagens com tamanho, qualidade e imagens de entrada", () => {
-    expect(motor).toContain('m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)');
+    expect(motor).toContain(String.raw`m.provedor === "openrouter" && /^openai\/gpt-image/.test(m.modelo_api)`);
     expect(motor).toContain('"https://openrouter.ai/api/v1/images"');
     expect(motor).toContain("corpo.input_references = imagens.map(");
     expect(motor).toContain("if (usaApiDeImagensDoOpenRouter(m)) return await imagemOpenRouterImages(m, chave, e);");

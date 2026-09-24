@@ -969,6 +969,14 @@
       "remote_name": "mesa_storage_leitura_compartilhada",
       "remote_statements_sha256": "9f7b21b891f769c8d4654ed437e46e4eeba845e9120de6ece94a942a88829db1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924012047",
+      "path": "supabase/migrations/20260924012047_mesa_gpt_image_pelo_openrouter.sql",
+      "local_sha256": "821063af568e2451c5790bfa21175374b9163563385a653372a986d579b509d1",
+      "remote_name": "mesa_gpt_image_pelo_openrouter",
+      "remote_statements_sha256": "214b34007567f6466da2bf49f2af884e58155f9727f4640b839f1c0e10109d3b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -1180,8 +1180,9 @@ async function imagemOpenRouterImages(m: ModeloIa, chave: string, e: EntradaImag
   const item = data.data?.[0];
   let bytes: Uint8Array | null = item?.b64_json ? deBase64(item.b64_json) : null;
   if (!bytes && item?.url) {
-    const baixada = await fetch(item.url, { signal: AbortSignal.timeout(60_000) });
-    if (baixada.ok) bytes = new Uint8Array(await baixada.arrayBuffer());
+    // Pelo mesmo ponto de saída do motor (tempo limite e erro padronizado).
+    const baixada = await buscar("openrouter", item.url, { method: "GET" }, 60_000);
+    bytes = new Uint8Array(await baixada.arrayBuffer());
   }
   if (!bytes || !bytes.length) throw new IaMotorErro("resposta_vazia", "O gerador nao devolveu imagem.", { provedor: "openrouter" });
   const u = data.usage ?? {};
