@@ -1049,6 +1049,14 @@
       "remote_name": "mesa_custos_e_fila",
       "remote_statements_sha256": "70006309b3f734f5052490372c22647540627735fa184e047567d356401c8bc7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924165938",
+      "path": "supabase/migrations/20260924165938_mesa_foto.sql",
+      "local_sha256": "7fc42f3ad5dc98c5d07c31883086e2dcd898f04a39a6f3779a8a34c65e3fd3e0",
+      "remote_name": "mesa_foto",
+      "remote_statements_sha256": "3540446c37534fd4d54f0bd3cb5d007ee0053548e952c8affcbfb8d3888def93",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
