@@ -189,6 +189,9 @@ export const ROTULO_DA_ACAO: Record<TipoDeAcao, string> = {
   completar_mes: "Completar o mês",
 };
 
+/** Dias sem movimento para um cliente contar como parado (pendência antiga não puxa o topo). */
+export const DIAS_CLIENTE_PARADO = 30;
+
 export function nivelDosPontos(p: number): Nivel {
   if (p >= 80) return "agora";
   if (p >= 55) return "semana";
@@ -375,6 +378,20 @@ export function acoesDoCliente(c: ClienteDaFila, hoje: string, acessoConhecido: 
     }
   }
 
+  // Cliente parado: nada no calendário deste mês e do próximo, pedido de
+  // aprovação com mais de 30 dias e sem acesso ao painel há mais de 30 dias
+  // (caso Vivideo, 24/09: 107 dias). Vai para "depois" em vez de puxar o topo.
+  const diasAprovacao = c.aprovacao_desde ? diasDesde(c.aprovacao_desde, hoje) : 0;
+  const diasAcesso = c.ultimo_acesso ? diasDesde(c.ultimo_acesso, hoje) : Infinity;
+  const semCalendario = (!atual || atual.itens === 0) && (!seguinte || seguinte.itens === 0);
+  if (semCalendario && c.aprovacao_pendentes > 0 && diasAprovacao > DIAS_CLIENTE_PARADO && (!acessoConhecido || diasAcesso > DIAS_CLIENTE_PARADO)) {
+    return acoes
+      .map((x) => {
+        const pontos = Math.min(x.pontos, 30);
+        return { ...x, pontos, nivel: nivelDosPontos(pontos), motivo: x.tipo === "cobrar" ? `Cliente parado: ${x.motivo}` : x.motivo };
+      })
+      .sort((a, b) => b.pontos - a.pontos);
+  }
   return acoes.sort((a, b) => b.pontos - a.pontos);
 }
 

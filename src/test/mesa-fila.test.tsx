@@ -435,3 +435,32 @@ describe("Mesa: fila na entrada e botões no topo", () => {
     expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.mesa_fila_prioridades() TO authenticated;");
   });
 });
+
+describe("cliente parado", () => {
+  it("pendência antiga de cliente sem calendário e sem acesso vai para depois", async () => {
+    const { acoesDoCliente } = await import("@/lib/mesa/fila");
+    const acoes = acoesDoCliente(
+      {
+        client_id: "c1",
+        nome: "Parado",
+        ultimo_acesso: "2026-06-09T21:01:19Z",
+        posts_por_mes: null,
+        aprovacao_pendentes: 3,
+        aprovacao_desde: "2026-06-09T21:08:29Z",
+        revisao_pendentes: 0,
+        revisao_desde: null,
+        reprovados: 0,
+        prontas_para_enviar: 0,
+        precisam_atencao: 0,
+        meses: [
+          { mes: "2026-09-01", itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+          { mes: "2026-10-01", itens: 0, sem_arte: 0, proximo_sem_arte: null, proposta_aberta: false },
+        ],
+      } as any,
+      "2026-09-24",
+      true,
+    );
+    expect(acoes.every((a) => a.nivel === "depois")).toBe(true);
+    expect(acoes.find((a) => a.tipo === "cobrar")?.motivo).toContain("Cliente parado");
+  });
+});
