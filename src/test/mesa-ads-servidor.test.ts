@@ -197,6 +197,16 @@ describe("importar anúncios próprios", () => {
     expect(m.cpm).toBe(10);
     expect(m.custo_por_resultado).toBe(3.33);
   });
+  it("conta a conexão de mensagem quando a conversa iniciada não vem, sem somar as duas", () => {
+    const m = somarMetricas([
+      // Direct da Verzelo: a Meta só registrou a conexão de mensagem.
+      dia("2026-09-23", { actions: [{ action_type: "onsite_conversion.total_messaging_connection", value: "1" }, { action_type: "link_click", value: "4" }] }),
+      // Dia com as duas: vale a conversa iniciada.
+      dia("2026-09-24", { actions: [{ action_type: "onsite_conversion.messaging_conversation_started_7d", value: "2" }, { action_type: "onsite_conversion.total_messaging_connection", value: "2" }] }),
+    ]);
+    expect(m.resultados_por_tipo).toEqual({ mensagens: 3 });
+    expect(m.resultados).toBe(3);
+  });
 });
 
 describe("resultados e diagnóstico sem IA", () => {
