@@ -13,10 +13,12 @@ import { template as clientWelcome } from './client-welcome.tsx'
 import { template as billingReminder } from './billing-reminder.tsx'
 import { template as migrationNotice } from './migration-notice.tsx'
 import { template as avisoDoPainel } from './aviso-do-painel.tsx'
+import { template as aprovacaoPendente } from './aprovacao-pendente.tsx'
 
 export const TEMPLATES: Record<string, TemplateEntry> = {
   'client-welcome': clientWelcome,
   'billing-reminder': billingReminder,
   'migration-notice': migrationNotice,
   'aviso-do-painel': avisoDoPainel,
+  'aprovacao-pendente': aprovacaoPendente,
 }
