@@ -58,8 +58,8 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 export type Provedor = "openai" | "anthropic" | "openrouter";
 export type TipoModelo = "texto" | "imagem";
 export type Qualidade = "baixa" | "media" | "alta";
-export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto";
-export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto";
+export type Tarefa = "calendario" | "estudio" | "conversa" | "leitura_referencia" | "verificacao" | "contexto" | "ads";
+export type Agente = "estrategista" | "diretor_arte" | "gerador_imagem" | "leitor" | "jev" | "contexto" | "estrategista_ads";
 
 export type ModeloIa = {
   id: string;

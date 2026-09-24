@@ -17,9 +17,29 @@
  *     grade do perfil);
  *   · o padrão de design da base de conhecimento.
  * Assim a marca e as regras nunca ficam de fora e o diretor escreve menos.
+ *
+ * Criativo de anúncio (Estúdio Ads, docs/mesa-ads/SPEC.md): o card traz o
+ * `formato` (feed 4:5, quadrado 1:1 ou stories 9:16) e o prompt é montado com
+ * `anuncio: { formato }`: quadro e margens do formato, zona segura da Meta
+ * (stories: nada nos 14% de cima e nos 20% de baixo), sem recorte da grade do
+ * perfil, sem carrossel contínuo e com as regras do criativo
+ * (conhecimento-ads.ts). A peça única é a capa; o carrossel de anúncio (cards
+ * feed 4:5 em sequência) segue como série. Sem o formato, tudo segue
+ * exatamente como no post.
  */
 
 import { PADRAO_NA_IMAGEM } from "./conhecimento-design.ts";
+import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } from "./conhecimento-ads.ts";
+
+/** Formato do criativo de anúncio (o carrossel de anúncio usa lâminas feed 4:5). */
+export type FormatoCriativo = Exclude<FormatoAds, "carrossel">;
+export const FORMATOS_CRIATIVO: FormatoCriativo[] = ["feed_4x5", "quadrado_1x1", "stories_9x16"];
+/** Quadro final publicado por formato, em px. */
+export const QUADRO_FINAL: Record<FormatoCriativo, { largura: number; altura: number }> = {
+  feed_4x5: { largura: 1080, altura: 1350 },
+  quadrado_1x1: { largura: 1080, altura: 1080 },
+  stories_9x16: { largura: 1080, altura: 1920 },
+};
 
 export type PapelBloco = "headline" | "subtitulo" | "apoio" | "numero" | "cta" | "selo";
 export type BlocoTexto = { papel: PapelBloco; texto: string };
@@ -58,6 +78,8 @@ export type CardDirecao = {
    * "elemento" é pessoa, rosto ou objeto real que entra na composição igual.
    */
   fotos_livres?: FotoLivre[];
+  /** Só no trabalho de anúncio (tipo 'ads'): formato do criativo; sem ele, feed 4:5. */
+  formato?: FormatoCriativo;
 };
 
 export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string };
@@ -90,13 +112,34 @@ type Caixa = { x0: number; x1: number; y0: number; y1: number };
 // Contador do carrossel no Instagram: canto superior direito, x de 83,3% a 100% e y até 8,1%.
 const TOPO_ABAIXO_DO_CONTADOR = 8.9;
 
-export function caixaDaZona(zona: ZonaTexto, capa: boolean, carrossel = true): Caixa {
-  const extra = capa ? CAPA_LATERAL_EXTRA : 0;
-  const esq = AREA.x0 + MARGEM_X + extra;
-  const dir = AREA.x1 - MARGEM_X - extra;
+type Margens = { x: number; topo: number; base: number; capaExtra: number };
+
+/**
+ * Margens do quadro em percentual. Sem formato: o grid do post 4:5. Com o
+ * formato do anúncio: o mesmo grid (90 px nas laterais, 100 px no topo e
+ * 106 px na base do quadro final) ou a zona segura do formato, o que for
+ * maior; sem o recorte da grade do perfil (anúncio não aparece nela).
+ */
+export function margensDoQuadro(formato?: FormatoCriativo | null): Margens {
+  if (!formato) return { x: MARGEM_X, topo: MARGEM_TOPO, base: MARGEM_BASE, capaExtra: CAPA_LATERAL_EXTRA };
+  const q = QUADRO_FINAL[formato];
+  const z = ZONA_SEGURA[formato];
+  return {
+    x: um(Math.max(90 / q.largura, z.lados) * 100),
+    topo: um(Math.max(100 / q.altura, z.topo) * 100),
+    base: um(Math.max(106 / q.altura, z.base) * 100),
+    capaExtra: 0,
+  };
+}
+
+export function caixaDaZona(zona: ZonaTexto, capa: boolean, carrossel = true, formato?: FormatoCriativo | null): Caixa {
+  const m = margensDoQuadro(formato);
+  const extra = capa ? m.capaExtra : 0;
+  const esq = AREA.x0 + m.x + extra;
+  const dir = AREA.x1 - m.x - extra;
   const chegaNaDireita = zona === "topo-centro" || zona === "coluna-direita";
-  const topo = AREA.y0 + (carrossel && chegaNaDireita ? TOPO_ABAIXO_DO_CONTADOR : MARGEM_TOPO);
-  const base = AREA.y1 - MARGEM_BASE;
+  const topo = AREA.y0 + (carrossel && chegaNaDireita ? Math.max(TOPO_ABAIXO_DO_CONTADOR, m.topo) : m.topo);
+  const base = AREA.y1 - m.base;
   const altura = base - topo;
   const terco = um(altura / 3);
   const largura = dir - esq;
@@ -293,13 +336,25 @@ export function promptDaLamina(
     logo?: { tom: string | null; clara: boolean } | null;
     /** Descrição da foto real anexada como base: o gerador não redesenha a foto. */
     fotoReal?: string | null;
+    /** Criativo de anúncio (trabalho tipo 'ads'): quadro, zona segura e regras do formato. */
+    anuncio?: { formato: FormatoCriativo } | null;
   },
 ): string {
+  const formato = opcoes.anuncio && FORMATOS_CRIATIVO.includes(opcoes.anuncio.formato) ? opcoes.anuncio.formato : null;
+  const anuncio = !!formato;
+  const quadro = formato ? QUADRO_FINAL[formato] : { largura: 1080, altura: 1350 };
+  // A peça única do anúncio é a própria capa; o carrossel de anúncio (cards
+  // feed 4:5 em sequência) é série como o carrossel do post.
   const capa = card.funcao === "capa" || card.ordem === 1;
+  const serie = opcoes.total > 1;
   const layout = normalizarLayout(card.layout, card.funcao, card.ordem, opcoes.total);
   const blocos = (card.blocos && card.blocos.length ? card.blocos : blocosDoTexto(card.texto_exato, card.funcao))
     .filter((b) => PAPEIS.includes(b.papel) && b.texto.trim());
-  const caixa = caixaDaZona(layout.zona_texto, capa, opcoes.total > 1);
+  const caixa = caixaDaZona(layout.zona_texto, capa, serie, formato);
+  const margens = margensDoQuadro(formato);
+  const px = (pct: number, lado: number) => Math.round((pct / 100) * lado);
+  // Cada linha da headline: cerca de 121 px (9% do quadro 4:5).
+  const linhaHeadline = Math.round((121.5 / quadro.altura) * 100);
 
   const paleta = marca.paleta.filter((p) => hexOk(p.hex));
   const corFundo = layout.cor_fundo || papelDaCor(paleta, "fundo", "primaria", "primária", "principal");
@@ -315,7 +370,7 @@ export function promptDaLamina(
     const t = tamanhos[i];
     const fonte = b.papel === "headline" || b.papel === "numero" ? fonteTitulo : fonteTexto;
     const cor = b.papel === "cta" || b.papel === "numero" ? corDestaque || corTexto : corTexto;
-    return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}" (as barras indicam quebra de linha, não desenhe as barras), letra de cerca de ${t.px} px numa arte de 1080 x 1350, peso ${t.peso}` +
+    return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}" (as barras indicam quebra de linha, não desenhe as barras), letra de cerca de ${t.px} px numa arte de ${quadro.largura} x ${quadro.altura}, peso ${t.peso}` +
       `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}.`;
   });
 
@@ -324,20 +379,27 @@ export function promptDaLamina(
     : "paleta coerente com as artes da marca anexadas";
 
   return [
-    `ARTE FINAL de ${opcoes.total > 1 ? `carrossel, lâmina ${card.ordem} de ${opcoes.total}` : "post único"} para o Instagram da marca. Função desta lâmina: ${capa ? "capa (parar a rolagem com um gancho forte)" : card.funcao === "cta" ? "fechamento com chamada para ação" : "conteúdo (uma ideia só)"}.`,
+    formato
+      ? `ARTE FINAL de criativo de anúncio para tráfego pago na Meta (Facebook e Instagram), formato ${TAMANHO_DO_FORMATO[formato].rotulo}${serie ? `, carrossel de anúncio, card ${card.ordem} de ${opcoes.total}` : ""}. ` +
+        (serie
+          ? `Função deste card: ${capa ? "capa (parar a rolagem da pessoa certa com o gancho)" : card.funcao === "cta" ? "fechamento com a oferta e a chamada para ação" : "um passo da sequência (uma ideia só)"}.`
+          : "Uma peça só, com uma mensagem só: parar a rolagem da pessoa certa, fazer entender a oferta em 1 segundo e levar à ação.")
+      : `ARTE FINAL de ${opcoes.total > 1 ? `carrossel, lâmina ${card.ordem} de ${opcoes.total}` : "post único"} para o Instagram da marca. Função desta lâmina: ${capa ? "capa (parar a rolagem com um gancho forte)" : card.funcao === "cta" ? "fechamento com chamada para ação" : "conteúdo (uma ideia só)"}.`,
     opcoes.conceito ? `Conceito do conjunto: ${opcoes.conceito}` : "",
     "",
     "IMAGEM E COMPOSIÇÃO",
     opcoes.fotoReal
       ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz e cores ficam exatamente como estão. Desenhe só o texto e, se precisar para a leitura, um painel ou véu suave dentro da área do texto.`
       : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
-    opcoes.fioVisual && opcoes.total > 1
+    opcoes.fioVisual && serie
       ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").slice(0, 600)} Mesma pessoa, mesmo cenário, mesma luz e paleta em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
       : "",
-    capa
+    anuncio && capa
+      ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Não escureça a imagem para criar destaque. Nada competindo com a headline."
+      : capa
       ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma luz, cenário e paleta das lâminas seguintes. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : "",
-    opcoes.anteriores && opcoes.anteriores.length && opcoes.total > 1
+    opcoes.anteriores && opcoes.anteriores.length && serie
       ? `- Lâminas anteriores desta série mostraram: ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}. Mantenha a mesma protagonista, cenário e luz; mude só a pose e o enquadramento (não repita a pose da lâmina anterior).`
       : "",
     `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
@@ -349,7 +411,7 @@ export function promptDaLamina(
     "TEXTO (escrito pela própria arte, integrado à composição)",
     `- Área do texto: ${descreverPosicao(caixa)}, alinhamento à ${layout.alinhamento === "centro" ? "centro" : layout.alinhamento}, todos os blocos no mesmo eixo e com a mesma margem.`,
     ...linhasBlocos,
-    "- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de 9% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.",
+    `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
     "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
     "",
     "MARCA",
@@ -359,7 +421,7 @@ export function promptDaLamina(
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
     marca.tipografiaCitada?.observacao ? `- Observação da marca sobre tipografia: ${marca.tipografiaCitada.observacao}` : "",
     opcoes.levaLogo && marca.temLogo
-      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo"} dentro das margens, sem redesenhar, nunca no canto superior direito.` +
+      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo"} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.` +
         (opcoes.logo
           ? opcoes.logo.clara
             ? " A logo é clara: o fundo atrás dela é escuro o bastante para ela aparecer inteira."
@@ -372,12 +434,25 @@ export function promptDaLamina(
     "- Não escreva o nome da marca nem da empresa em lugar nenhum da arte: a marca aparece só pela logo oficial anexada.",
     "",
     "FORMATO",
-    "- Arte vertical 4:5 (1080 x 1350), usando o quadro inteiro, sem bordas vazias.",
-    `- Margens de segurança: 90 px nas laterais${capa ? " (mais 34 px na capa, que aparece recortada em 3:4 na grade do perfil)" : ""}, 100 px no topo e 106 px na base. Nenhum texto nem a logo encostam nas margens.`,
-    opcoes.total > 1 ? "- Canto superior direito livre de texto (o Instagram mostra o contador do carrossel ali)." : "",
-    opcoes.carrosselInfinito && opcoes.total > 1
-      ? "- Carrossel contínuo: o que chega à borda continua na lâmina vizinha com a mesma posição, escala, perspectiva e luz; a última lâmina se conecta visualmente com a capa."
-      : "",
+    ...(formato
+      ? [
+        `- Arte ${formato === "stories_9x16" ? "vertical 9:16" : formato === "quadrado_1x1" ? "quadrada 1:1" : "vertical 4:5"} (${quadro.largura} x ${quadro.altura}), usando o quadro inteiro, sem bordas vazias.`,
+        `- Margens de segurança (zona segura do formato): ${px(margens.x, quadro.largura)} px nas laterais, ${px(margens.topo, quadro.altura)} px no topo e ${px(margens.base, quadro.altura)} px na base. Nenhum texto, logo, rosto ou produto encosta nelas.`,
+        formato === "stories_9x16"
+          ? `- Stories e Reels: a interface do Instagram e do Facebook cobre o topo (perfil) e a base (botão e legenda); nos ${px(margens.topo, quadro.altura)} px de cima e nos ${px(margens.base, quadro.altura)} px de baixo só a continuação do fundo.`
+          : "",
+        serie ? "- Canto superior direito livre de texto (a Meta mostra o contador do carrossel ali)." : "",
+        "",
+        regrasDoCriativo(formato),
+      ]
+      : [
+        "- Arte vertical 4:5 (1080 x 1350), usando o quadro inteiro, sem bordas vazias.",
+        `- Margens de segurança: 90 px nas laterais${capa ? " (mais 34 px na capa, que aparece recortada em 3:4 na grade do perfil)" : ""}, 100 px no topo e 106 px na base. Nenhum texto nem a logo encostam nas margens.`,
+        serie ? "- Canto superior direito livre de texto (o Instagram mostra o contador do carrossel ali)." : "",
+        opcoes.carrosselInfinito && serie
+          ? "- Carrossel contínuo: o que chega à borda continua na lâmina vizinha com a mesma posição, escala, perspectiva e luz; a última lâmina se conecta visualmente com a capa."
+          : "",
+      ]),
     "",
     PADRAO_NA_IMAGEM,
     card.evitar ? `\nEVITAR NESTA LÂMINA: ${card.evitar}` : "",
@@ -392,13 +467,15 @@ export function promptDaLamina(
  * Área da logo (percentual do quadro) no mesmo canto que o prompt descreve:
  * superior esquerdo quando o texto está na base, inferior esquerdo nos demais.
  */
-export function caixaDaLogo(zona: ZonaTexto, capa: boolean): Caixa {
-  const esq = AREA.x0 + MARGEM_X + (capa ? CAPA_LATERAL_EXTRA : 0);
-  const alturaLogo = 6; // 72 px de 1350, com folga
+export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCriativo | null): Caixa {
+  const m = margensDoQuadro(formato);
+  const esq = AREA.x0 + m.x + (capa ? m.capaExtra : 0);
+  // 72 px de 1350, com folga (81 px); no anúncio, os mesmos 81 px na altura do formato.
+  const alturaLogo = formato ? um((81 / QUADRO_FINAL[formato].altura) * 100) : 6;
   if (zona === "base-esquerda" || zona === "base-centro") {
-    return { x0: esq, x1: esq + 22, y0: MARGEM_TOPO, y1: MARGEM_TOPO + alturaLogo };
+    return { x0: esq, x1: esq + 22, y0: m.topo, y1: m.topo + alturaLogo };
   }
-  const base = AREA.y1 - MARGEM_BASE;
+  const base = AREA.y1 - m.base;
   return { x0: esq, x1: esq + 22, y0: base - alturaLogo, y1: base };
 }
 

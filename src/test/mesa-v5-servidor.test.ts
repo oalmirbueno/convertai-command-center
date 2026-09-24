@@ -37,7 +37,7 @@ describe("fotos da lâmina trazidas pela equipe", () => {
   it("fundo com elementos vira edição sem máscara que mantém a foto e o rosto", () => {
     const g = corpoDe(estudio, "gerarCard");
     expect(g).toContain("if (baseFoto && elementos.length)");
-    expect(g).toContain("editar: { bytes: baseFoto }, tamanho: TAMANHO_GERADOR");
+    expect(g).toContain("editar: { bytes: baseFoto }, tamanho: quadro.tamanho");
     expect(g).toContain('modo: "foto_composta"');
     expect(g).toContain("mesmo rosto, feições");
   });
@@ -209,7 +209,7 @@ describe("restante da auditoria (23/09 noite)", () => {
 describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica, 23/09)", () => {
   it("no contínuo a lâmina inteira é redesenhada e só as bordas voltam do panorama", () => {
     const g = corpoDe(estudio, "gerarCard");
-    expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo);");
+    expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);");
     expect(estudio).toContain("const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };");
     expect(g).toContain("devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28)");
   });

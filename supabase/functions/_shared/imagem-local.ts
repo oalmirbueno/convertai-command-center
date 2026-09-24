@@ -53,9 +53,13 @@ export function cobrir(img: Image, largura = LARGURA_LAMINA, altura = ALTURA_LAM
   return c.crop(Math.floor((l - largura) / 2), Math.floor((a - altura) / 2), largura, altura);
 }
 
-/** Foto qualquer (JPEG, PNG) vira PNG 1088 x 1360 pelo centro. */
-export async function fotoNaLamina(bytes: Uint8Array): Promise<Uint8Array> {
-  return await cobrir(await decodificar(bytes)).encode(1);
+/**
+ * Foto qualquer (JPEG, PNG) vira PNG no tamanho da lâmina pelo centro:
+ * 1088 x 1360 por padrão (post e carrossel 4:5); o criativo de anúncio passa
+ * o tamanho do formato (1088 x 1088 no 1:1, 1088 x 1920 no 9:16).
+ */
+export async function fotoNaLamina(bytes: Uint8Array, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
+  return await cobrir(await decodificar(bytes), largura, altura).encode(1);
 }
 
 /**

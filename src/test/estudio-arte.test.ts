@@ -44,8 +44,11 @@ describe("estudio-arte: a lamina inteira sai do gerador", () => {
 
   it("gera direto em 4:5 (2:3 so para direcao antiga, sem layout) e logo so na capa e no final", () => {
     expect(fonte).toContain("const TAMANHO_GERADOR = TAMANHO_4X5;");
-    expect(corpoDe("gerarCard")).toContain("tamanho: card.layout ? TAMANHO_GERADOR : TAMANHO_2X3,");
-    expect(corpoDe("gerarCard")).toContain("promptSe2x3: card.layout ? formatoPara2x3(prompt) : undefined,");
+    // O tamanho sai do quadro do card: no post (social) e sempre TAMANHO_GERADOR (4:5).
+    expect(corpoDe("gerarCard")).toContain("const quadro = quadroDoCard(t, card);");
+    expect(corpoDe("quadroDoCard")).toMatch(/if \(!ehAds\(t\)\) \{\s*return \{\s*formato: null,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,/);
+    expect(corpoDe("gerarCard")).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");
+    expect(corpoDe("gerarCard")).toContain("promptSe2x3: card.layout && !quadro.fixo ? formatoPara2x3(prompt) : undefined,");
     expect(fonte).toContain("const levaLogo = (t: Trabalho, ordem: number) => ordem === 1 || ordem === totalCards(t);");
   });
 
@@ -151,7 +154,8 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
   });
 
   it("a leitura e feita sobre o recorte 4:5 central, ou ignora as faixas", () => {
-    expect(v).toContain("const recorte = await laminaFinal(caminho);");
+    // O recorte e o do quadro final do card (4:5 no post).
+    expect(v).toContain("const recorte = await laminaFinal(caminho, quadro.final);");
     expect(v).toContain("v.leitura_no_recorte = recorte.redimensionada;");
     expect(v).toContain("ignore tudo o que estiver nas faixas de 128 px do topo e da base");
   });

@@ -28,6 +28,19 @@
  *   no pai, ligado ao projeto do item. Nao pede aprovacao (isso e da Entrega).
  * - referencias { subacao: importar_pinterest | sincronizar_workspace | ler }.
  *
+ * Estúdio Ads (docs/mesa-ads/SPEC.md): trabalho com tipo 'ads' é um conjunto
+ * de criativos de anúncio, não um carrossel. Cada card tem `formato`
+ * (feed_4x5 1088 x 1360, quadrado_1x1 1088 x 1088, stories_9x16 1088 x 1920;
+ * sem formato, feed 4:5) e o tamanho vale em todos os modos (normal, foto
+ * real, foto composta, ajuste por área e de fundo) e na conferência. O prompt
+ * leva as regras do criativo e a zona segura do formato; a peça única leva
+ * logo e o carrossel de anúncio (cards feed 4:5) segue como série, mas nunca
+ * contínuo (sem panorama nem tela dupla). A conferência
+ * acrescenta o risco de política e a clareza da oferta pelo Jev. `preparar`
+ * não chama o diretor: a direção já vem pronta da mesa-ads. `entregar` grava
+ * cada criativo em Arquivos, pasta criativos, fora da agenda e da aprovação
+ * de post (veja entregarAnuncio). Trabalho social (padrão) segue igual.
+ *
  * Custos: toda chamada de IA passa pelo motor (_shared/ia-motor.ts), que
  * confere saldo e cota e debita a carteira do cliente.
  */
@@ -51,6 +64,9 @@ import { JevErro, jevPerguntar, notaScore, type PerguntaJev } from "../_shared/j
 import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../_shared/conhecimento-design.ts";
 import {
   blocosDoTexto,
+  FORMATOS_CRIATIVO,
+  type FormatoCriativo,
+  QUADRO_FINAL,
   layoutPadrao,
   caixaDaLogo,
   caixaDaZona,
@@ -66,6 +82,7 @@ import {
   type MarcaParaDirecao,
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
+import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
 import {
   ampliar,
   type Area,
@@ -297,6 +314,15 @@ type Direcao = {
   campanha_id?: string | null;
   /** Carrossel contínuo: fundo panorâmico fatiado por lâmina (ordem -> caminho no bucket mesa). */
   panorama?: { fundos: Record<string, string> } | null;
+  /** Entrega do criativo de anúncio (tipo 'ads'): fora de file_ids, que guiam a aprovação e a agenda do post. */
+  entrega_ads?: EntregaAnuncio | null;
+};
+
+type EntregaAnuncio = {
+  file_ids: string[];
+  arquivos: { ordem: number; versao: number; file_id: string; storage_path: string | null; formato: string; largura: number | null; altura: number | null }[];
+  project_id: string | null;
+  entregue_em: string;
 };
 
 type CampanhaDaLamina = {
@@ -347,12 +373,18 @@ type Verificacao = {
   logo_ok?: boolean | null;
   /** Se a leitura foi feita sobre o recorte 4:5 central (senao, sobre a tela inteira ignorando as faixas). */
   leitura_no_recorte?: boolean;
-  identidade: { nota: number | null; escala_max: number; nivel: string | null; confianca: number | null } | { erro: string } | null;
+  identidade: NotaJev | null;
+  /** Só no criativo de anúncio: risco de política da Meta (0 viola, 4 sem risco aparente). */
+  politica?: NotaJev | null;
+  /** Só no criativo de anúncio: clareza da oferta (0 confusa, 4 imediata). */
+  clareza?: NotaJev | null;
   erro?: string;
   conferido_em?: string;
   uso_ids?: string[];
   custo_usd?: number;
 };
+
+type NotaJev = { nota: number | null; escala_max: number; nivel: string | null; confianca: number | null } | { erro: string };
 
 type VersaoCard = {
   ordem: number;
@@ -372,6 +404,8 @@ type Trabalho = {
   id: string;
   client_id: string;
   task_id: string | null;
+  /** 'social' (padrão: post e carrossel da agenda) ou 'ads' (criativos da Mesa Ads). */
+  tipo?: string | null;
   status: string;
   direcao: Direcao;
   modelo_imagem_id: string | null;
@@ -457,7 +491,60 @@ function comLayout(card: CardDirecao, total: number): CardDirecao {
 }
 
 const totalCards = (t: Trabalho) => t.direcao.cards.length;
+/**
+ * Trabalho da Mesa Ads: criativo de anúncio. Um card é a peça única (1:1, 4:5
+ * ou 9:16); vários cards são um carrossel de anúncio (feed 4:5).
+ */
+const ehAds = (t: Pick<Trabalho, "tipo">) => t.tipo === "ads";
+// Logo na capa e no final (a peça única do anúncio é as duas coisas).
 const levaLogo = (t: Trabalho, ordem: number) => ordem === 1 || ordem === totalCards(t);
+
+type QuadroDoCard = {
+  /** Formato do criativo (só no trabalho de anúncio). */
+  formato: FormatoCriativo | null;
+  largura: number;
+  altura: number;
+  /** Tamanho pedido ao gerador, "LxA". */
+  tamanho: string;
+  /** Quadro final publicado. */
+  final: { largura: number; altura: number };
+  proporcao: string;
+  /** Tamanho diferente de 4:5: sem a reserva em 2:3 do motor (o recorte cortaria texto). */
+  fixo: boolean;
+};
+
+const PROPORCAO_DO_FORMATO: Record<FormatoCriativo, string> = { feed_4x5: "4:5", quadrado_1x1: "1:1", stories_9x16: "9:16" };
+
+/**
+ * Tamanho da lâmina: o post (social) é sempre 4:5 (1088 x 1360, final
+ * 1080 x 1350), como sempre foi; o criativo de anúncio segue o formato do card
+ * (feed 4:5 quando o card não traz formato).
+ */
+function quadroDoCard(t: Pick<Trabalho, "tipo">, card: Pick<CardDirecao, "formato">): QuadroDoCard {
+  if (!ehAds(t)) {
+    return {
+      formato: null,
+      largura: LARGURA_LAMINA,
+      altura: ALTURA_LAMINA,
+      tamanho: TAMANHO_GERADOR,
+      final: { largura: LARGURA_FINAL, altura: ALTURA_FINAL },
+      proporcao: "4:5",
+      fixo: false,
+    };
+  }
+  const formato: FormatoCriativo = FORMATOS_CRIATIVO.includes(card.formato as FormatoCriativo) ? card.formato as FormatoCriativo : "feed_4x5";
+  const g = TAMANHO_DO_FORMATO[formato];
+  const tamanho = `${g.largura}x${g.altura}`;
+  return {
+    formato,
+    largura: g.largura,
+    altura: g.altura,
+    tamanho,
+    final: QUADRO_FINAL[formato],
+    proporcao: PROPORCAO_DO_FORMATO[formato],
+    fixo: tamanho !== TAMANHO_GERADOR,
+  };
+}
 
 function statusDepoisDeGerar(t: Trabalho, novas: VersaoCard[]): string {
   const todas = [...t.cards, ...novas];
@@ -692,23 +779,23 @@ const resumoDaFoto = (a: ImagemAcervo) =>
   texto([a.descricao, a.categoria ? `categoria ${a.categoria}` : "", a.pasta ? `pasta ${a.pasta}` : ""].filter(Boolean).join("; ") || a.nome, 400);
 
 /**
- * Foto real já no formato da lâmina (1088 x 1360, cover pelo centro). Pede o
- * recorte à transformação do Storage (sem gastar CPU da função) e, sem ela,
- * recorta aqui.
+ * Foto real já no formato da lâmina (1088 x 1360 por padrão; o criativo de
+ * anúncio passa o tamanho do formato), cover pelo centro. Pede o recorte à
+ * transformação do Storage (sem gastar CPU da função) e, sem ela, recorta aqui.
  */
-async function fotoRealNaLamina(a: ImagemAcervo): Promise<Uint8Array> {
+async function fotoRealNaLamina(a: ImagemAcervo, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
   try {
     const { data, error } = await servico().storage.from(a.storage_bucket).download(a.storage_path, {
-      transform: { width: 1088, height: 1360, resize: "cover", format: "origin" },
+      transform: { width: largura, height: altura, resize: "cover", format: "origin" },
     });
     if (!error && data) {
       const bytes = new Uint8Array(await data.arrayBuffer());
-      if (mimeDe(bytes)) return await fotoNaLamina(bytes);
+      if (mimeDe(bytes)) return await fotoNaLamina(bytes, largura, altura);
     }
   } catch {
     // cai no original abaixo
   }
-  return await fotoNaLamina(await baixar(a.storage_bucket, a.storage_path));
+  return await fotoNaLamina(await baixar(a.storage_bucket, a.storage_path), largura, altura);
 }
 
 async function modeloDoPapel(papel: "diretor_arte" | "leitura" | "imagem"): Promise<ModeloIa> {
@@ -957,7 +1044,34 @@ function imagensAnteriores(cards: CardDirecao[], ordem: number): string[] {
     .slice(-4);
 }
 
+/**
+ * Criativo de anúncio: a direção já vem pronta da mesa-ads (diretor com o
+ * conhecimento de ads), então preparar não chama o diretor nem lê a agenda
+ * (o trabalho 'ads' em geral não tem task_id). Devolve o trabalho como está.
+ */
+async function prepararAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, unknown>) {
+  await garantirAcesso(ch, t.client_id);
+  if (!t.direcao.cards.length) {
+    throw new ErroEstudio(409, "anuncio_sem_direcao", "Este criativo ainda não tem direção. Produza os criativos pela Mesa Ads.");
+  }
+  return json({
+    trabalho: t,
+    custo_usd: 0,
+    saldo_usd: null,
+    reserva_usada: null,
+    modo: "existente",
+    aviso: texto(corpo.instrucao, 2000)
+      ? "A direção do criativo de anúncio vem da Mesa Ads e não foi refeita. Para mudar a peça, use o ajuste do card."
+      : null,
+  });
+}
+
 async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
+  // Trabalho de anúncio: usa a direção existente (não quebra o fluxo do post abaixo).
+  if (corpo.trabalho_id) {
+    const alvo = await lerTrabalho(texto(corpo.trabalho_id, 64));
+    if (ehAds(alvo)) return await prepararAnuncio(ch, alvo, corpo);
+  }
   const item = await lerItemDaAgenda(texto(corpo.task_id, 64));
   await garantirAcesso(ch, item.clientId);
   const clientId = item.clientId;
@@ -1398,12 +1512,20 @@ const NIVEIS_IDENTIDADE = [
 async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: string, kit: Kit, fontes: Fonte[]) {
   const usos: { usoId: string; custoUsd: number }[] = [];
   const v: Verificacao = { pendente: false, texto_lido: null, ortografia_ok: null, identidade: null };
+  const quadro = quadroDoCard(t, card);
+  const ads = ehAds(t);
   try {
-    const recorte = await laminaFinal(caminho);
+    const recorte = await laminaFinal(caminho, quadro.final);
     v.leitura_no_recorte = recorte.redimensionada;
+    const jaNoFormato = !!recorte.largura && !!recorte.altura &&
+      Math.abs(recorte.largura / recorte.altura - quadro.final.largura / quadro.final.altura) < 0.01;
     const pedido = recorte.redimensionada
-      ? "Leia esta arte (já no recorte final 4:5)."
-      : `Leia esta arte. A tela tem ${recorte.largura ?? 1024} x ${recorte.altura ?? 1536} px e será cortada em 4:5 pelo centro: ignore tudo o que estiver nas faixas de 128 px do topo e da base, e leia só a área central.`;
+      ? `Leia esta arte (já no recorte final ${quadro.proporcao}).`
+      : jaNoFormato
+        ? `Leia esta arte (já no formato final ${quadro.proporcao}).`
+        : quadro.proporcao === "4:5"
+          ? `Leia esta arte. A tela tem ${recorte.largura ?? 1024} x ${recorte.altura ?? 1536} px e será cortada em 4:5 pelo centro: ignore tudo o que estiver nas faixas de 128 px do topo e da base, e leia só a área central.`
+          : `Leia esta arte. A tela tem ${recorte.largura ?? "?"} x ${recorte.altura ?? "?"} px e será cortada em ${quadro.proporcao} pelo centro: leia só o que fica dentro desse recorte central.`;
     const leitor = await modeloDoPapel("leitura");
     const lido = await chamarTexto({
       clientId: t.client_id,
@@ -1438,6 +1560,27 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   }
 
   try {
+    const questions: Record<string, PerguntaJev> = {
+      identidade: {
+        type: "score",
+        instructions: "Quanto a arte descrita em `arte_gerada` segue a identidade da marca em `kit` e a direção da lâmina em `lamina`?",
+        criteria: NIVEIS_IDENTIDADE,
+      },
+    };
+    // Criativo de anúncio: o Jev também julga o risco de política da Meta e a
+    // clareza da oferta, com a descrição lida da arte e o texto exato da peça.
+    if (ads) {
+      questions.politica = {
+        type: "score",
+        instructions: "Qual o risco de o anúncio descrito em `anuncio` (imagem em `anuncio.descricao_visual`, texto exato em `anuncio.texto_exato` e texto lido na arte em `anuncio.texto_lido`) ser reprovado pelas políticas de anúncio da Meta resumidas em `politicas_meta`? Julgue atributo pessoal, promessa de resultado, antes e depois, elemento que imita a interface, sensacionalismo e discriminação.",
+        criteria: NIVEIS_RISCO_POLITICA,
+      };
+      questions.clareza = {
+        type: "score",
+        instructions: "Quão clara é a oferta do anúncio descrito em `anuncio` para quem vê a peça por 1 segundo no celular: o que é oferecido, para quem e qual o próximo passo?",
+        criteria: NIVEIS_CLAREZA,
+      };
+    }
     const res = await jevPerguntar({
       state: {
         kit: {
@@ -1449,14 +1592,19 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         conceito: t.direcao.conceito,
         lamina: { funcao: card.funcao, composicao: card.composicao, texto_exato: card.texto_exato },
         arte_gerada: { descricao_visual: v.descricao_visual, texto_lido: v.texto_lido, logo_presente: v.logo_presente },
+        ...(ads
+          ? {
+            anuncio: {
+              formato: quadro.formato,
+              descricao_visual: v.descricao_visual,
+              texto_exato: card.texto_exato,
+              texto_lido: v.texto_lido,
+            },
+            politicas_meta: POLITICAS_META,
+          }
+          : {}),
       },
-      questions: {
-        identidade: {
-          type: "score",
-          instructions: "Quanto a arte descrita em `arte_gerada` segue a identidade da marca em `kit` e a direção da lâmina em `lamina`?",
-          criteria: NIVEIS_IDENTIDADE,
-        },
-      },
+      questions,
     });
     const cobrado = await cobrarJev(res, {
       clientId: t.client_id,
@@ -1465,18 +1613,30 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
       criadoPor: ch.userId,
     });
     if (cobrado) usos.push(cobrado);
-    const resposta = res.answers.identidade;
-    const nota = notaScore(resposta);
-    v.identidade = {
-      nota,
-      escala_max: NIVEIS_IDENTIDADE.length - 1,
-      nivel: nota == null ? null : NIVEIS_IDENTIDADE[Math.max(0, Math.min(NIVEIS_IDENTIDADE.length - 1, Math.round(nota)))],
-      confianca: typeof resposta?.confidence === "number" ? resposta.confidence : null,
-    };
+    v.identidade = notaDoJev(res.answers.identidade, NIVEIS_IDENTIDADE);
+    if (ads) {
+      v.politica = notaDoJev(res.answers.politica, NIVEIS_RISCO_POLITICA);
+      v.clareza = notaDoJev(res.answers.clareza, NIVEIS_CLAREZA);
+    }
   } catch (e) {
     v.identidade = { erro: codigoMotor(e) };
+    if (ads) {
+      v.politica = { erro: codigoMotor(e) };
+      v.clareza = { erro: codigoMotor(e) };
+    }
   }
   return { verificacao: v, usos };
+}
+
+/** Nota do Score do Jev com o nível correspondente da escala. */
+function notaDoJev(resposta: Parameters<typeof notaScore>[0], niveis: string[]): NotaJev {
+  const nota = notaScore(resposta);
+  return {
+    nota,
+    escala_max: niveis.length - 1,
+    nivel: nota == null ? null : niveis[Math.max(0, Math.min(niveis.length - 1, Math.round(nota)))],
+    confianca: typeof resposta?.confidence === "number" ? resposta.confidence : null,
+  };
 }
 
 /**
@@ -1538,7 +1698,7 @@ function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLog
     comLogo
       ? "- Logo: use a logo oficial anexada exatamente como é, sem redesenhar, sem mudar cor nem proporção."
       : "- Sem logo nesta lâmina.",
-    t.direcao.carrossel_infinito
+    t.direcao.carrossel_infinito && !ehAds(t)
       ? "- Carrossel infinito: o que chega à borda continua na lâmina vizinha com a mesma posição, escala, perspectiva e luz."
       : "",
     anexos.length ? `- Imagens anexadas, na ordem: ${anexos.join("; ")}.` : "",
@@ -1584,13 +1744,18 @@ function garantirEditavel(t: Trabalho) {
   if (!t.modelo_imagem_id) throw new ErroEstudio(409, "trabalho_sem_modelo", "O trabalho não tem modelo de imagem definido.");
 }
 
-/** Área do texto e da logo da lâmina, em fração do quadro (máscara da foto real). */
-function areasDeDesenho(card: CardDirecao, total: number, comLogo: boolean): Area[] {
+/**
+ * Área do texto e da logo da lâmina, em fração do quadro (máscara da foto
+ * real). No criativo de anúncio, as caixas seguem o formato e a zona segura
+ * dele (a mesma conta do prompt).
+ */
+function areasDeDesenho(card: CardDirecao, total: number, comLogo: boolean, quadro?: Pick<QuadroDoCard, "formato">): Area[] {
+  const formato = quadro?.formato ?? null;
   const capa = card.funcao === "capa" || card.ordem === 1;
   const zona = card.layout?.zona_texto ?? "base-esquerda";
   const pct = (c: { x0: number; x1: number; y0: number; y1: number }): Area => ({ x0: c.x0 / 100, y0: c.y0 / 100, x1: c.x1 / 100, y1: c.y1 / 100 });
-  const areas = [ampliar(pct(caixaDaZona(zona, capa, total > 1)), 0.04)];
-  if (comLogo) areas.push(ampliar(pct(caixaDaLogo(zona, capa)), 0.02));
+  const areas = [ampliar(pct(caixaDaZona(zona, capa, total > 1, formato)), 0.04)];
+  if (comLogo) areas.push(ampliar(pct(caixaDaLogo(zona, capa, formato)), 0.02));
   return areas;
 }
 
@@ -1606,8 +1771,12 @@ const descreverArea = (a: Area) =>
 
 // ---------------------------------------------- fundo do carrossel contínuo
 
-/** A lâmina usa o fundo panorâmico: contínuo ligado, mais de uma lâmina, editor da OpenAI e layout definido. */
+/**
+ * A lâmina usa o fundo panorâmico: contínuo ligado, mais de uma lâmina, editor
+ * da OpenAI e layout definido. Nunca no criativo de anúncio (peças independentes).
+ */
 function usaPanorama(t: Trabalho, card: CardDirecao, provedor: string): boolean {
+  if (ehAds(t)) return false;
   return !!t.direcao.carrossel_infinito && totalCards(t) > 1 && provedor === "openai" && !!card.layout;
 }
 
@@ -1734,6 +1903,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   garantirEditavel(t);
   const card = cardDaDirecao(t, ordem);
   const total = totalCards(t);
+  // Tamanho da lâmina: 4:5 no post; no criativo de anúncio, o do formato do card.
+  const quadro = quadroDoCard(t, card);
+  const ads = ehAds(t);
+  // Carrossel contínuo não existe no anúncio.
+  const infinito = !ads && !!t.direcao.carrossel_infinito;
   const [kit, fontes, modeloImagem] = await Promise.all([
     lerKit(t.client_id),
     lerFontes(t.client_id),
@@ -1747,10 +1921,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const livres = card.fotos_livres ?? [];
   const fundoLivre = foto ? undefined : livres.find((f) => f.papel === "fundo");
   const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
-  let baseFoto: Uint8Array | null = foto ? await fotoRealNaLamina(foto) : null;
+  let baseFoto: Uint8Array | null = foto ? await fotoRealNaLamina(foto, quadro.largura, quadro.altura) : null;
   if (!baseFoto && fundoLivre) {
     try {
-      baseFoto = await fotoNaLamina(await baixar("mesa", fundoLivre.caminho));
+      baseFoto = await fotoNaLamina(await baixar("mesa", fundoLivre.caminho), quadro.largura, quadro.altura);
     } catch {
       throw new ErroEstudio(409, "foto_sumiu", "A foto de fundo desta lâmina não foi encontrada. Escolha outra na ferramenta Fotos.");
     }
@@ -1771,7 +1945,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // Continuidade real: só no carrossel contínuo, com a anterior pronta, sem foto real e no editor da OpenAI (máscara).
   const anterior = ordem > 1 ? versaoAtual(t, ordem - 1) : null;
-  const continuar = !baseFoto && !elementos.length && t.direcao.carrossel_infinito && !!anterior && modeloImagem.provedor === "openai" && !!card.layout;
+  const continuar = !baseFoto && !elementos.length && infinito && !!anterior && modeloImagem.provedor === "openai" && !!card.layout;
 
   const anexos: ImagemEntrada[] = [];
   // Rótulo de cada anexo; a numeração sai na hora do prompt, porque a imagem
@@ -1812,7 +1986,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     anexos.push({ bytes: await baixar("mesa", anterior.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
     legendar(`card ${ordem - 1} já aprovado desta mesma série: mantenha a mesma protagonista, cenário, luz, paleta, tipografia e posição da marca; mude só a pose, o enquadramento e o texto`);
   }
-  if (t.direcao.carrossel_infinito && ordem === total && ordem > 2) {
+  if (infinito && ordem === total && ordem > 2) {
     const capa = versaoAtual(t, 1);
     if (capa) {
       anexos.push({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1.png" });
@@ -1857,13 +2031,15 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const base = card.layout
     ? promptDaLamina(card, marca, {
       total,
-      carrosselInfinito: t.direcao.carrossel_infinito,
+      carrosselInfinito: infinito,
       levaLogo: levaLogo(t, ordem),
       conceito: t.direcao.conceito,
       anteriores: imagensAnteriores(t.direcao.cards, ordem),
       fotoReal: resumoDoFundo,
       fioVisual: t.direcao.fio_visual ?? null,
       logo: tomDaLogo,
+      // Criativo de anúncio: quadro, zona segura e regras do formato (conhecimento-ads.ts).
+      anuncio: quadro.formato ? { formato: quadro.formato } : null,
     })
     : card.prompt_imagem;
   const baseComCampanha = campanha ? `${base}\n\n${blocoDaCampanha(campanha)}` : base;
@@ -1886,7 +2062,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       baseComCampanha,
       regrasDeRender(t, card, legendas(1), comLogo),
     ].join("\n\n");
-    const img = await chamarImagem({ ...comum, prompt, editar: { bytes: baseFoto }, tamanho: TAMANHO_GERADOR });
+    const img = await chamarImagem({ ...comum, prompt, editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo });
     return await gravarVersao(ch, t, card, img, {
       origem: "gerar",
       referencias: idsReferencias,
@@ -1900,7 +2076,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     // integrado à cena) e só as faixas das bordas voltam do fundo original: é o
     // que mantém a emenda. Antes a máscara abria só o retângulo do texto e o
     // gerador pintava ali uma caixa de fundo (Para Si Ótica, 23/09).
-    const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo);
+    const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);
     const prompt = [
       panorama
         ? `EDITE a imagem 1: ela é a cena desta lâmina, parte de um panorama que atravessa o carrossel. Mantenha a mesma cena, luz, pessoas e objetos, na mesma posição e escala. Não mude nada nas faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado): elas emendam com as lâminas vizinhas.`
@@ -1912,11 +2088,12 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const img = await chamarImagem({
       ...comum,
       prompt,
-      editar: { bytes: baseFoto, mascara: await mascara(1088, 1360, areas) },
-      tamanho: TAMANHO_GERADOR,
+      editar: { bytes: baseFoto, mascara: await mascara(quadro.largura, quadro.altura, areas) },
+      tamanho: quadro.tamanho,
+      tamanhoFixo: quadro.fixo,
     });
     // O gerador redesenha tudo mesmo com máscara: o original volta fora das áreas.
-    const final = img.tamanho === TAMANHO_GERADOR ? await devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28) : img.png;
+    const final = img.tamanho === quadro.tamanho ? await devolverOriginalForaDasAreas(baseFoto, img.png, areas, panorama ? 40 : 28) : img.png;
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
@@ -1960,8 +2137,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const img = await chamarImagem({
     ...comum,
     prompt,
-    promptSe2x3: card.layout ? formatoPara2x3(prompt) : undefined,
-    tamanho: card.layout ? TAMANHO_GERADOR : TAMANHO_2X3,
+    // A reserva em 2:3 só serve ao quadro 4:5 (recorte central); 1:1 e 9:16 saem no tamanho pedido ou falham.
+    promptSe2x3: card.layout && !quadro.fixo ? formatoPara2x3(prompt) : undefined,
+    tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,
+    tamanhoFixo: !!card.layout && quadro.fixo,
   });
 
   return await gravarVersao(ch, t, card, img, {
@@ -2125,12 +2304,13 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
       legendas.push(`imagem ${referencias.length + 1}: logo oficial da marca`);
     }
   }
+  const quadro = quadroDoCard(base, card);
   if (fotoFundo) {
-    referencias.push({ bytes: await fotoRealNaLamina(fotoFundo), mime: "image/png", nome: "novo-fundo.png" });
+    referencias.push({ bytes: await fotoRealNaLamina(fotoFundo, quadro.largura, quadro.altura), mime: "image/png", nome: "novo-fundo.png" });
     legendas.push(`imagem ${referencias.length + 1}: foto real do cliente que vira o novo fundo (use como está, sem redesenhar)`);
   }
   // A edição mantém o formato da versão editada.
-  const tamanhoAtual = String((atualVersao as { tamanho?: string }).tamanho || (card.layout ? TAMANHO_GERADOR : TAMANHO_2X3));
+  const tamanhoAtual = String((atualVersao as { tamanho?: string }).tamanho || (card.layout ? quadro.tamanho : TAMANHO_2X3));
   const dims = dimensoesPng(atual);
   const abertas = areas.map((a) => ampliar(a, 0.02));
   const comMascara = abertas.length > 0 && !!dims;
@@ -2152,6 +2332,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
     editar: { bytes: atual, mascara: comMascara ? await mascara(dims!.largura, dims!.altura, abertas) : undefined },
     qualidade: (QUALIDADES.includes(base.qualidade as Qualidade) ? base.qualidade : QUALIDADE_PADRAO) as Qualidade,
     tamanho: tamanhoAtual,
+    // Criativo 1:1 ou 9:16: a edição fica no tamanho da peça (sem reserva em 2:3).
+    tamanhoFixo: quadro.fixo && tamanhoAtual === quadro.tamanho,
     referencia: { tipo: "estudio_trabalho", id: base.id },
     criadoPor: ch.userId,
     tarefa: "estudio",
@@ -2260,6 +2442,9 @@ async function escolherHashtags(t: Trabalho, candidatas: string[], contexto: Rec
 
 async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  if (ehAds(t)) {
+    throw new ErroEstudio(409, "anuncio_sem_legenda", "Criativo de anúncio não tem legenda de post: o texto do anúncio fica na copy da Mesa Ads.");
+  }
   if (!t.task_id) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
   const item = await lerItemDaAgenda(t.task_id);
   const [prompt, diretor, contexto, recentes, perfil] = await Promise.all([
@@ -2346,21 +2531,25 @@ function legendaComHashtags(legendaTexto: string | null, hashtags: string[] | nu
 // --------------------------------------------------------------- entregar
 
 /**
- * Lamina no formato final 4:5. O gerador entrega 1024 x 1536; o corte e a
+ * Lamina no formato final: 4:5 (1080 x 1350) por padrao; o criativo de
+ * anuncio passa o quadro do formato (1080 x 1080 ou 1080 x 1920). O corte e a
  * escala ficam com a transformacao de imagem do Storage (cover pelo centro,
  * sem gastar CPU da funcao). Se a transformacao nao estiver disponivel no
  * plano, entra a lamina como foi gerada e a resposta avisa.
  */
-async function laminaFinal(caminho: string): Promise<{ bytes: Uint8Array; largura: number | null; altura: number | null; redimensionada: boolean }> {
+async function laminaFinal(
+  caminho: string,
+  alvo: { largura: number; altura: number } = { largura: LARGURA_FINAL, altura: ALTURA_FINAL },
+): Promise<{ bytes: Uint8Array; largura: number | null; altura: number | null; redimensionada: boolean }> {
   try {
     const { data, error } = await servico().storage.from("mesa").download(caminho, {
-      transform: { width: LARGURA_FINAL, height: ALTURA_FINAL, resize: "cover", format: "origin" },
+      transform: { width: alvo.largura, height: alvo.altura, resize: "cover", format: "origin" },
     });
     if (!error && data) {
       const bytes = new Uint8Array(await data.arrayBuffer());
       const d = dimensoesPng(bytes);
-      // Aceita qualquer tamanho em 4:5 (o Storage pode nao ampliar alem do original).
-      if (d && Math.abs(d.largura / d.altura - 0.8) < 0.01) {
+      // Aceita qualquer tamanho na proporcao do alvo (o Storage pode nao ampliar alem do original).
+      if (d && Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01) {
         return { bytes, largura: d.largura, altura: d.altura, redimensionada: true };
       }
     }
@@ -2379,6 +2568,8 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  // Criativo de anúncio: entrega própria, fora da agenda e da aprovação de post.
+  if (ehAds(t)) return await entregarAnuncio(ch, t, corpo);
   if (t.status === "entregue" && t.file_ids.length) {
     return json({ trabalho_id: t.id, file_ids: t.file_ids, root_file_id: t.file_ids[0], ja_entregue: true });
   }
@@ -2488,6 +2679,131 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
     formatos,
     aviso: formatos.some((f) => !f.redimensionada)
       ? "A transformação de imagem do Storage não respondeu: parte das artes foi entregue em 1024 x 1536, como gerada."
+      : null,
+  });
+}
+
+/**
+ * entregar de um trabalho 'ads' (caminho escolhido por ser o mais simples e
+ * seguro, sem migration e sem mexer na agenda):
+ * - cada card vira um arquivo em Arquivos, pelo mesmo caminho da tela (bucket
+ *   files + RPC create_file_record com o JWT de quem chamou), na pasta
+ *   "criativos" (Criativos de anúncio), no tamanho final do formato, sem
+ *   legenda de post (a copy fica na Mesa Ads); o carrossel de anúncio vira pai
+ *   e filhos "(n/N)", como o do post; ligado ao projeto só quando o trabalho
+ *   tem item da agenda;
+ * - os ids vão para direcao.entrega_ads e NÃO para file_ids: a aprovação do
+ *   post (mesa_enviar_para_aprovacao), o gatilho que acompanha a aprovação e o
+ *   agendamento automático (mesa_agendar_aprovados) se guiam por file_ids,
+ *   então o criativo não entra nesse fluxo;
+ * - status 'entregue'; idempotente pela idempotency_key de cada card (uma nova
+ *   tentativa reaproveita o que já foi registrado).
+ */
+async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, unknown>) {
+  const feita = t.direcao.entrega_ads;
+  if (t.status === "entregue" && feita?.file_ids?.length) {
+    return json({ trabalho_id: t.id, tipo: "anuncio", file_ids: feita.file_ids, arquivos: feita.arquivos, ja_entregue: true });
+  }
+  const ultimas = t.direcao.cards.map((c) => ({ card: c, versao: versaoAtual(t, c.ordem) }));
+  const semArte = ultimas.filter((u) => !u.versao).map((u) => u.card.ordem);
+  if (!ultimas.length || semArte.length) {
+    throw new ErroEstudio(409, "cards_sem_arte", "Gere todos os criativos antes de entregar.", { cards_sem_arte: semArte });
+  }
+  // Projeto só quando o criativo nasceu de um item da agenda (e o item é deste cliente).
+  let projetoId: string | null = null;
+  if (t.task_id) {
+    try {
+      const item = await lerItemDaAgenda(t.task_id);
+      if (item.clientId === t.client_id) projetoId = item.projeto.id;
+    } catch {
+      // Item apagado: o criativo vai para Arquivos sem projeto.
+    }
+  }
+  const nomeBase = texto(corpo.nome, 120) || "Criativo de anúncio";
+  const total = ultimas.length;
+  const ehCarrossel = total > 1;
+  let paiId: string | null = null;
+  const rodada = Math.max(1, Number(t.entrega_rodada) || 1);
+  const fileIds: string[] = [];
+  const arquivos: EntregaAnuncio["arquivos"] = [];
+  let semRecorte = false;
+
+  for (let i = 0; i < total; i++) {
+    const { card, versao } = ultimas[i];
+    const quadro = quadroDoCard(t, card);
+    const formato = quadro.formato ?? "feed_4x5";
+    const chave = `estudio-arte:${t.id}:ads:r${rodada}:${card.ordem}`;
+    const { data: existente } = await servico().from("files").select("id, client_id, storage_path").eq("idempotency_key", chave).maybeSingle();
+    const ja = existente as { id: string; client_id: string; storage_path: string | null } | null;
+    if (ja) {
+      if (ja.client_id !== t.client_id) throw new ErroEstudio(409, "chave_de_arquivo_em_uso", "O registro deste envio pertence a outro cliente.");
+      fileIds.push(ja.id);
+      if (i === 0) paiId = ja.id;
+      arquivos.push({ ordem: card.ordem, versao: versao!.versao, file_id: ja.id, storage_path: ja.storage_path, formato, largura: null, altura: null });
+      continue;
+    }
+
+    const lamina = await laminaFinal(versao!.storage_path, quadro.final);
+    if (!lamina.redimensionada) semRecorte = true;
+    const fileId = crypto.randomUUID();
+    const nome = ehCarrossel && i > 0 ? `${nomeBase} ${quadro.proporcao} (${i + 1}/${total})` : `${nomeBase} ${quadro.proporcao}`;
+    const grupo: string = paiId ?? fileId;
+    const caminho = `${t.client_id}/${grupo}/v1/${i + 1}-${nomeSeguro(nome)}.png`;
+    const { error: erroUpload } = await ch.doChamador.storage
+      .from("files")
+      .upload(caminho, new Blob([new Uint8Array(lamina.bytes)], { type: "image/png" }), { contentType: "image/png", upsert: false });
+    if (erroUpload) {
+      throw new ErroEstudio(503, "envio_de_arquivo_falhou", "Não foi possível enviar o criativo para Arquivos. Tente entregar de novo.", {
+        card: card.ordem,
+        detalhe: erroUpload.message,
+      });
+    }
+    const { data: registro, error: erroRegistro } = await ch.doChamador.rpc("create_file_record", {
+      p_file: {
+        id: fileId,
+        client_id: t.client_id,
+        file_name: nome,
+        file_url: `files://${caminho}`,
+        file_type: ehCarrossel ? "carrossel" : formato === "stories_9x16" ? "story" : "post",
+        mime_type: "image/png",
+        extension: "png",
+        storage_bucket: "files",
+        storage_path: caminho,
+        size_bytes: lamina.bytes.byteLength,
+        sha256: await sha256Hex(lamina.bytes),
+        folder: "criativos",
+        project_id: projetoId,
+        status: "ready",
+        version: 1,
+        description: texto(`Criativo de anúncio do Estúdio Ads (${TAMANHO_DO_FORMATO[formato].rotulo}). ${t.direcao.conceito}`, 1000),
+        parent_file_id: ehCarrossel && i > 0 ? paiId : null,
+        idempotency_key: chave,
+      },
+    });
+    if (erroRegistro || !registro) {
+      await ch.doChamador.storage.from("files").remove([caminho]).catch(() => {});
+      throw new ErroEstudio(503, "registro_de_arquivo_falhou", "O criativo subiu, mas o registro em Arquivos falhou. Tente entregar de novo.", {
+        card: card.ordem,
+        detalhe: erroRegistro?.message ?? null,
+      });
+    }
+    const id: string = (registro as { id: string }).id;
+    fileIds.push(id);
+    if (i === 0) paiId = id;
+    arquivos.push({ ordem: card.ordem, versao: versao!.versao, file_id: id, storage_path: caminho, formato, largura: lamina.largura, altura: lamina.altura });
+  }
+
+  const entrega: EntregaAnuncio = { file_ids: fileIds, arquivos, project_id: projetoId, entregue_em: new Date().toISOString() };
+  const gravado = await mutarTrabalho(t.id, (x) => ({ status: "entregue", direcao: { ...x.direcao, entrega_ads: entrega } }));
+  return json({
+    trabalho_id: t.id,
+    status: gravado.status,
+    tipo: "anuncio",
+    project_id: projetoId,
+    file_ids: fileIds,
+    arquivos,
+    aviso: semRecorte
+      ? "A transformação de imagem do Storage não respondeu: parte dos criativos foi entregue no tamanho gerado."
       : null,
   });
 }
@@ -2807,7 +3123,7 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
         cards,
         ...(refsConjunto !== undefined ? { referencias_ids: refsConjunto } : {}),
         // Ligar, desligar ou pedir para refazer apaga o panorama: o próximo gerar faz outro.
-        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1, panorama: null } : {}),
+        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1 && !ehAds(x), panorama: null } : {}),
         ...(conjunto && conjunto.refazer_fundo === true ? { panorama: null } : {}),
       },
     };
