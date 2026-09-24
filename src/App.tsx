@@ -4,7 +4,7 @@ import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { criarQueryClient, LimpezaDoCacheAoTrocarDeUsuario, opcoesDePersistencia } from "@/lib/mesa/cachePersistido";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -71,6 +71,17 @@ const MesaAds = lazy(() => import("@/pages/MesaAds"));
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
 const queryClient = criarQueryClient();
 const persistencia = opcoesDePersistencia();
+
+/** Página nova ainda baixando: o menu e o topo ficam; só o conteúdo pulsa. */
+function EsqueletoDaPagina() {
+  return (
+    <div aria-busy="true" aria-label="Abrindo a página" className="space-y-4 pb-10">
+      <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
+      <div className="h-24 animate-pulse rounded-xl bg-muted/80" />
+      <div className="h-[45vh] animate-pulse rounded-xl bg-muted/60" />
+    </div>
+  );
+}
 
 /** Enquanto a Mesa baixa: o menu fica, e a tela já tem o desenho dela. */
 function EsqueletoDaMesa() {
@@ -228,13 +239,6 @@ export function AppRoutes() {
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
       <Route path="/oauth/meta/callback" element={<ProtectedRoute><MetaOAuthCallback /></ProtectedRoute>} />
 
-      <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
-      <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
-      <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/execucao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminExecucao /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/metricas" element={<ProtectedRoute><StaffRoute><AppLayout><AdminMetricas /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/anuncios" element={<ProtectedRoute><StaffRoute><AppLayout><AdminAds /></AppLayout></StaffRoute></ProtectedRoute>} />
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela
           cheia e usa toda a largura no celular. Duas URLs servem a mesma
           tela: /ciclo pelo painel e /ciclo.html quando aberto pelo ícone do
@@ -246,43 +250,56 @@ export function AppRoutes() {
       <Route path="/ciclo-antigo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
       {/* Endereço antigo do app instalado: leva para o atual. */}
       <Route path="/ciclo.html" element={<Navigate to="/ciclo" replace />} />
-      <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
-      <Route path="/clientes" element={<ProtectedRoute><StaffRoute><AppLayout><Clients /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/equipe" element={<ProtectedRoute><StaffRoute><AppLayout><Team /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/arquivos" element={<ProtectedRoute><StaffRoute><AppLayout><AdminFiles /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/config" element={<ProtectedRoute><StaffRoute><AppLayout><SettingsPage /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminRequests /> : <ClientRequests />}</AppLayout></ProtectedRoute>} />
-      <Route path="/documentos" element={<ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>} />
-      <Route path="/perfil" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />
-      <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
-      <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
-      <Route path="/relatorios/novo" element={<ProtectedRoute><StaffRoute><AppLayout><AdminReportCreate /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
-      <Route path="/timeline" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      <Route path="/ver-como-cliente" element={<ProtectedRoute><StaffRoute><AppLayout><AdminViewAsClient /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
-      <Route path="/comercial" element={<ProtectedRoute><ComercialRoute><AppLayout><AdminComercial /></AppLayout></ComercialRoute></ProtectedRoute>} />
-      {/* Cada area do departamento tem endereco proprio: o menu aponta
-          direto para ela, o voltar do navegador funciona e o link pode
-          ser mandado para alguem. */}
-      <Route path="/comercial/:aba" element={<ProtectedRoute><ComercialRoute><AppLayout><AdminComercial /></AppLayout></ComercialRoute></ProtectedRoute>} />
-      <Route path="/financeiro/projecao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminProjection /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/api-docs" element={<ProtectedRoute><StaffRoute><AppLayout><ApiDocs /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/admin/quiz" element={<ProtectedRoute><StaffRoute><AppLayout><AdminQuizSubmissions /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/admin/backfill" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBackfillPage /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      {/* Mesa do cliente: calendário e estúdio de arte com IA. Só admin,
-          gestor e design; tráfego e cliente voltam para o painel. */}
-      {/* Suspense próprio: enquanto a Mesa baixa, o menu continua na tela e
-          aparece o esqueleto dela, não a tela cheia de carregando. */}
-      <Route path="/mesa" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaDoCliente /></Suspense> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      {/* Mesa Ads: criativos de anúncio (docs/mesa-ads/SPEC.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
-      <Route path="/mesa-ads" element={<ProtectedRoute><AppLayout>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
-      <Route path="/novidades" element={<ProtectedRoute><AppLayout><Novidades /></AppLayout></ProtectedRoute>} />
-      <Route path="/contratos" element={<ProtectedRoute><StaffRoute><AppLayout><AdminContracts /></AppLayout></StaffRoute></ProtectedRoute>} />
+      {/* Casca do painel montada UMA vez (24/09/2026): antes cada rota montava o
+          próprio AppLayout e a troca de página desmontava menu e topo, parecendo
+          que o painel reiniciava. As páginas trocam dentro do Outlet, e o
+          carregamento de página nova fica só na área do conteúdo. */}
+      <Route element={<ProtectedRoute><AppLayout><Suspense fallback={<EsqueletoDaPagina />}><Outlet /></Suspense></AppLayout></ProtectedRoute>}>
+        <Route path="/dashboard" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</>} />
+        <Route path="/projetos" element={<Projects />} />
+        <Route path="/briefings" element={<StaffRoute><AdminBriefings /></StaffRoute>} />
+        <Route path="/kanban" element={<StaffRoute><Kanban /></StaffRoute>} />
+        <Route path="/execucao" element={<StaffRoute><AdminExecucao /></StaffRoute>} />
+        <Route path="/metricas" element={<StaffRoute><AdminMetricas /></StaffRoute>} />
+        <Route path="/anuncios" element={<StaffRoute><AdminAds /></StaffRoute>} />
+        <Route path="/calendario" element={<EditorialCalendar />} />
+        <Route path="/clientes" element={<StaffRoute><Clients /></StaffRoute>} />
+        <Route path="/equipe" element={<StaffRoute><Team /></StaffRoute>} />
+        <Route path="/arquivos" element={<StaffRoute><AdminFiles /></StaffRoute>} />
+        <Route path="/config" element={<StaffRoute><SettingsPage /></StaffRoute>} />
+        <Route path="/pedidos" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminRequests /> : <ClientRequests />}</>} />
+        <Route path="/documentos" element={<ClientDocuments />} />
+        <Route path="/perfil" element={<ProfilePage />} />
+        <Route path="/aprovacoes" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminApprovals /> : <ClientApprovals />}</>} />
+        <Route path="/relatorios" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminReports /> : <ClientReports />}</>} />
+        <Route path="/relatorios/novo" element={<StaffRoute><AdminReportCreate /></StaffRoute>} />
+        <Route path="/relatorios/:id" element={<ReportDetail />} />
+        <Route path="/timeline" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/ver-como-cliente" element={<StaffRoute><AdminViewAsClient /></StaffRoute>} />
+        <Route path="/financeiro" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</>} />
+        <Route path="/comercial" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
+        {/* Cada area do departamento tem endereco proprio: o menu aponta
+            direto para ela, o voltar do navegador funciona e o link pode
+            ser mandado para alguem. */}
+        <Route path="/comercial/:aba" element={<ComercialRoute><AdminComercial /></ComercialRoute>} />
+        <Route path="/financeiro/projecao" element={<StaffRoute><AdminProjection /></StaffRoute>} />
+        <Route path="/api-docs" element={<StaffRoute><ApiDocs /></StaffRoute>} />
+        <Route path="/admin/quiz" element={<StaffRoute><AdminQuizSubmissions /></StaffRoute>} />
+        <Route path="/admin/backfill" element={<StaffRoute><AdminBackfillPage /></StaffRoute>} />
+        <Route path="/cofre" element={<ClientVaultPage />} />
+        <Route path="/workspace" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa do cliente: calendário e estúdio de arte com IA. Só admin,
+            gestor e design; tráfego e cliente voltam para o painel. */}
+        {/* Suspense próprio: enquanto a Mesa baixa, o menu continua na tela e
+            aparece o esqueleto dela, não a tela cheia de carregando. */}
+        <Route path="/mesa" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaDoCliente /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Ads: criativos de anúncio (docs/mesa-ads/SPEC.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-ads" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
+        <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
+        <Route path="/novidades" element={<Novidades />} />
+        <Route path="/contratos" element={<StaffRoute><AdminContracts /></StaffRoute>} />
+      </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

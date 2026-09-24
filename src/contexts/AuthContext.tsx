@@ -158,8 +158,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const deliverProfile = useCallback((next: UserProfile | null) => {
     if (next) {
-      profileRef.current = next;
-      setProfile(next);
+      // Mesmo perfil de antes (volta para a aba do navegador dispara SIGNED_IN
+      // de novo): mantém o objeto, senão toda tela que depende do perfil
+      // recomeçava como se o painel tivesse reiniciado (24/09/2026).
+      const igual = !!profileRef.current && JSON.stringify(profileRef.current) === JSON.stringify(next);
+      if (!igual) {
+        profileRef.current = next;
+        setProfile(next);
+      }
       setProfileError(false);
     } else if (!profileRef.current) {
       setProfileError(true);
@@ -256,7 +262,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // e sem papel quando a renovação da abertura passava de 8 s, e a
         // /mesa caía no /dashboard.
         sessaoRespondeu.current = true;
-        setUser(session.user);
+        // Mesmo usuário (só o token renovou ou a aba voltou ao foco): mantém o
+        // objeto para as telas não recomeçarem.
+        setUser((anterior) =>
+          anterior && anterior.id === session.user.id && anterior.updated_at === session.user.updated_at && anterior.email === session.user.email
+            ? anterior
+            : session.user,
+        );
         const isFreshSignIn = event === "SIGNED_IN";
         // Defer profile fetch to avoid Supabase SDK deadlock
         setTimeout(async () => {
