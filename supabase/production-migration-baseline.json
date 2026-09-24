@@ -985,6 +985,22 @@
       "remote_name": "mesa_ads",
       "remote_statements_sha256": "826415089c923d86d7b7a0289e77420404e9a649c7c9b3217f749cf130111ceb",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924021731",
+      "path": "supabase/migrations/20260924021731_mesa_ads_memoria_do_agente.sql",
+      "local_sha256": "fc8d34a200461cc01da467d8b2a4cf6fce2dca3c0f20db3a120eb94340a6ccfa",
+      "remote_name": "mesa_ads_memoria_do_agente",
+      "remote_statements_sha256": "15177a511f8f646125e792c8a82265a5f1349875f817c80d2106e280a82d88c8",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924021905",
+      "path": "supabase/migrations/20260924021905_mesa_ads_biblioteca.sql",
+      "local_sha256": "cf49f61a8a9b4b52f425edbf4586107dd36e5a1bb2e1306c63c1560b64189234",
+      "remote_name": "mesa_ads_biblioteca",
+      "remote_statements_sha256": "c7845cfc6b2643cf0eea34dba1f2ea6e8f601386a544162db4c94f3488b25484",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
