@@ -1065,6 +1065,14 @@
       "remote_name": "mesa_foto_v2",
       "remote_statements_sha256": "65a74206889565a6a60e3801350644d9907b8d1ea616915c2cdacff827407189",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924193310",
+      "path": "supabase/migrations/20260924193310_mesa_foto_modelos_canvas.sql",
+      "local_sha256": "7698bcc482137044af8fe0d34d13f88c2a06df657eaa434347cb5fa6aeb46e5c",
+      "remote_name": "mesa_foto_modelos_canvas",
+      "remote_statements_sha256": "e0c396deffce1345fc706d572cda0971d8a6df3903ccef1cb6fb2d6eb26ecb22",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
