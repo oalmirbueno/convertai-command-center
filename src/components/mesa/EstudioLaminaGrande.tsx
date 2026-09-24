@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Crop, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useTamanho } from "./EstudioAltura";
 import { ImagemDaMesa } from "./MesaContexto";
-import { Esboco, funcaoDaLamina } from "./PranchetaDoEstudio";
+import { ESTILO_VELADO, Esboco, funcaoDaLamina, VeuDaLamina, type AndamentoDaLamina } from "./PranchetaDoEstudio";
 import SeletorDeAreas from "./SeletorDeAreas";
 import type { Area } from "./estudioUtil";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
@@ -16,8 +16,10 @@ import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
  * esboço do layout antes de gerar; nenhum texto por cima da arte. A barra
  * de cima tem a versão vista e o botão de ver grande (Ampliar).
  *
- * O andamento da geração NÃO aparece aqui: o indicador da lâmina é um só,
- * na prancheta. Aqui a imagem só fica esmaecida enquanto a lâmina trabalha.
+ * O cronômetro da geração NÃO aparece aqui: o indicador da lâmina é um só,
+ * na prancheta. Aqui a imagem fica esmaecida enquanto a lâmina trabalha e,
+ * com `andamento`, velada (borrada, com a etapa em texto) até a conferência
+ * e a autocorreção terminarem.
  */
 
 /** Maior largura do quadro (px): a imagem gerada tem 1088 de largura. */
@@ -64,6 +66,7 @@ export default function EstudioLaminaGrande({
   areas,
   onAreas,
   ocupado,
+  andamento,
   onAmpliar,
   soPelaLargura,
 }: {
@@ -79,6 +82,8 @@ export default function EstudioLaminaGrande({
   onAreas: (areas: Area[]) => void;
   /** A lâmina está gerando, ajustando ou na conferência: a imagem fica esmaecida. */
   ocupado: boolean;
+  /** Etapa da lâmina (gerando, conferindo, corrigindo...): vela a arte até terminar. */
+  andamento?: AndamentoDaLamina;
   onAmpliar: () => void;
   soPelaLargura?: boolean;
 }) {
@@ -86,6 +91,7 @@ export default function EstudioLaminaGrande({
   const ultima = ordenadas[ordenadas.length - 1] || null;
   const vista = ordenadas.find((v) => v.versao === versaoVista) || ultima;
   const posicao = vista ? ordenadas.indexOf(vista) : -1;
+  const velada = !!andamento && andamento.etapa !== "fila";
   const irPara = (passo: number) => {
     const alvo = ordenadas[posicao + passo];
     if (alvo) onVersaoVista(alvo.versao);
@@ -125,9 +131,14 @@ export default function EstudioLaminaGrande({
           desenhandoAreas && ultima ? (
             <SeletorDeAreas caminho={ultima.storage_path} areas={areas} onMudar={onAreas} disabled={ocupado} />
           ) : vista ? (
-            <button type="button" onDoubleClick={onAmpliar} className="block h-full w-full cursor-zoom-in" aria-label={`Lâmina ${card.ordem}: duplo clique para ver grande`}>
-              <ImagemDaMesa caminho={vista.storage_path} alt={`Lâmina ${card.ordem}, versão ${vista.versao}`} className={`h-full w-full transition-opacity ${ocupado ? "opacity-50" : ""}`} />
-            </button>
+            <>
+              <button type="button" onDoubleClick={velada ? undefined : onAmpliar} className="block h-full w-full cursor-zoom-in overflow-hidden" aria-label={`Lâmina ${card.ordem}: duplo clique para ver grande`}>
+                <div className="h-full w-full" style={velada ? ESTILO_VELADO : undefined}>
+                  <ImagemDaMesa caminho={vista.storage_path} alt={`Lâmina ${card.ordem}, versão ${vista.versao}`} className={`h-full w-full transition-opacity ${ocupado && !velada ? "opacity-50" : ""}`} />
+                </div>
+              </button>
+              {velada && andamento && <VeuDaLamina andamento={andamento} />}
+            </>
           ) : (
             <Esboco card={card} total={total} largura={largura} />
           )

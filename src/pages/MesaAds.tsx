@@ -8,29 +8,36 @@ import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCu
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { CustoCompacto, SeletorDeCliente } from "@/pages/MesaDoCliente";
+import type { PedidoDePlano } from "@/components/mesa-ads/adsApi";
 
 /**
  * Mesa Ads (/mesa-ads, só equipe: admin, gestor e design): criativos de
  * anúncio de alta conversão para o tráfego pago do Meta
- * (docs/mesa-ads/SPEC.md). Mesma casca da Mesa do cliente: barra fina com o
- * seletor de cliente, as cinco etapas e o saldo. Endereço completo:
+ * (docs/mesa-ads/SPEC.md e docs/mesa-ads/v2/CONTRATO-V2.md). Mesma casca da
+ * Mesa do cliente: barra fina com o seletor de cliente, as seis etapas e o
+ * saldo. Endereço completo:
  * /mesa-ads?client=<id>&etapa=estudio&plano=<id>&criativo=<id>
  *
- * Etapas: Oferta (briefing de performance), Referências (biblioteca com a
- * escala de evidência), Plano de teste (ângulos e hipóteses com o
- * estrategista de ads), Estúdio Ads (arte no motor do Estúdio e copy do
- * anúncio) e Resultados (métricas reais, diagnóstico e aprendizado).
+ * Etapas: Oferta (agente de oferta e briefing), Referências (biblioteca com
+ * a escala de evidência e a janela de detalhe), Plano de teste (ângulos
+ * conferidos pelo Jev), Estúdio Ads (arte, copy e entrega), Conta (tudo o que
+ * roda na conta de anúncios, ao vivo) e Resultados (criativos ligados,
+ * diagnóstico e aprendizado). "Criar criativos desta oferta", "Criar
+ * variações deste" e os próximos testes da análise levam ao Plano com o
+ * pedido pronto (pedidoDePlano), que gera o plano uma vez.
  */
 
 const carregarOferta = () => import("@/components/mesa-ads/AbaOferta");
 const carregarReferencias = () => import("@/components/mesa-ads/AbaReferencias");
 const carregarPlano = () => import("@/components/mesa-ads/AbaPlano");
 const carregarEstudio = () => import("@/components/mesa-ads/AbaEstudioAds");
+const carregarConta = () => import("@/components/mesa-ads/AbaConta");
 const carregarResultados = () => import("@/components/mesa-ads/AbaResultados");
 const AbaOferta = lazy(carregarOferta);
 const AbaReferencias = lazy(carregarReferencias);
 const AbaPlano = lazy(carregarPlano);
 const AbaEstudioAds = lazy(carregarEstudio);
+const AbaConta = lazy(carregarConta);
 const AbaResultados = lazy(carregarResultados);
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
@@ -40,6 +47,7 @@ export const ETAPAS_DA_MESA_ADS = [
   { valor: "referencias", rotulo: "Referências" },
   { valor: "plano", rotulo: "Plano de teste" },
   { valor: "estudio", rotulo: "Estúdio Ads" },
+  { valor: "conta", rotulo: "Conta" },
   { valor: "resultados", rotulo: "Resultados" },
 ] as const;
 
@@ -112,6 +120,7 @@ export default function MesaAds() {
   const [chavesUsadas, setChavesUsadas] = useState(false);
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
+  const [pedidoDePlano, setPedidoDePlano] = useState<PedidoDePlano | null>(null);
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -142,7 +151,14 @@ export default function MesaAds() {
 
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
+    setPedidoDePlano(null);
     mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null });
+  };
+
+  /** Pedido de plano vindo de outra etapa: vai ao Plano de teste, que gera uma vez. */
+  const criarPlano = (p: PedidoDePlano) => {
+    setPedidoDePlano(p);
+    mudar({ etapa: "plano", plano: null, criativo: null });
   };
 
   // Endereço só com o cliente: abre na etapa em que parou.
@@ -160,7 +176,7 @@ export default function MesaAds() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarOferta, carregarReferencias, carregarPlano, carregarEstudio, carregarResultados]) {
+        for (const carregar of [carregarOferta, carregarReferencias, carregarPlano, carregarEstudio, carregarConta, carregarResultados]) {
           carregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -232,7 +248,7 @@ export default function MesaAds() {
           {clientId && (
             <nav
               aria-label="Etapas da Mesa Ads"
-              className="order-last mt-2 grid w-full grid-cols-5 gap-0.5 rounded-lg bg-muted p-0.5 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
+              className="order-last mt-2 grid w-full grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:grid-cols-6 lg:order-none lg:mx-3 lg:mt-0 lg:flex lg:w-auto lg:min-w-0 lg:flex-1"
             >
               {ETAPAS_DA_MESA_ADS.map((e, i) => (
                 <button
@@ -279,7 +295,7 @@ export default function MesaAds() {
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
           <p className="text-[14px] font-medium">Escolha um cliente para abrir a Mesa Ads dele.</p>
           <p className="mt-1 text-[12.5px] text-muted-foreground">
-            Oferta, referências com evidência, plano de teste, criativos e resultados reais, com o custo de IA sempre à vista.
+            Oferta, referências com evidência, plano de teste, criativos, a conta de anúncios ao vivo e resultados reais, com o custo de IA sempre à vista.
           </p>
         </div>
       )}
@@ -288,13 +304,15 @@ export default function MesaAds() {
         <MesaProvider valor={valor}>
           <div key={valor.clientId} className="min-w-0">
             <Suspense fallback={<EsqueletoDaEtapa />}>
-              {etapa === "oferta" && <AbaOferta />}
+              {etapa === "oferta" && <AbaOferta onCriarCriativos={criarPlano} />}
               {etapa === "referencias" && <AbaReferencias />}
               {etapa === "plano" && (
                 <AbaPlano
                   planoId={planoUrl}
                   onPlano={(id) => mudar({ plano: id }, true)}
                   onProduzido={(id) => mudar({ etapa: "estudio", plano: id, criativo: null })}
+                  pedidoPendente={pedidoDePlano}
+                  onPedidoConsumido={() => setPedidoDePlano(null)}
                 />
               )}
               {etapa === "estudio" && (
@@ -305,6 +323,7 @@ export default function MesaAds() {
                   onVerTodos={() => mudar({ plano: null }, true)}
                 />
               )}
+              {etapa === "conta" && <AbaConta onCriarPlano={criarPlano} />}
               {etapa === "resultados" && <AbaResultados />}
             </Suspense>
           </div>

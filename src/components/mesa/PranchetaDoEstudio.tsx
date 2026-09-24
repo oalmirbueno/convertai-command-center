@@ -36,12 +36,19 @@ import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 export const AVISO_DA_ORDEM_NO_CONTINUO =
   "No carrossel contínuo a ordem faz parte da cena. Desligue o contínuo ou use Refazer o fundo para reordenar.";
 
-export type EtapaDaLamina ="fila" | "gerando" | "ajustando" | "conferindo";
+/**
+ * Etapas da lâmina. "corrigindo" e "reconferindo" são a autocorreção antes de
+ * mostrar (docs/mesa-ads/v2/CONTRATO-V2.md): a conferência achou erro, o
+ * estúdio corrige sozinho e confere de novo.
+ */
+export type EtapaDaLamina = "fila" | "gerando" | "ajustando" | "conferindo" | "corrigindo" | "reconferindo";
 
 /** O que está acontecendo com a lâmina agora e desde quando (o cronômetro não recomeça entre etapas). */
 export interface AndamentoDaLamina {
   etapa: EtapaDaLamina;
   desde: number;
+  /** Motivo curto da correção em andamento (ex.: "Texto errado na arte"). */
+  detalhe?: string;
 }
 
 export const ROTULO_DA_ETAPA: Record<EtapaDaLamina, string> = {
@@ -49,7 +56,56 @@ export const ROTULO_DA_ETAPA: Record<EtapaDaLamina, string> = {
   gerando: "gerando",
   ajustando: "ajustando",
   conferindo: "conferindo",
+  corrigindo: "corrigindo",
+  reconferindo: "conferindo de novo",
 };
+
+/** Frase da etapa no véu da lâmina (texto claro, em português). */
+export const TEXTO_DA_ETAPA: Record<EtapaDaLamina, string> = {
+  fila: "Na fila",
+  gerando: "Gerando",
+  ajustando: "Ajustando",
+  conferindo: "Conferindo texto e identidade",
+  corrigindo: "Corrigindo",
+  reconferindo: "Conferindo de novo",
+};
+
+export function textoDoAndamento(a: AndamentoDaLamina): string {
+  return a.etapa === "corrigindo" && a.detalhe ? `Corrigindo: ${a.detalhe}` : TEXTO_DA_ETAPA[a.etapa];
+}
+
+/** A lâmina está na conferência (a primeira ou a de depois da correção). */
+export const estaConferindo = (a: AndamentoDaLamina | undefined) => !!a && (a.etapa === "conferindo" || a.etapa === "reconferindo");
+
+/**
+ * Véu da lâmina em andamento: a arte fica borrada e coberta, com a etapa em
+ * texto claro por cima, até a conferência (e a autocorreção) terminar. Assim
+ * ninguém vê, nem aprova, uma arte que ainda vai ser corrigida. O filtro de
+ * desfoque vai na imagem (quem chama aplica ESTILO_VELADO); o véu é só a
+ * camada com o texto (sem backdrop-filter, que o Chrome 64 não tem).
+ */
+export function VeuDaLamina({ andamento, compacto = false }: { andamento: AndamentoDaLamina; compacto?: boolean }) {
+  if (andamento.etapa === "fila") return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/60 p-2 text-center"
+      aria-live="polite"
+      data-veu-da-lamina=""
+    >
+      {compacto ? (
+        <span className="h-2 w-2 animate-pulse rounded-full bg-primary" aria-label={textoDoAndamento(andamento)} />
+      ) : (
+        <span className="inline-flex max-w-full items-center rounded-full bg-card px-3 py-1.5 text-[12.5px] font-medium text-foreground shadow-sm">
+          <span className="mr-2 h-2 w-2 shrink-0 animate-pulse rounded-full bg-primary" aria-hidden="true" />
+          <span className="min-w-0 [overflow-wrap:anywhere]">{textoDoAndamento(andamento)}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Desfoque da arte velada (filter tem suporte no Safari 11 e no Chrome 64). */
+export const ESTILO_VELADO = { filter: "blur(14px)", WebkitFilter: "blur(14px)", transform: "scale(1.06)" } as const;
 
 type Props = {
   cards: CardDaDirecao[];
@@ -96,7 +152,7 @@ export function ProgressoDaLamina({ ordem, andamento }: { ordem: number; andamen
   return (
     <span
       role="status"
-      aria-label={`Lâmina ${ordem}: ${ROTULO_DA_ETAPA[andamento.etapa]}`}
+      aria-label={`Lâmina ${ordem}: ${andamento.detalhe && andamento.etapa === "corrigindo" ? textoDoAndamento(andamento).toLocaleLowerCase("pt-BR") : ROTULO_DA_ETAPA[andamento.etapa]}`}
       data-progresso-da-lamina={ordem}
       className="inline-flex h-7 min-w-0 max-w-full items-center rounded-full bg-secondary px-2.5 text-[11px]"
     >
@@ -292,7 +348,12 @@ function Lamina({
           className={`relative block w-full overflow-hidden bg-card text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${cantos} ${ativo ? (colado ? "ring-[3px] ring-inset ring-primary" : "border-primary ring-2 ring-primary") : colado ? "" : "border-border hover:border-primary/60"}`}
         >
           {versao ? (
-            <ImagemDaMesa caminho={versao.storage_path} alt={`Lâmina ${card.ordem}`} className={`absolute inset-0 h-full w-full transition-opacity ${trabalhando ? "opacity-50" : ""}`} />
+            <>
+              <div className="absolute inset-0" style={trabalhando ? ESTILO_VELADO : undefined}>
+                <ImagemDaMesa caminho={versao.storage_path} alt={`Lâmina ${card.ordem}`} className="h-full w-full" />
+              </div>
+              {trabalhando && andamento && <VeuDaLamina andamento={andamento} compacto />}
+            </>
           ) : (
             <Esboco card={card} total={total} largura={largura} />
           )}

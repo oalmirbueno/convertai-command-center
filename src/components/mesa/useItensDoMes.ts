@@ -26,6 +26,8 @@ export interface Verificacao {
   identidade?: number | { score?: number; nota?: number | null; escala_max?: number; nivel?: string | null; motivo?: string } | { erro: string } | null;
   erro?: string;
   conferido_em?: string;
+  /** Decisão da autocorreção gravada pela conferência (estudio-arte/autocorrecao.ts). */
+  autocorrecao?: { precisa: boolean; motivos: string[]; instrucao: string | null } | null;
 }
 
 export interface CardGerado {
@@ -35,6 +37,8 @@ export interface CardGerado {
   origem?: "gerar" | "ajuste";
   instrucao?: string | null;
   verificacao?: Verificacao | null;
+  /** Versão feita pela autocorreção (corrigir_card): a rodada e os motivos. */
+  autocorrecao?: { rodada: number; motivos: string[]; pedido_da_equipe?: boolean } | null;
   criado_em?: string;
 }
 

@@ -13,6 +13,7 @@ import {
   chavesAds,
   CTAS_DO_META,
   formatoDe,
+  LIMITE_DESCRICAO,
   LIMITE_TEXTO_VISIVEL,
   LIMITE_TITULO,
   mudarCriativo,
@@ -22,13 +23,15 @@ import {
   type CriativoAds,
 } from "./adsApi";
 import { Andamento, useAndamento } from "./Comuns";
+import PacoteDaCopy from "./PacoteDaCopy";
 
 /**
  * A copy do anúncio ao lado da arte: texto principal (o Meta mostra cerca de
- * 125 caracteres antes do "mais"), título até 40, descrição e o CTA do Meta.
- * Grava sozinha ao sair do campo. "Variar copy" pede variações ao
- * estrategista; a escolhida entra no formulário para conferir e gravar. A
- * prévia mostra como o anúncio aparece no feed.
+ * 125 caracteres antes do "mais"), título até 40, descrição até 30 e o CTA
+ * do Meta. Grava sozinha ao sair do campo (sem apagar o pacote gravado junto).
+ * "Variar copy" pede variações rápidas; o pacote completo (PacoteDaCopy) traz
+ * todos os estilos, títulos, descrições, CTAs, ganchos e a orientação ao
+ * gestor, com "Usar" para trazer ao formulário. A prévia mostra o feed.
  */
 
 const limpa = (c: CopyDoAnuncio): CopyDoAnuncio => ({
@@ -96,7 +99,7 @@ export function PreviaDoFeed({ copy, caminho, formato, nome }: { copy: CopyDoAnu
   );
 }
 
-export default function PainelDaCopy({ criativo, caminhoDaArte }: { criativo: CriativoAds; caminhoDaArte: string | null }) {
+export default function PainelDaCopy({ criativo, caminhoDaArte, nome }: { criativo: CriativoAds; caminhoDaArte: string | null; nome?: string }) {
   const { clientId, clientName, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const [copy, setCopy] = useState<CopyDoAnuncio>(limpa(criativo.copy));
@@ -118,7 +121,8 @@ export default function PainelDaCopy({ criativo, caminhoDaArte }: { criativo: Cr
     if (!mudou) return;
     setSalvando(true);
     try {
-      const nova = limpa(copy);
+      // O pacote completo mora na mesma coluna: vai junto, intacto.
+      const nova: CopyDoAnuncio = { ...criativo.copy, ...limpa(copy) };
       await mudarCriativo(criativo.id, { copy: nova });
       queryClient.setQueryData<CriativoAds[]>(chavesAds.criativos(clientId), (l) => (l || []).map((c) => (c.id === criativo.id ? { ...c, copy: nova } : c)));
       if (!silencioso) toast.success("Copy salva");
@@ -166,7 +170,10 @@ export default function PainelDaCopy({ criativo, caminhoDaArte }: { criativo: Cr
           <Input aria-label="Título" className="h-9 text-[13px]" value={titulo} onChange={(e) => campo("titulo", e.target.value)} onBlur={() => void salvar(true)} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Descrição</span>
+          <span className="mb-1 flex items-center text-[11.5px] font-medium text-foreground/80">
+            <span className="flex-1">Descrição</span>
+            <Contador atual={(copy.descricao || "").length} limite={LIMITE_DESCRICAO} rotulo="Descrição" />
+          </span>
           <Input aria-label="Descrição" className="h-9 text-[13px]" value={copy.descricao || ""} onChange={(e) => campo("descricao", e.target.value)} onBlur={() => void salvar(true)} />
         </label>
         <label className="block">
@@ -221,6 +228,15 @@ export default function PainelDaCopy({ criativo, caminhoDaArte }: { criativo: Cr
           )}
         </div>
       </section>
+
+      <PacoteDaCopy
+        criativo={criativo}
+        nome={nome || criativo.nome || "Criativo"}
+        onUsar={(campos) => {
+          setCopy((c) => ({ ...c, ...campos }));
+          toast.info("Texto no formulário", { description: "Confira e salve a copy." });
+        }}
+      />
 
       <section aria-label="Como fica no feed">
         <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Como fica no feed</h3>

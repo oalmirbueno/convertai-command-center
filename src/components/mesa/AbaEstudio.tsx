@@ -14,6 +14,7 @@ import {
   PenLine,
   RefreshCw,
   Send,
+  ShieldCheck,
   Sparkles,
   Square,
   Star,
@@ -70,7 +71,8 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
-import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
+import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
+import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import {
   copiarTexto,
@@ -358,6 +360,8 @@ function DetalheDoItem({
   const [ferramentaGuardada, setFerramenta] = useEstadoGuardado<Ferramenta | "">(`${chave}:ferramenta`, "lamina");
   const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "conjunto");
   const [refsAba, setRefsAba] = useEstadoGuardado<"cliente" | "banco">(`${chave}:refs-aba`, "cliente");
+  // "Corrigir sozinho" (autocorreção antes de mostrar): ligado por padrão, guardado por trabalho na sessão.
+  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho ? trabalho.id : `item:${item.id}`), true);
   const parar = useRef(false);
   const painelRef = useRef<HTMLDivElement>(null);
 
@@ -406,11 +410,11 @@ function DetalheDoItem({
   ];
 
   /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
-  const marcar = (ordem: number, etapa: EtapaDaLamina) =>
+  const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
     setAndamento((a) => {
       const antes = a[ordem];
       const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();
-      return { ...a, [ordem]: { etapa, desde } };
+      return { ...a, [ordem]: { etapa, desde, detalhe } };
     });
   const soltar = (ordem: number) => setAndamento((a) => semOrdem(a, ordem));
 
@@ -425,15 +429,49 @@ function DetalheDoItem({
     }
   };
 
-  /** Conferência depois de gerar ou ajustar; se não estiver no ar, a versão fica "sem conferência". */
-  const conferirDepois = async (trabalhoId: string, ordem: number): Promise<number> => {
-    try {
-      const c = await conferir(trabalhoId, ordem);
-      return custoDaResposta(c) || 0;
-    } catch (e) {
-      if (e instanceof ErroDaMesa && CODIGOS_QUE_NAO_PARAM_A_FILA.indexOf(e.codigo) >= 0) return 0;
-      throw e;
+  /**
+   * Conferência depois de gerar ou ajustar, com a autocorreção antes de
+   * mostrar (docs/mesa-ads/v2/CONTRATO-V2.md): confere; se a conferência achar
+   * erro e "Corrigir sozinho" estiver ligado, corrige (corrigir_card) e confere
+   * de novo, até 2 vezes. A lâmina fica velada até o fim e só então é
+   * liberada. Soma o custo de todas as chamadas. Se a conferência não estiver
+   * no ar, a versão fica "sem conferência".
+   */
+  const conferirDepois = async (trabalhoId: string, ordem: number, comecarCorrigindo: DecisaoDeAutocorrecao | null = null): Promise<number> => {
+    const r = await conferirECorrigir({
+      conferir: () => chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem }),
+      corrigir: (pedidoDaEquipe) =>
+        chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalhoId, ordem, pedido_da_equipe: pedidoDaEquipe || undefined }),
+      corrigirSozinho,
+      comecarCorrigindo,
+      aoMudarEtapa: (etapa, detalhe) => {
+        marcar(ordem, etapa, detalhe);
+        if (etapa === "reconferindo") atualizar();
+      },
+    });
+    soltar(ordem);
+    atualizar();
+    const e = r.falha;
+    if (e && !(e instanceof ErroDaMesa && CODIGOS_QUE_NAO_PARAM_A_FILA.indexOf(e.codigo) >= 0)) {
+      // O custo do que já rodou (conferência e correções) não se perde.
+      avisarErro(e, r.rodadas ? `Lâmina ${ordem} corrigida, mas a conferência não terminou` : `Lâmina ${ordem} pronta, mas a conferência falhou`);
+    } else if (!e && r.autocorrecao && r.autocorrecao.precisa) {
+      toast.warning(
+        r.rodadas ? `Lâmina ${ordem}: corrigida ${r.rodadas === 1 ? "1 vez" : `${r.rodadas} vezes`}, mas ainda com erro` : `Lâmina ${ordem}: a conferência achou erro`,
+        { description: r.autocorrecao.motivos.join(" · ") },
+      );
     }
+    return r.custo_usd;
+  };
+
+  /** "Corrigir de novo": a equipe pede a correção com os motivos da última conferência. */
+  const corrigirDeNovo = async (ordem: number) => {
+    if (!trabalho) return { custo_usd: 0 };
+    const ultima = ultimasVersoes(trabalho.cards || []).get(ordem);
+    const v = ultima && ultima.verificacao;
+    const decisao = v && !v.pendente && v.autocorrecao && v.autocorrecao.precisa ? v.autocorrecao : null;
+    marcar(ordem, decisao ? "corrigindo" : "conferindo");
+    return { custo_usd: await conferirDepois(trabalho.id, ordem, decisao) };
   };
 
   /** Gera uma lâmina. Com erro a lâmina fica livre; com sucesso segue para a conferência. */
@@ -470,6 +508,7 @@ function DetalheDoItem({
     try {
       return await conferirDepois(trabalhoId, ordem);
     } catch (e) {
+      soltar(ordem);
       avisarErro(e, `Lâmina ${ordem} pronta, mas a conferência falhou`);
       return 0;
     }
@@ -896,6 +935,19 @@ function DetalheDoItem({
     </div>
   );
 
+  const chaveCorrigirSozinho = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={corrigirSozinho}
+      onClick={() => setCorrigirSozinho((c) => !c)}
+      className={`mb-1 mr-2 mt-1 inline-flex h-10 shrink-0 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+      title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo ou identidade, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a lâmina."
+    >
+      <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
+    </button>
+  );
+
   const acaoPrincipal = (
     <div className="mb-1 mt-1 flex shrink-0 items-center">
       {emLote ? (
@@ -917,7 +969,9 @@ function DetalheDoItem({
           titulo={`Gerar ${filaDeGeracao.length} lâmina(s)`}
           descricao={infinito
             ? comNotaDoFundo("Carrossel contínuo: uma lâmina de cada vez, porque cada uma continua a anterior. A conferência roda logo depois de cada uma.", ordensDaFila)
-            : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
+            : corrigirSozinho
+              ? "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma e, se achar erro, o estúdio corrige sozinho (até 2 vezes) antes de mostrar. Cada correção custa um ajuste a mais."
+              : "Até 3 lâminas ao mesmo tempo. A conferência de ortografia e identidade roda logo depois de cada uma."}
           fecharAoConfirmar
           variant={semImagem.length ? "default" : "outline"}
           className="h-10 gap-1 px-3 text-[12.5px]"
@@ -961,6 +1015,7 @@ function DetalheDoItem({
           <>
             {seletorDeQualidade}
             {seletorDeGerador}
+            {chaveCorrigirSozinho}
             {acaoPrincipal}
           </>
         )}
@@ -1038,6 +1093,7 @@ function DetalheDoItem({
       areas={areas}
       onAreas={setAreas}
       ocupado={laminaOcupada(cardSelecionado.ordem)}
+      andamento={andamento[cardSelecionado.ordem]}
       onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
       soPelaLargura={!colunas}
     />
@@ -1111,7 +1167,7 @@ function DetalheDoItem({
       direcao={cardSelecionado}
       versoes={(trabalho.cards || []).filter((v) => v.ordem === cardSelecionado.ordem)}
       ocupado={laminaOcupada(cardSelecionado.ordem) || entregue}
-      conferindo={!!andamento[cardSelecionado.ordem] && andamento[cardSelecionado.ordem].etapa === "conferindo"}
+      conferindo={estaConferindo(andamento[cardSelecionado.ordem])}
       painel={painel}
       onPainel={setPainel}
       versaoVista={versaoVista}
@@ -1125,6 +1181,8 @@ function DetalheDoItem({
       onGerar={() => gerarEConferir(cardSelecionado.ordem)}
       onAjustar={(instrucao, opcoes) => ajustar(cardSelecionado.ordem, instrucao, opcoes)}
       onConferir={() => conferir(trabalho.id, cardSelecionado.ordem)}
+      onCorrigir={() => corrigirDeNovo(cardSelecionado.ordem)}
+      partesCorrigir={() => partesAjustar().concat(partesConferir())}
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
     />

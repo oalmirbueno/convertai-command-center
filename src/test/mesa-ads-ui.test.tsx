@@ -104,7 +104,7 @@ const valorDaMesa = (): MesaValor => ({
 
 function montar(filho: any) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa() }, filho))));
+  return render(h(QueryClientProvider, { client: qc }, h(TooltipProvider, null, h(MesaProvider, { valor: valorDaMesa(), children: filho }))));
 }
 
 const chamadasDe = (acao: string) =>
@@ -129,13 +129,13 @@ const PLANO: PlanoAds = {
       metrica: "Conversas qualificadas",
       janela_dias: 7,
       formatos: ["feed_4x5", "stories_9x16"],
-      jev: { clareza: 8, relevancia: 7, prova: 6, risco_politica: 2 },
+      jev: { clareza: 8, relevancia: 7, prova: 6, risco_politica: 9 },
     },
     {
       id: "a2",
       nome: "Prova do resultado",
       formatos: ["quadrado_1x1"],
-      jev: { clareza: 0.9, relevancia: 0.8, prova: 0.5, risco_politica: 0.1 },
+      jev: { clareza: 0.9, relevancia: 0.8, prova: 0.5, risco_politica: 0.9 },
     },
   ],
   estrutura: {},
@@ -187,7 +187,7 @@ describe("rota e casca", () => {
     expect(central.indexOf("Mesa Ads")).toBeGreaterThan(central.indexOf("navigate(`/mesa?client=${client.id}&aba=estudio`)"));
   });
 
-  it("a página mostra o seletor de cliente, o saldo e as cinco etapas; trocar de etapa muda o endereço", async () => {
+  it("a página mostra o seletor de cliente, o saldo e as seis etapas (Conta antes de Resultados); trocar de etapa muda o endereço", async () => {
     render(
       h(
         QueryClientProvider,
@@ -198,8 +198,11 @@ describe("rota e casca", () => {
     expect(screen.getByRole("heading", { name: "Mesa Ads" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Ads" });
     const botoes = within(nav).getAllByRole("button");
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Oferta", "2Referências", "3Plano de teste", "4Estúdio Ads", "5Resultados"]);
-    expect(ETAPAS_DA_MESA_ADS.map((e) => e.valor)).toEqual(["oferta", "referencias", "plano", "estudio", "resultados"]);
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Oferta", "2Referências", "3Plano de teste", "4Estúdio Ads", "5Conta", "6Resultados"]);
+    expect(ETAPAS_DA_MESA_ADS.map((e) => e.valor)).toEqual(["oferta", "referencias", "plano", "estudio", "conta", "resultados"]);
+    // No celular, as etapas quebram em duas linhas de três (sem rolagem lateral).
+    expect(nav.className).toContain("grid-cols-3");
+    expect(nav.className).toContain("sm:grid-cols-6");
     expect(botoes[0].getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("combobox", { name: /Cliente: Clínica Sintética/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Saldo e gasto do mês" })).toBeTruthy();
@@ -330,7 +333,9 @@ describe("etapa 3, plano de teste", () => {
     montar(h(AbaPlano, { planoId: PLANO.id, onPlano: vi.fn(), onProduzido }));
     expect(await screen.findByText("A dor da espera")).toBeTruthy();
     expect(screen.getByText(/Acreditamos que mostrar a agenda cumprida/)).toBeTruthy();
-    expect(screen.getAllByRole("meter", { name: "Risco de política" })).toHaveLength(2);
+    // Política no Jev: 0 viola, 10 sem risco. A tela mostra "Política", nunca "risco".
+    expect(screen.getAllByRole("meter", { name: "Política" })).toHaveLength(2);
+    expect(screen.queryAllByRole("meter", { name: /Risco/ })).toHaveLength(0);
     // Notas em 0 a 1 viram 0 a 10; em 0 a 10 ficam.
     expect(screen.getAllByRole("meter", { name: "Clareza" }).map((m) => m.getAttribute("aria-valuenow"))).toEqual(["8", "9"]);
 

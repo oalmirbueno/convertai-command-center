@@ -1,0 +1,201 @@
+{
+ "estilos": [
+  {
+   "id": "oferta_direta",
+   "nome": "Oferta direta",
+   "risco": "baixo"
+  },
+  {
+   "id": "tipografia_gigante",
+   "nome": "Manchete gigante",
+   "risco": "baixo"
+  },
+  {
+   "id": "close_extremo",
+   "nome": "Close extremo",
+   "risco": "baixo"
+  },
+  {
+   "id": "objeto_inesperado",
+   "nome": "Objeto inesperado",
+   "risco": "baixo"
+  },
+  {
+   "id": "metafora_visual",
+   "nome": "Metáfora literalizada",
+   "risco": "baixo"
+  },
+  {
+   "id": "comparacao_lado_a_lado",
+   "nome": "Comparação lado a lado",
+   "risco": "medio"
+  },
+  {
+   "id": "nos_contra_eles",
+   "nome": "Nós contra o jeito comum (tabela)",
+   "risco": "medio"
+  },
+  {
+   "id": "depoimento_citacao",
+   "nome": "Depoimento em citação",
+   "risco": "medio"
+  },
+  {
+   "id": "lista_checklist",
+   "nome": "Lista ou checklist",
+   "risco": "baixo"
+  },
+  {
+   "id": "ugc_nativo",
+   "nome": "Foto nativa de celular",
+   "risco": "baixo"
+  },
+  {
+   "id": "bastidor_real",
+   "nome": "Bastidor real",
+   "risco": "baixo"
+  },
+  {
+   "id": "demonstracao_etapas",
+   "nome": "Demonstração em etapas",
+   "risco": "baixo"
+  },
+  {
+   "id": "antes_depois",
+   "nome": "Antes e depois",
+   "risco": "alto"
+  },
+  {
+   "id": "moldura_de_app",
+   "nome": "Moldura de app (nota, conversa, post)",
+   "risco": "alto"
+  },
+  {
+   "id": "objecao_na_manchete",
+   "nome": "Objeção na manchete",
+   "risco": "baixo"
+  },
+  {
+   "id": "numero_em_destaque",
+   "nome": "Número em destaque",
+   "risco": "medio"
+  },
+  {
+   "id": "produto_heroi_cor",
+   "nome": "Produto herói em cor chapada",
+   "risco": "baixo"
+  },
+  {
+   "id": "editorial_manchete",
+   "nome": "Manchete editorial",
+   "risco": "medio"
+  },
+  {
+   "id": "humor_situacao",
+   "nome": "Humor com a situação",
+   "risco": "medio"
+  },
+  {
+   "id": "local_e_bairro",
+   "nome": "Local e bairro",
+   "risco": "baixo"
+  },
+  {
+   "id": "pilha_de_oferta",
+   "nome": "Pilha de oferta",
+   "risco": "medio"
+  },
+  {
+   "id": "rosto_e_olhar",
+   "nome": "Rosto e olhar",
+   "risco": "baixo"
+  }
+ ],
+ "nichos": [
+  {
+   "id": "estetica",
+   "nome": "Estética (clínicas e procedimentos estéticos)"
+  },
+  {
+   "id": "odontologia",
+   "nome": "Odontologia"
+  },
+  {
+   "id": "advocacia",
+   "nome": "Advocacia"
+  },
+  {
+   "id": "imobiliaria",
+   "nome": "Imobiliária e lançamentos"
+  },
+  {
+   "id": "restaurante_delivery",
+   "nome": "Restaurante e delivery"
+  },
+  {
+   "id": "academia",
+   "nome": "Academia e estúdios de treino"
+  },
+  {
+   "id": "moda",
+   "nome": "Moda e vestuário"
+  },
+  {
+   "id": "pet",
+   "nome": "Pet shop e veterinária"
+  },
+  {
+   "id": "automotivo_oficina",
+   "nome": "Automotivo e oficina"
+  },
+  {
+   "id": "cursos_infoproduto",
+   "nome": "Cursos e infoprodutos"
+  },
+  {
+   "id": "saude_clinica",
+   "nome": "Saúde e clínicas (médicas, fisioterapia, psicologia, exames)"
+  },
+  {
+   "id": "paisagismo_jardim",
+   "nome": "Paisagismo e jardinagem"
+  },
+  {
+   "id": "informatica_assistencia",
+   "nome": "Informática e assistência técnica"
+  },
+  {
+   "id": "ecommerce_geral",
+   "nome": "E-commerce geral"
+  },
+  {
+   "id": "eventos_festas",
+   "nome": "Eventos e festas (buffets, decoração, ingressos)"
+  },
+  {
+   "id": "b2b_servicos",
+   "nome": "B2B e serviços para empresas"
+  },
+  {
+   "id": "games_keys",
+   "nome": "Games e keys digitais"
+  },
+  {
+   "id": "beleza_salao",
+   "nome": "Beleza e salão (cabelo, unhas, sobrancelha, barbearia)"
+  },
+  {
+   "id": "construcao_reforma",
+   "nome": "Construção e reforma"
+  }
+ ],
+ "objetivos": [
+  "vendas",
+  "mensagens",
+  "leads",
+  "seguidores",
+  "agendamento",
+  "trafego",
+  "reconhecimento"
+ ]
+}

@@ -159,6 +159,8 @@
         "npm:@radix-ui/react-tooltip@^1.2.7",
         "npm:@supabase/supabase-js@^2.97.0",
         "npm:@tailwindcss/typography@~0.5.16",
+        "npm:@tanstack/query-sync-storage-persister@5.83.0",
+        "npm:@tanstack/react-query-persist-client@5.83.0",
         "npm:@tanstack/react-query@^5.83.0",
         "npm:@testing-library/jest-dom@^6.6.0",
         "npm:@testing-library/react@16",

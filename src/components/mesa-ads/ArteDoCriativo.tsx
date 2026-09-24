@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ChevronLeft, ChevronRight, ImagePlus, Maximize2, PenLine, RefreshCw, ScanLine, Wand2 } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, ImagePlus, Maximize2, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,15 @@ import { Ampliar } from "@/components/mesa/Ampliar";
 import CardDoEstudio, { type OpcoesDoAjuste, type PainelDaLamina } from "@/components/mesa/CardDoEstudio";
 import EstudioFotos from "@/components/mesa/EstudioFotos";
 import EstudioLaminaGrande from "@/components/mesa/EstudioLaminaGrande";
-import PranchetaDoEstudio, { type AndamentoDaLamina, type EtapaDaLamina } from "@/components/mesa/PranchetaDoEstudio";
+import PranchetaDoEstudio, {
+  ESTILO_VELADO,
+  estaConferindo,
+  VeuDaLamina,
+  type AndamentoDaLamina,
+  type EtapaDaLamina,
+} from "@/components/mesa/PranchetaDoEstudio";
+import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
+import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "@/components/mesa/ReferenciasDoEstudio";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
@@ -39,6 +47,11 @@ import { formatoDe, ZONA_SEGURA, type CriativoAds } from "./adsApi";
  * referências usam os componentes do Estúdio sem mudança. A prévia respeita
  * a proporção do formato (4:5, 1:1, 9:16); nos stories, a zona segura
  * aparece como guia opcional (14% em cima, 20% embaixo), sem tocar na arte.
+ *
+ * Autocorreção antes de mostrar (docs/mesa-ads/v2/CONTRATO-V2.md): depois de
+ * gerar ou ajustar, confere; se a conferência achar erro (texto, logo,
+ * identidade, política, clareza) e "Corrigir sozinho" estiver ligado, corrige
+ * e confere de novo (até 2 vezes). A arte fica velada até o fim do ciclo.
  */
 
 const QUALIDADES: { valor: Qualidade; rotulo: string }[] = [
@@ -91,6 +104,7 @@ function PreviaNoFormato({
   areas,
   onAreas,
   ocupado,
+  andamento,
   zonaSegura,
   onAmpliar,
 }: {
@@ -103,6 +117,7 @@ function PreviaNoFormato({
   areas: Area[];
   onAreas: (a: Area[]) => void;
   ocupado: boolean;
+  andamento?: AndamentoDaLamina;
   zonaSegura: boolean;
   onAmpliar: () => void;
 }) {
@@ -112,6 +127,7 @@ function PreviaNoFormato({
   const vista = ordenadas.find((v) => v.versao === versaoVista) || ultima;
   const posicao = vista ? ordenadas.indexOf(vista) : -1;
   const larguraMaxima = f.valor === "stories_9x16" ? 340 : 520;
+  const velada = !!andamento && andamento.etapa !== "fila";
   return (
     <div className="flex min-w-0 flex-col">
       <div className="mb-2 flex h-8 min-w-0 items-center">
@@ -145,8 +161,10 @@ function PreviaNoFormato({
             {desenhandoAreas && ultima ? (
               <SeletorDeAreas caminho={ultima.storage_path} areas={areas} onMudar={onAreas} disabled={ocupado} />
             ) : vista ? (
-              <button type="button" onDoubleClick={onAmpliar} className="block h-full w-full cursor-zoom-in" aria-label="Duplo clique para ver grande">
-                <ImagemDaMesa caminho={vista.storage_path} alt={`Arte, versão ${vista.versao}`} className={`h-full w-full ${ocupado ? "opacity-50" : ""}`} />
+              <button type="button" onDoubleClick={velada ? undefined : onAmpliar} className="block h-full w-full cursor-zoom-in overflow-hidden" aria-label="Duplo clique para ver grande">
+                <div className="h-full w-full" style={velada ? ESTILO_VELADO : undefined}>
+                  <ImagemDaMesa caminho={vista.storage_path} alt={`Arte, versão ${vista.versao}`} className={`h-full w-full ${ocupado && !velada ? "opacity-50" : ""}`} />
+                </div>
               </button>
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center">
@@ -154,7 +172,8 @@ function PreviaNoFormato({
                 {card.texto_exato && <p className="mt-2 line-clamp-4 text-[11.5px] leading-snug text-muted-foreground">{card.texto_exato}</p>}
               </div>
             )}
-            {zonaSegura && !desenhandoAreas && <GuiaDaZonaSegura />}
+            {zonaSegura && !desenhandoAreas && !velada && <GuiaDaZonaSegura />}
+            {velada && andamento && !desenhandoAreas && <VeuDaLamina andamento={andamento} />}
           </div>
         </div>
       </div>
@@ -187,6 +206,8 @@ export default function ArteDoCriativo({
   const [refsAlvo, setRefsAlvo] = useState<AlvoDasReferencias>("conjunto");
   const [refsAba, setRefsAba] = useState<"cliente" | "banco">("cliente");
   const [zonaSegura, setZonaSegura] = useState(true);
+  // "Corrigir sozinho": ligado por padrão, guardado por trabalho na sessão.
+  const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho.id), true);
 
   useEffect(() => {
     setModeloImagem(trabalho.modelo_imagem_id || (padraoPara(catalogo, "imagem") || { id: "" }).id);
@@ -209,11 +230,11 @@ export default function ArteDoCriativo({
   const ultimaDoCard = card ? ultimas.get(card.ordem) : undefined;
   useEffect(() => { setVersaoVista(null); setAreas([]); }, [selecionado, ultimaDoCard ? ultimaDoCard.versao : 0]);
 
-  const marcar = (ordem: number, etapa: EtapaDaLamina) =>
+  const marcar = (ordem: number, etapa: EtapaDaLamina, detalhe?: string) =>
     setAndamento((a) => {
       const antes = a[ordem];
       const desde = antes && antes.etapa !== "fila" && etapa !== "fila" ? antes.desde : Date.now();
-      return { ...a, [ordem]: { etapa, desde } };
+      return { ...a, [ordem]: { etapa, desde, detalhe } };
     });
   const soltar = (ordem: number) =>
     setAndamento((a) => {
@@ -230,24 +251,60 @@ export default function ArteDoCriativo({
     else onAtualizar();
   };
 
+  const chamarConferir = (ordem: number) =>
+    chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalho.id, ordem });
+  const chamarCorrigir = (ordem: number, pedidoDaEquipe: boolean) =>
+    chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
+
+  /** Botão "Conferir" da ferramenta Arte: só a conferência, sem corrigir. */
   const conferir = async (ordem: number) => {
     marcar(ordem, "conferindo");
     try {
-      return await chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalho.id, ordem });
+      return await chamarConferir(ordem);
     } finally {
       soltar(ordem);
       onAtualizar();
     }
   };
 
-  /** Conferência depois da arte já cobrada: se falhar, avisa sem derrubar a geração. */
-  const conferirSemDerrubar = async (ordem: number): Promise<number> => {
-    try {
-      return custoDaResposta(await conferir(ordem)) || 0;
-    } catch (e) {
-      if (!(e instanceof ErroDaMesa && CODIGOS_SEM_CONFERENCIA.indexOf(e.codigo) >= 0)) avisarErro(e, "Arte pronta, mas a conferência falhou");
-      return 0;
+  /**
+   * Conferência depois da arte já cobrada, com a autocorreção: confere e, se
+   * precisar e "Corrigir sozinho" estiver ligado, corrige e confere de novo
+   * (até 2 vezes). A arte fica velada até aqui. Se falhar, avisa sem derrubar
+   * a geração. Devolve o custo de todas as chamadas.
+   */
+  const conferirSemDerrubar = async (ordem: number, comecarCorrigindo: DecisaoDeAutocorrecao | null = null): Promise<number> => {
+    const r = await conferirECorrigir({
+      conferir: () => chamarConferir(ordem),
+      corrigir: (pedidoDaEquipe) => chamarCorrigir(ordem, pedidoDaEquipe),
+      corrigirSozinho,
+      comecarCorrigindo,
+      aoMudarEtapa: (etapa, detalhe) => {
+        marcar(ordem, etapa, detalhe);
+        if (etapa === "reconferindo") onAtualizar();
+      },
+    });
+    soltar(ordem);
+    onAtualizar();
+    const e = r.falha;
+    if (e && !(e instanceof ErroDaMesa && CODIGOS_SEM_CONFERENCIA.indexOf(e.codigo) >= 0)) {
+      avisarErro(e, r.rodadas ? "A arte foi corrigida, mas a conferência não terminou" : "Arte pronta, mas a conferência falhou");
+    } else if (!e && r.autocorrecao && r.autocorrecao.precisa) {
+      toast.warning(r.rodadas ? `Corrigida ${r.rodadas === 1 ? "1 vez" : `${r.rodadas} vezes`}, mas ainda com erro` : "A conferência achou erro", {
+        description: r.autocorrecao.motivos.join(" · "),
+      });
     }
+    return r.custo_usd;
+  };
+
+  /** "Corrigir de novo": a equipe pede a correção com os motivos da última conferência. */
+  const corrigirDeNovo = async (ordem: number) => {
+    const ultima = ultimas.get(ordem);
+    const v = ultima && ultima.verificacao;
+    const decisao = v && !v.pendente && v.autocorrecao ? v.autocorrecao : null;
+    if (!decisao || !decisao.precisa) return { custo_usd: await conferirSemDerrubar(ordem) };
+    marcar(ordem, "corrigindo");
+    return { custo_usd: await conferirSemDerrubar(ordem, decisao) };
   };
 
   const gerarEConferir = async (ordem: number) => {
@@ -393,11 +450,23 @@ export default function ArteDoCriativo({
             <ScanLine className="mr-1 h-3.5 w-3.5" /> Zona segura
           </button>
         )}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={corrigirSozinho}
+          onClick={() => setCorrigirSozinho((c) => !c)}
+          className={`mb-1 mr-2 mt-1 inline-flex h-9 items-center rounded-lg border px-2.5 text-[12px] ${corrigirSozinho ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+          title="Depois de gerar ou ajustar, se a conferência achar erro de texto, logo, identidade, política ou clareza, o estúdio corrige sozinho (até 2 vezes) antes de mostrar a arte."
+        >
+          <ShieldCheck className="mr-1 h-3.5 w-3.5" /> Corrigir sozinho{corrigirSozinho ? "" : " (desligado)"}
+        </button>
         <span className="mb-1 ml-auto mt-1">
           <BotaoComCusto
             rotulo={<>{semImagem.length ? <Wand2 className="mr-1 h-3.5 w-3.5" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />}{semImagem.length ? (cards.length > 1 ? `Gerar (${semImagem.length})` : "Gerar arte") : cards.length > 1 ? "Refazer todas" : "Refazer arte"}</>}
             titulo={semImagem.length ? "Gerar a arte" : "Refazer a arte"}
-            descricao="Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois."
+            descricao={corrigirSozinho
+              ? "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois e, se achar erro, o estúdio corrige sozinho (até 2 vezes) antes de mostrar. Cada correção custa um ajuste a mais."
+              : "Gera no tamanho do formato. A conferência de texto, identidade, clareza e política roda logo depois."}
             variant={semImagem.length ? "default" : "outline"}
             className="h-9"
             disabled={algoGerando}
@@ -442,6 +511,7 @@ export default function ArteDoCriativo({
               areas={areas}
               onAreas={setAreas}
               ocupado={ocupada(card.ordem)}
+              andamento={andamento[card.ordem]}
               onAmpliar={() => ampliar(card.ordem)}
               soPelaLargura
             />
@@ -456,6 +526,7 @@ export default function ArteDoCriativo({
               areas={areas}
               onAreas={setAreas}
               ocupado={ocupada(card.ordem)}
+              andamento={andamento[card.ordem]}
               zonaSegura={f.valor === "stories_9x16" && zonaSegura}
               onAmpliar={() => ampliar(card.ordem)}
             />
@@ -488,7 +559,7 @@ export default function ArteDoCriativo({
                 direcao={card}
                 versoes={versoesDoCard}
                 ocupado={ocupada(card.ordem)}
-                conferindo={!!andamento[card.ordem] && andamento[card.ordem].etapa === "conferindo"}
+                conferindo={estaConferindo(andamento[card.ordem])}
                 painel={painel}
                 onPainel={setPainel}
                 versaoVista={versaoVista}
@@ -501,6 +572,8 @@ export default function ArteDoCriativo({
                 onGerar={() => gerarEConferir(card.ordem)}
                 onAjustar={(instrucao, opcoes) => ajustar(card.ordem, instrucao, opcoes)}
                 onConferir={() => conferir(card.ordem)}
+                onCorrigir={() => corrigirDeNovo(card.ordem)}
+                partesCorrigir={() => partesAjustar().concat(partesConferir())}
                 onConfigurar={(c) => configurar({ card: { ordem: card.ordem, ...c } })}
                 onConcluido={onAtualizar}
               />

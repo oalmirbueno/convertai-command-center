@@ -43,7 +43,22 @@ const ACOES = {
   aprendizado_registrar: "aprendizadoRegistrar",
 };
 
-const dia = (d: string, o: Partial<Diaria> = {}): Diaria => ({
+/** Ações da v2 (docs/mesa-ads/v2/CONTRATO-V2.md). */
+const ACOES_V2 = {
+  oferta_conversar: "ofertaConversar",
+  oferta_salvar: "ofertaSalvar",
+  oferta_listar: "ofertaListar",
+  conta_ao_vivo: "contaAoVivo",
+  conta_sincronizar: "contaSincronizar",
+  conta_analisar: "contaAnalisar",
+  referencia_abrir: "referenciaAbrir",
+  referencia_importar_url: "referenciaImportarUrl",
+  biblioteca_do_nicho: "bibliotecaDoNicho",
+  copy_pacote: "copyPacote",
+  pacote_enviar: "pacoteEnviar",
+};
+
+const dia =(d: string, o: Partial<Diaria> = {}): Diaria => ({
   ad_id: "1",
   day: d,
   spend: 10,
@@ -62,8 +77,8 @@ describe("acesso", () => {
     expect(acesso).toContain("if (data !== true) throw new ErroHttp(403");
     expect(corpoDe(fonte, "identificar")).toContain('servico.rpc("is_staff"');
   });
-  it("toda ação passa por exigirAcessoAoCliente", () => {
-    for (const nome of Object.values(ACOES)) {
+  it("toda ação passa por exigirAcessoAoCliente (as dez do SPEC e as da v2)", () => {
+    for (const nome of [...Object.values(ACOES), ...Object.values(ACOES_V2)]) {
       expect(corpoDe(fonte, nome), nome).toContain("await exigirAcessoAoCliente(chamador,");
     }
   });
@@ -78,8 +93,8 @@ describe("acesso", () => {
 });
 
 describe("mapa de ações", () => {
-  it("tem as dez ações do SPEC", () => {
-    for (const [acao, nome] of Object.entries(ACOES)) {
+  it("tem as dez ações do SPEC e as onze da v2", () => {
+    for (const [acao, nome] of Object.entries({ ...ACOES, ...ACOES_V2 })) {
       const linha = acao === nome ? `  ${acao},` : `  ${acao}: ${nome},`;
       expect(fonte).toContain(linha);
     }
@@ -97,8 +112,11 @@ describe("honestidade", () => {
   it("toda chamada de texto usa a tarefa ads e o sistema do estrategista (ou o do leitor)", () => {
     expect(fonte).toContain('const TAREFA = "ads" as Tarefa;');
     expect(fonte).toContain('const AGENTE = "estrategista_ads" as Agente;');
+    // v2: oferta, conta, pacote e nicho usam o MESMO sistema; o conhecimento
+    // de oferta, agressivo, conta e pacote já está em CONHECIMENTO_ESTRATEGISTA_ADS.
+    expect(corpoDe(fonte, "sistemaDoEstrategista")).toContain("function sistemaDoEstrategista(): string");
     const chamadas = fonte.split("await chamarTexto({").slice(1);
-    expect(chamadas.length).toBeGreaterThanOrEqual(7);
+    expect(chamadas.length).toBeGreaterThanOrEqual(14);
     for (const c of chamadas) {
       const trecho = c.slice(0, 400);
       expect(trecho).toContain("tarefa: TAREFA,");

@@ -83,11 +83,41 @@ function SelosDaConferencia({ v }: { v: Verificacao }) {
   );
 }
 
+/**
+ * A autocorreção não resolveu (ou a chave "Corrigir sozinho" está desligada):
+ * os motivos ficam à vista, com o botão "Corrigir de novo".
+ */
+function AindaComErro({ motivos, acaoCorrigir }: { motivos: string[]; acaoCorrigir: ReactNode }) {
+  return (
+    <div className="border-t border-border px-2.5 py-2" data-ainda-com-erro="">
+      <p className="text-[11.5px] font-medium text-destructive">Ainda com erro</p>
+      <ul className="mt-1 space-y-0.5 text-[11.5px] leading-snug text-foreground/90">
+        {motivos.map((m, i) => (
+          <li key={i} className="[overflow-wrap:anywhere]">{m}</li>
+        ))}
+      </ul>
+      {acaoCorrigir && <div className="mt-2">{acaoCorrigir}</div>}
+    </div>
+  );
+}
+
 /** Conferência compacta: uma linha de selos; texto lido e diferenças só aberta. */
-function Conferencia({ versao, conferindo, acaoConferir }: { versao: CardGerado; conferindo: boolean; acaoConferir: ReactNode }) {
+function Conferencia({
+  versao,
+  conferindo,
+  acaoConferir,
+  acaoCorrigir = null,
+}: {
+  versao: CardGerado;
+  conferindo: boolean;
+  acaoConferir: ReactNode;
+  /** Botão "Corrigir de novo" (só na versão mais recente). */
+  acaoCorrigir?: ReactNode;
+}) {
   const [aberta, setAberta] = useState(false);
   const v = versao.verificacao || null;
   const pendente = !v || v.pendente;
+  const decisao = v && !v.pendente && v.autocorrecao && v.autocorrecao.precisa ? v.autocorrecao : null;
 
   if (pendente) {
     return (
@@ -113,6 +143,7 @@ function Conferencia({ versao, conferindo, acaoConferir }: { versao: CardGerado;
         <span className="flex min-w-0 flex-1 overflow-hidden">{v && <SelosDaConferencia v={v} />}</span>
         <ChevronDown className={`ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform ${aberta ? "rotate-180" : ""}`} />
       </button>
+      {decisao && !conferindo && <AindaComErro motivos={decisao.motivos} acaoCorrigir={acaoCorrigir} />}
       {aberta && v && (
         <div className="space-y-2 border-t border-border px-2.5 pb-2.5 pt-2 text-[12px]">
           <div className="flex flex-wrap">{<SelosDaConferencia v={v} />}</div>
@@ -189,6 +220,8 @@ export default function CardDoEstudio({
   onGerar,
   onAjustar,
   onConferir,
+  onCorrigir,
+  partesCorrigir,
   onConfigurar,
   onConcluido,
 }: {
@@ -215,6 +248,9 @@ export default function CardDoEstudio({
   onGerar: () => Promise<any>;
   onAjustar: (instrucao: string, opcoes?: OpcoesDoAjuste) => Promise<any>;
   onConferir: () => Promise<any>;
+  /** "Corrigir de novo": a autocorreção a pedido da equipe (corrigir_card + conferir). */
+  onCorrigir?: () => Promise<any>;
+  partesCorrigir?: () => ParteDaEstimativa[];
   /** Grava na lâmina sem custo (estudio-arte "configurar"). */
   onConfigurar: (card: { imagens_ids?: string[]; texto_exato?: string }) => Promise<void>;
   onConcluido: () => void;
@@ -309,6 +345,21 @@ export default function CardDoEstudio({
     />
   ) : null;
 
+  const acaoCorrigir = onCorrigir && vista && vista.versao === ultima?.versao ? (
+    <BotaoDaLamina
+      emAndamento={ocupado}
+      rotulo={<><Wand2 className="mr-1 h-3 w-3" /> Corrigir de novo</>}
+      titulo={`Corrigir a lâmina ${direcao.ordem}`}
+      descricao="O estúdio edita a arte atual com os motivos da conferência (mesmo texto exato) e confere de novo antes de mostrar."
+      variant="outline"
+      className="h-7 shrink-0 px-2 text-[11px]"
+      disabled={ocupado}
+      partes={partesCorrigir || partesAjustar}
+      executar={onCorrigir}
+      aoConcluir={onConcluido}
+    />
+  ) : null;
+
   return (
     <div className="min-w-0 space-y-4">
       {/* Cabeçalho: qual lâmina e a ação principal */}
@@ -336,7 +387,7 @@ export default function CardDoEstudio({
         />
       </div>
 
-      {vista && <Conferencia versao={vista} conferindo={conferindo && vista.versao === ultima?.versao} acaoConferir={acaoConferir} />}
+      {vista && <Conferencia versao={vista} conferindo={conferindo && vista.versao === ultima?.versao} acaoConferir={acaoConferir} acaoCorrigir={acaoCorrigir} />}
 
       {/* Texto exato: a conferência compara a arte com ele */}
       <section>

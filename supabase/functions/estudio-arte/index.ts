@@ -17,10 +17,21 @@
  * - conferir_card { trabalho_id, ordem, versao? }: confere uma versao (a atual
  *   quando versao nao vem): ortografia pela leitura do texto no recorte 4:5 e
  *   identidade pelo Jev (Score). A tela chama logo depois de gerar ou ajustar;
- *   separado para cada chamada caber no tempo da funcao.
+ *   separado para cada chamada caber no tempo da funcao. Devolve tambem
+ *   `autocorrecao` ({ precisa, motivos, instrucao }, de autocorrecao.ts), que
+ *   fica gravada na verificacao da versao.
  * - ajustar_card { trabalho_id, ordem, instrucao }: o diretor transforma o
  *   pedido em instrucao de edicao; o gerador edita a versao atual; nova versao
  *   com conferencia pendente; o pedido vai para a memoria do agente.
+ * - corrigir_card { trabalho_id, ordem, pedido_da_equipe? }: autocorrecao antes
+ *   de mostrar (docs/mesa-ads/v2/CONTRATO-V2.md). Le a verificacao da versao
+ *   atual e decide (decidirAutocorrecao); sem nada a corrigir devolve
+ *   { corrigido: false, autocorrecao }; com erro, edita pelo MESMO caminho do
+ *   ajuste com a instrucao da decisao (texto exato fixo, sem memoria) e a
+ *   versao nova leva autocorrecao { rodada, motivos }. No maximo 2 rodadas
+ *   automaticas seguidas por lamina: a terceira volta 409
+ *   limite_de_autocorrecao. pedido_da_equipe (botao "Corrigir de novo") nao
+ *   conta no limite e recomeca a sequencia.
  * - legenda { trabalho_id }: legenda final a partir do item e da direcao.
  * - entregar { trabalho_id }: cria os arquivos em Arquivos pelo mesmo caminho
  *   da tela de Arquivos (bucket files + RPC create_file_record com o JWT de
@@ -83,6 +94,8 @@ import {
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
 import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
+import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
 import {
   ampliar,
   type Area,
@@ -382,7 +395,12 @@ type Verificacao = {
   conferido_em?: string;
   uso_ids?: string[];
   custo_usd?: number;
+  /** Decisão da autocorreção sobre esta conferência (autocorrecao.ts). */
+  autocorrecao?: DecisaoDeAutocorrecao;
 };
+
+/** Marca da versão que nasceu da autocorreção (corrigir_card). */
+type MarcaDeAutocorrecao = { rodada: number; motivos: string[]; pedido_da_equipe?: boolean };
 
 type NotaJev = { nota: number | null; escala_max: number; nivel: string | null; confianca: number | null } | { erro: string };
 
@@ -394,6 +412,8 @@ type VersaoCard = {
   instrucao?: string | null;
   referencias?: string[];
   verificacao: Verificacao | VerificacaoPendente;
+  /** Só nas versões feitas por corrigir_card. */
+  autocorrecao?: MarcaDeAutocorrecao | null;
   custo_usd: number;
   uso_ids: string[];
   criado_em: string;
@@ -1666,6 +1686,9 @@ async function conferirCard(ch: Chamador, corpo: Record<string, unknown>) {
     uso_ids: conf.usos.map((u) => u.usoId),
     custo_usd: custo,
   };
+  // A conferência já diz o que corrigir antes de mostrar (corrigir_card usa a mesma decisão).
+  const autocorrecao = decidirAutocorrecao(verificacao, { ads: ehAds(t), textoExato: card.texto_exato });
+  verificacao.autocorrecao = autocorrecao;
   const caminhoAlvo = alvo.storage_path;
   await mutarTrabalho(t.id, (atual) => ({
     cards: atual.cards.map((c) =>
@@ -1675,7 +1698,7 @@ async function conferirCard(ch: Chamador, corpo: Record<string, unknown>) {
     ),
     custo_usd: arred(num(atual.custo_usd) + custo),
   }));
-  return json({ trabalho_id: t.id, ordem, versao: alvo.versao, verificacao, custo_usd: custo });
+  return json({ trabalho_id: t.id, ordem, versao: alvo.versao, verificacao, autocorrecao, custo_usd: custo });
 }
 
 // ------------------------------------------------------------- gerar card
@@ -2227,13 +2250,20 @@ A imagem anexada é a versão atual da lâmina. A pessoa da equipe pediu um ajus
 - Se \`tipo\` for "fundo", troque SÓ o fundo: texto, logo, pessoas e objetos em primeiro plano ficam idênticos, na mesma posição. Com \`nova_foto_de_fundo\`, o fundo novo é essa foto real do cliente (anexada depois da lâmina).
 Escreva sem travessão.`;
 
-async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
+/**
+ * ajustar_card e o caminho único de edição: a ação da tela chama sem `auto`;
+ * corrigir_card chama com `auto` (a instrução da decisão da autocorreção).
+ * Com `auto`, o texto exato não muda (a correção reescreve o combinado), o
+ * pedido não vai para a memória do diretor e a versão nova leva a marca
+ * autocorrecao { rodada, motivos }.
+ */
+async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: MarcaDeAutocorrecao | null = null) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   const ordem = lerOrdem(corpo);
-  const tipo: "livre" | "fundo" = corpo.tipo === "fundo" ? "fundo" : "livre";
+  const tipo: "livre" | "fundo" = !auto && corpo.tipo === "fundo" ? "fundo" : "livre";
   // Ajuste pontual: só as áreas marcadas na tela mudam (máscara + devolução dos pixels originais).
-  const areas = tipo === "fundo" ? [] : normalizarAreas(corpo.areas);
-  const pedido = texto(corpo.instrucao, 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
+  const areas = tipo === "fundo" || auto ? [] : normalizarAreas(corpo.areas);
+  const pedido = texto(corpo.instrucao, auto ? 4000 : 2000) || (tipo === "fundo" ? "Troque só o fundo, mantendo texto, logo e primeiro plano." : "");
   if (!pedido) throw new ErroEstudio(400, "instrucao_vazia", "Descreva o ajuste que você quer.");
   garantirEditavel(t);
   const card = cardDaDirecao(t, ordem);
@@ -2263,6 +2293,8 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
       conteudo: JSON.stringify({
         pedido,
         tipo,
+        // Correção automática: o texto exato é o combinado e não muda.
+        autocorrecao: auto ? { motivos: auto.motivos, texto_exato_fixo: true } : null,
         areas: areas.length ? areas : null,
         nova_foto_de_fundo: fotoFundo ? resumoDaFoto(fotoFundo) : null,
         lamina: { ordem, funcao: card.funcao, texto_exato: card.texto_exato, composicao: card.composicao, leva_logo: levaLogo(t, ordem) },
@@ -2279,7 +2311,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const a = (dir.json ?? {}) as { instrucao_edicao?: string; texto_exato?: string; memoria?: string };
   const instrucaoEdicao = texto(a.instrucao_edicao, 4000);
   if (!instrucaoEdicao) throw new ErroEstudio(502, "ajuste_vazio", "O diretor não devolveu a instrução de edição. Tente de novo.");
-  const novoTexto = texto(a.texto_exato, 1200) || card.texto_exato;
+  const novoTexto = auto ? card.texto_exato : texto(a.texto_exato, 1200) || card.texto_exato;
   const cardAjustado: CardDirecao = { ...card, texto_exato: novoTexto };
 
   // O texto novo passa a valer na direcao, para a conferencia comparar certo.
@@ -2344,9 +2376,10 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
     ? { ...gerado, png: await devolverOriginalForaDasAreas(atual, gerado.png, abertas, 16), mime: "image/png" }
     : gerado;
 
-  // O que foi pedido vai para a memoria do diretor (origem ajuste).
+  // O que foi pedido vai para a memoria do diretor (origem ajuste). A
+  // autocorreção não é gosto da marca: fica fora da memória.
   const aprendizado = texto(a.memoria, 400);
-  await servico().from("agente_memoria").insert({
+  if (!auto) await servico().from("agente_memoria").insert({
     client_id: base.client_id,
     agente: "diretor_arte",
     tipo: "preferencia",
@@ -2359,9 +2392,10 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   return await gravarVersao(ch, base, cardAjustado, img, {
     origem: "ajuste",
-    instrucao: pedido,
+    instrucao: auto ? `Correção automática ${auto.rodada}: ${auto.motivos.join("; ")}` : pedido,
     custoExtraUsd: dir.custoUsd,
     extra: {
+      ...(auto ? { autocorrecao: auto } : {}),
       instrucao_edicao: instrucaoEdicao,
       versao_editada: atualVersao.versao,
       uso_diretor: dir.usoId,
@@ -2371,6 +2405,47 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>) {
       imagem_id: fotoFundo?.id,
     },
   });
+}
+
+// ------------------------------------------------------------ corrigir card
+
+/**
+ * corrigir_card { trabalho_id, ordem, pedido_da_equipe? }: autocorreção antes
+ * de mostrar. Lê a versão atual e a verificação dela, decide
+ * (decidirAutocorrecao) e, se houver erro, edita pelo mesmo caminho do ajuste
+ * (ajustarCard com `auto`). No máximo LIMITE_DE_AUTOCORRECAO rodadas
+ * automáticas seguidas por lâmina; o pedido da equipe ("Corrigir de novo")
+ * não conta no limite e recomeça a sequência.
+ */
+async function corrigirCard(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const ordem = lerOrdem(corpo);
+  garantirEditavel(t);
+  const card = cardDaDirecao(t, ordem);
+  const atual = versaoAtual(t, ordem);
+  if (!atual) throw new ErroEstudio(409, "card_sem_versao", "Gere este card antes de corrigir.");
+  const autocorrecao = decidirAutocorrecao(atual.verificacao as Verificacao | VerificacaoPendente, {
+    ads: ehAds(t),
+    textoExato: card.texto_exato,
+  });
+  if (!autocorrecao.precisa || !autocorrecao.instrucao) {
+    return json({ trabalho_id: t.id, ordem, versao: atual.versao, corrigido: false, autocorrecao, custo_usd: 0 });
+  }
+  const pedidoDaEquipe = corpo.pedido_da_equipe === true;
+  const seguidas = rodadasSeguidas(t.cards.filter((c) => c.ordem === ordem));
+  if (!pedidoDaEquipe && seguidas >= LIMITE_DE_AUTOCORRECAO) {
+    throw new ErroEstudio(
+      409,
+      "limite_de_autocorrecao",
+      `A lâmina ${ordem} já passou por ${LIMITE_DE_AUTOCORRECAO} correções automáticas seguidas. Veja os motivos e corrija de novo ou ajuste à mão.`,
+      { codigo: "limite_de_autocorrecao", rodadas: seguidas, autocorrecao },
+    );
+  }
+  const rodada = pedidoDaEquipe ? 1 : seguidas + 1;
+  const marca: MarcaDeAutocorrecao = { rodada, motivos: autocorrecao.motivos, ...(pedidoDaEquipe ? { pedido_da_equipe: true } : {}) };
+  const resposta = await ajustarCard(ch, { trabalho_id: t.id, ordem, instrucao: autocorrecao.instrucao }, marca);
+  const dados = await resposta.json();
+  return json({ ...dados, corrigido: true, rodada, autocorrecao }, resposta.status);
 }
 
 // ---------------------------------------------------------------- legenda
@@ -3139,11 +3214,15 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   preparar_fundo: prepararFundo,
   gerar_card: gerarCard,
   conferir_card: conferirCard,
-  ajustar_card: ajustarCard,
+  ajustar_card: (ch, corpo) => ajustarCard(ch, corpo),
+  corrigir_card: corrigirCard,
   legenda,
   entregar,
   referencias,
 };
+
+/** Ações que podem passar de 150 s: geração, ajuste, correção, conferência, preparo e entrega. */
+const ACOES_LONGAS = new Set(["preparar", "preparar_fundo", "gerar_card", "conferir_card", "ajustar_card", "corrigir_card", "legenda", "entregar"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -3165,14 +3244,19 @@ Deno.serve(async (req) => {
   const executar = ACOES[acao];
   if (!executar) return erro(400, "acao_desconhecida", "Ação desconhecida.", { aceitas: Object.keys(ACOES) });
 
-  try {
-    return await executar(ch, corpo);
-  } catch (e) {
-    if (e instanceof ErroEstudio) return erro(e.status, e.codigo, e.message, e.detalhes);
-    if (e instanceof IaMotorErro) return respostaDoMotor(e);
-    if (e instanceof JevErro) return erro(502, "jev_indisponivel", "A conferência do Jev não respondeu. Tente de novo.", { codigo: e.codigo });
-    // Log so com o codigo e a acao: nada de prompt nem dado de cliente.
-    console.error("estudio-arte: falha inesperada", { acao, erro: e instanceof Error ? e.name : "desconhecido" });
-    return erro(500, "erro_interno", "Erro inesperado no estúdio. Tente de novo.");
-  }
+  const chamador = ch;
+  const rodar = async (): Promise<Response> => {
+    try {
+      return await executar(chamador, corpo);
+    } catch (e) {
+      if (e instanceof ErroEstudio) return erro(e.status, e.codigo, e.message, e.detalhes);
+      if (e instanceof IaMotorErro) return respostaDoMotor(e);
+      if (e instanceof JevErro) return erro(502, "jev_indisponivel", "A conferência do Jev não respondeu. Tente de novo.", { codigo: e.codigo });
+      // Log so com o codigo e a acao: nada de prompt nem dado de cliente.
+      console.error("estudio-arte: falha inesperada", { acao, erro: e instanceof Error ? e.name : "desconhecido" });
+      return erro(500, "erro_interno", "Erro inesperado no estúdio. Tente de novo.");
+    }
+  };
+  // Imagem e conferência passam fácil de 150 s: a resposta começa na hora (resposta-com-folego.ts).
+  return ACOES_LONGAS.has(acao) ? respostaComFolego(rodar, corsHeaders) : await rodar();
 });

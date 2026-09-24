@@ -21,10 +21,12 @@ import {
   nomeDoAnuncio,
   normalizarResultados,
   porcento,
-  type DiagnosticoDoCriativo,
   type LinhaDeResultado,
 } from "./adsApi";
 import { nomeDoCriativo } from "./AbaEstudioAds";
+import { Diagnostico } from "./Comuns";
+
+export { Diagnostico };
 
 /**
  * Etapa 5, Resultados: métricas reais por criativo ligado (resultados_ler,
@@ -45,19 +47,6 @@ export function periodoDosUltimos(dias: number, hoje = new Date()): { inicio: st
   const fim = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - 1);
   const inicio = new Date(fim.getFullYear(), fim.getMonth(), fim.getDate() - (dias - 1));
   return { inicio: dataIso(inicio), fim: dataIso(fim) };
-}
-
-export function Diagnostico({ valor }: { valor: DiagnosticoDoCriativo | string | null }) {
-  if (!valor) return <span className="text-[11.5px] text-muted-foreground">Sem diagnóstico</span>;
-  if (typeof valor === "string") return <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">{valor}</p>;
-  const texto = (v: unknown) => (typeof v === "string" ? v : "");
-  return (
-    <div className="min-w-0 space-y-0.5" data-diagnostico="">
-      {texto(valor.sinal) && <span className="inline-block rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">{texto(valor.sinal)}</span>}
-      {texto(valor.leitura) && <p className="text-[12px] leading-snug [overflow-wrap:anywhere]">{texto(valor.leitura)}</p>}
-      {texto(valor.acao) && <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Próximo passo: {texto(valor.acao)}</p>}
-    </div>
-  );
 }
 
 const COLUNAS: { chave: keyof LinhaDeResultado["metricas"]; rotulo: string; formato: (v: number | null | undefined) => string }[] = [

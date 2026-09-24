@@ -1,5 +1,6 @@
 /**
- * Cálculos da Mesa Ads, puros e sem IA (docs/mesa-ads/SPEC.md).
+ * Cálculos da Mesa Ads, puros e sem IA (docs/mesa-ads/SPEC.md e
+ * docs/mesa-ads/v2/CONTRATO-V2.md).
  *
  * Tudo aqui é conta e regra fixa: soma das métricas diárias da Meta
  * (ads_creative_daily), resultados por tipo de ação, diagnóstico pela tabela
@@ -15,6 +16,8 @@ export type Evidencia = "E0" | "E1" | "E2" | "E3" | "E4";
 /** Linha de ads_creative_daily como a função lê. */
 export type Diaria = {
   ad_id: string;
+  /** Campanha do anúncio no dia (a conta ao vivo agrupa por ela). */
+  campaign_id?: string | null;
   day: string;
   spend: number | string | null;
   impressions: number | string | null;
@@ -319,4 +322,747 @@ export function cortarNaPalavra(texto: string, max: number): string {
 /** Travessão e meia-risca viram vírgula (regra do dono), sem mexer em hífen de palavra. */
 export function semTravessao(texto: string): string {
   return texto.replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/,\s*,/g, ",");
+}
+
+// =============================================================== Mesa Ads v2
+// Regras em c\u00f3digo da v2 (docs/mesa-ads/v2/CONTRATO-V2.md): notas do Jev em
+// 0 a 10, aprova\u00e7\u00e3o do \u00e2ngulo, conta ao vivo (tend\u00eancia e sinal), leitura do
+// an\u00fancio da Meta, links das refer\u00eancias e o pacote do gestor. Nada aqui
+// chama IA nem banco.
+
+// ------------------------------------------------------------- notas do Jev
+
+/**
+ * Nota do Score do Jev (0 a niveis-1) em 0 a 10 com uma casa. Todos os
+ * n\u00edveis v\u00e3o do pior ao melhor, inclusive NIVEIS_RISCO_POLITICA (0 = viola a
+ * pol\u00edtica, \u00faltimo = sem risco aparente): em risco_politica, 10 = SEM risco.
+ */
+export const notaDe0a10 = (n: number | null, niveis: number): number | null =>
+  n == null ? null : Math.round((n / (niveis - 1)) * 100) / 10;
+
+/** N\u00edvel bruto 0 ("viola") ou 1 ("risco alto") de 0 a 4: a pe\u00e7a vai com alerta de pol\u00edtica. */
+export const alertaDePolitica = (bruta: number | null): boolean => bruta != null && bruta < 2;
+
+// ------------------------------------------------------------- aprova\u00e7\u00e3o do \u00e2ngulo
+
+/**
+ * Regra de aprova\u00e7\u00e3o do plano de teste (contrato v2 com a corre\u00e7\u00e3o do
+ * coordenador): risco_politica \u00e9 nota de 0 a 10 onde 10 = sem risco, ent\u00e3o
+ * aprovar exige 7 ou mais (n\u00edvel "risco baixo" ou melhor) e nenhum alerta.
+ */
+export const LIMIARES_APROVACAO = {
+  clareza_min: 7,
+  relevancia_min: 7,
+  parada_min: 6,
+  diferenciacao_min: 6,
+  /** Nota de risco de pol\u00edtica (10 = sem risco): m\u00ednimo para aprovar. */
+  risco_politica_min: 7,
+} as const;
+
+export type NotasAngulo = {
+  clareza: number | null;
+  relevancia: number | null;
+  prova: number | null;
+  risco_politica: number | null;
+  parada?: number | null;
+  diferenciacao?: number | null;
+  alerta_politica: boolean;
+};
+
+const virgula = (v: number) => String(v).replace(".", ",");
+
+/** Motivos de reprova\u00e7\u00e3o do \u00e2ngulo (lista vazia = aprovado). Nota ausente reprova: sem nota n\u00e3o h\u00e1 aprova\u00e7\u00e3o. */
+export function motivosDoAngulo(j: NotasAngulo | null | undefined): string[] {
+  if (!j) return ["Sem nota do Jev."];
+  const L = LIMIARES_APROVACAO;
+  const motivos: string[] = [];
+  if (j.alerta_politica) motivos.push("Alerta de pol\u00edtica da Meta.");
+  if (j.risco_politica == null) motivos.push("Sem nota de risco de pol\u00edtica.");
+  else if (j.risco_politica < L.risco_politica_min) motivos.push(`Risco de pol\u00edtica: nota ${virgula(j.risco_politica)} (o m\u00ednimo \u00e9 ${L.risco_politica_min}; 10 = sem risco).`);
+  const minimos: [number | null | undefined, number, string][] = [
+    [j.clareza, L.clareza_min, "Clareza"],
+    [j.relevancia, L.relevancia_min, "Relev\u00e2ncia"],
+    [j.parada, L.parada_min, "Poder de parar a rolagem"],
+    [j.diferenciacao, L.diferenciacao_min, "Diferencia\u00e7\u00e3o"],
+  ];
+  for (const [nota, minimo, nome] of minimos) {
+    if (nota == null) motivos.push(`Sem nota de ${nome.toLowerCase()}.`);
+    else if (nota < minimo) motivos.push(`${nome} ${virgula(nota)} (o m\u00ednimo \u00e9 ${minimo}).`);
+  }
+  return motivos;
+}
+
+export const anguloAprovado = (j: NotasAngulo | null | undefined): boolean => motivosDoAngulo(j).length === 0;
+
+/** Pesos da pontua\u00e7\u00e3o do \u00e2ngulo (somam 1). risco_politica entra como qualidade (10 = sem risco). */
+export const PESOS_PONTUACAO = { clareza: 0.22, relevancia: 0.2, parada: 0.2, diferenciacao: 0.15, prova: 0.1, risco_politica: 0.13 } as const;
+
+/**
+ * Pontua\u00e7\u00e3o de 0 a 10 para ordenar os \u00e2ngulos: m\u00e9dia ponderada das notas
+ * presentes; alerta de pol\u00edtica corta pela metade.
+ */
+export function pontuacaoDoAngulo(j: NotasAngulo | null | undefined): number | null {
+  if (!j) return null;
+  const P = PESOS_PONTUACAO;
+  const partes: [number | null | undefined, number][] = [
+    [j.clareza, P.clareza],
+    [j.relevancia, P.relevancia],
+    [j.parada, P.parada],
+    [j.diferenciacao, P.diferenciacao],
+    [j.prova, P.prova],
+    [j.risco_politica, P.risco_politica],
+  ];
+  let soma = 0;
+  let pesos = 0;
+  for (const [v, p] of partes) {
+    if (typeof v === "number" && Number.isFinite(v)) {
+      soma += v * p;
+      pesos += p;
+    }
+  }
+  if (!pesos) return null;
+  const nota = (soma / pesos) * (j.alerta_politica ? 0.5 : 1);
+  return Math.round(nota * 10) / 10;
+}
+
+/**
+ * Lista final do plano: aprovados por pontua\u00e7\u00e3o; se sobrarem menos de
+ * `minimo`, os melhores reprovados completam a lista marcados `reprovado`;
+ * o resto vai para os descartados com os motivos.
+ */
+export function separarAngulos<T extends { aprovado: boolean; pontuacao: number | null }>(
+  angulos: T[],
+  minimo = 3,
+): { principais: (T & { reprovado?: boolean })[]; descartados: T[] } {
+  const ordem = (a: T, b: T) => (b.pontuacao ?? -1) - (a.pontuacao ?? -1);
+  const aprovados = angulos.filter((a) => a.aprovado).sort(ordem);
+  const reprovados = angulos.filter((a) => !a.aprovado).sort(ordem);
+  const faltam = Math.max(0, minimo - aprovados.length);
+  const resgatados = reprovados.slice(0, faltam).map((a) => ({ ...a, reprovado: true }));
+  return { principais: [...aprovados, ...resgatados], descartados: reprovados.slice(faltam) };
+}
+
+// ------------------------------------------------------------- conta ao vivo
+
+export type Tendencia = { ctr_var_pct: number | null; custo_resultado_var_pct: number | null; frequencia: number | null };
+
+/** Impress\u00f5es m\u00ednimas em cada metade do per\u00edodo para comparar CTR e custo. */
+export const IMPRESSOES_POR_METADE = 500;
+
+/**
+ * Tend\u00eancia do an\u00fancio no per\u00edodo: segunda metade dos dias contra a primeira.
+ * Varia\u00e7\u00e3o em % (positivo = subiu). Frequ\u00eancia: a da metade mais recente.
+ */
+export function tendenciaDoAnuncio(linhas: Diaria[]): Tendencia {
+  const total = somarMetricas(linhas);
+  const dias = [...new Set(linhas.map((l) => String(l.day).slice(0, 10)))].sort();
+  if (dias.length < 4) return { ctr_var_pct: null, custo_resultado_var_pct: null, frequencia: total.frequencia_media };
+  const corte = dias[Math.floor(dias.length / 2)];
+  const a = somarMetricas(linhas.filter((l) => String(l.day).slice(0, 10) < corte));
+  const b = somarMetricas(linhas.filter((l) => String(l.day).slice(0, 10) >= corte));
+  const comparaveis = a.impressoes >= IMPRESSOES_POR_METADE && b.impressoes >= IMPRESSOES_POR_METADE;
+  const variacao = (x: number | null, y: number | null) =>
+    comparaveis && x != null && y != null && x > 0 ? Math.round((y / x - 1) * 1000) / 10 : null;
+  return {
+    ctr_var_pct: variacao(a.ctr_saida_pct, b.ctr_saida_pct),
+    custo_resultado_var_pct: variacao(a.custo_por_resultado, b.custo_por_resultado),
+    frequencia: b.frequencia_media ?? total.frequencia_media,
+  };
+}
+
+/**
+ * Limiares do sinal da conta ao vivo. S\u00e3o pontos de decis\u00e3o da equipe, n\u00e3o
+ * verdade universal: o custo de refer\u00eancia \u00e9 o toler\u00e1vel do briefing ou, sem
+ * ele, o custo por resultado m\u00e9dio da pr\u00f3pria conta no per\u00edodo.
+ */
+export const LIMIARES_SINAL = {
+  /** Resultados m\u00ednimos no per\u00edodo para falar em escalar. */
+  resultados_para_escalar: 3,
+  /** Escalar: custo por resultado at\u00e9 80% da refer\u00eancia. */
+  folga_para_escalar: 0.8,
+  /** Escalar s\u00f3 com frequ\u00eancia abaixo disso (ainda h\u00e1 p\u00fablico novo). */
+  frequencia_max_para_escalar: 2.5,
+  /** Fadiga: CTR caiu 20% ou mais da primeira para a segunda metade... */
+  queda_de_ctr_fadiga_pct: -20,
+  /** ...ou o custo por resultado subiu 20% ou mais, com frequ\u00eancia alta. */
+  alta_de_custo_fadiga_pct: 20,
+  /** Pausar: custo por resultado acima de 2 vezes a refer\u00eancia. */
+  custo_para_pausar: 2,
+  /** Pausar: gasto sem nenhum resultado maior que 2 vezes a refer\u00eancia. */
+  gasto_sem_resultado_para_pausar: 2,
+  /** Sem refer\u00eancia de custo: impress\u00f5es sem nenhum resultado para pausar. */
+  impressoes_sem_resultado_para_pausar: 5000,
+} as const;
+
+export type SinalConta = "escalar" | "manter" | "observar" | "renovar" | "pausar" | "sem_dados";
+
+/** Sinal do an\u00fancio na conta ao vivo, regra em c\u00f3digo (nunca IA). */
+export function sinalDoAnuncio(m: Metricas, t: Tendencia, custoReferencia?: number | null): SinalConta {
+  const L = LIMIARES_SINAL;
+  const D = LIMIARES_DIAGNOSTICO;
+  if (m.impressoes < D.impressoes_minimas || !(m.gasto > 0)) return "sem_dados";
+  const ref = custoReferencia && custoReferencia > 0 ? custoReferencia : null;
+  if (m.resultados <= 0) {
+    const gastouDemais = ref ? m.gasto >= ref * L.gasto_sem_resultado_para_pausar : m.impressoes >= L.impressoes_sem_resultado_para_pausar;
+    return gastouDemais ? "pausar" : "observar";
+  }
+  const cpr = m.custo_por_resultado;
+  if (ref && cpr != null && cpr > ref * L.custo_para_pausar) return "pausar";
+  const freq = t.frequencia ?? m.frequencia_media ?? 0;
+  const ctrCaiu = t.ctr_var_pct != null && t.ctr_var_pct <= L.queda_de_ctr_fadiga_pct;
+  const custoSubiu = t.custo_resultado_var_pct != null && t.custo_resultado_var_pct >= L.alta_de_custo_fadiga_pct;
+  if (freq >= D.frequencia_alta && (ctrCaiu || custoSubiu)) return "renovar";
+  if (ref && m.resultados >= L.resultados_para_escalar && cpr != null && cpr <= ref * L.folga_para_escalar && freq < L.frequencia_max_para_escalar && !custoSubiu) {
+    return "escalar";
+  }
+  if (custoSubiu || (m.ctr_saida_pct ?? 0) < D.ctr_saida_baixo_pct || (ref && cpr != null && cpr > ref)) return "observar";
+  return "manter";
+}
+
+export type PontoDaSerie = { dia: string; gasto: number; impressoes: number; cliques: number; ctr: number | null; resultados: number };
+
+/** S\u00e9rie di\u00e1ria do an\u00fancio (cliques = cliques de sa\u00edda; ctr = CTR de sa\u00edda em %). */
+export function serieDiaria(linhas: Diaria[]): PontoDaSerie[] {
+  const porDia = new Map<string, Diaria[]>();
+  for (const l of linhas) {
+    const d = String(l.day).slice(0, 10);
+    const lista = porDia.get(d) ?? [];
+    lista.push(l);
+    porDia.set(d, lista);
+  }
+  return [...porDia.keys()].sort().map((dia) => {
+    const m = somarMetricas(porDia.get(dia)!);
+    return { dia, gasto: m.gasto, impressoes: m.impressoes, cliques: m.cliques_saida, ctr: m.ctr_saida_pct, resultados: m.resultados };
+  });
+}
+
+// ------------------------------------------------------------- anúncio da Meta
+
+/** Botões da Meta (call_to_action.type) no nome que a equipe vê. */
+export const CTA_DA_META: Record<string, string | null> = {
+  LEARN_MORE: "Saiba mais",
+  MESSAGE_PAGE: "Enviar mensagem",
+  SEND_MESSAGE: "Enviar mensagem",
+  INSTAGRAM_MESSAGE: "Enviar mensagem",
+  WHATSAPP_MESSAGE: "Enviar mensagem pelo WhatsApp",
+  SHOP_NOW: "Comprar agora",
+  BUY_NOW: "Comprar agora",
+  ORDER_NOW: "Peça agora",
+  SIGN_UP: "Cadastre-se",
+  SUBSCRIBE: "Assinar",
+  BOOK_TRAVEL: "Reservar",
+  BOOK_NOW: "Reservar",
+  CONTACT_US: "Fale conosco",
+  GET_QUOTE: "Solicitar orçamento",
+  CALL_NOW: "Ligar agora",
+  DOWNLOAD: "Baixar",
+  GET_OFFER: "Obter oferta",
+  SEE_MENU: "Ver menu",
+  APPLY_NOW: "Candidate-se",
+  GET_DIRECTIONS: "Como chegar",
+  WATCH_MORE: "Assistir mais",
+  NO_BUTTON: null,
+};
+
+export type CopyDoAnuncio = {
+  titulo: string | null;
+  corpo: string | null;
+  descricao: string | null;
+  cta: string | null;
+  cta_tipo: string | null;
+  destino: string | null;
+  imagem_url: string | null;
+  miniatura_url: string | null;
+  video_id: string | null;
+};
+
+const objeto = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {});
+const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+const primeiroTexto = (v: unknown): string | null => {
+  if (!Array.isArray(v)) return null;
+  for (const x of v) {
+    const t = str(objeto(x).text) ?? str(x);
+    if (t) return t;
+  }
+  return null;
+};
+
+/**
+ * Copy, CTA, destino e imagem do anúncio a partir do `raw` guardado em
+ * ads_creatives (anúncio da Meta com creative.object_story_spec). Só o que a
+ * Meta devolveu: campo que não veio fica null.
+ */
+export function extrairCopyDoRaw(
+  raw: unknown,
+  colunas: { titulo?: string | null; corpo?: string | null; destino?: string | null; image_url?: string | null; thumbnail_url?: string | null; video_id?: string | null } = {},
+): CopyDoAnuncio {
+  const r = objeto(raw);
+  const criativo = objeto(r.creative);
+  const spec = objeto(criativo.object_story_spec);
+  const link = objeto(spec.link_data);
+  const video = objeto(spec.video_data);
+  const modelo = objeto(spec.template_data);
+  const feed = objeto(criativo.asset_feed_spec);
+  const ctaObj = objeto(link.call_to_action ?? video.call_to_action ?? modelo.call_to_action);
+  const ctaTipo = str(ctaObj.type) ?? (Array.isArray(feed.call_to_action_types) ? str(feed.call_to_action_types[0]) : null);
+  const ctaValor = objeto(ctaObj.value);
+  const linkFeed = Array.isArray(feed.link_urls) ? objeto(feed.link_urls[0]) : {};
+  let destino = str(ctaValor.link) ?? str(link.link) ?? str(modelo.link) ?? str(linkFeed.website_url) ?? str(colunas.destino);
+  if (!destino && ctaTipo) {
+    const app = String(ctaValor.app_destination ?? "").toUpperCase();
+    if (ctaTipo === "WHATSAPP_MESSAGE" || app === "WHATSAPP") destino = "WhatsApp";
+    else if (ctaTipo === "INSTAGRAM_MESSAGE" || app === "INSTAGRAM_DIRECT") destino = "Direct do Instagram";
+    else if (ctaTipo === "MESSAGE_PAGE" || ctaTipo === "SEND_MESSAGE" || app === "MESSENGER") destino = "Messenger";
+    else if (ctaTipo === "CALL_NOW") destino = "Ligação";
+  }
+  let cta: string | null = null;
+  if (ctaTipo) {
+    cta = ctaTipo in CTA_DA_META
+      ? CTA_DA_META[ctaTipo]
+      : ctaTipo.toLowerCase().split("_").map((p, i) => (i === 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p)).join(" ");
+  }
+  return {
+    titulo: str(link.name) ?? str(video.title) ?? str(modelo.name) ?? primeiroTexto(feed.titles) ?? str(criativo.title) ?? str(colunas.titulo),
+    corpo: str(link.message) ?? str(video.message) ?? str(modelo.message) ?? primeiroTexto(feed.bodies) ?? str(criativo.body) ?? str(colunas.corpo),
+    descricao: str(link.description) ?? str(video.link_description) ?? str(modelo.description) ?? primeiroTexto(feed.descriptions),
+    cta,
+    cta_tipo: ctaTipo,
+    destino,
+    imagem_url: str(criativo.image_url) ?? str(link.picture) ?? str(video.image_url) ?? str(colunas.image_url),
+    miniatura_url: str(criativo.thumbnail_url) ?? str(colunas.thumbnail_url),
+    video_id: str(criativo.video_id) ?? str(video.video_id) ?? str(colunas.video_id),
+  };
+}
+
+// ------------------------------------------------------------- links das referências
+
+/** IPv4 de rede interna, reservada ou de metadados (bloqueado para busca no servidor). */
+export function ipv4Interno(ip: string): boolean {
+  const p = ip.split(".").map((x) => Number(x));
+  if (p.length !== 4 || p.some((x) => !Number.isInteger(x) || x < 0 || x > 255)) return true;
+  const [a, b] = p;
+  return a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0) ||
+    (a === 198 && (b === 18 || b === 19));
+}
+
+/** IPv6 interno (loopback, local, único local, IPv4 mapeado). */
+export function ipv6Interno(ip: string): boolean {
+  const h = ip.replace(/^\[|\]$/g, "").toLowerCase();
+  if (h === "::" || h === "::1") return true;
+  if (/^f[cd]/.test(h) || /^fe[89ab]/.test(h)) return true;
+  const mapeado = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapeado) return ipv4Interno(mapeado[1]);
+  return h.startsWith("::ffff:") || h.startsWith("64:ff9b:");
+}
+
+/**
+ * Só https público na porta padrão, sem usuário e senha, sem host interno.
+ * Devolve a URL normalizada ou null.
+ */
+export function urlPublicaSegura(bruto: unknown): URL | null {
+  if (typeof bruto !== "string" || !bruto.trim() || bruto.length > 2048) return null;
+  let u: URL;
+  try {
+    u = new URL(bruto.trim());
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" || u.username || u.password) return null;
+  if (u.port && u.port !== "443") return null;
+  const h = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (!h) return null;
+  if (h.startsWith("[")) return ipv6Interno(h) ? null : u;
+  if (/^[\d.]+$/.test(h)) return ipv4Interno(h) ? null : u;
+  if (!h.includes(".") || h === "localhost" || /\.(localhost|local|internal|lan|home|corp|intranet)$/.test(h)) return null;
+  return u;
+}
+
+export type TipoDeLink = "youtube" | "github" | "behance" | "instagram" | "pinterest" | "spotify" | "tiktok" | "imagem" | "pagina";
+
+const EXT_IMAGEM = /\.(png|jpe?g|webp)$/i;
+
+export function tipoDoLink(u: URL): TipoDeLink {
+  const h = u.hostname.toLowerCase().replace(/^www\./, "");
+  if (h === "youtu.be" || h === "youtube.com" || h.endsWith(".youtube.com")) return "youtube";
+  if (h === "github.com") return "github";
+  if (h === "behance.net" || h.endsWith(".behance.net")) return h.startsWith("mir-s3-cdn") ? "imagem" : "behance";
+  if (h === "instagram.com" || h.endsWith(".instagram.com")) return "instagram";
+  if (/(^|\.)pinterest\.[a-z.]{2,8}$/.test(h) || h === "pin.it") return "pinterest";
+  if (h === "open.spotify.com" || h === "spotify.com") return "spotify";
+  if (h === "tiktok.com" || h.endsWith(".tiktok.com")) return "tiktok";
+  if (EXT_IMAGEM.test(u.pathname)) return "imagem";
+  return "pagina";
+}
+
+/** Origem gravada em ads_referencias para um link importado. */
+export function origemDoLink(u: URL): "pinterest" | "instagram" | "tiktok" | "url" {
+  const t = tipoDoLink(u);
+  return t === "pinterest" || t === "instagram" || t === "tiktok" ? t : "url";
+}
+
+/** Id do vídeo do YouTube (watch, youtu.be, shorts, embed, live) ou null. */
+export function idDoYoutube(u: URL): string | null {
+  const h = u.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+  const valido = (x: string | null | undefined) => (x && /^[A-Za-z0-9_-]{11}$/.test(x) ? x : null);
+  if (h === "youtu.be") return valido(u.pathname.split("/")[1]);
+  if (h === "youtube.com" || h === "music.youtube.com") {
+    const v = valido(u.searchParams.get("v"));
+    if (v) return v;
+    const m = u.pathname.match(/^\/(shorts|embed|live|v)\/([^/?#]+)/);
+    return m ? valido(m[2]) : null;
+  }
+  return null;
+}
+
+const GITHUB_RESERVADOS = new Set(["orgs", "topics", "search", "marketplace", "features", "explore", "settings", "login", "about", "pricing", "collections", "sponsors", "trending", "enterprise", "apps"]);
+
+/** Dono e repositório de um link do GitHub ou null. */
+export function repoDoGithub(u: URL): { dono: string; repo: string } | null {
+  if (u.hostname.toLowerCase().replace(/^www\./, "") !== "github.com") return null;
+  const [dono, repoBruto] = u.pathname.split("/").filter(Boolean);
+  if (!dono || !repoBruto || GITHUB_RESERVADOS.has(dono.toLowerCase())) return null;
+  const repo = repoBruto.replace(/\.git$/i, "");
+  if (!/^[A-Za-z0-9_.-]+$/.test(dono) || !/^[A-Za-z0-9_.-]+$/.test(repo)) return null;
+  return { dono, repo };
+}
+
+/** Entidades HTML mais comuns. */
+export function decodificarHtml(s: string): string {
+  return s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+export type MetaTags = { titulo: string | null; descricao: string | null; imagem: string | null; site: string | null; tipo: string | null; imagens: string[] };
+
+/** og:tags, twitter:tags e <title> de uma página (atributos em qualquer ordem). */
+export function lerMetaTags(html: string, base?: string): MetaTags {
+  const campos = new Map<string, string[]>();
+  const trecho = html.slice(0, 600_000);
+  const tags = trecho.match(/<meta\s[^>]*>/gi) ?? [];
+  for (const tag of tags) {
+    const attrs: Record<string, string> = {};
+    const re = /([a-zA-Z:_-]+)\s*=\s*("([^"]*)"|'([^']*)')/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(tag))) attrs[m[1].toLowerCase()] = decodificarHtml(m[3] ?? m[4] ?? "").trim();
+    const chave = (attrs.property || attrs.name || attrs.itemprop || "").toLowerCase();
+    if (!chave || !attrs.content) continue;
+    const lista = campos.get(chave) ?? [];
+    lista.push(attrs.content);
+    campos.set(chave, lista);
+  }
+  const um = (...chaves: string[]) => {
+    for (const c of chaves) {
+      const v = campos.get(c)?.[0];
+      if (v) return v;
+    }
+    return null;
+  };
+  const absoluta = (x: string) => {
+    try {
+      return new URL(x, base).toString();
+    } catch {
+      return null;
+    }
+  };
+  const tituloTag = trecho.match(/<title[^>]*>([^<]{1,300})<\/title>/i);
+  const titulo = um("og:title", "twitter:title") ?? (tituloTag ? decodificarHtml(tituloTag[1]).trim() : null);
+  const imagens = [...new Set(
+    [...(campos.get("og:image") ?? []), ...(campos.get("og:image:secure_url") ?? []), ...(campos.get("twitter:image") ?? []), ...(campos.get("twitter:image:src") ?? [])]
+      .map(absoluta)
+      .filter((x): x is string => !!x),
+  )];
+  return {
+    titulo: titulo || null,
+    descricao: um("og:description", "twitter:description", "description"),
+    imagem: imagens[0] ?? null,
+    site: um("og:site_name", "application-name"),
+    tipo: um("og:type"),
+    imagens,
+  };
+}
+
+/** Ordem de preferência dos tamanhos de módulo do Behance (maior primeiro). */
+const TAMANHOS_BEHANCE = ["source", "max_3840", "max_3840_webp", "fs", "fs_webp", "max_1200", "max_1200_webp", "1400", "1400_webp", "1400_opt_1", "hd", "disp", "disp_webp", "808", "max_808", "404", "max_632", "230"];
+
+/** Imagens dos módulos de um projeto do Behance (o maior tamanho de cada uma, sem repetir). */
+export function imagensDoBehance(html: string, max = 12): string[] {
+  const texto = html.replace(/\\\//g, "/");
+  const achados = texto.match(/https:\/\/mir-s3-cdn-cf\.behance\.net\/project_modules\/[^"'\s)\\<>]+/g) ?? [];
+  const melhor = new Map<string, { url: string; rank: number }>();
+  const ordem: string[] = [];
+  for (const url of achados) {
+    const partes = url.split("/");
+    const tamanho = partes[4] ?? "";
+    const arquivo = partes[partes.length - 1].split("?")[0];
+    if (!arquivo || !EXT_IMAGEM.test(arquivo)) continue;
+    const i = TAMANHOS_BEHANCE.indexOf(tamanho);
+    const rank = i < 0 ? TAMANHOS_BEHANCE.length : i;
+    const atual = melhor.get(arquivo);
+    if (!atual) ordem.push(arquivo);
+    if (!atual || rank < atual.rank) melhor.set(arquivo, { url, rank });
+  }
+  return ordem.slice(0, max).map((a) => melhor.get(a)!.url);
+}
+
+/** Imagens do README (markdown e <img>); caminho relativo vira raw.githubusercontent. Sem selo nem SVG. */
+export function imagensDoReadme(md: string, dono: string, repo: string, max = 8): string[] {
+  const achados: string[] = [];
+  const reMd = /!\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
+  const reImg = /<img\s[^>]*src\s*=\s*["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = reMd.exec(md))) achados.push(m[1]);
+  while ((m = reImg.exec(md))) achados.push(m[1]);
+  const saida: string[] = [];
+  for (const bruto of achados) {
+    let url: string;
+    if (/^https?:\/\//i.test(bruto)) url = bruto.replace(/^http:/i, "https:");
+    else url = `https://raw.githubusercontent.com/${dono}/${repo}/HEAD/${bruto.replace(/^\.?\//, "")}`;
+    url = url.replace(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\//, "https://raw.githubusercontent.com/$1/$2/");
+    if (/shields\.io|badgen|badge|\.svg(\?|$)/i.test(url)) continue;
+    if (!saida.includes(url)) saida.push(url);
+    if (saida.length >= max) break;
+  }
+  return saida;
+}
+
+// ------------------------------------------------------------- pacote de copy
+
+export const ESTILOS_DE_TEXTO_PRINCIPAL = ["curto", "medio", "longo", "pas", "historia", "prova_objecao"] as const;
+
+/** Limites do pacote (Meta e contrato v2). */
+export const LIMITES_PACOTE = {
+  textos_principais_min: 6,
+  titulos_min: 8,
+  titulo_max: 40,
+  descricoes_min: 5,
+  descricao_max: 30,
+  ganchos_min: 5,
+  texto_principal_max: 2200,
+} as const;
+
+export type PacoteCopy = {
+  textos_principais: { estilo: string; texto: string }[];
+  titulos: string[];
+  descricoes: string[];
+  ctas: { cta: string; porque: string }[];
+  ganchos: string[];
+  gestor: {
+    objetivo_meta: string | null;
+    evento_otimizacao: string | null;
+    publico_sugerido: string;
+    conjuntos: string[];
+    utm: string;
+    regras_de_corte: string[];
+    regras_de_escala: string[];
+    verba: string | null;
+  };
+};
+
+const limpo = (v: unknown, max: number) => (typeof v === "string" ? semTravessao(v.trim().replace(/[ \t]+/g, " ")).slice(0, max) : "");
+const unicos = (lista: string[]) => {
+  const vistos = new Set<string>();
+  return lista.filter((x) => {
+    const k = x.toLowerCase();
+    if (!x || vistos.has(k)) return false;
+    vistos.add(k);
+    return true;
+  });
+};
+
+/**
+ * Normaliza o pacote de copy em código: limites da Meta (título até 40,
+ * descrição até 30, cortando na palavra), CTA só da lista, sem repetição e
+ * sem travessão. O que ficar abaixo do mínimo vira aviso (nunca é inventado).
+ */
+export function normalizarPacoteCopy(bruto: unknown, ctasValidos: readonly string[]): { pacote: PacoteCopy; avisos: string[] } {
+  const b = objeto(bruto);
+  const L = LIMITES_PACOTE;
+  const avisos: string[] = [];
+  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+  const vistosTexto = new Set<string>();
+  const textos = arr(b.textos_principais)
+    .map((x) => {
+      const estilo = String(objeto(x).estilo ?? "");
+      return { estilo: (ESTILOS_DE_TEXTO_PRINCIPAL as readonly string[]).includes(estilo) ? estilo : "medio", texto: limpo(objeto(x).texto, L.texto_principal_max) };
+    })
+    .filter((x) => {
+      const k = x.texto.toLowerCase();
+      if (!x.texto || vistosTexto.has(k)) return false;
+      vistosTexto.add(k);
+      return true;
+    });
+  let cortados = 0;
+  const noLimite = (t: unknown, max: number) => {
+    const s = limpo(t, 300);
+    const c = cortarNaPalavra(s, max);
+    if (c.length < s.length) cortados++;
+    return c;
+  };
+  const titulos = unicos(arr(b.titulos).map((t) => noLimite(t, L.titulo_max)));
+  const descricoes = unicos(arr(b.descricoes).map((t) => noLimite(t, L.descricao_max)));
+  const ctas = arr(b.ctas)
+    .map((x) => ({ cta: String(objeto(x).cta ?? ""), porque: limpo(objeto(x).porque, 300) }))
+    .filter((x, i, todos) => ctasValidos.includes(x.cta) && todos.findIndex((y) => y.cta === x.cta) === i);
+  const ganchos = unicos(arr(b.ganchos).map((g) => limpo(g, 200)));
+  const g = objeto(b.gestor);
+  const listaTexto = (v: unknown, n: number) => arr(v).map((x) => limpo(x, 400)).filter(Boolean).slice(0, n);
+  if (cortados) avisos.push(`${cortados} título(s) ou descrição(ões) cortado(s) no limite da Meta.`);
+  if (textos.length < L.textos_principais_min) avisos.push(`Vieram ${textos.length} textos principais (o pedido era ${L.textos_principais_min}).`);
+  if (titulos.length < L.titulos_min) avisos.push(`Vieram ${titulos.length} títulos (o pedido era ${L.titulos_min}).`);
+  if (descricoes.length < L.descricoes_min) avisos.push(`Vieram ${descricoes.length} descrições (o pedido era ${L.descricoes_min}).`);
+  if (ganchos.length < L.ganchos_min) avisos.push(`Vieram ${ganchos.length} ganchos (o pedido era ${L.ganchos_min}).`);
+  return {
+    pacote: {
+      textos_principais: textos.slice(0, 12),
+      titulos: titulos.slice(0, 16),
+      descricoes: descricoes.slice(0, 10),
+      ctas: ctas.slice(0, 5),
+      ganchos: ganchos.slice(0, 10),
+      gestor: {
+        objetivo_meta: limpo(g.objetivo_meta, 120) || null,
+        evento_otimizacao: limpo(g.evento_otimizacao, 120) || null,
+        publico_sugerido: limpo(g.publico_sugerido, 1200),
+        conjuntos: listaTexto(g.conjuntos, 8),
+        utm: limpo(g.utm, 400),
+        regras_de_corte: listaTexto(g.regras_de_corte, 8),
+        regras_de_escala: listaTexto(g.regras_de_escala, 8),
+        verba: limpo(g.verba, 400) || null,
+      },
+    },
+    avisos,
+  };
+}
+
+export type CampoDoPacote = "texto_principal" | "titulo" | "descricao" | "gancho";
+
+/** Todos os textos do pacote numa lista plana (para a conferência de política). */
+export function textosDoPacote(p: PacoteCopy): { campo: CampoDoPacote; indice: number; texto: string }[] {
+  return [
+    ...p.textos_principais.map((t, i) => ({ campo: "texto_principal" as const, indice: i, texto: t.texto })),
+    ...p.titulos.map((t, i) => ({ campo: "titulo" as const, indice: i, texto: t })),
+    ...p.descricoes.map((t, i) => ({ campo: "descricao" as const, indice: i, texto: t })),
+    ...p.ganchos.map((t, i) => ({ campo: "gancho" as const, indice: i, texto: t })),
+  ];
+}
+
+/**
+ * Aplica a conferência no pacote: troca os textos reescritos e tira os que
+ * continuam com alerta. `trocas` e `remover` usam a chave "campo:indice".
+ */
+export function aplicarConferenciaNoPacote(p: PacoteCopy, trocas: Map<string, string>, remover: Set<string>): PacoteCopy {
+  const chave = (campo: CampoDoPacote, i: number) => `${campo}:${i}`;
+  const L = LIMITES_PACOTE;
+  const trata = (campo: CampoDoPacote, lista: string[], max?: number) =>
+    lista.flatMap((t, i) => {
+      const k = chave(campo, i);
+      if (remover.has(k)) return [];
+      const novo = trocas.get(k);
+      return [novo != null ? (max ? cortarNaPalavra(semTravessao(novo), max) : semTravessao(novo)) : t];
+    });
+  return {
+    ...p,
+    textos_principais: p.textos_principais.flatMap((t, i) => {
+      const k = chave("texto_principal", i);
+      if (remover.has(k)) return [];
+      const novo = trocas.get(k);
+      return [novo != null ? { ...t, texto: semTravessao(novo).slice(0, L.texto_principal_max) } : t];
+    }),
+    titulos: trata("titulo", p.titulos, L.titulo_max),
+    descricoes: trata("descricao", p.descricoes, L.descricao_max),
+    ganchos: trata("gancho", p.ganchos),
+  };
+}
+
+export type CriativoDoPacote = {
+  nome: string;
+  formato: string;
+  angulo: string | null;
+  hipotese: string | null;
+  arte: string;
+  copy: { texto_principal?: string | null; titulo?: string | null; descricao?: string | null; cta_meta?: string | null };
+  pacote: PacoteCopy | null;
+};
+
+export type DadosDoPacote = {
+  cliente: string;
+  plano: string | null;
+  gerado_em: string;
+  objetivo: { nome: string; objetivo_meta: string; evento_otimizacao: string; metrica_que_decide: string } | null;
+  oferta: { nome: string; promessa?: string | null } | null;
+  destino: string | null;
+  verba_diaria_brl: number | null;
+  criativos: CriativoDoPacote[];
+};
+
+/** Pacote do gestor de tráfego em Markdown (montado em código, sem IA e sem travessão). */
+export function markdownDoPacote(d: DadosDoPacote): string {
+  const l: string[] = [];
+  const item = (rotulo: string, valor: unknown) => {
+    if (valor != null && String(valor).trim()) l.push(`- **${rotulo}:** ${String(valor).trim()}`);
+  };
+  l.push(`# Pacote do gestor de tráfego: ${d.cliente}`);
+  l.push("");
+  item("Plano", d.plano);
+  item("Gerado em", `${d.gerado_em.slice(0, 16).replace("T", " ")} (UTC)`);
+  item("Objetivo", d.objetivo ? `${d.objetivo.nome} (objetivo na Meta: ${d.objetivo.objetivo_meta}; otimizar para: ${d.objetivo.evento_otimizacao})` : "não definido");
+  if (d.objetivo) item("Métrica que decide", d.objetivo.metrica_que_decide);
+  if (d.oferta) item("Oferta", [d.oferta.nome, d.oferta.promessa].filter(Boolean).join(": "));
+  item("Destino", d.destino ?? "não informado no briefing");
+  item("Verba diária do briefing", d.verba_diaria_brl != null ? `R$ ${d.verba_diaria_brl.toFixed(2).replace(".", ",")}` : "não informada (definir com o dono)");
+  l.push("");
+  l.push("> Número de resultado só com dado real da conta. Nada de prova, depoimento, preço ou urgência que não esteja no briefing.");
+  d.criativos.forEach((c, i) => {
+    l.push("");
+    l.push(`## ${i + 1}. ${c.nome}`);
+    item("Formato", c.formato);
+    item("Ângulo", c.angulo);
+    item("Hipótese", c.hipotese);
+    item("Arte", c.arte);
+    const p = c.pacote;
+    if (!p) {
+      l.push("");
+      l.push("**Copy principal** (pacote completo ainda não gerado)");
+      item("Texto principal", c.copy.texto_principal);
+      item("Título", c.copy.titulo);
+      item("Descrição", c.copy.descricao);
+      item("Botão", c.copy.cta_meta);
+      return;
+    }
+    const bloco = (titulo: string, linhas: string[]) => {
+      if (!linhas.length) return;
+      l.push("");
+      l.push(`**${titulo}**`);
+      for (const x of linhas) l.push(`- ${x}`);
+    };
+    bloco("Textos principais", p.textos_principais.map((t) => `(${t.estilo}) ${t.texto.replace(/\n+/g, " / ")}`));
+    bloco("Títulos (até 40 caracteres)", p.titulos);
+    bloco("Descrições (até 30 caracteres)", p.descricoes);
+    bloco("Botões (CTA)", p.ctas.map((t) => `${t.cta}: ${t.porque}`));
+    bloco("Ganchos (primeira linha)", p.ganchos);
+    const g = p.gestor;
+    l.push("");
+    l.push("**Configuração sugerida**");
+    item("Objetivo na Meta", g.objetivo_meta);
+    item("Evento de otimização", g.evento_otimizacao);
+    item("Público sugerido", g.publico_sugerido);
+    if (g.conjuntos.length) item("Conjuntos", g.conjuntos.join("; "));
+    item("UTM", g.utm ? `\`${g.utm}\`` : null);
+    if (g.regras_de_corte.length) item("Regras de corte", g.regras_de_corte.join("; "));
+    if (g.regras_de_escala.length) item("Regras de escala", g.regras_de_escala.join("; "));
+    item("Verba", g.verba ?? "não informada no briefing");
+  });
+  l.push("");
+  return semTravessao(l.join("\n"));
 }
