@@ -1001,6 +1001,38 @@
       "remote_name": "mesa_ads_biblioteca",
       "remote_statements_sha256": "c7845cfc6b2643cf0eea34dba1f2ea6e8f601386a544162db4c94f3488b25484",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924133108",
+      "path": "supabase/migrations/20260924133108_mesa_ads_v2.sql",
+      "local_sha256": "d73300d3d327abcbff8efc30ef9a966bfbc6697c1a62c988e61f4025132991b4",
+      "remote_name": "mesa_ads_v2",
+      "remote_statements_sha256": "1dc3b3196df77b1a11ad8f96031c96cedb8d6082fc09500f697603ee5180ff58",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924133627",
+      "path": "supabase/migrations/20260924133627_mesa_ads_biblioteca_padroes_1.sql",
+      "local_sha256": "c0a31577f01ebbf6ac58cc95854da6087de5c92986cc1054524af8f1be3d1ed6",
+      "remote_name": "mesa_ads_biblioteca_padroes_1",
+      "remote_statements_sha256": "f8cd9121fe39c7e4a52ebed1178b9bc3c6afe734f7300cb492d86ad2a2f4734a",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924133829",
+      "path": "supabase/migrations/20260924133829_mesa_ads_biblioteca_padroes_2.sql",
+      "local_sha256": "edd8a4d027e72f049228d19dad1e0bfd7d48bde619ce76622aa0a765d0fcecce",
+      "remote_name": "mesa_ads_biblioteca_padroes_2",
+      "remote_statements_sha256": "a08e478f8332679c590e3b6b40cda70c2a0b938a4b0bde75837d8f9220ff8cd5",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924134019",
+      "path": "supabase/migrations/20260924134019_mesa_ads_biblioteca_padroes_3.sql",
+      "local_sha256": "118932303c997a79dc728dca70bb355e3203eaf091dcec06d803cad1f0c509c8",
+      "remote_name": "mesa_ads_biblioteca_padroes_3",
+      "remote_statements_sha256": "b191c09c319e238169f111ab5ba86342bc7012677d037c88a8f837d60c0b69c2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
