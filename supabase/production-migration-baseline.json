@@ -1033,6 +1033,14 @@
       "remote_name": "mesa_ads_biblioteca_padroes_3",
       "remote_statements_sha256": "b191c09c319e238169f111ab5ba86342bc7012677d037c88a8f837d60c0b69c2",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260924141858",
+      "path": "supabase/migrations/20260924141858_aprovacao_pendente_por_email.sql",
+      "local_sha256": "919705226912897d3bb6149a06696b69252334d1dd8da5f5bc96489e93eee563",
+      "remote_name": "aprovacao_pendente_por_email",
+      "remote_statements_sha256": "0813b9f6ea2072b940a1438e8a8fe98a06a500af12214424a488f51583a9d3da",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
