@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, FlaskConical, ShieldCheck, Wand2 } from "lucide-react";
+import { AlertTriangle, Check, ChevronDown, FlaskConical, ShieldCheck, Target, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -28,12 +28,19 @@ import {
   pontuacaoDe10,
   qualidadeDoPlano,
   rotuloDoObjetivo,
+  rotuloDoTom,
   STATUS_DO_PLANO,
+  testarPrimeiroDoPlano,
+  tomDe,
+  tomDoPedido,
+  TONS_DO_CRIATIVO,
+  brl,
   type Angulo,
   type FormatoAds,
   type PedidoDePlano,
   type PlanoAds,
   type StatusDoPlano,
+  type TomDoCriativo,
 } from "./adsApi";
 import { Andamento, BarraDeNota, BarraDePolitica, pilula, SeloDeEvidencia, useAndamento } from "./Comuns";
 import ConversaDoPlano from "./ConversaDoPlano";
@@ -52,13 +59,70 @@ import ConversaDoPlano from "./ConversaDoPlano";
 
 export const QUANTIDADES_DE_ANGULOS = [3, 4, 5, 6];
 
-/** Corpo de criativos_produzir: ângulos na ordem do plano e formatos na ordem da lista. */
-export function corpoDaProducao(plano: PlanoAds, angulos: string[], formatos: FormatoAds[]) {
-  return {
+/** Corpo de criativos_produzir: ângulos na ordem do plano e formatos na ordem da lista (v3: com o tom, quando escolhido). */
+export function corpoDaProducao(plano: PlanoAds, angulos: string[], formatos: FormatoAds[], tom?: TomDoCriativo | null) {
+  const corpo: { plano_id: string; angulo_ids: string[]; formatos: FormatoAds[]; tom?: TomDoCriativo } = {
     plano_id: plano.id,
     angulo_ids: plano.angulos.filter((a) => angulos.indexOf(a.id) >= 0).map((a) => a.id),
     formatos: FORMATOS.map((f) => f.valor).filter((f) => formatos.indexOf(f) >= 0),
   };
+  if (tom) corpo.tom = tom;
+  return corpo;
+}
+
+/** Seletor dos três tons (sóbrio, direto, agressivo), com a regra de cada um no título. */
+export function SeletorDeTom({ valor, onMudar, rotulo = "Tom" }: { valor: TomDoCriativo; onMudar: (t: TomDoCriativo) => void; rotulo?: string }) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center" role="radiogroup" aria-label={rotulo}>
+      {TONS_DO_CRIATIVO.map((t) => (
+        <button
+          key={t.valor}
+          type="button"
+          role="radio"
+          aria-checked={valor === t.valor}
+          title={t.dica}
+          onClick={() => onMudar(t.valor)}
+          className={pilula(valor === t.valor)}
+        >
+          {t.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Testar primeiro: a ordem de teste, o porquê e a regra de corte (números do código). */
+function TestarPrimeiro({ plano }: { plano: PlanoAds }) {
+  const { itens, base } = testarPrimeiroDoPlano(plano);
+  if (!itens.length) return null;
+  return (
+    <section className="rounded-xl border border-primary/30 bg-primary/5 p-4" aria-label="Testar primeiro">
+      <h3 className="flex items-center text-[13.5px] font-semibold">
+        <Target className="mr-1.5 h-4 w-4 text-primary" /> Testar primeiro
+      </h3>
+      <p className="mt-0.5 text-[12px] text-muted-foreground">
+        Ordem pela conferência do Jev e pela prova. O corte usa o custo tolerável do briefing ou a média real da conta.
+        {base && base.custo_por_resultado !== null
+          ? ` Conta nos últimos ${base.periodo_dias} dias: ${brl(base.gasto)} investidos, ${base.resultados || 0} resultado(s), ${brl(base.custo_por_resultado)} por resultado.`
+          : base
+            ? " A conta ainda não tem resultado registrado nos últimos 90 dias."
+            : ""}
+      </p>
+      <ol className="mt-2 space-y-2">
+        {itens.map((t, i) => (
+          <li key={t.angulo_id} className="min-w-0 rounded-lg border border-border bg-card p-3">
+            <p className="text-[13px] font-semibold [overflow-wrap:anywhere]">
+              <span className="mr-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground">{t.ordem || i + 1}</span>
+              {t.nome}
+            </p>
+            {t.porque && <p className="mt-1 text-[12.5px] leading-snug [overflow-wrap:anywhere]"><span className="font-medium">Por quê: </span>{t.porque}</p>}
+            {t.metrica && <p className="mt-1 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">Métrica que decide: {t.metrica}</p>}
+            {t.corte && <p className="mt-1 text-[12px] leading-snug [overflow-wrap:anywhere]"><span className="font-medium">Corte: </span>{t.corte}</p>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 function Linha({ rotulo, children }: { rotulo: string; children: ReactNode }) {
@@ -93,6 +157,7 @@ function NotasDoAngulo({ angulo }: { angulo: Angulo }) {
       <BarraDePolitica nota={notas.risco_politica} />
       {notas.parada !== null && <BarraDeNota rotulo="Parada" nota={notas.parada} />}
       {notas.diferenciacao !== null && <BarraDeNota rotulo="Diferenciação" nota={notas.diferenciacao} />}
+      {angulo.jev && pontuacaoDe10(angulo.jev.tom) !== null && <BarraDeNota rotulo={`Tom ${rotuloDoTom(angulo.tom).toLowerCase()}`} nota={pontuacaoDe10(angulo.jev.tom)} />}
     </div>
   );
 }
@@ -141,6 +206,15 @@ function CartaoDoAngulo({
             )}
             {angulo.estilo_visual && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">{humanizar(angulo.estilo_visual)}</span>}
             {angulo.objetivo && <span className="mb-1 mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">{rotuloDoObjetivo(angulo.objetivo)}</span>}
+            {typeof angulo.ordem_teste === "number" && (
+              <span className="mb-1 mr-1.5 rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">Testar {angulo.ordem_teste}º</span>
+            )}
+            {angulo.tom && <span className="mb-1 mr-1.5 rounded-full border border-border px-2 py-0.5 text-[11px]">Tom {rotuloDoTom(angulo.tom).toLowerCase()}</span>}
+            {angulo.generico && (
+              <span className="mb-1 mr-1.5 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning" title="Pela conferência do Jev: diferenciação ou relevância baixa, serviria para qualquer marca da categoria.">
+                Genérico
+              </span>
+            )}
             {rodadas > 0 && (
               <span className="mb-1 mr-1.5 text-[11px] text-muted-foreground">
                 reescrito {rodadas} {rodadas === 1 ? "vez" : "vezes"} pela conferência
@@ -172,6 +246,13 @@ function CartaoDoAngulo({
           <span className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">Hipótese</span>
           {angulo.hipotese}
         </blockquote>
+      )}
+
+      {(angulo.porque_testar_primeiro || angulo.corte) && (
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Linha rotulo="Por que testar">{angulo.porque_testar_primeiro || ""}</Linha>
+          <Linha rotulo="Regra de corte">{angulo.corte ? angulo.corte.texto : ""}</Linha>
+        </div>
       )}
 
       {(alerta || (!aprovado && motivos.length > 0)) && (
@@ -280,9 +361,15 @@ export default function AbaPlano({
   const [desdeGerar, rodarGerar] = useAndamento();
   const [desdeProduzir, rodarProduzir] = useAndamento();
   const [rotuloDoPedido, setRotuloDoPedido] = useState<string | null>(null);
+  // v3: tom do plano novo e da produção (o da produção começa no tom do plano aberto).
+  // Sem escolha explícita, o tom sai do pedido escrito ("mais agressivo") e, sem nada, direto.
+  const [tomEscolhido, setTomEscolhido] = useState<TomDoCriativo | null>(null);
+  const [tomDaProducao, setTomDaProducao] = useState<TomDoCriativo>("direto");
+  const tom: TomDoCriativo = tomEscolhido || tomDoPedido(pedido) || "direto";
 
   const lista = planos.data || [];
   const plano = lista.find((p) => p.id === planoId) || lista[0] || null;
+  const tomDoPlanoAberto: TomDoCriativo = (plano && tomDe(plano.estrutura.tom)) || "direto";
   const destaques = (referencias.data || []).filter((r) => r.destaque).length;
   const ofertasAtivas = (ofertas.data || []).filter((o) => o.status !== "arquivada").sort((a, b) => Number(b.status === "escolhida") - Number(a.status === "escolhida"));
   const qualidade = plano ? qualidadeDoPlano(plano) : null;
@@ -312,8 +399,9 @@ export default function AbaPlano({
       }),
     );
     if (sugeridos.length) setFormatos(sugeridos);
+    setTomDaProducao(tomDe(plano.estrutura.tom) || "direto");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plano ? plano.id : null, plano ? plano.angulos.length : 0]);
+  }, [plano ? plano.id : null, plano ? plano.angulos.length : 0, plano ? String(plano.estrutura.tom || "") : ""]);
 
   const pecas = useMemo(() => marcados.length * formatos.length, [marcados.length, formatos.length]);
 
@@ -329,6 +417,7 @@ export default function AbaPlano({
         objetivo: extra.objetivo !== undefined ? extra.objetivo : objetivo || null,
         modo: extra.modo,
         referencia_ids: extra.referencia_ids,
+        tom: extra.tom || tomEscolhido,
       }),
     ).catch(async (e) => {
       // O servidor grava o plano logo depois da primeira conferência: se a
@@ -339,6 +428,7 @@ export default function AbaPlano({
 
   const aoGerar = (data: any) => {
     setPedido("");
+    setTomEscolhido(null);
     setRotuloDoPedido(null);
     if (data && typeof data.aviso === "string" && data.aviso) toast.info("Aviso do estrategista", { description: data.aviso });
     const p = data && data.plano && typeof data.plano === "object" ? normalizarPlano(data.plano) : null;
@@ -366,6 +456,7 @@ export default function AbaPlano({
     setRotuloDoPedido(p.rotulo);
     if (p.oferta_id) setOfertaId(p.oferta_id);
     if (p.objetivo) setObjetivo(p.objetivo);
+    if (p.tom) setTomEscolhido(p.tom);
     rodarGerar(() => chamarPlano({ ...p, pedido: p.pedido || "" }))
       .then((data) => {
         mesa.atualizarCusto();
@@ -381,7 +472,7 @@ export default function AbaPlano({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedidoPendente, briefing.isLoading]);
 
-  const produzir = () => (plano ? rodarProduzir(() => chamarAds<any>("criativos_produzir", corpoDaProducao(plano, marcados, formatos))) : Promise.resolve(null));
+  const produzir = () => (plano ? rodarProduzir(() => chamarAds<any>("criativos_produzir", corpoDaProducao(plano, marcados, formatos, tomDaProducao !== tomDoPlanoAberto ? tomDaProducao : null))) : Promise.resolve(null));
 
   const mudarStatus = async (status: StatusDoPlano) => {
     if (!plano) return;
@@ -423,6 +514,12 @@ export default function AbaPlano({
                 ))}
               </select>
             </label>
+            <div className="min-w-0 lg:col-span-2">
+              <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">
+                Tom <span className="font-normal text-muted-foreground">({(TONS_DO_CRIATIVO.find((t) => t.valor === tom) || TONS_DO_CRIATIVO[1]).dica})</span>
+              </span>
+              <SeletorDeTom valor={tom} onMudar={setTomEscolhido} rotulo="Tom do plano" />
+            </div>
             <div className="min-w-0">
               <span className="mb-1 block text-[11.5px] font-medium text-foreground/80">Objetivo</span>
               <div className="flex min-w-0 flex-wrap" role="radiogroup" aria-label="Objetivo do plano">
@@ -544,6 +641,8 @@ export default function AbaPlano({
               </div>
             )}
 
+            <TestarPrimeiro plano={plano} />
+
             <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
               {angulosOrdenados.map((a, i) => (
                 <CartaoDoAngulo key={a.id} angulo={a} indice={i} marcado={marcados.indexOf(a.id) >= 0} onMarcar={() => setMarcados((m) => alternar(m, a.id))} referencias={referencias.data || []} />
@@ -573,6 +672,10 @@ export default function AbaPlano({
                     );
                   })}
                 </div>
+                <div className="mb-1 mr-3 flex min-w-0 items-center">
+                  <span className="mr-1.5 text-[11.5px] text-muted-foreground">Tom</span>
+                  <SeletorDeTom valor={tomDaProducao} onMudar={setTomDaProducao} rotulo="Tom dos criativos" />
+                </div>
                 <span className="mb-1 ml-auto flex min-w-0 flex-wrap items-center">
                   <span className="mr-2 text-[12px] tabular-nums text-muted-foreground">
                     {marcados.length} ângulo{marcados.length === 1 ? "" : "s"} × {formatos.length} formato{formatos.length === 1 ? "" : "s"} = {pecas} criativo{pecas === 1 ? "" : "s"}
@@ -581,7 +684,7 @@ export default function AbaPlano({
                   <BotaoComCusto
                     rotulo="Produzir criativos"
                     titulo="Produzir criativos"
-                    descricao="Para cada ângulo e formato: a copy do anúncio (conferida pelo Jev) e a direção de arte no Estúdio Ads, pronta para gerar."
+                    descricao={`Para cada ângulo e formato: a copy do anúncio no tom ${rotuloDoTom(tomDaProducao).toLowerCase()} (conferida pelo Jev, com aviso de genérico) e a direção de arte no Estúdio Ads, pronta para gerar.`}
                     className="ml-2 h-9"
                     disabled={pecas === 0}
                     partes={() => partesDaProducao(catalogo, pecas)}

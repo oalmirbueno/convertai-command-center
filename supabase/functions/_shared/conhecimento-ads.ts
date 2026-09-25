@@ -14,10 +14,14 @@
  * criativo agressivo dentro da política, leitura de conta (era Andromeda) e
  * pacote de copy. Contrato: docs/mesa-ads/v2/CONTRATO-V2.md.
  *
+ * Versão 3 (25/09/2026, pedido do dono): tom do criativo em três níveis
+ * (sóbrio, direto, agressivo) com regras concretas para ângulos, copy e arte,
+ * a pergunta do Jev "genérico" e o foco em resultado (ordem de teste e corte).
+ *
  * Sem travessão nos textos (regra do dono).
  */
 
-export const VERSAO_CONHECIMENTO_ADS = "2026-09-24.2";
+export const VERSAO_CONHECIMENTO_ADS = "2026-09-25.1";
 
 export type FormatoAds = "feed_4x5" | "quadrado_1x1" | "stories_9x16" | "carrossel";
 
@@ -757,6 +761,182 @@ export const PARAR_A_ROLAGEM = `PARAR A ROLAGEM (a peça disputa atenção com a
 - Real vende: foto real do produto, do trabalho e da equipe, com textura, mãos, uso e contexto.
 - Direto: a oferta ou o benefício aparece sem precisar de legenda; CTA escrito curto e visível.`;
 
+// ------------------------------------------------------------------ v3: tom do criativo e foco em resultado
+// Pedido do dono (25/09/2026): "quando eu peço para ser agressivo, ele não fica
+// agressivo" e "os criativos estão muito genéricos". O tom deixa de ser um
+// adjetivo solto no prompt e vira três níveis com regras concretas, aplicadas
+// nos ângulos, na copy e na direção de arte (e conferidas pelo Jev como aviso).
+
+export type TomDoCriativo = "sobrio" | "direto" | "agressivo";
+export const TONS_DO_CRIATIVO: readonly TomDoCriativo[] = ["sobrio", "direto", "agressivo"];
+
+export type RegrasDoTom = {
+  id: TomDoCriativo;
+  nome: string;
+  resumo: string;
+  /** Máximo de palavras da frase grande da arte (headline_arte). */
+  headline_max_palavras: number;
+  /** Máximo de caracteres da headline_arte (corte em código). */
+  headline_max_caracteres: number;
+  angulos: string[];
+  copy: string[];
+  arte: string[];
+  /** Níveis do Jev (pior ao melhor): quanto a peça cumpre este tom. */
+  niveis_jev: string[];
+};
+
+export const TONS: Record<TomDoCriativo, RegrasDoTom> = {
+  sobrio: {
+    id: "sobrio",
+    nome: "Sóbrio",
+    resumo: "Autoridade calma: benefício claro, prova e credencial na frente, sem pressão.",
+    headline_max_palavras: 8,
+    headline_max_caracteres: 60,
+    angulos: [
+      "Situação real do público contada com calma; o mecanismo e a prova carregam a venda.",
+      "Gancho por curiosidade ou por demonstração, nunca por ameaça.",
+    ],
+    copy: [
+      "Headline de até 8 palavras, afirmativa, com o benefício concreto.",
+      "Primeira linha do texto principal diz o que é e para quem, sem saudação.",
+      "Urgência só se for real, dita de forma neutra; sem imperativo repetido.",
+      "CTA convite: \"Fale com a gente\", \"Veja como funciona\", \"Agende sua avaliação\".",
+    ],
+    arte: [
+      "Paleta da marca com respiro, tipografia média ou semibold, um ponto focal limpo.",
+      "Foto real com luz natural; hierarquia clara sem gritar.",
+    ],
+    niveis_jev: [
+      "Agressivo, apelativo ou com pressão fora do tom sóbrio.",
+      "Mistura tons: partes com pressão ou exagero.",
+      "Neutro, mas sem autoridade nem benefício claro.",
+      "Sóbrio e claro, com benefício e prova à frente.",
+      "Autoridade calma exemplar: específico, confiável e sem nenhuma pressão.",
+    ],
+  },
+  direto: {
+    id: "direto",
+    nome: "Direto",
+    resumo: "Oferta na cara: benefício e condição concretos na primeira leitura, contraste alto e CTA de ação.",
+    headline_max_palavras: 7,
+    headline_max_caracteres: 50,
+    angulos: [
+      "O gancho já nomeia a oferta ou o benefício concreto; nada de rodeio.",
+      "Um mecanismo e uma prova por ângulo, ditos sem adjetivo vazio.",
+    ],
+    copy: [
+      "Headline de até 7 palavras com o benefício ou a oferta concreta (o quê, quanto, quando).",
+      "Primeira linha do texto principal é a oferta ou a situação do público; preço e condição reais quando existirem.",
+      "CTA de ação com o próximo passo: \"Chame no WhatsApp\", \"Peça seu orçamento\".",
+      "Proibido o vocabulário genérico: qualidade, excelência, soluções, confira, venha conhecer, o melhor para você.",
+    ],
+    arte: [
+      "Contraste alto: bloco de cor sólida ou área limpa sob o texto, um elemento dominante.",
+      "Headline em peso bold, ocupando de 25% a 35% da altura da peça.",
+    ],
+    niveis_jev: [
+      "Vago: não se sabe o que é oferecido nem o próximo passo.",
+      "Fala da marca ou da categoria, mas a oferta aparece só no fim ou escondida.",
+      "Oferta compreensível, com algum rodeio ou adjetivo vazio.",
+      "Direto: oferta e próximo passo claros na primeira leitura.",
+      "Direto ao ponto: benefício concreto, condição e ação em poucas palavras, sem nada sobrando.",
+    ],
+  },
+  agressivo: {
+    id: "agressivo",
+    nome: "Agressivo",
+    resumo: "Impossível de ignorar: frase curta e dura, promessa concreta com número real, contraste máximo, escala grande, urgência real e CTA imperativo.",
+    headline_max_palavras: 5,
+    headline_max_caracteres: 36,
+    angulos: [
+      "Cada ângulo parte de uma tensão concreta do público (custo de esperar, retrabalho, dinheiro ou tempo perdido) ou de uma afirmação contraintuitiva sobre a categoria, com a solução logo atrás.",
+      "O gancho verbal é uma ordem ou uma afirmação dura de até 5 palavras; nunca pergunta morna nem frase institucional.",
+      "A hipótese mira a métrica de negócio (conversa, lead, venda), não curtida.",
+    ],
+    copy: [
+      "Headline de 2 a 5 palavras, imperativa ou afirmação dura (\"Pare de pagar por poda mal feita\", \"Árvore no chão hoje\").",
+      "Promessa concreta com NÚMERO REAL do briefing, da oferta ou da campanha (preço, prazo, quantidade, garantia, vagas). Sem número real, use especificidade concreta (o quê, onde, em quanto tempo) e nunca invente número.",
+      "Primeira linha do texto principal é a oferta ou a dor em palavras do público; sem saudação, sem \"você sabia\", sem apresentar a empresa.",
+      "Urgência só real (data da campanha, vagas, lote, sazonalidade verdadeira), dita sem rodeio no texto e na arte.",
+      "CTA imperativo com o próximo passo e o canal: \"Chame no WhatsApp agora\", \"Garanta sua data\".",
+      "Proibido: qualidade, excelência, soluções, confira, venha conhecer, o melhor para você, compromisso, tradição, atendimento diferenciado, pergunta retórica morna e qualquer frase que serviria para um concorrente.",
+      "Continua dentro da política: sem atributo pessoal, sem resultado garantido, sem medo exagerado, sem urgência falsa.",
+    ],
+    arte: [
+      "Contraste máximo: fundo chapado saturado (ou preto e branco com UMA cor de destaque) e texto em bloco sólido; nada de cinza sobre cinza.",
+      "Escala gigante: a headline ocupa de 35% a 50% da altura da peça em peso black ou extra bold; o elemento dominante (produto, número, objeto) ocupa de 40% a 60% do quadro.",
+      "O número real da oferta (preço, prazo, vagas) aparece enorme, na cor de destaque.",
+      "Composição com energia: diagonal, corte ousado com o produto saindo do quadro, sobreposição; nunca tudo centralizado e pequeno.",
+      "CTA escrito em botão ou faixa de cor sólida, curto e visível.",
+      "Nunca escurecer a foto ou a capa: o destaque vem de cor, escala, tipografia e composição.",
+    ],
+    niveis_jev: [
+      "Morno ou institucional: nada na peça pressiona para agir agora.",
+      "Tem uma frase forte, mas a oferta é vaga, sem número nem próximo passo concreto.",
+      "Direto, porém longo ou suave demais para o tom agressivo pedido.",
+      "Agressivo: frase curta e dura, promessa concreta e CTA imperativo.",
+      "Agressivo de verdade dentro da política: curto, específico, com número real ou urgência real e CTA impossível de ignorar.",
+    ],
+  },
+};
+
+/** Termos que denunciam o pedido de tom na fala da equipe (regra fixa, sem IA). */
+const PEDE_AGRESSIVO = /agressiv|mais pesad|mais forte|sem d[oó]|sem medo|mais vendedor|mais direto ao ponto|mais duro|chamar mais aten|mais impactante|apelativ/i;
+const PEDE_SOBRIO = /s[oó]bri|elegant|discret|institucional|mais leve|mais suave|menos agressiv/i;
+
+/**
+ * Tom pedido pela equipe numa frase livre. "menos agressivo" e "sóbrio" vencem;
+ * "agressivo", "mais forte", "sem dó" e afins viram agressivo; o resto fica no padrão.
+ */
+export function tomDoPedido(texto: string | null | undefined, padrao: TomDoCriativo = "direto"): TomDoCriativo {
+  const t = String(texto ?? "");
+  if (!t.trim()) return padrao;
+  if (PEDE_SOBRIO.test(t)) return "sobrio";
+  if (PEDE_AGRESSIVO.test(t)) return "agressivo";
+  return padrao;
+}
+
+export const tomValido = (v: unknown): TomDoCriativo | null => (TONS_DO_CRIATIVO as readonly string[]).includes(String(v)) ? (v as TomDoCriativo) : null;
+
+const listaDoTom = (itens: string[]) => itens.map((x) => `- ${x}`).join("\n");
+
+/** Bloco do tom para o prompt dos ângulos (plano e conversa do plano). */
+export function regrasDoTomParaAngulos(tom: TomDoCriativo): string {
+  const r = TONS[tom];
+  return `TOM PEDIDO: ${r.nome.toUpperCase()} (${r.resumo})\nNos ângulos:\n${listaDoTom(r.angulos)}\nGancho verbal com no máximo ${r.headline_max_palavras} palavras.`;
+}
+
+/** Bloco do tom para o prompt da copy (produção e variações). */
+export function regrasDoTomParaCopy(tom: TomDoCriativo): string {
+  const r = TONS[tom];
+  return `TOM PEDIDO: ${r.nome.toUpperCase()} (${r.resumo})\nNa copy e no texto da arte:\n${listaDoTom(r.copy)}\nheadline_arte com no máximo ${r.headline_max_palavras} palavras.\nNa direção da arte:\n${listaDoTom(r.arte)}`;
+}
+
+/** Bloco do tom para o diretor de arte e o gerador (vai em regras_do_criativo e no tratamento do layout). */
+export function direcaoDoTomParaArte(tom: TomDoCriativo): string {
+  const r = TONS[tom];
+  return `TOM DA PEÇA: ${r.nome.toUpperCase()}. ${r.resumo}\n${listaDoTom(r.arte)}`;
+}
+
+/** Frase curta do tom para o tratamento do layout (cabe no campo de 900 caracteres). */
+export function tratamentoDoTom(tom: TomDoCriativo): string {
+  if (tom === "agressivo") return "tom agressivo: contraste máximo, headline gigante em peso black (35% a 50% da altura), número real enorme na cor de destaque, CTA em faixa sólida";
+  if (tom === "sobrio") return "tom sóbrio: respiro, tipografia média, um ponto focal limpo, sem pressão";
+  return "tom direto: contraste alto, bloco sólido sob o texto, headline bold de 25% a 35% da altura";
+}
+
+/** Critérios da pergunta Noul do Jev: o anúncio é genérico? */
+export const CRITERIOS_GENERICO = {
+  true: "Genérico: serviria para qualquer concorrente da categoria trocando só o nome; não tem situação específica do público, promessa concreta (o quê, quanto, quando) nem número ou detalhe real da oferta; usa frases como qualidade, excelência, soluções, confira, venha conhecer.",
+  false: "Específico: tem situação concreta do público, promessa ou condição concreta da oferta, ou detalhe real que só este cliente poderia dizer.",
+};
+
+export const FOCO_EM_RESULTADO = `FOCO EM RESULTADO (o criativo existe para mover a métrica do negócio)
+- Todo ângulo diz por que pode mover a métrica que decide (conversa, lead, venda, agendamento), ligado ao que a conta já mostrou: o que venceu, o que cansou, o custo por resultado atual.
+- Ordem de teste: primeiro o ângulo com maior chance de bater o custo tolerável (prova real, oferta clara, situação exata), depois o que abre um território novo.
+- Regra de corte escrita antes de subir: pausar quando gastar de 2 a 3 vezes o custo tolerável por resultado sem resultado, ou quando o custo por resultado passar do tolerável com volume suficiente (cerca de 1.000 impressões e 3 dias). Os números vêm do código, nunca da IA.
+- Criativo que não se liga a uma métrica não vai ao ar.`;
+
 /** Conhecimento inteiro para o estrategista de ads (sistema do modelo). */
 export const CONHECIMENTO_ESTRATEGISTA_ADS = [
   `Você é o estrategista de criativos de anúncio da agência Aceleriq. Seu trabalho é transformar a oferta real do cliente em hipóteses de criativo de alta conversão para tráfego pago (Meta: Facebook e Instagram), com método, honestidade e foco em resultado de negócio.`,
@@ -780,6 +960,7 @@ export const CONHECIMENTO_ESTRATEGISTA_ADS = [
   DIAGNOSTICO,
   CONHECIMENTO_CONTA,
   ROTINA_DE_TESTE,
+  FOCO_EM_RESULTADO,
 ].join("\n\n");
 
 /** Bloco que o diretor de arte e o gerador recebem numa peça de anúncio. */

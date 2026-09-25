@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookmarkPlus, Check, Copy, Download, ExternalLink, ImageIcon, Loader2, Search, Sparkles, Star } from "lucide-react";
+import { BookmarkPlus, Check, Copy, Download, ExternalLink, ImageIcon, Loader2, Search, Sparkles, Star, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +34,12 @@ import {
  *
  * v2: cada prompt mostra uma imagem de exemplo do resultado (de banco
  * público, com licença e autor, ou gerada, com o selo "exemplo gerado").
- * Sem imagem, "Gerar exemplo" gera uma (paga, com o preço antes). Tudo em
- * miniatura compacta, com "ver grande" ao tocar.
+ * Sem imagem, "Gerar exemplo" gera uma (paga, com o preço antes).
+ *
+ * 25/09 (pedido do dono: "a imagem tem que ficar um pouco maior, não dá para
+ * reconhecer"): o exemplo do prompt ficou bem maior (largura cheia no
+ * celular, 160 px no computador) e as referências em grade de 2 a 5 colunas,
+ * sempre com "ver grande" ao tocar.
  */
 
 export async function copiarParaAreaDeTransferencia(texto: string): Promise<boolean> {
@@ -178,10 +182,13 @@ function ExemploDoPrompt({ item, onAmpliar }: { item: ItemDaBiblioteca; onAmplia
   const queryClient = useQueryClient();
   if (temImagem(item)) {
     return (
-      <button type="button" onClick={onAmpliar} className="relative block w-16 shrink-0 cursor-zoom-in sm:w-20" aria-label={`Ver grande o exemplo de ${item.titulo}`} data-exemplo={item.exemplo_gerado ? "gerado" : "publico"}>
-        <Moldura proporcao={1}>
+      <button type="button" onClick={onAmpliar} className="relative block w-full shrink-0 cursor-zoom-in sm:w-40" aria-label={`Ver grande o exemplo de ${item.titulo}`} data-exemplo={item.exemplo_gerado ? "gerado" : "publico"}>
+        <Moldura proporcao={4 / 3}>
           <ImagemDaBiblioteca item={item} />
         </Moldura>
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" aria-hidden="true">
+          <ZoomIn className="mr-0.5 h-3 w-3" /> ver grande
+        </span>
         {item.exemplo_gerado && (
           <span className="pointer-events-none absolute bottom-1 left-1 rounded-full border border-primary/30 bg-card px-1 text-[9px] font-semibold text-primary" data-selo="exemplo-gerado">
             exemplo gerado
@@ -191,8 +198,8 @@ function ExemploDoPrompt({ item, onAmpliar }: { item: ItemDaBiblioteca; onAmplia
     );
   }
   return (
-    <div className="flex w-16 shrink-0 flex-col items-center sm:w-20" data-exemplo="">
-      <Moldura proporcao={1}>
+    <div className="flex w-full shrink-0 flex-col items-center sm:w-40" data-exemplo="">
+      <Moldura proporcao={4 / 3}>
         <span className="flex h-full w-full items-center justify-center text-muted-foreground">
           <ImageIcon className="h-4 w-4" />
         </span>
@@ -224,9 +231,9 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
   const [ingles, setIngles] = useState(false);
   const texto = ingles ? item.prompt_en : item.prompt_pt || item.prompt_en;
   return (
-    <li className="flex min-w-0 items-start rounded-xl border border-border bg-card p-3" data-prompt={item.id}>
+    <li className="flex min-w-0 flex-col rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-start" data-prompt={item.id}>
       <ExemploDoPrompt item={item} onAmpliar={onAmpliar} />
-      <div className="ml-3 min-w-0 flex-1 space-y-2">
+      <div className="mt-2 min-w-0 flex-1 space-y-2 sm:ml-3 sm:mt-0">
         <div className="flex min-w-0 items-start">
           <div className="min-w-0 flex-1">
             <p className="flex min-w-0 items-center text-[13px] font-semibold">
@@ -276,10 +283,13 @@ function CartaoDoPrompt({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaB
 function CartaoDaReferencia({ item, onSalvar, salvando, onAmpliar }: { item: ItemDaBiblioteca; onSalvar: () => void; salvando: boolean; onAmpliar: () => void }) {
   return (
     <li className="min-w-0 rounded-lg border border-border bg-card p-1" data-referencia={item.id}>
-      <button type="button" onClick={onAmpliar} className="block w-full cursor-zoom-in" aria-label={`Ver grande ${item.titulo}`}>
-        <Moldura proporcao={1}>
+      <button type="button" onClick={onAmpliar} className="relative block w-full cursor-zoom-in" aria-label={`Ver grande ${item.titulo}`}>
+        <Moldura proporcao={4 / 5}>
           <ImagemDaBiblioteca item={item} />
         </Moldura>
+        <span className="pointer-events-none absolute right-1 top-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" aria-hidden="true">
+          <ZoomIn className="h-3 w-3" />
+        </span>
       </button>
       <div className="space-y-0.5 px-0.5 pt-1">
         <p className="truncate text-[11px] font-medium" title={item.titulo}>
@@ -367,7 +377,7 @@ function BuscaPublica({ categoriaInicial }: { categoriaInicial: string }) {
       </form>
       {resultados && resultados.length === 0 && <p className="mt-3 text-[12px] text-muted-foreground">Nada encontrado. Tente em inglês ou com menos palavras.</p>}
       {resultados && resultados.length > 0 && (
-        <ul className="mt-3 grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6" aria-label="Resultados da busca">
+        <ul className="mt-3 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4" aria-label="Resultados da busca">
 
           {resultados.map((r) => {
             const ja = importadas.indexOf(r.chave) >= 0;
@@ -483,7 +493,7 @@ export default function EtapaBiblioteca() {
       {referencias.length > 0 && (
         <section className="min-w-0 space-y-2">
           <h2 className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referências de imagem · {referencias.length}</h2>
-          <ul className="grid min-w-0 grid-cols-3 gap-1.5 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
+          <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {referencias.map((i) => (
               <CartaoDaReferencia key={i.id} item={i} salvando={salvando === i.id} onSalvar={() => void salvar(i)} onAmpliar={() => setAmpliada(i)} />
             ))}

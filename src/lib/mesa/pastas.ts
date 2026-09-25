@@ -15,6 +15,8 @@ export const RAIZ = "";
 export const PASTA_ARQUIVOS = "__arquivos";
 export const PASTA_ENVIADAS = "__enviadas";
 export const PASTA_FORA = "__fora";
+/** Fotos feitas na Mesa Foto (origem mesa_foto): antes caíam em "Fora do Workspace" e ninguém achava (25/09). */
+export const PASTA_MESA_FOTO = "__mesa_foto";
 
 export interface PastaDoExplorador {
   id: string;
@@ -136,7 +138,8 @@ export interface FotoComPasta {
 /**
  * Pastas do acervo espelhando o Workspace: a foto que veio do Workspace fica
  * na pasta onde o arquivo mora lá; as de Arquivos ficam em "Arquivos" (uma
- * subpasta por pasta de Arquivos); as enviadas, em "Enviadas".
+ * subpasta por pasta de Arquivos); as enviadas, em "Enviadas"; as feitas na
+ * Mesa Foto, em "Mesa Foto".
  */
 export function pastasDoAcervo(nos: NoDoWorkspace[], fotos: FotoComPasta[]): {
   pastas: PastaDoExplorador[];
@@ -148,10 +151,12 @@ export function pastasDoAcervo(nos: NoDoWorkspace[], fotos: FotoComPasta[]): {
   let temArquivos = false;
   let temEnviadas = false;
   let temFora = false;
+  let temMesaFoto = false;
   const subpastas: string[] = [];
   for (const f of fotos) {
     const destino = pastaDaFoto(f, pastaDoNo);
     if (destino === PASTA_ENVIADAS) temEnviadas = true;
+    else if (destino === PASTA_MESA_FOTO) temMesaFoto = true;
     else if (destino === PASTA_FORA) temFora = true;
     else if (destino.indexOf(PASTA_ARQUIVOS) === 0) {
       temArquivos = true;
@@ -160,6 +165,7 @@ export function pastasDoAcervo(nos: NoDoWorkspace[], fotos: FotoComPasta[]): {
   }
   if (temArquivos) pastas.push({ id: PASTA_ARQUIVOS, nome: "Arquivos", paiId: RAIZ });
   for (const s of subpastas) pastas.push({ id: s, nome: s.slice(PASTA_ARQUIVOS.length + 1), paiId: PASTA_ARQUIVOS });
+  if (temMesaFoto) pastas.push({ id: PASTA_MESA_FOTO, nome: "Mesa Foto", paiId: RAIZ });
   if (temEnviadas) pastas.push({ id: PASTA_ENVIADAS, nome: "Enviadas", paiId: RAIZ });
   if (temFora) pastas.push({ id: PASTA_FORA, nome: "Fora do Workspace", paiId: RAIZ });
   return { pastas, pastaDoNo };
@@ -173,5 +179,6 @@ export function pastaDaFoto(f: FotoComPasta, pastaDoNo: Record<string, string>):
     return nome ? `${PASTA_ARQUIVOS}/${nome}` : PASTA_ARQUIVOS;
   }
   if (f.origem === "upload") return PASTA_ENVIADAS;
+  if (f.origem === "mesa_foto") return PASTA_MESA_FOTO;
   return PASTA_FORA;
 }

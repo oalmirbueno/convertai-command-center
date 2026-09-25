@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bookmark, ChevronLeft, ChevronRight, ImagePlus, Maximize2, MessageSquare, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
+import { Bookmark, ChevronLeft, ChevronRight, Copy, ImagePlus, Maximize2, MessageSquare, PenLine, RefreshCw, ScanLine, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,6 @@ import PranchetaDoEstudio, {
 } from "@/components/mesa/PranchetaDoEstudio";
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "@/components/mesa/autocorrecaoDaLamina";
 import { useEstadoGuardado } from "@/components/mesa/estudioUtil";
-import ReferenciasDoEstudio, { type AlvoDasReferencias } from "@/components/mesa/ReferenciasDoEstudio";
 import SeletorDeAreas from "@/components/mesa/SeletorDeAreas";
 import { ultimasVersoes, type CardDaDirecao, type CardGerado, type Trabalho } from "@/components/mesa/useItensDoMes";
 import type { Area } from "@/components/mesa/estudioUtil";
@@ -39,7 +38,35 @@ import {
   type ParteDaEstimativa,
   type Qualidade,
 } from "@/lib/mesa/api";
-import { formatoDe, ZONA_SEGURA, type CriativoAds } from "./adsApi";
+import { formatoDe, instrucaoComTom, ZONA_SEGURA, type CriativoAds } from "./adsApi";
+import ReferenciasDoCriativo from "./ReferenciasDoCriativo";
+
+/** Formato irmão (mesmo ângulo e variação, outro formato) com o trabalho de arte dele. */
+export interface IrmaoDoCriativo {
+  criativo: CriativoAds;
+  trabalho: Trabalho | null;
+}
+
+/** Andamento do ajuste levado aos formatos irmãos. */
+export type EtapaDoIrmao = "fila" | "ajustando" | "conferindo" | "feito" | "sem_arte" | "erro";
+
+/** Irmãos que recebem um ajuste na lâmina `ordem`: têm trabalho, a lâmina e a arte dela. */
+export function irmaosComArte(irmaos: IrmaoDoCriativo[], ordem: number): IrmaoDoCriativo[] {
+  return irmaos.filter((i) => {
+    const t = i.trabalho;
+    if (!t || t.status === "entregue") return false;
+    const cards = (t.direcao && t.direcao.cards) || [];
+    return cards.some((c) => c.ordem === ordem) && ultimasVersoes(t.cards || []).has(ordem);
+  });
+}
+
+/** Instrução levada ao irmão: a mesma do pedido; ajuste por área vira "no elemento equivalente". */
+export function instrucaoParaIrmao(instrucao: string, formatoDeOrigem: string, comAreas: boolean): string {
+  const base = instrucaoComTom(instrucao);
+  return comAreas
+    ? `${base}\n\n(No ${formatoDeOrigem} esta mudança foi feita numa área marcada. Aplique no elemento equivalente desta peça, mantendo a composição do formato.)`
+    : base;
+}
 
 /**
  * A arte do criativo no MESMO motor do Estúdio da Mesa: o trabalho tipo
@@ -188,10 +215,13 @@ export default function ArteDoCriativo({
   criativo,
   trabalho,
   onAtualizar,
+  irmaos = [],
 }: {
   criativo: CriativoAds;
   trabalho: Trabalho;
   onAtualizar: () => void;
+  /** v3: os formatos irmãos do mesmo ângulo (o ajuste e a referência valem para eles, ligado por padrão). */
+  irmaos?: IrmaoDoCriativo[];
 }) {
   const mesa = useMesa();
   const { catalogo } = mesa;
@@ -206,9 +236,10 @@ export default function ArteDoCriativo({
   const [areas, setAreas] = useState<Area[]>([]);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [ferramenta, setFerramenta] = useState<Ferramenta>("lamina");
-  const [refsAlvo, setRefsAlvo] = useState<AlvoDasReferencias>("conjunto");
-  const [refsAba, setRefsAba] = useState<"cliente" | "banco">("cliente");
   const [zonaSegura, setZonaSegura] = useState(true);
+  // v3: ajuste e referência valem também para os formatos irmãos do ângulo (padrão ligado).
+  const [valerParaIrmaos, setValerParaIrmaos] = useState(true);
+  const [andamentoIrmaos, setAndamentoIrmaos] = useState<Record<string, EtapaDoIrmao>>({});
   // "Corrigir sozinho": desligado por padrão (24/09/2026), guardado por trabalho na sessão.
   const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho.id), false);
 
@@ -254,8 +285,8 @@ export default function ArteDoCriativo({
     else onAtualizar();
   };
 
-  const chamarConferir = (ordem: number) =>
-    chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalho.id, ordem });
+  const chamarConferir = (ordem: number, trabalhoId: string = trabalho.id) =>
+    chamarFuncao<any>("estudio-arte", { acao: "conferir_card", trabalho_id: trabalhoId, ordem });
   const chamarCorrigir = (ordem: number, pedidoDaEquipe: boolean) =>
     chamarFuncao<any>("estudio-arte", { acao: "corrigir_card", trabalho_id: trabalho.id, ordem, pedido_da_equipe: pedidoDaEquipe || undefined });
 
@@ -339,6 +370,50 @@ export default function ArteDoCriativo({
     return { custo_usd: total, falhou: falhas.length > 0 };
   };
 
+  /**
+   * O mesmo pedido de ajuste nos formatos irmãos, um por vez (uma chamada por
+   * formato, com andamento): ajusta e confere, sem autocorreção. Irmão sem a
+   * arte desta lâmina fica de fora, avisado.
+   */
+  const ajustarIrmaos = async (ordem: number, instrucao: string, opcoes: OpcoesDoAjuste): Promise<number> => {
+    if (!valerParaIrmaos || !irmaos.length) return 0;
+    const aptos = irmaosComArte(irmaos, ordem);
+    const semArte = irmaos.filter((i) => aptos.indexOf(i) < 0);
+    const estado: Record<string, EtapaDoIrmao> = {};
+    aptos.forEach((i) => { estado[i.criativo.id] = "fila"; });
+    semArte.forEach((i) => { estado[i.criativo.id] = "sem_arte"; });
+    setAndamentoIrmaos(estado);
+    const passo = (id: string, e: EtapaDoIrmao) => setAndamentoIrmaos((a) => ({ ...a, [id]: e }));
+    const texto = instrucaoParaIrmao(instrucao, f.rotulo, !!(opcoes.areas && opcoes.areas.length));
+    let custo = 0;
+    let falhas = 0;
+    for (const i of aptos) {
+      const t = i.trabalho as Trabalho;
+      try {
+        passo(i.criativo.id, "ajustando");
+        const a = await chamarFuncao<any>("estudio-arte", { acao: "ajustar_card", trabalho_id: t.id, ordem, instrucao: texto, tipo: opcoes.tipo, imagem_id: opcoes.imagem_id });
+        custo += custoDaResposta(a) || 0;
+        passo(i.criativo.id, "conferindo");
+        try {
+          custo += custoDaResposta(await chamarConferir(ordem, t.id)) || 0;
+        } catch {
+          /* conferência do irmão falhou: o ajuste já foi feito */
+        }
+        passo(i.criativo.id, "feito");
+      } catch (e) {
+        falhas += 1;
+        passo(i.criativo.id, "erro");
+        avisarErro(e, `O ajuste não foi feito em ${formatoDe(i.criativo.formato).rotulo}`);
+      }
+      onAtualizar();
+    }
+    if (aptos.length && !falhas) toast.success(`Ajuste levado a ${aptos.length} formato${aptos.length === 1 ? "" : "s"} deste ângulo`);
+    if (semArte.length) {
+      toast.info("Formato ainda sem arte", { description: `${semArte.map((i) => formatoDe(i.criativo.formato).rotulo).join(", ")}: gere a arte lá; o ajuste não foi aplicado.` });
+    }
+    return custo;
+  };
+
   const ajustar = async (ordem: number, instrucao: string, opcoes: OpcoesDoAjuste = {}) => {
     marcar(ordem, "ajustando");
     let custo = 0;
@@ -347,7 +422,8 @@ export default function ArteDoCriativo({
         acao: "ajustar_card",
         trabalho_id: trabalho.id,
         ordem,
-        instrucao,
+        // "Mais agressivo" leva junto as regras concretas do tom agressivo.
+        instrucao: instrucaoComTom(instrucao),
         areas: opcoes.areas && opcoes.areas.length ? opcoes.areas : undefined,
         tipo: opcoes.tipo,
         imagem_id: opcoes.imagem_id,
@@ -358,18 +434,35 @@ export default function ArteDoCriativo({
       soltar(ordem);
       throw e;
     }
-    return { custo_usd: custo + (await conferirSemDerrubar(ordem)) };
+    const doCard = await conferirSemDerrubar(ordem);
+    const dosIrmaos = await ajustarIrmaos(ordem, instrucao, opcoes);
+    return { custo_usd: custo + doCard + dosIrmaos };
   };
 
   const configurar = async (corpo: Record<string, unknown>) => {
     await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
+    // Texto exato mudado à mão vale também nos formatos irmãos (mesma copy do ângulo), sem custo.
+    const card = corpo.card as { ordem?: number; texto_exato?: string } | undefined;
+    if (valerParaIrmaos && card && typeof card.texto_exato === "string" && typeof card.ordem === "number") {
+      for (const i of irmaos) {
+        const t = i.trabalho;
+        if (!t || t.status === "entregue" || !((t.direcao && t.direcao.cards) || []).some((c) => c.ordem === card.ordem)) continue;
+        try {
+          await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: t.id, card: { ordem: card.ordem, texto_exato: card.texto_exato } });
+        } catch (e) {
+          avisarErro(e, `O texto não foi levado a ${formatoDe(i.criativo.formato).rotulo}`);
+        }
+      }
+    }
     onAtualizar();
   };
 
   const partesGerar = (vezes = 1): ParteDaEstimativa[] => partesDaLamina(modeloImagem, leitor ? leitor.id : undefined, qualidade, vezes);
+  // Custo à vista: o ajuste deste formato e o dos irmãos com arte (uma chamada por formato).
+  const irmaosDoAjuste = card && valerParaIrmaos ? irmaosComArte(irmaos, card.ordem).length : 0;
   const partesAjustar = (): ParteDaEstimativa[] => [
-    { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.ajuste.entrada, tokensSaida: TAMANHOS.ajuste.saida },
-    ...partesGerar(1),
+    { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.ajuste.entrada, tokensSaida: TAMANHOS.ajuste.saida, vezes: 1 + irmaosDoAjuste },
+    ...partesGerar(1 + irmaosDoAjuste),
   ];
   const partesConferir = (): ParteDaEstimativa[] => [
     { modeloId: leitor ? leitor.id : null, tipo: "texto", tokensEntrada: TAMANHOS.leituraDoCard.entrada, tokensSaida: TAMANHOS.leituraDoCard.saida },
@@ -453,6 +546,23 @@ export default function ArteDoCriativo({
             <ScanLine className="mr-1 h-3.5 w-3.5" /> Zona segura
           </button>
         )}
+        {irmaos.length > 0 && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={valerParaIrmaos}
+            onClick={() => setValerParaIrmaos((v) => !v)}
+            className={`mb-1 mr-2 mt-1 inline-flex h-9 min-w-0 items-center rounded-lg border px-2.5 text-[12px] ${valerParaIrmaos ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground"}`}
+            title="Pedido de ajuste, texto e referência deste formato vão também para os outros formatos do mesmo ângulo (uma chamada por formato; o custo aparece antes)."
+          >
+            <Copy className="mr-1 h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {valerParaIrmaos ? "Aplicar também em " : "Só neste formato (irmãos: "}
+              {irmaos.map((i) => formatoDe(i.criativo.formato).curto).join(", ")}
+              {valerParaIrmaos ? "" : ")"}
+            </span>
+          </button>
+        )}
         <button
           type="button"
           role="switch"
@@ -482,6 +592,26 @@ export default function ArteDoCriativo({
           />
         </span>
       </div>
+
+      {Object.keys(andamentoIrmaos).length > 0 && (
+        <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-3 py-2 text-[12px]" aria-label="Ajuste nos formatos irmãos" aria-live="polite">
+          <span className="mb-1 mr-2 mt-1 font-medium">Mesmo ajuste nos irmãos:</span>
+          {irmaos.filter((i) => !!andamentoIrmaos[i.criativo.id]).map((i) => {
+            const e = andamentoIrmaos[i.criativo.id];
+            const rotulo =
+              e === "fila" ? "na fila" : e === "ajustando" ? "ajustando" : e === "conferindo" ? "conferindo" : e === "feito" ? "feito" : e === "sem_arte" ? "sem arte ainda" : "falhou";
+            const tom = e === "feito" ? "bg-success/10 text-success" : e === "erro" ? "bg-destructive/10 text-destructive" : e === "sem_arte" ? "bg-secondary text-muted-foreground" : "bg-primary/10 text-primary";
+            return (
+              <span key={i.criativo.id} data-irmao={e} className={`mb-1 mr-1.5 mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] ${tom}`}>
+                {formatoDe(i.criativo.formato).rotulo}: {rotulo}
+              </span>
+            );
+          })}
+          <button type="button" className="mb-1 ml-auto mt-1 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setAndamentoIrmaos({})}>
+            Fechar
+          </button>
+        </div>
+      )}
 
       {cards.length > 1 && (
         <PranchetaDoEstudio
@@ -608,13 +738,11 @@ export default function ArteDoCriativo({
               />
             )}
             {ferramenta === "referencias" && (
-              <ReferenciasDoEstudio
+              <ReferenciasDoCriativo
                 trabalho={trabalho}
                 cardSelecionado={card}
-                alvo={refsAlvo}
-                onAlvo={setRefsAlvo}
-                aba={refsAba}
-                onAba={setRefsAba}
+                irmaos={irmaos.map((i) => i.trabalho).filter((t): t is Trabalho => !!t && t.status !== "entregue")}
+                valerParaIrmaos={valerParaIrmaos}
                 onAtualizar={onAtualizar}
               />
             )}

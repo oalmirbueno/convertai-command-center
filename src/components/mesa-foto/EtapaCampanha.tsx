@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BookImage, Check, ClipboardCheck, Images, Megaphone, Plus, Sparkles, Upload, X } from "lucide-react";
+import { BookImage, Check, ClipboardCheck, Images, Megaphone, Plus, RefreshCw, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeModelo, SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, usd, type Qualidade } from "@/lib/mesa/api";
 import { AndamentoDoLote, BotaoDoLote } from "./AndamentoDoLote";
+import { SeletorDaCampanha, useCampanhaEscolhida } from "./CampanhaDaMesa";
+import { DecisaoRapida, MenuDeUso } from "./UsoDaFoto";
 import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
 import { ZonaDeEnvio } from "./EtapaAcervo";
@@ -20,10 +22,14 @@ import { GuiaDeEstiloNaTela } from "./GuiaDeEstilo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import {
   acrescentarFotos,
+  chaveDosEnsaios,
   ehCampanha,
   ESTADOS_DA_TOMADA,
+  fotoDaVersao,
+  gerarTomada,
   guardarEnsaio,
   invalidarFotos,
+  partesDaGeracao,
   limitarQuantidade,
   MAX_REFERENCIAS_DA_CAMPANHA,
   partesDoPlanoDeLote,
@@ -50,8 +56,14 @@ import {
  * de campanha. Gerar em lote com andamento por foto; revisar e usar seguem o
  * mesmo fluxo de aprovação.
  *
- * Organizada em blocos independentes (Produto, Estilo, Modelo, Fotos, e a
- * campanha aberta) para virar a futura Mesa de Publicidade sem refazer.
+ * Organizada em blocos independentes (Produto, Campanha da Mesa, Estilo,
+ * Modelo, Fotos, e a campanha aberta) para virar a futura Mesa de
+ * Publicidade sem refazer.
+ *
+ * 25/09 (pedido do dono): a campanha da Mesa se escolhe aqui (a do mês vem
+ * marcada pelo calendário) e vai no plano; cada foto gerada aprova, rejeita,
+ * refaz e tem o menu Usar no próprio resultado, numa grade com rolagem
+ * própria.
  *
  * Regras: a pessoa é sintética (adulta, sem parecer com ninguém real, sem
  * sexualização), o produto do kit não muda, a referência de estilo só dá a
@@ -107,7 +119,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
   };
 
   return (
-    <Cartao titulo="2. Referência de estilo" dica="Print de perfil, moodboard ou referência da biblioteca. O diretor tira só a direção: paleta, luz, cenários, clima. Nunca copia foto, marca ou pessoa.">
+    <Cartao titulo="3. Referência de estilo" dica="Print de perfil, moodboard ou referência da biblioteca. O diretor tira só a direção: paleta, luz, cenários, clima. Nunca copia foto, marca ou pessoa.">
       {refs.length > 0 && (
         <ul className="mb-2 flex min-w-0 flex-wrap" aria-label="Referências de estilo escolhidas">
           {refs.map((r) => {
@@ -200,7 +212,7 @@ function BlocoDoEstilo({ refs, onMudar }: { refs: RefDeEstilo[]; onMudar: (r: Re
 
 function BlocoDoModelo({ modelo, onMudar }: { modelo: PerfilDoModelo; onMudar: (m: PerfilDoModelo) => void }) {
   return (
-    <Cartao titulo="3. Modelo sintético" dica="Pessoa criada pela IA: adulta, sem parecer com ninguém real, sem sexualização. Sempre marcada como gerada.">
+    <Cartao titulo="4. Modelo sintético" dica="Pessoa criada pela IA: adulta, sem parecer com ninguém real, sem sexualização. Sempre marcada como gerada.">
       <p className="mb-1 text-[11.5px] text-muted-foreground">Perfil</p>
       <Pilulas rotulo="Perfil do modelo" opcoes={PERFIS} valor={PERFIS.some((p) => p.valor === modelo.perfil) ? modelo.perfil : null} onEscolher={(v) => onMudar({ ...modelo, perfil: v })} />
       <p className="mb-1 mt-1 text-[11.5px] text-muted-foreground">Idade aproximada</p>
@@ -210,6 +222,75 @@ function BlocoDoModelo({ modelo, onMudar }: { modelo: PerfilDoModelo; onMudar: (
         <Input value={modelo.estilo} onChange={(e) => onMudar({ ...modelo, estilo: e.target.value })} placeholder="Ex.: urbano, minimalista, roupa neutra" aria-label="Estilo do modelo" className="h-9 text-[12.5px]" />
       </label>
     </Cartao>
+  );
+}
+
+/** Uma foto da campanha no resultado: ver grande, aprovar, rejeitar, refazer e usar ali mesmo. */
+function FotoDaCampanha({ ensaio, tomada, modeloId, qualidade, onAmpliar }: { ensaio: Ensaio; tomada: Ensaio["tomadas"][number]; modeloId: string; qualidade: Qualidade; onAmpliar: () => void }) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const fotos = useFotos(clientId);
+  const ultima = tomada.versoes.length ? tomada.versoes[tomada.versoes.length - 1] : null;
+  const aprovadaV = tomada.versoes.find((v) => v.aprovada) || null;
+  const mostrada = aprovadaV || ultima;
+  const estado = ESTADOS_DA_TOMADA[tomada.status] || ESTADOS_DA_TOMADA.pendente;
+  const pendente = !aprovadaV && ultima && !ultima.rejeitada && ultima.storage_path ? ultima : null;
+  const fotoAprovada = aprovadaV ? fotoDaVersao(fotos.data || [], aprovadaV) : null;
+  const gerando = tomada.status === "gerando";
+  return (
+    <li className={`min-w-0 rounded-xl border bg-card p-1.5 ${aprovadaV ? "border-success/50" : "border-border"}`} data-foto-da-campanha={tomada.id}>
+      <button type="button" className="block w-full cursor-zoom-in text-left disabled:cursor-default" disabled={!mostrada} onClick={onAmpliar} aria-label={`Ver grande: ${tomada.nome}`}>
+        <Moldura proporcao={proporcaoDoFormato(tomada.formato)} className="border border-border">
+          {mostrada && mostrada.storage_path ? (
+            <ImagemDaMesa caminho={mostrada.storage_path} alt={tomada.nome} className="h-full w-full !object-contain" />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <Megaphone className="h-4 w-4" />
+            </span>
+          )}
+          {mostrada && (
+            <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+              gerada
+            </span>
+          )}
+        </Moldura>
+      </button>
+      <p className="mt-1 truncate text-[11.5px] font-medium" title={tomada.nome}>
+        {tomada.nome}
+      </p>
+      <span className={`inline-block rounded-full px-1.5 py-px text-[10px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center">
+        {pendente && !gerando && <DecisaoRapida ensaio={ensaio} tomada={tomada} versao={pendente} compacta />}
+        {!aprovadaV && ultima && tomada.status !== "bloqueada" && (
+          <BotaoComCusto
+            rotulo={
+              <>
+                <RefreshCw className="mr-1 h-3.5 w-3.5" /> Refazer
+              </>
+            }
+            titulo="Variação gerada"
+            descricao="Gera uma versão nova desta foto, com variação real. As versões antigas ficam."
+            variant="ghost"
+            className="mb-1 mr-1 h-8 px-2 text-[12px]"
+            disabled={gerando || !modeloId}
+            partes={() => partesDaGeracao(modeloId, qualidade)}
+            executar={async () => {
+              try {
+                const r = await gerarTomada({ ensaioId: ensaio.id, tomadaId: tomada.id, modeloImagemId: modeloId, qualidade });
+                if (r.ensaio) guardarEnsaio(queryClient, clientId, r.ensaio);
+                else void queryClient.invalidateQueries({ queryKey: chaveDosEnsaios(clientId) });
+                return r;
+              } catch (e) {
+                void queryClient.invalidateQueries({ queryKey: chaveDosEnsaios(clientId) });
+                throw e;
+              }
+            }}
+          />
+        )}
+        {fotoAprovada && <MenuDeUso foto={fotoAprovada} className="mb-1" />}
+        {pendente && !gerando && <MenuDeUso pendente={{ ensaio, tomada, versao: pendente }} variante="ghost" className="mb-1" />}
+      </div>
+    </li>
   );
 }
 
@@ -230,11 +311,11 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
       <AndamentoDoLote ensaioId={ensaio.id} />
       <Cartao
         titulo={`Fotos da campanha · ${r.total}`}
-        dica={`${r.aprovadas} aprovadas · ${r.paraRevisar} para revisar · ${usd(r.custo)} gasto`}
+        dica={`${r.aprovadas} aprovadas · ${r.paraRevisar} para revisar · ${usd(r.custo)} gasto${ensaio.direcao.campanha_mesa ? ` · campanha ${ensaio.direcao.campanha_mesa.nome}` : ""}. Aprove, refaça ou use cada foto aqui mesmo.`}
         acao={
           r.versoes > 0 ? (
-            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: ensaio.id })}>
-              <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Revisar e aprovar
+            <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("revisar", { ensaio: ensaio.id })}>
+              <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Comparar com as fontes
             </Button>
           ) : undefined
         }
@@ -242,37 +323,13 @@ function CampanhaAberta({ ensaio }: { ensaio: Ensaio }) {
         {ensaio.tomadas.length === 0 ? (
           <p className="text-[12px] text-muted-foreground">O diretor não montou fotos. Planeje de novo com outro pedido.</p>
         ) : (
-          <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {ensaio.tomadas.map((t) => {
-              const ultima = t.versoes.length ? t.versoes[t.versoes.length - 1] : null;
-              const estado = ESTADOS_DA_TOMADA[t.status] || ESTADOS_DA_TOMADA.pendente;
-              const i = comVersao.indexOf(t);
-              return (
-                <li key={t.id} className="min-w-0" data-foto-da-campanha={t.id}>
-                  <button type="button" className="block w-full cursor-zoom-in text-left disabled:cursor-default" disabled={!ultima} onClick={() => setAmpliada(i)} aria-label={`Ver grande: ${t.nome}`}>
-                    <Moldura proporcao={proporcaoDoFormato(t.formato)} className="border border-border">
-                      {ultima && ultima.storage_path ? (
-                        <ImagemDaMesa caminho={ultima.storage_path} alt={t.nome} className="h-full w-full" />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-                          <Megaphone className="h-4 w-4" />
-                        </span>
-                      )}
-                      {ultima && (
-                        <span className="pointer-events-none absolute left-1 top-1 rounded-full border border-primary/30 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
-                          gerada
-                        </span>
-                      )}
-                    </Moldura>
-                  </button>
-                  <p className="mt-1 truncate text-[11px] font-medium" title={t.nome}>
-                    {t.nome}
-                  </p>
-                  <span className={`inline-block rounded-full px-1.5 py-px text-[10px] font-medium ${estado.cor}`}>{estado.rotulo}</span>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="max-h-[75vh] min-w-0 overflow-y-auto pr-0.5" data-rolagem-propria="">
+            <ul className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {ensaio.tomadas.map((t) => (
+                <FotoDaCampanha key={t.id} ensaio={ensaio} tomada={t} modeloId={modelo} qualidade={qualidade} onAmpliar={() => setAmpliada(comVersao.indexOf(t))} />
+              ))}
+            </ul>
+          </div>
         )}
         <div className="mt-3 grid min-w-0 grid-cols-2 gap-2">
           <SeletorDeModelo catalogo={catalogo} tipo="imagem" valor={modelo} onChange={setModeloId} qualidade={qualidade} />
@@ -314,18 +371,19 @@ export default function EtapaCampanha() {
   const [modelo, setModelo] = useState<PerfilDoModelo>({ perfil: "Variar os perfis", idade_aprox: "25 a 35", estilo: "" });
   const [quantidade, setQuantidade] = useState(6);
   const [pedido, setPedido] = useState("");
+  const campanhaDaMesa = useCampanhaEscolhida();
 
   if (kits.isSuccess && !listaDeKits.length) {
     return (
       <Vazio
         titulo="Primeiro, o produto"
         acao={
-          <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("kits")}>
-            Identificar o produto
+          <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("acervo")}>
+            Identificar o produto nas fotos
           </Button>
         }
       >
-        A campanha põe o produto do kit na mão de um modelo sintético. Sem kit, não há o que preservar.
+        A campanha põe o produto na mão de um modelo sintético. Sem o produto identificado, não há o que preservar.
       </Vazio>
     );
   }
@@ -391,11 +449,12 @@ export default function EtapaCampanha() {
               </Select>
               {kit && kit.invariantes.length > 0 && <p className="mt-2 text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">Não muda: {kit.invariantes.join(", ")}.</p>}
             </Cartao>
+            <SeletorDaCampanha escolhida={campanhaDaMesa} titulo="2. Campanha da Mesa" />
             <BlocoDoEstilo refs={refs} onMudar={setRefs} />
           </div>
           <div className="min-w-0 space-y-4">
             <BlocoDoModelo modelo={modelo} onMudar={setModelo} />
-            <Cartao titulo="4. Fotos">
+            <Cartao titulo="5. Fotos">
               <Pilulas rotulo="Quantas fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
               <label className="mt-1 block">
                 <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido ao diretor (opcional)</span>
@@ -430,6 +489,7 @@ export default function EtapaCampanha() {
                     referenciasEstiloIds: refs.map((r) => r.id),
                     modelo,
                     pedido,
+                    campanhaId: campanhaDaMesa.campanhaId,
                   })
                 }
                 aoConcluir={(data) => {
@@ -445,7 +505,7 @@ export default function EtapaCampanha() {
               />
               {!kit && <p className="mt-2 text-[11.5px] text-muted-foreground">Escolha o produto.</p>}
               <p className="mt-2 flex items-start text-[11px] leading-snug text-muted-foreground">
-                <Upload className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> As fotos geradas passam por Revisar (aprovar ou rejeitar) e depois por Usar, como as outras.
+                <Upload className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Cada foto gerada se aprova, refaz ou usa no próprio resultado: Mesa, Mesa Ads, baixar ou aprovação.
               </p>
             </Cartao>
           </div>

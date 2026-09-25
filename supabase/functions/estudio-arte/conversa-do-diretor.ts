@@ -27,6 +27,7 @@ import {
   type LayoutLamina,
   type ZonaTexto,
 } from "../_shared/direcao-arte.ts";
+import { panoramaApagado, type PanoramaGravado } from "../_shared/carrossel-continuo.ts";
 
 export const ZONAS_DA_CONVERSA: ZonaTexto[] = [
   "topo-esquerda", "topo-centro", "centro-esquerda", "centro", "base-esquerda", "base-centro", "base-direita", "coluna-esquerda", "coluna-direita",
@@ -247,7 +248,9 @@ export type ContextoDasMudancas = {
 
 const TEXTOS_LIVRES: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "evitar"];
 /** Campos que mudam a cena desenhada (no contínuo, o panorama precisa nascer de novo). */
-export const CAMPOS_DE_CENA: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo"];
+// zona_texto entra desde 25/09: o panorama deixa calma a zona do texto de cada
+// lâmina; mudar a zona no contínuo sem refazer o fundo punha o texto na parte cheia da cena.
+export const CAMPOS_DE_CENA: (keyof CamposDaMudanca)[] = ["conceito", "fio_visual", "estilo", "imagem", "ponto_focal", "fundo", "tratamento", "cor_fundo", "foto_acervo", "zona_texto"];
 
 /**
  * Confere as mudanças contra as regras da casa. Devolve só as que sobram com
@@ -332,6 +335,7 @@ export function normalizarMudancas(bruto: unknown, ctx: ContextoDasMudancas): { 
     if (ctx.continuo && alvo === "lamina" && ordens.length > 1) {
       const cena = ["imagem", "tratamento", "fundo"].some((c) => !!campos[c as keyof CamposDaMudanca]);
       if (cena) avisar("Carrossel contínuo: a cena atravessa as lâminas, então a mudança de cenário vale para todas e o fundo contínuo nasce de novo.");
+      if (campos.zona_texto) avisar("Carrossel contínuo: o fundo deixa calma a área do texto de cada lâmina, então mudar onde fica o texto faz o fundo contínuo nascer de novo.");
     }
 
     const chaves = Object.keys(campos) as (keyof CamposDaMudanca)[];
@@ -364,7 +368,7 @@ export type DirecaoParaMudar = {
   estilo_pedido?: string | null;
   carrossel_infinito: boolean;
   cards: CardDirecao[];
-  panorama?: { fundos: Record<string, string> } | null;
+  panorama?: PanoramaGravado | null;
   [k: string]: unknown;
 };
 
@@ -461,7 +465,8 @@ export function aplicarNaDirecao<D extends DirecaoParaMudar>(
     fio_visual: fio,
     estilo_pedido: estilo,
     cards,
-    ...(continuo && mexeuNaCena ? { panorama: null } : {}),
+    // Apagado com a geração seguinte: um trecho que ainda estava sendo gerado é descartado.
+    ...(continuo && mexeuNaCena ? { panorama: panoramaApagado(direcao.panorama) } : {}),
   } as D;
   return { direcao: nova, afetadas: Array.from(afetadas).sort((a, b) => a - b), fundoApagado, textoMudou };
 }

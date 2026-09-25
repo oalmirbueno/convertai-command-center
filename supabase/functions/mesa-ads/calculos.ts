@@ -357,6 +357,8 @@ export const LIMIARES_APROVACAO = {
   diferenciacao_min: 6,
   /** Nota de risco de pol\u00edtica (10 = sem risco): m\u00ednimo para aprovar. */
   risco_politica_min: 7,
+  /** v3: só quando o Jev mediu o tom pedido (agressivo, por exemplo). */
+  tom_min: 6,
 } as const;
 
 export type NotasAngulo = {
@@ -366,6 +368,8 @@ export type NotasAngulo = {
   risco_politica: number | null;
   parada?: number | null;
   diferenciacao?: number | null;
+  /** v3: quanto o ângulo cumpre o tom pedido (0 a 10); ausente quando não foi medido. */
+  tom?: number | null;
   alerta_politica: boolean;
 };
 
@@ -389,13 +393,25 @@ export function motivosDoAngulo(j: NotasAngulo | null | undefined): string[] {
     if (nota == null) motivos.push(`Sem nota de ${nome.toLowerCase()}.`);
     else if (nota < minimo) motivos.push(`${nome} ${virgula(nota)} (o m\u00ednimo \u00e9 ${minimo}).`);
   }
+  if (typeof j.tom === "number" && j.tom < L.tom_min) motivos.push(`Abaixo do tom pedido: nota ${virgula(j.tom)} (o mínimo é ${L.tom_min}).`);
   return motivos;
+}
+
+/**
+ * Ângulo genérico pela nota do Jev (regra em código): diferenciação ou
+ * relevância abaixo de 5 (o nível "serviria para qualquer marca da categoria").
+ */
+export function anguloGenerico(j: NotasAngulo | null | undefined): boolean {
+  if (!j) return false;
+  return (typeof j.diferenciacao === "number" && j.diferenciacao < 5) || (typeof j.relevancia === "number" && j.relevancia < 5);
 }
 
 export const anguloAprovado = (j: NotasAngulo | null | undefined): boolean => motivosDoAngulo(j).length === 0;
 
 /** Pesos da pontua\u00e7\u00e3o do \u00e2ngulo (somam 1). risco_politica entra como qualidade (10 = sem risco). */
 export const PESOS_PONTUACAO = { clareza: 0.22, relevancia: 0.2, parada: 0.2, diferenciacao: 0.15, prova: 0.1, risco_politica: 0.13 } as const;
+/** v3: peso do tom pedido quando o Jev mediu (entra na média ponderada junto dos outros). */
+export const PESO_DO_TOM = 0.15;
 
 /**
  * Pontua\u00e7\u00e3o de 0 a 10 para ordenar os \u00e2ngulos: m\u00e9dia ponderada das notas
@@ -411,6 +427,7 @@ export function pontuacaoDoAngulo(j: NotasAngulo | null | undefined): number | n
     [j.diferenciacao, P.diferenciacao],
     [j.prova, P.prova],
     [j.risco_politica, P.risco_politica],
+    [j.tom, PESO_DO_TOM],
   ];
   let soma = 0;
   let pesos = 0;
@@ -1069,4 +1086,325 @@ export function markdownDoPacote(d: DadosDoPacote): string {
   });
   l.push("");
   return semTravessao(l.join("\n"));
+}
+
+// =============================================================== Mesa Ads v3
+// Pedido do dono (25/09/2026): criativo menos genérico e foco em resultado.
+// Tudo aqui é regra fixa: sinais de texto genérico, ordem de teste e a regra
+// de corte com os números do briefing e da conta (nunca da IA).
+
+/** Clichês que denunciam copy genérica (a conta confere; o Jev julga o resto). */
+export const CLICHES_DE_ANUNCIO = [
+  "qualidade",
+  "excelência",
+  "soluções",
+  "solução completa",
+  "confira",
+  "venha conhecer",
+  "venha nos visitar",
+  "o melhor para você",
+  "atendimento diferenciado",
+  "compromisso com",
+  "tradição",
+  "sua melhor escolha",
+  "não perca",
+  "entre em contato",
+  "faça já o seu",
+] as const;
+
+const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Clichês encontrados no texto (sem acento e sem caixa). */
+export function clichesNoTexto(texto: string | null | undefined): string[] {
+  const t = ` ${semAcento(String(texto ?? ""))} `;
+  return CLICHES_DE_ANUNCIO.filter((c) => t.indexOf(semAcento(c)) >= 0);
+}
+
+export const contarPalavras = (t: string | null | undefined) => String(t ?? "").trim().split(/\s+/).filter(Boolean).length;
+
+/** Tem algum número (preço, prazo, quantidade)? */
+export const temNumero = (t: string | null | undefined) => /\d/.test(String(t ?? ""));
+
+/**
+ * Avisos de tom em código para a peça: headline longa demais para o tom,
+ * clichês e, no agressivo, falta de número quando a oferta tem número real.
+ */
+export function avisosDeTom(
+  peca: { headline: string; texto_principal: string },
+  tom: { id: string; nome: string; headline_max_palavras: number },
+  numerosDaOferta: string[] = [],
+): string[] {
+  const avisos: string[] = [];
+  const palavras = contarPalavras(peca.headline);
+  if (palavras > tom.headline_max_palavras) avisos.push(`Headline com ${palavras} palavras: o tom ${tom.nome.toLowerCase()} pede no máximo ${tom.headline_max_palavras}.`);
+  const cliches = [...new Set([...clichesNoTexto(peca.headline), ...clichesNoTexto(peca.texto_principal)])];
+  if (cliches.length) avisos.push(`Genérico: usa ${cliches.map((c) => `"${c}"`).join(", ")}.`);
+  if (tom.id === "agressivo" && numerosDaOferta.length && !temNumero(peca.headline) && !temNumero(peca.texto_principal)) {
+    avisos.push(`Sem número: a oferta tem ${numerosDaOferta.slice(0, 3).join(", ")} e o tom agressivo pede a promessa concreta com número real.`);
+  }
+  return avisos;
+}
+
+/** Trechos com número nos textos reais da oferta (preço, prazo, garantia, vagas). */
+export function numerosReais(textos: (string | null | undefined)[]): string[] {
+  const achados: string[] = [];
+  for (const t of textos) {
+    const m = String(t ?? "").match(/(R\$\s?)?\d[\d.,]*(\s?(%|dias?|horas?|min|vagas?|anos?|meses|mês|vezes|unidades?|kg|m²))?/gi) || [];
+    for (const x of m) {
+      const limpo = x.trim().replace(/[.,]+$/, "");
+      if (limpo && achados.indexOf(limpo) < 0) achados.push(limpo);
+    }
+  }
+  return achados.slice(0, 8);
+}
+
+export type CorteDoAngulo = {
+  metrica: string;
+  /** Custo por resultado acima disso, com volume, pausa. */
+  limite_brl: number | null;
+  /** Gasto sem nenhum resultado que já manda pausar (2,5 vezes o tolerável). */
+  gasto_sem_resultado_brl: number | null;
+  impressoes_minimas: number;
+  dias_minimos: number;
+  fonte: "briefing" | "media_da_conta" | null;
+  texto: string;
+};
+
+const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
+
+/**
+ * Regra de corte do ângulo com os números reais: o custo tolerável do
+ * briefing ou, sem ele, a média da conta no período. Sem número, a regra
+ * diz o que falta (nunca inventa).
+ */
+export function regraDeCorte(opcoes: {
+  metrica?: string | null;
+  custoToleravel?: number | null;
+  custoMedioConta?: number | null;
+  janelaDias?: number | null;
+}): CorteDoAngulo {
+  const metrica = (opcoes.metrica && opcoes.metrica.trim()) || "custo por resultado";
+  const tolera = typeof opcoes.custoToleravel === "number" && opcoes.custoToleravel > 0 ? opcoes.custoToleravel : null;
+  const media = typeof opcoes.custoMedioConta === "number" && opcoes.custoMedioConta > 0 ? opcoes.custoMedioConta : null;
+  const base = tolera ?? media;
+  const fonte = tolera ? "briefing" : media ? "media_da_conta" : null;
+  const dias = Math.min(7, Math.max(3, Math.round(Number(opcoes.janelaDias) || 3)));
+  const impressoes = 1000;
+  if (!base) {
+    return {
+      metrica,
+      limite_brl: null,
+      gasto_sem_resultado_brl: null,
+      impressoes_minimas: impressoes,
+      dias_minimos: dias,
+      fonte: null,
+      texto: `Julgar por ${metrica} depois de 1.000 impressões e ${dias} dias. Sem custo tolerável no briefing nem histórico na conta: defina o custo tolerável para ter o corte em reais.`,
+    };
+  }
+  const limite = Math.round(base * 100) / 100;
+  const semResultado = Math.round(base * 2.5 * 100) / 100;
+  const origem = fonte === "briefing" ? "custo tolerável do briefing" : "média da conta no período";
+  return {
+    metrica,
+    limite_brl: limite,
+    gasto_sem_resultado_brl: semResultado,
+    impressoes_minimas: impressoes,
+    dias_minimos: dias,
+    fonte,
+    texto: `Pausar se gastar ${reais(semResultado)} sem nenhum resultado, ou se o custo por resultado passar de ${reais(limite)} (${origem}) depois de 1.000 impressões e ${dias} dias. Abaixo de ${reais(limite)} com volume: manter e produzir variações.`,
+  };
+}
+
+/**
+ * Ordem de teste: aprovados primeiro, depois pela pontuação do Jev e, no
+ * empate, pela prova (prova real sustenta o custo). Devolve 1, 2, 3... por id.
+ */
+export function ordemDeTeste<T extends { id: string; aprovado?: boolean; reprovado?: boolean; pontuacao: number | null; jev?: { prova?: number | null } | null }>(angulos: T[]): Map<string, number> {
+  const valido = (a: T) => Number(!a.reprovado && a.aprovado !== false);
+  const prova = (a: T) => (a.jev && typeof a.jev.prova === "number" ? a.jev.prova : -1);
+  const lista = angulos.slice().sort((a, b) => valido(b) - valido(a) || (b.pontuacao ?? -1) - (a.pontuacao ?? -1) || prova(b) - prova(a));
+  return new Map(lista.map((a, i) => [a.id, i + 1]));
+}
+
+// ------------------------------------------------------------- oferta do contexto
+
+export type EntradaDaOfertaDoContexto = {
+  cliente: string;
+  briefing: {
+    oferta?: { produto?: string | null; promessa?: string | null; condicao?: string | null; preco_confirmado?: string | null; garantia?: string | null } | null;
+    publico?: { quem?: string | null } | null;
+    destino?: { tipo?: string | null } | null;
+    provas?: { texto?: string; autorizado?: boolean }[] | null;
+  } | null;
+  consolidado: { negocio?: string; publico?: string; oferta?: string; diferenciais?: string[] } | null;
+  brief: Record<string, unknown> | null;
+  campanhas: { nome: string; objetivo: string | null; conceito: string | null; periodo_fim: string | null }[];
+  melhorAnuncio: { nome: string | null; titulo: string | null; custo_por_resultado: number | null; resultados: number } | null;
+};
+
+export type CamposDaOferta = {
+  nome: string;
+  para_quem: string;
+  promessa: string;
+  mecanismo: string;
+  entregaveis: string[];
+  bonus: string[];
+  garantia: string | null;
+  urgencia_real: string | null;
+  ancoragem: string | null;
+  cta: string;
+  provas_necessarias: string[];
+  riscos: string[];
+};
+
+const limpoCtx = (v: unknown, max = 600): string => (typeof v === "string" ? semTravessao(v.replace(/\s+/g, " ").trim()).slice(0, max) : "");
+
+/** Primeira frase (até max caracteres), sem o ponto final. */
+function primeiraFrase(t: string, max = 240): string {
+  const m = t.match(/^[^.!?\n]{8,}[.!?]/);
+  return cortarNaPalavra((m ? m[0] : t).replace(/[.!?]+$/, ""), max);
+}
+
+/** Nome curto (até 6 palavras). */
+const nomeCurto = (t: string) => t.split(/\s+/).filter(Boolean).slice(0, 6).join(" ").replace(/[,;:.]+$/, "");
+
+/** Resposta do brief cuja pergunta casa com o padrão. */
+function doBrief(brief: Record<string, unknown> | null, padrao: RegExp): { chave: string; texto: string } | null {
+  if (!brief) return null;
+  for (const k of Object.keys(brief)) {
+    if (!padrao.test(k)) continue;
+    const t = limpoCtx(brief[k], 800);
+    if (t) return { chave: k, texto: t };
+  }
+  return null;
+}
+
+export const CTA_DO_DESTINO: Record<string, string> = {
+  whatsapp: "Chame no WhatsApp",
+  direct: "Mande uma mensagem no Direct",
+  formulario: "Preencha o formulário",
+  pagina: "Veja as condições no site",
+  ligacao: "Ligue agora",
+};
+
+const dataCurta = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+
+/**
+ * Oferta montada EM CÓDIGO a partir do contexto do cliente (sem IA, grátis):
+ * cada campo vem de uma fonte real e diz qual; o que não existe fica vazio e
+ * vira lacuna. O agente de oferta lapida depois, com o custo à vista.
+ */
+export function ofertaDoContextoEmCodigo(e: EntradaDaOfertaDoContexto): { campos: CamposDaOferta; fontes: Record<string, string>; lacunas: string[] } {
+  const fontes: Record<string, string> = {};
+  const lacunas: string[] = [];
+  const b = e.briefing ?? {};
+  const bo = b.oferta ?? {};
+  const c = e.consolidado ?? {};
+  const escolher = (campo: string, opcoes: [string, string][]): string => {
+    for (const [valor, fonte] of opcoes) {
+      if (valor) {
+        fontes[campo] = fonte;
+        return valor;
+      }
+    }
+    return "";
+  };
+
+  const produtoBrief = doBrief(e.brief, /produt|servi[cç]/i);
+  const precoBrief = doBrief(e.brief, /pre[cç]o|valor|investimento|ticket/i);
+  const diferencialBrief = doBrief(e.brief, /diferenc|por que (escolher|comprar)|vantag/i);
+  const publicoBrief = doBrief(e.brief, /p[uú]blico|cliente ideal|quem (compra|[eé] o cliente)|persona/i);
+  const garantiaBrief = doBrief(e.brief, /garant/i);
+  const campanhaComData = e.campanhas.find((x) => !!x.periodo_fim) ?? null;
+  const campanha = e.campanhas[0] ?? null;
+
+  const produto = escolher("produto", [
+    [limpoCtx(bo.produto, 300), "briefing de performance (produto)"],
+    [c.oferta ? primeiraFrase(limpoCtx(c.oferta, 600), 160) : "", "contexto consolidado da Mesa (oferta)"],
+    [produtoBrief ? primeiraFrase(produtoBrief.texto, 160) : "", `brief do cliente (${produtoBrief ? produtoBrief.chave : ""})`],
+  ]);
+  const nomeBase = campanha && campanha.nome ? campanha.nome : produto;
+  const nome = nomeCurto(limpoCtx(nomeBase, 120)) || `Oferta ${e.cliente}`.slice(0, 60);
+  fontes.nome = campanha && campanha.nome ? "campanha do mês na Mesa" : fontes.produto ?? "nome do cliente";
+
+  const para_quem = escolher("para_quem", [
+    [limpoCtx(b.publico?.quem, 600), "briefing de performance (público)"],
+    [limpoCtx(c.publico, 600), "contexto consolidado da Mesa (público)"],
+    [publicoBrief ? publicoBrief.texto.slice(0, 600) : "", `brief do cliente (${publicoBrief ? publicoBrief.chave : ""})`],
+  ]);
+  if (!para_quem) lacunas.push("Para quem: o contexto não diz quem compra. Conte ao agente a situação de quem compra.");
+
+  const promessa = escolher("promessa", [
+    [limpoCtx(bo.promessa, 800), "briefing de performance (promessa)"],
+    [campanha && campanha.conceito ? primeiraFrase(limpoCtx(campanha.conceito, 600), 240) : "", "campanha do mês na Mesa (conceito)"],
+    [c.oferta ? limpoCtx(c.oferta, 800) : "", "contexto consolidado da Mesa (oferta)"],
+  ]);
+  if (!promessa) lacunas.push("Promessa: sem promessa no contexto. Peça ao agente uma promessa forte e específica.");
+
+  const diferenciais = Array.isArray(c.diferenciais) ? c.diferenciais.map((d) => limpoCtx(d, 200)).filter(Boolean).slice(0, 3) : [];
+  const mecanismo = escolher("mecanismo", [
+    [diferenciais.join("; "), "contexto consolidado da Mesa (diferenciais)"],
+    [diferencialBrief ? diferencialBrief.texto.slice(0, 600) : "", `brief do cliente (${diferencialBrief ? diferencialBrief.chave : ""})`],
+  ]);
+  if (!mecanismo) lacunas.push("Mecanismo: nenhum diferencial registrado. Diga ao agente por que o cliente entrega melhor que o comum.");
+
+  const entregaveis: string[] = [];
+  if (produto) entregaveis.push(produto);
+  if (limpoCtx(bo.condicao)) {
+    entregaveis.push(limpoCtx(bo.condicao, 300));
+    fontes.entregaveis = "briefing de performance (produto e condição)";
+  }
+  if (produtoBrief) {
+    for (const item of produtoBrief.texto.split(/[;\n]/).map((x) => limpoCtx(x, 200)).filter((x) => x.length > 2)) {
+      if (entregaveis.length >= 8) break;
+      if (entregaveis.indexOf(item) < 0) entregaveis.push(item);
+    }
+    if (!fontes.entregaveis) fontes.entregaveis = `brief do cliente (${produtoBrief.chave})`;
+  }
+  if (entregaveis.length && !fontes.entregaveis) fontes.entregaveis = fontes.produto ?? "contexto";
+  if (!entregaveis.length) lacunas.push("O que entra: o contexto não lista produtos ou serviços.");
+
+  const garantia = escolher("garantia", [
+    [limpoCtx(bo.garantia, 400), "briefing de performance (garantia)"],
+    [garantiaBrief ? garantiaBrief.texto.slice(0, 400) : "", `brief do cliente (${garantiaBrief ? garantiaBrief.chave : ""})`],
+  ]) || null;
+  if (!garantia) lacunas.push("Garantia: nenhuma registrada. O agente pode sugerir uma reversão de risco para o cliente confirmar.");
+
+  const precoConfirmado = limpoCtx(bo.preco_confirmado, 200);
+  const ancoragem = escolher("ancoragem", [
+    [precoConfirmado ? `Preço confirmado: ${precoConfirmado}` : "", "briefing de performance (preço confirmado)"],
+    [precoBrief ? precoBrief.texto.slice(0, 300) : "", `brief do cliente (${precoBrief ? precoBrief.chave : ""})`],
+  ]) || null;
+  if (!ancoragem) lacunas.push("Preço: sem preço confirmado. Oferta agressiva pede número real; confirme com o cliente.");
+
+  let urgencia_real: string | null = null;
+  if (campanhaComData && campanhaComData.periodo_fim) {
+    urgencia_real = `${campanhaComData.nome} vai até ${dataCurta(campanhaComData.periodo_fim)}`;
+    fontes.urgencia_real = "campanha do mês na Mesa (período)";
+  } else lacunas.push("Urgência real: nenhuma campanha com data neste mês. Sem data real, sem urgência.");
+
+  const destino = String((b.destino && b.destino.tipo) || "");
+  const cta = CTA_DO_DESTINO[destino] || "Fale com a gente";
+  fontes.cta = CTA_DO_DESTINO[destino] ? "briefing de performance (destino)" : "padrão (sem destino no briefing)";
+
+  lacunas.push("Bônus: o contexto não tem bônus. Peça ao agente bônus que resolvam o próximo problema do comprador.");
+
+  const provas_necessarias: string[] = [];
+  const provas = (b.provas ?? []).filter((p) => p && p.texto);
+  if (!provas.length) provas_necessarias.push("Uma prova real (depoimento autorizado, número ou caso) para sustentar a promessa.");
+  if (provas.some((p) => !p.autorizado)) provas_necessarias.push("Autorização para usar as provas do briefing que ainda não estão autorizadas.");
+  if (!ancoragem) provas_necessarias.push("Preço ou condição confirmados pelo cliente.");
+
+  const riscos: string[] = [];
+  if (e.melhorAnuncio && e.melhorAnuncio.resultados > 0) {
+    const custo = e.melhorAnuncio.custo_por_resultado != null ? `, custo por resultado R$ ${e.melhorAnuncio.custo_por_resultado.toFixed(2).replace(".", ",")}` : "";
+    riscos.push(`Base da conta: o anúncio "${limpoCtx(e.melhorAnuncio.titulo || e.melhorAnuncio.nome || "sem nome", 80)}" trouxe ${e.melhorAnuncio.resultados} resultado(s) nos últimos 90 dias${custo}. A oferta nova precisa bater isso.`);
+    fontes.riscos = "conta de anúncios (últimos 90 dias)";
+  }
+
+  return {
+    campos: { nome, para_quem, promessa, mecanismo, entregaveis, bonus: [], garantia, urgencia_real, ancoragem, cta, provas_necessarias, riscos },
+    fontes,
+    lacunas,
+  };
 }

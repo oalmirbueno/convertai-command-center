@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Lightbulb, Loader2, Plus, Rocket, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Lightbulb, Loader2, Plus, RefreshCw, Rocket, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
   juntarBriefing,
   lerBriefing,
   lerOfertas,
+  montarOfertaDoContexto,
   normalizarBriefing,
   normalizarOferta,
   OBJETIVOS,
@@ -31,16 +32,24 @@ import {
   type BriefingAds,
   type Ideia,
   type Oferta,
+  type OfertaDoContexto,
   type PedidoDePlano,
   type RespostaDaOferta,
   type StatusDaOferta,
   type TipoDeProva,
 } from "./adsApi";
 import { Andamento, Campo, Cartao, pilula, useAndamento } from "./Comuns";
-import AgenteDaOferta from "./AgenteDaOferta";
+import AgenteDaOferta, { pedidoParaLapidar, type PedidoAoAgente } from "./AgenteDaOferta";
 import CartaoDaOferta from "./CartaoDaOferta";
 
 /**
+ * v3 (pedido do dono, 25/09): ao abrir sem nenhuma oferta em uso, a oferta já
+ * vem montada do contexto do cliente (oferta_do_contexto, sem IA e grátis:
+ * briefing de ads, contexto consolidado da Mesa, brief, campanhas do mês e a
+ * conta), como rascunho editável com a fonte de cada campo. "Lapidar com o
+ * agente" leva a oferta ao agente ao lado com o pedido pronto; o custo
+ * aparece no Enviar.
+ *
  * Etapa 1, Oferta. Em cima, o agente de oferta (conversa com microfone e
  * anexos) e as ofertas que ele propôs, com as notas do Jev: escolher,
  * editar, arquivar, aplicar no briefing ou criar criativos direto (leva ao
@@ -152,6 +161,11 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
   const [objetivoDosCriativos, setObjetivoDosCriativos] = useState("");
   const [briefingAberto, setBriefingAberto] = useState(true);
   const briefingRef = useRef<HTMLDivElement>(null);
+  const [doContexto, setDoContexto] = useState<OfertaDoContexto | null>(null);
+  const [montando, setMontando] = useState(false);
+  const [erroDoContexto, setErroDoContexto] = useState<string | null>(null);
+  const [pedidoAoAgente, setPedidoAoAgente] = useState<PedidoAoAgente | null>(null);
+  const tentouMontar = useRef(false);
 
   const base = useMemo(() => (salvo.data ? normalizarBriefing(salvo.data) : briefingVazio()), [salvo.data]);
   const idSalvo = salvo.data ? salvo.data.id : null;
@@ -189,8 +203,10 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
   const todas = useMemo(() => {
     const doBanco = ofertas.data || [];
     const soltas = ultima ? ultima.ofertas.filter((o) => !doBanco.some((x) => x.id === o.id)) : [];
-    return soltas.concat(doBanco);
-  }, [ofertas.data, ultima]);
+    // A oferta do contexto recém-montada aparece mesmo antes de a lista reler.
+    const doCtx = doContexto && doContexto.oferta && !doBanco.some((x) => x.id === doContexto.oferta!.id) && !soltas.some((x) => x.id === doContexto.oferta!.id) ? [doContexto.oferta] : [];
+    return soltas.concat(doCtx, doBanco);
+  }, [ofertas.data, ultima, doContexto]);
   const listaDeOfertas = todas
     .filter((o) => (filtro === "arquivadas" ? o.status === "arquivada" : filtro === "escolhidas" ? o.status === "escolhida" : o.status !== "arquivada"))
     .sort((x, y) => {
@@ -220,6 +236,43 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
       r.ofertas.forEach(trocarNaLista);
     }
   };
+
+  /** Oferta do contexto: sem IA, grátis; ao abrir sem oferta em uso, monta sozinha uma vez. */
+  const montarDoContexto = async (forcar: boolean) => {
+    setMontando(true);
+    setErroDoContexto(null);
+    try {
+      const r = await montarOfertaDoContexto(clientId, { gravar: true, forcar });
+      setDoContexto(r);
+      if (r.oferta) {
+        trocarNaLista(r.oferta);
+        setNovas([r.oferta.id]);
+        setFiltro("ativas");
+        if (forcar) toast.success("Oferta remontada do contexto", { description: "Sem custo. Confira os campos e lapide com o agente." });
+      }
+      void queryClient.invalidateQueries({ queryKey: chavesAds.ofertas(clientId) });
+    } catch (e) {
+      setErroDoContexto(textoDoErro(e));
+    } finally {
+      setMontando(false);
+    }
+  };
+
+  const ativasNoBanco = (ofertas.data || []).filter((o) => o.status !== "arquivada").length;
+  useEffect(() => {
+    if (tentouMontar.current || !ofertas.isSuccess || ativasNoBanco > 0) return;
+    tentouMontar.current = true;
+    void montarDoContexto(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ofertas.isSuccess, ativasNoBanco]);
+
+  const lapidar = (o: Oferta) =>
+    setPedidoAoAgente({
+      texto: pedidoParaLapidar(o.nome, o.origem === "contexto", o.lacunas || []),
+      ofertaId: o.id,
+      nome: o.nome,
+      chave: Date.now(),
+    });
 
   const ocupar = (id: string, sim: boolean) => setOcupadas((l) => (sim ? l.concat([id]) : l.filter((x) => x !== id)));
 
@@ -295,6 +348,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
         <AgenteDaOferta
           conversaInicial={conversaInicial}
           onResposta={aoResponder}
+          pedido={pedidoAoAgente}
           className="h-[560px] xl:sticky xl:top-[140px] xl:order-2 xl:h-[calc(100vh-170px)]"
         />
 
@@ -329,6 +383,30 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
               ))}
             </div>
           </div>
+
+          {(montando || erroDoContexto || todas.some((o) => o.origem === "contexto" && o.status !== "arquivada")) && (
+            <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-primary/30 bg-primary/5 px-4 py-3" role="note" aria-label="Oferta do contexto">
+              <div className="mb-1 mr-3 mt-1 min-w-0 flex-1 text-[12.5px]">
+                {montando ? (
+                  <span className="inline-flex items-center">
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Montando a oferta pelo contexto do cliente (sem custo)…
+                  </span>
+                ) : erroDoContexto ? (
+                  <span>A oferta do contexto não foi montada: {erroDoContexto}</span>
+                ) : (
+                  <>
+                    <span className="font-medium">Oferta montada do contexto do cliente, sem IA.</span> Briefing, contexto da Mesa, brief, campanhas do mês e conta de anúncios; cada campo diz de onde veio. Edite à vontade e lapide com o agente ao lado.
+                    {doContexto && doContexto.lacunas.length > 0 && (
+                      <span className="mt-1 block text-[12px] text-muted-foreground">Falta no contexto: {doContexto.lacunas.slice(0, 4).join(" ")}</span>
+                    )}
+                  </>
+                )}
+              </div>
+              <Button type="button" size="sm" variant="outline" className="mb-1 mt-1 h-8" disabled={montando} onClick={() => void montarDoContexto(true)} title="Lê o contexto de novo e remonta a oferta do contexto (sem custo)">
+                <RefreshCw className="mr-1 h-3.5 w-3.5" /> Remontar do contexto
+              </Button>
+            </div>
+          )}
 
           {ultima && ultima.resposta && (
             <p className="rounded-xl border border-border bg-card px-4 py-3 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]" aria-label="Resumo do agente">
@@ -375,6 +453,7 @@ export default function AbaOferta({ onCriarCriativos }: { onCriarCriativos?: (p:
                   onStatus={(s) => mudarStatus(o, s)}
                   onAplicar={() => aplicarNoBriefing(briefingDaOferta(o), `a oferta ${o.nome}`)}
                   onCriar={() => criar(o)}
+                  onLapidar={() => lapidar(o)}
                 />
               ))}
             </div>

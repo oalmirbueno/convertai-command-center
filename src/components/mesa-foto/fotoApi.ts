@@ -213,6 +213,8 @@ export interface DirecaoDoEnsaio {
   conceito: string;
   guia_de_estilo: GuiaDeEstilo | null;
   modelo: PerfilDoModelo | null;
+  /** A campanha da Mesa que orientou o plano (escolhida ou a do mês). */
+  campanha_mesa?: { id: string; nome: string; papel: string } | null;
 }
 
 /** Tomada da receita: o id é o que ensaio_planejar aceita em tomadas_pedidas. */
@@ -961,11 +963,15 @@ export function normalizarPerfilDoModelo(v: any): PerfilDoModelo | null {
 
 function normalizarDirecao(v: any, ensaio: any): DirecaoDoEnsaio {
   const d = v && typeof v === "object" && !Array.isArray(v) ? v : {};
-  return {
+  const c = d.campanha_mesa && typeof d.campanha_mesa === "object" ? d.campanha_mesa : null;
+  const direcao: DirecaoDoEnsaio = {
     conceito: texto(d.conceito),
     guia_de_estilo: normalizarGuiaDeEstilo(d.guia_de_estilo || (ensaio && ensaio.guia_de_estilo)),
     modelo: normalizarPerfilDoModelo(d.modelo || (ensaio && ensaio.modelo)),
   };
+  // Só quando o plano veio de uma campanha da Mesa (ensaios antigos não têm).
+  if (c && texto(c.id)) direcao.campanha_mesa = { id: texto(c.id), nome: texto(c.nome) || "Campanha", papel: texto(c.papel) };
+  return direcao;
 }
 
 export function normalizarReceita(v: any): Receita | null {
@@ -1143,6 +1149,8 @@ export function useReceitas() {
 export function invalidarFotos(queryClient: QueryClient, clientId: string) {
   void queryClient.invalidateQueries({ queryKey: chaveDasFotos(clientId) });
   invalidarAcervo(queryClient, clientId);
+  // "Fotos da Mesa Foto" no Estúdio (EstudioFotos, chaveDaMesaFoto): a foto aprovada agora aparece já.
+  void queryClient.invalidateQueries({ queryKey: ["mesa", "acervo-mesa-foto", clientId] });
 }
 
 /** Põe fotos novas no topo do acervo em cache (antes da releitura chegar). */
@@ -1295,8 +1303,11 @@ export async function planejarEnsaio(p: {
   pedido: string;
   /** Ids das tomadas da receita que a equipe manteve (vazio: todas). A função recusa id que não é da receita. */
   tomadasPedidas: string[];
+  /** Campanha da Mesa (id ou "nenhuma"); sem ela, a função usa a do mês. */
+  campanhaId?: string | null;
 }): Promise<{ ensaio: Ensaio | null; estimativa_usd: number | null; custo_usd?: number }> {
   const data = await chamarFuncao<any>("mesa-foto", {
+    campanha_id: p.campanhaId || undefined,
     acao: "ensaio_planejar",
     client_id: p.clientId,
     kit_id: p.kitId,
@@ -2021,8 +2032,11 @@ export async function conversarComDiretor(p: {
   anexosDeEstilo?: string[];
   /** Depois de "Nova conversa": a função abre uma conversa nova em vez de continuar a do kit. */
   novaConversa?: boolean;
+  /** A campanha da Mesa escolhida em Variações ou Campanha (id ou "nenhuma"); sem ela, a do mês. */
+  campanhaId?: string | null;
 }): Promise<RespostaDoDiretor> {
   const corpo: Record<string, unknown> = { acao: "agente_conversar", client_id: p.clientId, mensagem: p.mensagem.trim() };
+  if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.conversaId) corpo.conversa_id = p.conversaId;
   else if (p.novaConversa) corpo.nova_conversa = true;
 
@@ -2328,8 +2342,11 @@ export async function planejarVariacoes(p: {
   tipos: string[];
   pedido: string;
   referenciaIds?: string[];
+  /** Campanha da Mesa (mesa_campanhas) que orienta o plano; sem ela, a função usa a do mês. */
+  campanhaId?: string | null;
 }): Promise<{ ensaio: Ensaio | null; estimativa_usd: number | null; lacunas: string[]; custo_usd?: number }> {
   const corpo: Record<string, unknown> = { acao: "variacoes_planejar", client_id: p.clientId, kit_id: p.kitId, quantidade: limitarQuantidade(p.quantidade) };
+  if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   if (p.tipos.length) corpo.tipos = p.tipos;
   if (p.pedido.trim()) corpo.pedido = p.pedido.trim();
   if (p.referenciaIds && p.referenciaIds.length) corpo.referencia_ids = p.referenciaIds;
@@ -2347,8 +2364,11 @@ export async function planejarCampanha(p: {
   referenciasEstiloIds: string[];
   modelo: PerfilDoModelo;
   pedido: string;
+  /** Campanha da Mesa (mesa_campanhas) que orienta o plano; sem ela, a função usa a do mês. */
+  campanhaId?: string | null;
 }): Promise<{ ensaio: Ensaio | null; guia_de_estilo: GuiaDeEstilo | null; estimativa_usd: number | null; lacunas: string[]; promessa: string; custo_usd?: number }> {
   const corpo: Record<string, unknown> = { acao: "campanha_planejar", client_id: p.clientId, kit_id: p.kitId, quantidade: limitarQuantidade(p.quantidade) };
+  if (p.campanhaId) corpo.campanha_id = p.campanhaId;
   const refs = p.referenciasEstiloIds.filter(Boolean).slice(0, MAX_REFERENCIAS_DA_CAMPANHA);
   if (refs.length) corpo.referencias_estilo_ids = refs;
   const modelo: Record<string, string> = {};
@@ -2534,20 +2554,152 @@ export interface ProximoPasso {
 }
 
 /**
- * O caminho principal em 3 passos (1. Fotos do produto, 2. O produto,
- * 3. Criar) e depois revisar e usar: a tela sempre mostra o próximo passo.
+ * O caminho principal em 3 passos (1. Fotos do produto, com o produto
+ * identificado ali mesmo, 2. Criar, 3. Usar, com a revisão dentro): a tela
+ * sempre mostra o próximo passo.
  */
 export function proximoPasso(e: { fotos: number; kits: KitDeFoto[]; kitId: string | null; ensaio: Ensaio | null; selecionadas: number }): ProximoPasso {
   if (e.fotos === 0) return { etapa: "acervo", rotulo: "Subir as fotos do produto" };
   if (!e.kits.length) {
-    return { etapa: "kits", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
+    return { etapa: "acervo", rotulo: e.selecionadas ? `Identificar o produto (${e.selecionadas} ${e.selecionadas === 1 ? "foto" : "fotos"})` : "Identificar o produto" };
   }
-  if (!e.kitId) return { etapa: "kits", rotulo: "Escolher o produto" };
+  if (!e.kitId) return { etapa: "acervo", rotulo: "Escolher o produto" };
   if (!e.ensaio) return { etapa: "criar", rotulo: "Criar as fotos" };
   const r = resumoDoEnsaio(e.ensaio);
   const faltam = tomadasParaGerar(e.ensaio).filter((t) => !t.versoes.length).length;
-  if (r.paraRevisar) return { etapa: "revisar", rotulo: `Revisar ${r.paraRevisar} ${r.paraRevisar === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
+  if (r.paraRevisar) return { etapa: "usar", rotulo: `Revisar ${r.paraRevisar} ${r.paraRevisar === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
   if (faltam) return { etapa: ehCampanha(e.ensaio) ? "campanha" : "ensaio", rotulo: `Gerar ${faltam} ${faltam === 1 ? "foto" : "fotos"}`, extras: { ensaio: e.ensaio.id } };
   if (r.aprovadas) return { etapa: "usar", rotulo: `Usar ${r.aprovadas} ${r.aprovadas === 1 ? "aprovada" : "aprovadas"}`, extras: { ensaio: e.ensaio.id } };
   return { etapa: "criar", rotulo: "Criar mais fotos" };
+}
+
+// ------------------------------------------------------------------ ligada à Mesa: campanhas do cliente
+
+/** Campanha da Mesa (mesa_campanhas) como a função campanhas_listar devolve. */
+export interface CampanhaDaMesa {
+  id: string;
+  nome: string;
+  objetivo: string;
+  conceito: string;
+  status: string;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  periodo_pelo_calendario: boolean;
+  tema_visual: string;
+  paleta_apoio: { nome: string; hex: string }[];
+  elementos: string;
+  tom: string;
+  no_mes: boolean;
+  acontecendo_hoje: boolean;
+  conteudos_no_mes: number;
+  pautas_no_mes: string[];
+  do_mes: boolean;
+  motivo: string;
+}
+
+export interface CampanhasDaMesa {
+  mes: string;
+  campanhaDoMesId: string | null;
+  campanhas: CampanhaDaMesa[];
+}
+
+const HEX_VALIDO = /^#[0-9a-f]{6}$/i;
+const dataCurta = (d: string | null) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "");
+
+export function normalizarCampanhaDaMesa(v: any): CampanhaDaMesa | null {
+  if (!v || typeof v !== "object" || !texto(v.id)) return null;
+  const id = v.identidade && typeof v.identidade === "object" ? v.identidade : v;
+  const apoio: { nome: string; hex: string }[] = [];
+  (Array.isArray(id.paleta_apoio) ? id.paleta_apoio : []).forEach((p: any) => {
+    const hex = texto(p && p.hex).toUpperCase();
+    if (HEX_VALIDO.test(hex) && apoio.length < 4) apoio.push({ nome: texto(p && p.nome), hex });
+  });
+  return {
+    id: texto(v.id),
+    nome: texto(v.nome) || "Campanha",
+    objetivo: texto(v.objetivo),
+    conceito: texto(v.conceito),
+    status: texto(v.status) || "planejada",
+    periodo_inicio: textoOuNulo(v.periodo_inicio),
+    periodo_fim: textoOuNulo(v.periodo_fim),
+    periodo_pelo_calendario: v.periodo_pelo_calendario === true,
+    tema_visual: texto(id.tema_visual),
+    paleta_apoio: apoio,
+    elementos: texto(id.elementos),
+    tom: texto(id.tom),
+    no_mes: v.no_mes === true,
+    acontecendo_hoje: v.acontecendo_hoje === true,
+    conteudos_no_mes: numeroOuNulo(v.conteudos_no_mes) || 0,
+    pautas_no_mes: listaDeTextos(v.pautas_no_mes),
+    do_mes: v.do_mes === true,
+    motivo: texto(v.motivo),
+  };
+}
+
+export function normalizarCampanhasDaMesa(data: any): CampanhasDaMesa {
+  const d = data && typeof data === "object" ? data : {};
+  const campanhas: CampanhaDaMesa[] = [];
+  (Array.isArray(d.campanhas) ? d.campanhas : []).forEach((b: any) => {
+    const c = normalizarCampanhaDaMesa(b);
+    if (c && !campanhas.some((x) => x.id === c.id)) campanhas.push(c);
+  });
+  const marcada = campanhas.find((c) => c.do_mes) || null;
+  const doMes = texto(d.campanha_do_mes_id) || (marcada ? marcada.id : "");
+  return { mes: texto(d.mes), campanhaDoMesId: doMes && campanhas.some((c) => c.id === doMes) ? doMes : null, campanhas };
+}
+
+/** "12/09 a 30/09" (com "pelo calendário" quando o período saiu das datas dos conteúdos). */
+export function periodoDaCampanha(c: Pick<CampanhaDaMesa, "periodo_inicio" | "periodo_fim" | "periodo_pelo_calendario">): string {
+  const i = dataCurta(c.periodo_inicio);
+  const f = dataCurta(c.periodo_fim);
+  const base = i && f ? (i === f ? i : `${i} a ${f}`) : i || f;
+  return base ? `${base}${c.periodo_pelo_calendario ? " (pelo calendário)" : ""}` : "sem período";
+}
+
+export const chaveDasCampanhasDaMesa = (clientId: string) => ["mesa-foto", "campanhas-da-mesa", clientId];
+
+/** As campanhas que a Mesa usa, com a do mês marcada pelo calendário (campanhas_listar, sem IA). */
+export function useCampanhasDaMesa(clientId: string, ativo = true) {
+  return useQuery({
+    queryKey: chaveDasCampanhasDaMesa(clientId),
+    enabled: ativo && !!clientId,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: async (): Promise<CampanhasDaMesa> => normalizarCampanhasDaMesa(await chamarFuncao<any>("mesa-foto", { acao: "campanhas_listar", client_id: clientId })),
+  });
+}
+
+// ------------------------------------------------------------------ revisar dentro do resultado
+
+export interface FotoParaRevisar {
+  ensaio: Ensaio;
+  tomada: Tomada;
+  versao: VersaoDaTomada;
+}
+
+/**
+ * A última versão de cada tomada que ainda espera decisão (sem versão
+ * aprovada e a última não rejeitada), do ensaio pedido primeiro.
+ */
+export function fotosParaRevisar(ensaios: Ensaio[], primeiro?: string | null): FotoParaRevisar[] {
+  const ordem = ensaios.slice().sort((a, b) => (a.id === primeiro ? -1 : b.id === primeiro ? 1 : 0));
+  const saida: FotoParaRevisar[] = [];
+  ordem.forEach((e) => {
+    e.tomadas.forEach((t) => {
+      if (!t.versoes.length || t.versoes.some((v) => v.aprovada)) return;
+      const ultima = t.versoes[t.versoes.length - 1];
+      if (!ultima.rejeitada && ultima.storage_path) saida.push({ ensaio: e, tomada: t, versao: ultima });
+    });
+  });
+  return saida;
+}
+
+/** A foto do acervo de uma versão aprovada (versao_decidir grava imagem_id). */
+export function fotoDaVersao(fotos: FotoDoAcervo[], v: Pick<VersaoDaTomada, "imagem_id" | "storage_path">): FotoDoAcervo | null {
+  if (v.imagem_id) {
+    const achada = fotos.find((f) => f.id === v.imagem_id);
+    if (achada) return achada;
+  }
+  return v.storage_path ? fotos.find((f) => f.storage_path === v.storage_path) || null : null;
 }

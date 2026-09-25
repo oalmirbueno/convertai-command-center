@@ -200,6 +200,62 @@ export async function adicionarPin(clientId: string, url: string): Promise<{ id:
   return { id: ref.id, jaExistia: !!(d && d.ja_existia) };
 }
 
+/** Extensão aceita para imagem de referência enviada (jpg, png ou webp) ou null. */
+export function extensaoDaReferencia(arquivo: { type?: string; name?: string }): string | null {
+  const tipo = String(arquivo.type || "").toLowerCase();
+  if (tipo === "image/jpeg" || tipo === "image/jpg") return "jpg";
+  if (tipo === "image/png") return "png";
+  if (tipo === "image/webp") return "webp";
+  const nome = String(arquivo.name || "").toLowerCase();
+  const ponto = nome.lastIndexOf(".");
+  const ext = ponto >= 0 ? nome.slice(ponto + 1) : "";
+  if (ext === "jpg" || ext === "jpeg") return "jpg";
+  if (ext === "png" || ext === "webp") return ext;
+  return null;
+}
+
+export const MAX_BYTES_REFERENCIA = 12 * 1024 * 1024;
+
+/** UUID v4 com reserva para navegador antigo (Safari 11 tem getRandomValues, não randomUUID). */
+function idNovo(): string {
+  const c: any = typeof crypto !== "undefined" ? crypto : null;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  const b = new Uint8Array(16);
+  if (c && typeof c.getRandomValues === "function") c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  let h = "";
+  for (let i = 0; i < 16; i++) h += (b[i] < 16 ? "0" : "") + b[i].toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/**
+ * Sobe uma imagem do computador como referência de composição do cliente
+ * (pedido do dono em 25/09: "colar link ou subir imagem"). A imagem vai para
+ * o bucket mesa em <cliente>/referencias/ e a linha nasce com origem upload.
+ * A leitura por IA fica para o "Ler as pendentes" do Contexto.
+ */
+export async function subirReferencia(clientId: string, arquivo: File): Promise<string> {
+  const ext = extensaoDaReferencia(arquivo);
+  if (!ext) throw new Error("Envie uma imagem JPG, PNG ou WEBP.");
+  if (arquivo.size > MAX_BYTES_REFERENCIA) throw new Error("Imagem acima de 12 MB.");
+  const caminho = `${clientId}/referencias/upload-${idNovo()}.${ext}`;
+  const tipo = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+  const { error: erroUpload } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
+  if (erroUpload) throw erroUpload;
+  const { data, error } = await (supabase as any)
+    .from("cliente_referencias")
+    .insert({ client_id: clientId, origem: "upload", storage_path: caminho, papel: "tecnica", ativa: true })
+    .select("id")
+    .single();
+  if (error) {
+    await supabase.storage.from("mesa").remove([caminho]).catch(() => undefined);
+    throw error;
+  }
+  return String(data.id);
+}
+
 /**
  * Liga uma imagem do Workspace como referência do cliente (a imagem continua
  * morando no Workspace, como no sincronizar). Já ligada: só volta a ficar em uso.
@@ -267,7 +323,14 @@ export function useAtraso<T>(valor: T, ms: number): T {
 
 const CAMPOS_GLOBAL = "id, titulo, leitura, tags, storage_path, url_origem";
 
-/** Uma página do banco da agência, com busca no título, na leitura e nas tags. */
+/**
+ * Uma página do banco da agência, com busca no título, na leitura e nas tags.
+ * Cada palavra da busca precisa aparecer (em qualquer um dos três), então
+ * "tipografia grande" acha peças que têm as duas palavras, não só a frase
+ * exata. A ordem tem desempate pelo id: as 1.386 do Pinterest entraram em
+ * lotes com o mesmo criado_em, e sem o desempate a mesma imagem aparecia em
+ * duas páginas e outras nunca apareciam (25/09).
+ */
 export function useBancoDaAgencia(opcoes: { busca: string; tag: string | null; pagina: number; porPagina: number; ativo: boolean }) {
   const { busca, tag, pagina, porPagina, ativo } = opcoes;
   return useQuery({
@@ -277,18 +340,29 @@ export function useBancoDaAgencia(opcoes: { busca: string; tag: string | null; p
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<{ lista: ReferenciaGlobal[]; total: number }> => {
       let q = (supabase as any).from("referencias_globais").select(CAMPOS_GLOBAL, { count: "exact" }).eq("ativa", true);
-      if (busca) {
-        const termo = `*${busca}*`;
-        const partes = [`titulo.ilike.${termo}`, `leitura.ilike.${termo}`];
-        if (busca.indexOf(" ") < 0) partes.push(`tags.cs.{${busca}}`);
-        q = q.or(partes.join(","));
+      for (const palavra of palavrasDaBusca(busca)) {
+        const termo = `*${palavra}*`;
+        q = q.or([`titulo.ilike.${termo}`, `leitura.ilike.${termo}`, `tags.cs.{${palavra}}`].join(","));
       }
       if (tag) q = q.contains("tags", [tag]);
-      const { data, error, count } = await q.order("criado_em", { ascending: false }).range(pagina * porPagina, pagina * porPagina + porPagina - 1);
+      const { data, error, count } = await q
+        .order("criado_em", { ascending: false })
+        .order("id", { ascending: true })
+        .range(pagina * porPagina, pagina * porPagina + porPagina - 1);
       if (error) throw error;
       return { lista: (data || []) as ReferenciaGlobal[], total: Number(count || 0) };
     },
   });
+}
+
+/** Palavras da busca do banco (já limpa), sem repetição, no máximo 6. */
+export function palavrasDaBusca(busca: string): string[] {
+  const saida: string[] = [];
+  for (const p of String(busca || "").split(" ")) {
+    const t = p.trim();
+    if (t && saida.indexOf(t) < 0) saida.push(t);
+  }
+  return saida.slice(0, 6);
 }
 
 /** As tags mais usadas no banco da agência (mesma chave e formato do Estúdio). */
@@ -298,10 +372,22 @@ export function useTagsDoBanco(ativo: boolean) {
     enabled: ativo,
     staleTime: 10 * 60_000,
     queryFn: async (): Promise<string[]> => {
-      const { data, error } = await (supabase as any).from("referencias_globais").select("tags").eq("ativa", true).limit(2000);
-      if (error) throw error;
+      // Em páginas de 1.000 (o limite de linhas do PostgREST cortava a conta nas primeiras 1.000).
+      const linhas: { tags: string[] | null }[] = [];
+      for (let pagina = 0; pagina < 3; pagina++) {
+        const { data, error } = await (supabase as any)
+          .from("referencias_globais")
+          .select("tags")
+          .eq("ativa", true)
+          .order("id", { ascending: true })
+          .range(pagina * 1000, pagina * 1000 + 999);
+        if (error) throw error;
+        const lote = (data || []) as { tags: string[] | null }[];
+        for (const l of lote) linhas.push(l);
+        if (lote.length < 1000) break;
+      }
       const conta: Record<string, number> = {};
-      for (const r of (data || []) as { tags: string[] | null }[]) {
+      for (const r of linhas) {
         for (const t of r.tags || []) {
           const k = String(t || "").trim();
           if (k) conta[k] = (conta[k] || 0) + 1;

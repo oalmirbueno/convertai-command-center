@@ -83,23 +83,29 @@ describe("estudio-arte: uma lamina por chamada", () => {
     expect(corpoDe("gerarCard")).toContain("const ordem = lerOrdem(corpo);");
   });
 
-  it("o gerador so e chamado em gerar (foto composta, foto real, continuo ou normal, um por vez) e em ajustar, fora de laco", () => {
+  it("o gerador so e chamado em gerar (replicar referencia, foto composta, foto real ou panorama, normal, um por vez) e em ajustar, fora de laco", () => {
     // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada).
+    // A tela dupla (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava.
     expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(6);
     expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");
     expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
-    // Cada modo termina a chamada: foto real e continuo retornam antes do normal.
+    expect(g).not.toContain("continuar");
+    // gerar_card nunca gera o trecho do panorama (trecho e lâmina juntos passavam de 400 s).
+    expect(g).not.toContain("garantirFundoContinuo(");
+    // Cada modo termina a chamada: replicar referencia antes de todos; foto real e panorama retornam antes do normal.
+    expect(g.indexOf("if (replicar) {")).toBeLessThan(g.indexOf("if (baseFoto && elementos.length) {"));
     expect(g.indexOf("if (baseFoto && elementos.length) {")).toBeLessThan(g.indexOf("if (baseFoto) {"));
-    expect(g.indexOf("if (baseFoto) {")).toBeLessThan(g.indexOf("if (continuar) {"));
+    expect(g.indexOf("if (baseFoto) {")).toBeLessThan(g.indexOf("// 3) Normal."));
     expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(4);
     expect(corpoDe("ajustarCard").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     // Nenhum laco envolve a chamada ao gerador.
     const gerar = corpoDe("gerarCard");
     const antes = gerar.slice(0, gerar.indexOf("await chamarImagem("));
     const abertos = (antes.match(/\bfor \(/g) ?? []).length;
-    // Fontes, fotos-elemento da equipe e referências: todos fecham antes do gerador.
-    expect(abertos).toBeLessThanOrEqual(3);
+    // Fontes, fotos-elemento da equipe e referências (e, no replicar, fotos,
+    // referências e anexos em ordem): todos fecham antes do gerador.
+    expect(abertos).toBeLessThanOrEqual(6);
     expect(antes.lastIndexOf("}")).toBeGreaterThan(antes.lastIndexOf("for ("));
   });
 

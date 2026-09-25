@@ -121,6 +121,53 @@ export interface IdentidadeDaCampanha {
 
 export type EstadoDaCampanha = "planejada" | "gravada" | "encerrada";
 
+/**
+ * Campanha completa (25/09): briefing, imagens do acervo com papel e o plano
+ * de imagens (qual imagem vai em qual lâmina e por quê). Colunas em
+ * docs/mesa/migrations/20260925120000_mesa_campanhas_completas.sql; ausentes
+ * antes do SQL, por isso opcionais.
+ */
+export interface BriefingDaCampanha {
+  produtos: { nome: string; por_que: string }[];
+  oferta: string;
+  mensagem_central: string;
+  publico: string;
+  provas: string[];
+  tom: string;
+  cta: string;
+}
+
+export type PapelDaImagemDaCampanha = "heroi" | "apoio" | "ambiente";
+
+export interface ImagemDaCampanha {
+  imagem_id: string;
+  papel: PapelDaImagemDaCampanha;
+  nota: string;
+}
+
+export interface PecaDoPlanoDeImagens {
+  tema_id: string;
+  ordem: number;
+  imagem_id: string | null;
+  candidatas: string[];
+  uso: "fundo" | "elemento";
+  por_que: string;
+  escolha: "estrategista" | "jev";
+  confianca: number | null;
+  aviso: string | null;
+}
+
+export interface PlanoDeImagens {
+  gerado_em: string;
+  assinatura: string;
+  fonte: "campanha" | "acervo";
+  resumo: string;
+  analise: { imagem_id: string; o_que_mostra: string; forca: string; serve_para: string }[];
+  pecas: PecaDoPlanoDeImagens[];
+  lacunas: string[];
+  jev_erro: string | null;
+}
+
 export interface Campanha {
   id: string;
   client_id: string;
@@ -138,6 +185,9 @@ export interface Campanha {
   custo_usd: number | null;
   criado_em: string;
   atualizado_em?: string;
+  briefing?: Partial<BriefingDaCampanha> | null;
+  imagens?: ImagemDaCampanha[] | null;
+  plano_imagens?: PlanoDeImagens | null;
 }
 
 // ------------------------------------------------------------------ chaves
@@ -370,6 +420,9 @@ export interface CorpoDaCampanha {
   anexos?: string[];
   referenciasIds?: string[];
   hype?: Hype | null;
+  /** O que a equipe já definiu; vale sobre o que o estrategista sugerir. */
+  briefing?: BriefingDaCampanha | null;
+  imagens?: ImagemDaCampanha[];
 }
 
 export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
@@ -380,7 +433,18 @@ export function corpoDaCampanha(c: CorpoDaCampanha): Record<string, unknown> {
   if (c.anexos && c.anexos.length) corpo.anexos = c.anexos.slice(0, MAX_ANEXOS);
   if (c.referenciasIds && c.referenciasIds.length) corpo.referencias_ids = c.referenciasIds.slice(0, 8);
   if (c.hype) corpo.hype = c.hype;
+  if (c.briefing && !briefingEstaVazio(c.briefing)) corpo.briefing = c.briefing;
+  if (c.imagens && c.imagens.length) corpo.imagens = c.imagens.slice(0, 12);
   return corpo;
+}
+
+/** Briefing sem nada preenchido (não vai no corpo). */
+export function briefingEstaVazio(b: Partial<BriefingDaCampanha> | null | undefined): boolean {
+  if (!b) return true;
+  const tem = (v: unknown) => typeof v === "string" && v.trim().length > 0;
+  const produtos = Array.isArray(b.produtos) ? b.produtos.filter((p) => p && tem(p.nome)) : [];
+  const provas = Array.isArray(b.provas) ? b.provas.filter(tem) : [];
+  return !produtos.length && !provas.length && !tem(b.oferta) && !tem(b.mensagem_central) && !tem(b.publico) && !tem(b.tom) && !tem(b.cta);
 }
 
 export const campanhaCriar = (c: CorpoDaCampanha) => chamarFuncao<any>("agente-calendario", corpoDaCampanha(c));

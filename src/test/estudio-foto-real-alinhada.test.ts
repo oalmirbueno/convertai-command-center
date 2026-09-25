@@ -38,7 +38,8 @@ describe("foto real: o original volta alinhado ao que o gerador devolveu", () =>
     // Cena trocada: nada de colagem; fica a imagem inteira do gerador, marcada.
     expect(imagem).toContain("if (opcoes.texto && !(erro <= LIMITE_CENA_MUDADA)) {");
     expect(imagem).toContain("export const LIMITE_CENA_MUDADA = 24;");
-    expect(gerar).toContain("await devolverOriginalAlinhado(baseFoto, img.png, areas, panorama ? 40 : 28, { texto: fotoFixa })");
+    // Só na foto real: o panorama cola as letras na fatia intacta (colarMudancasNaBase).
+    expect(gerar).toContain("await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa })");
     expect(gerar).toContain("cena_mudada: volta.cenaMudada");
   });
 });
@@ -54,8 +55,10 @@ describe("foto real: recorte pelo foco e logo pelo código", () => {
   });
 
   it("a logo oficial é aplicada pelo código na lâmina com foto real fixa", () => {
-    expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length;");
-    expect(gerar).toContain("if (fotoFixa && tomDaLogo) {");
+    // Com referência escolhida a lâmina replica a referência (foto recomposta), então a foto fixa sai de cena.
+    expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
+    // Foto real fixa ou panorama: a logo entra pelo código (25/09).
+    expect(gerar).toContain("if ((fotoFixa || panorama) && tomDaLogo) {");
     expect(gerar).toContain("logoNoCodigo = logo.bytes;");
     expect(gerar).toContain("final = await aplicarLogo(final, logoNoCodigo,");
     expect(gerar).toContain("logoNoCodigo: !!logoNoCodigo,");

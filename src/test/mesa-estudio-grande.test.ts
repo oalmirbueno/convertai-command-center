@@ -383,7 +383,7 @@ describe("foto real composta (fotos_livres)", () => {
     expect(imagensDoColar(null)).toEqual([]);
   });
 
-  it("Ctrl+V com arquivo sobe no bucket mesa; papel e nota; salvar chama configurar com fotos_livres", async () => {
+  it("Ctrl+V com arquivo sobe no bucket mesa e grava na hora; papel e nota também gravam sozinhos (sem Salvar)", async () => {
     mock.upload.mockResolvedValue({ data: {}, error: null });
     const onSalvar = vi.fn().mockResolvedValue(undefined);
     render(envolver(h(EstudioFotos, { card: { ordem: 2, fotos_livres: [] }, ocupado: false, temArte: true, onSalvar })));
@@ -406,17 +406,22 @@ describe("foto real composta (fotos_livres)", () => {
     expect(caminho).toMatch(new RegExp(`^${CLIENTE}/estudio/fotos/[0-9a-f-]{36}\\.png$`));
     const papel = await screen.findByRole("radiogroup", { name: "Papel da foto 1" });
     expect(papel.querySelector("[aria-checked=true]")?.textContent).toBe("Fundo");
+    // Subiu e já gravou na lâmina, sem botão de salvar (dono, 25/09: "salvar lâmina não atualiza").
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 2, fotos_livres: [{ caminho, papel: "fundo" }] } }));
+    expect(screen.queryByRole("button", { name: /Salvar na lâmina/ })).toBeNull();
 
-    // Vira elemento, com nota, e salva.
+    // Vira elemento: grava na hora. A nota grava ao sair do campo.
     fireEvent.click(screen.getByRole("radio", { name: "Elemento" }));
-    fireEvent.change(screen.getByLabelText("Como usar a foto 1"), { target: { value: "rosto à direita, olhando para o texto" } });
-    fireEvent.click(screen.getByRole("button", { name: /Salvar na lâmina/ }));
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 2, fotos_livres: [{ caminho, papel: "elemento" }] } }));
+    const nota = screen.getByLabelText("Como usar a foto 1");
+    fireEvent.change(nota, { target: { value: "rosto à direita, olhando para o texto" } });
+    fireEvent.blur(nota);
     await waitFor(() =>
       expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 2, fotos_livres: [{ caminho, papel: "elemento", nota: "rosto à direita, olhando para o texto" }] } }),
     );
   });
 
-  it("miniatura com remover; remover e salvar limpa com []", async () => {
+  it("miniatura com remover; remover grava na hora e limpa com []", async () => {
     const onSalvar = vi.fn().mockResolvedValue(undefined);
     render(
       envolver(
@@ -424,7 +429,6 @@ describe("foto real composta (fotos_livres)", () => {
       ),
     );
     fireEvent.click(screen.getByRole("button", { name: "Remover a foto 1" }));
-    fireEvent.click(screen.getByRole("button", { name: /Salvar na lâmina/ }));
     await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 1, fotos_livres: [] } }));
   });
 
@@ -432,7 +436,9 @@ describe("foto real composta (fotos_livres)", () => {
     const estudio = ler("src/components/mesa/AbaEstudio.tsx");
     expect(estudio).toContain('producao: ["lamina", "diretor", "fotos", "referencias", "conjunto", "legenda", "entrega"]');
     expect(estudio).toContain("onSalvar={(corpo) => configurar(corpo)}");
-    expect(estudio).toContain('await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });');
+    expect(estudio).toContain('await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });');
+    // O trabalho devolvido entra no cache na hora: a escolha aparece na lâmina sem esperar a lista do mês.
+    expect(estudio).toContain("gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);");
   });
 });
 

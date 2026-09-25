@@ -283,7 +283,9 @@ describe("front: confere e corrige antes de revelar", () => {
     expect(arteDoCriativo).toContain("<VeuDaLamina andamento={andamento} />");
     expect(abaEstudio).toContain("andamento={andamento[cardSelecionado.ordem]}");
     // Props públicas da ArteDoCriativo não mudam (a frente C a renderiza).
-    expect(arteDoCriativo).toContain("}: {\n  criativo: CriativoAds;\n  trabalho: Trabalho;\n  onAtualizar: () => void;\n}) {");
+    expect(arteDoCriativo).toContain("}: {\n  criativo: CriativoAds;\n  trabalho: Trabalho;\n  onAtualizar: () => void;\n");
+    // A Mesa Ads v3 só acrescentou `irmaos` opcional; as props obrigatórias não mudam.
+    expect(arteDoCriativo).toContain("  irmaos?: IrmaoDoCriativo[];\n}) {");
   });
 
   it("o véu tem a etapa em texto claro e nenhum texto de tela tem travessão", () => {
@@ -320,7 +322,7 @@ describe("correção só na área do texto e refazer diferente (24/09/2026)", ()
     expect(corpoDe("ajustarCard")).toContain("auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas)");
   });
   it("refazer pede outra composição e as regras fixas cobram anatomia e nada de moldura", () => {
-    expect(estudio).toContain("blocoDeVariacao(versoesAntes, !!baseFoto)");
+    expect(estudio).toContain("blocoDeVariacao(versoesAntes, !!baseFoto, replicar)");
     expect(estudio).toContain("NÃO repita a composição da versão anterior");
     expect(estudio).toContain("mãos com cinco dedos");
     expect(estudio).toContain("Sem moldura, borda, contorno ou cantos arredondados");

@@ -41,7 +41,7 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
-import { logoLimpa } from "../_shared/imagem-local.ts";
+import { decodificar, logoLimpa } from "../_shared/imagem-local.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import {
   createEditorialItem,
@@ -53,6 +53,8 @@ import {
 } from "../_shared/mcp-write-services.ts";
 import { auditLog } from "../_shared/mcp-audit.ts";
 import { direcaoDoRoteiro } from "../_shared/direcao-arte.ts";
+import { aplicarFotosDoPlano, pecasDoPlanoGravado } from "../_shared/fotos-do-plano.ts";
+export { aplicarFotosDoPlano, pecasDoPlanoGravado };
 import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 
@@ -1317,7 +1319,10 @@ function exigirEditavel(p: Proposta) {
 }
 
 /** Descricao legivel do item, com todo o conteudo estruturado, cabendo no limite. */
-export function descricaoDoItem(item: Item, propostaId: string, indice: number): string {
+/** Contexto da campanha no texto da tarefa: briefing antes do roteiro e a foto escolhida em cada card. */
+export type CampanhaNoItem = { linhas: string[]; fotoDoCard: (temaId: string, ordem: number) => string | null };
+
+export function descricaoDoItem(item: Item, propostaId: string, indice: number, campanha?: CampanhaNoItem | null): string {
   const linhas: string[] = [
     `Tema: ${item.tema}`,
     `Formato: ${item.formato === "carrossel" ? `Carrossel${item.carrossel_infinito ? " (carrossel infinito)" : ""}` : "Post estático"}`,
@@ -1330,11 +1335,15 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number):
     `Palavra-chave: ${item.palavra_chave}`,
   ];
   if (item.termo_regional) linhas.push(`Termo regional: ${item.termo_regional}`);
-  linhas.push("", `Gancho: ${item.gancho}`, "", `Resumo: ${item.resumo}`, "", "Roteiro dos cards:");
+  linhas.push("", `Gancho: ${item.gancho}`, "", `Resumo: ${item.resumo}`);
+  if (campanha && campanha.linhas.length) linhas.push("", ...campanha.linhas);
+  linhas.push("", "Roteiro dos cards:");
   for (const c of item.cards) {
     linhas.push(`Card ${c.ordem}${c.funcao ? ` (${c.funcao})` : ""}: ${c.texto}`);
     if (c.ilustracao) linhas.push(`  Ilustração: ${c.ilustracao}`);
     if (c.estilo) linhas.push(`  Estilo: ${c.estilo}`);
+    const foto = campanha ? campanha.fotoDoCard(item.tema_id, c.ordem) : null;
+    if (foto) linhas.push(`  Foto da campanha: ${foto}`);
   }
   linhas.push("", `CTA: ${item.cta}`, "", `Legenda (copy):\n${item.copy}`, "", `Origem: Mesa do cliente, proposta ${propostaId}, item ${indice + 1}.`);
   const completo = linhas.join("\n").trim();
@@ -1392,6 +1401,13 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   const taskIds: string[] = [];
   const resultado: Array<{ indice: number; tema: string; data: string; task_id: string | null; situacao: string; erro?: string }> = [];
 
+  // Conteúdo de campanha: o briefing e a foto de cada card entram no texto da tarefa (o Estúdio lê).
+  const idDaCampanha = typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id) ? p.parametros.campanha_id : null;
+  const campanhaDaProposta = idDaCampanha ? await carregarCampanha(servico, idDaCampanha).catch(() => null) : null;
+  const campanhaNoItem = campanhaDaProposta && campanhaDaProposta.client_id === p.client_id
+    ? await campanhaNaAgenda(servico, campanhaDaProposta).catch(() => null)
+    : null;
+
   for (let i = 0; i < p.itens.length; i++) {
     const item = p.itens[i];
     const data = normalizarDataUtil(item.data, uteis);
@@ -1412,7 +1428,7 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
       client_id: p.client_id,
       project_id: projectId,
       title: titulo,
-      description: descricaoDoItem({ ...item, data }, p.id, i),
+      description: descricaoDoItem({ ...item, data }, p.id, i, campanhaNoItem),
       format: FORMATO_PARA_ENTREGA[item.formato === "estatico" ? "estatico" : "carrossel"],
       due_date: data,
       priority: "medium" as const,
@@ -1538,6 +1554,9 @@ const FORMATOS_COM_ARTE = new Set(["carousel", "static", "design"]);
  * custo de IA. Quando a equipe abre o item no Estúdio, é só gerar.
  * Item que já tem trabalho não ganha outro.
  */
+// aplicarFotosDoPlano e pecasDoPlanoGravado moraram aqui até 25/09; agora são
+// de _shared/fotos-do-plano.ts (o Estúdio usa as mesmas no preparar).
+
 async function criarDirecoesDoRoteiro(
   servico: SupabaseClient,
   clientId: string,
@@ -1556,10 +1575,15 @@ async function criarDirecoesDoRoteiro(
   if (!modeloImagem) return 0;
   const jaTem = new Set(((existentes as { task_id: string }[] | null) ?? []).map((e) => e.task_id));
   const idsCampanha = [...new Set(comTarefa.map((i) => i.campanha_id).filter((x): x is string => !!x && UUID.test(x)))];
+  // select * : antes do SQL de 25/09 a campanha vem sem plano_imagens e segue sem foto.
   const { data: campanhasBrutas } = idsCampanha.length
-    ? await servico.from("mesa_campanhas").select("id, nome, identidade").eq("client_id", clientId).in("id", idsCampanha)
+    ? await servico.from("mesa_campanhas").select("*").eq("client_id", clientId).in("id", idsCampanha)
     : { data: [] };
-  const campanhas = new Map(((campanhasBrutas as { id: string; nome: string; identidade: Record<string, unknown> }[] | null) ?? []).map((x) => [x.id, x]));
+  const campanhas = new Map(((campanhasBrutas as Campanha[] | null) ?? []).map((x) => [x.id, x]));
+  // Fotos do plano de imagens de cada campanha (conferidas no acervo do cliente).
+  const pecasPorCampanha = new Map(Array.from(campanhas.values()).map((c) => [c.id, pecasDoPlanoGravado(c.plano_imagens)]));
+  const idsDasFotos = [...new Set(Array.from(pecasPorCampanha.values()).flatMap((l) => l.map((p) => p.imagem_id)))];
+  const fotosDoPlano = new Map((await fotosDoAcervoPorId(servico, clientId, idsDasFotos)).map((f) => [f.id, f]));
   const formato = new Map(((tarefas as { id: string; delivery_type: string; deleted_at: string | null }[] | null) ?? [])
     .filter((t) => !t.deleted_at)
     .map((t) => [t.id, t.delivery_type]));
@@ -1575,7 +1599,10 @@ async function criarDirecoesDoRoteiro(
       levaLogo: (ordem, total) => ordem === 1 || ordem === total,
     });
     if (!direcao.cards.length) continue;
-    if (campanha) (direcao as Record<string, unknown>).campanha_id = campanha.id;
+    if (campanha) {
+      (direcao as Record<string, unknown>).campanha_id = campanha.id;
+      aplicarFotosDoPlano(direcao, item.tema_id, pecasPorCampanha.get(campanha.id) ?? [], fotosDoPlano);
+    }
     linhas.push({
       client_id: clientId,
       task_id: item.task_id,
@@ -1797,6 +1824,10 @@ type Campanha = {
   proposta_id: string | null;
   status: string;
   custo_usd: number;
+  /** Colunas de 25/09 (docs/mesa/migrations/20260925120000_mesa_campanhas_completas.sql); ausentes antes do SQL. */
+  briefing?: Record<string, unknown> | null;
+  imagens?: unknown;
+  plano_imagens?: Record<string, unknown> | null;
 };
 
 async function carregarCampanha(servico: SupabaseClient, id: unknown): Promise<Campanha> {
@@ -1823,13 +1854,479 @@ async function somarCustoDaCampanha(servico: SupabaseClient, id: string, clientI
   console.error("[agente-calendario] custo da campanha nao somado", { campanha_id: id, valor });
 }
 
-const resumoDaCampanha = (c: Campanha) => ({
-  nome: c.nome,
-  objetivo: c.objetivo,
-  conceito: c.conceito,
-  identidade: c.identidade,
-  periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim },
+// ------------------------------- campanha completa: briefing, imagens e plano
+
+const MAX_IMAGENS_CAMPANHA = 12;
+const PAPEIS_DA_IMAGEM = ["heroi", "apoio", "ambiente"] as const;
+type PapelDaImagem = typeof PAPEIS_DA_IMAGEM[number];
+const ROTULO_DO_PAPEL: Record<PapelDaImagem, string> = {
+  heroi: "produto herói",
+  apoio: "apoio",
+  ambiente: "ambiente",
+};
+
+type ImagemDaCampanha = { imagem_id: string; papel: PapelDaImagem; nota: string };
+
+type BriefingDaCampanha = {
+  produtos: { nome: string; por_que: string }[];
+  oferta: string;
+  mensagem_central: string;
+  publico: string;
+  provas: string[];
+  tom: string;
+  cta: string;
+};
+
+/** Linha do acervo (cliente_imagens) que a campanha usa. */
+type FotoDaCampanha = {
+  id: string;
+  storage_bucket: string;
+  storage_path: string;
+  nome: string;
+  pasta: string | null;
+  categoria: string | null;
+  tags: string[] | null;
+  descricao: string | null;
+  origem: string | null;
+};
+
+const CAMPOS_FOTO = "id, storage_bucket, storage_path, nome, pasta, categoria, tags, descricao, origem";
+
+export function normalizarBriefing(bruto: unknown): BriefingDaCampanha {
+  const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const produtos = (Array.isArray(o.produtos) ? o.produtos : [])
+    .map((p) => {
+      const x = (p && typeof p === "object" ? p : { nome: p }) as Record<string, unknown>;
+      return { nome: texto(x.nome, 120), por_que: texto(x.por_que, 500) };
+    })
+    .filter((p) => p.nome)
+    .slice(0, 5);
+  const provas = (Array.isArray(o.provas) ? o.provas : []).map((p) => texto(p, 300)).filter(Boolean).slice(0, 6);
+  return {
+    produtos,
+    oferta: texto(o.oferta, 600),
+    mensagem_central: texto(o.mensagem_central, 400),
+    publico: texto(o.publico, 600),
+    provas,
+    tom: texto(o.tom, 300),
+    cta: texto(o.cta, 200),
+  };
+}
+
+/** O que a equipe definiu vale sobre o que o estrategista sugeriu (campo vazio não apaga). */
+export function juntarBriefing(daIa: BriefingDaCampanha, daEquipe: BriefingDaCampanha): BriefingDaCampanha {
+  return {
+    produtos: daEquipe.produtos.length ? daEquipe.produtos : daIa.produtos,
+    oferta: daEquipe.oferta || daIa.oferta,
+    mensagem_central: daEquipe.mensagem_central || daIa.mensagem_central,
+    publico: daEquipe.publico || daIa.publico,
+    provas: daEquipe.provas.length ? daEquipe.provas : daIa.provas,
+    tom: daEquipe.tom || daIa.tom,
+    cta: daEquipe.cta || daIa.cta,
+  };
+}
+
+const briefingVazio = (b: BriefingDaCampanha) =>
+  !b.produtos.length && !b.oferta && !b.mensagem_central && !b.publico && !b.provas.length && !b.tom && !b.cta;
+
+/** Imagens da campanha: só UUID, sem repetir, papel conhecido, até 12. */
+export function normalizarImagensDaCampanha(bruto: unknown): ImagemDaCampanha[] {
+  const vistas = new Set<string>();
+  const saida: ImagemDaCampanha[] = [];
+  for (const x of Array.isArray(bruto) ? bruto : []) {
+    const o = (x && typeof x === "object" ? x : { imagem_id: x }) as Record<string, unknown>;
+    const id = String(o.imagem_id ?? o.id ?? "").trim().toLowerCase();
+    if (!UUID.test(id) || vistas.has(id)) continue;
+    vistas.add(id);
+    const papel = (PAPEIS_DA_IMAGEM as readonly string[]).includes(String(o.papel)) ? String(o.papel) as PapelDaImagem : "apoio";
+    saida.push({ imagem_id: id, papel, nota: texto(o.nota, 400) });
+    if (saida.length >= MAX_IMAGENS_CAMPANHA) break;
+  }
+  return saida;
+}
+
+/**
+ * Assinatura do plano: imagens da campanha (id:papel) e conteúdos (tema_id:
+ * quantidade de cards). A tela calcula igual (campanhasApi.assinaturaDoPlano)
+ * e avisa quando o plano ficou velho.
+ */
+export function assinaturaDoPlano(imagens: { imagem_id: string; papel?: string }[], itens: { tema_id?: string | null; cards?: unknown[] | null }[]): string {
+  const a = imagens.map((i) => `${i.imagem_id}:${i.papel || ""}`).sort().join(",");
+  const b = itens.map((i) => `${i.tema_id || ""}:${Array.isArray(i.cards) ? i.cards.length : 0}`).sort().join(",");
+  return `${a}|${b}`;
+}
+
+/** Referência baixada da internet (Mesa Foto) não é publicável: não entra na campanha. */
+const fotoNaoPublicavel = (f: FotoDaCampanha) => (f.tags ?? []).some((t) => t === "nao_publicar" || t === "referencia_web");
+
+/** As linhas do acervo pelos ids, só do cliente e ativas, na ordem pedida. */
+async function fotosDoAcervoPorId(servico: SupabaseClient, clientId: string, ids: string[]): Promise<FotoDaCampanha[]> {
+  const validos = ids.filter((i) => UUID.test(i)).slice(0, 40);
+  if (!validos.length) return [];
+  const { data } = await servico.from("cliente_imagens").select(CAMPOS_FOTO).eq("client_id", clientId).eq("ativa", true).in("id", validos);
+  const achadas = (data as FotoDaCampanha[] | null) ?? [];
+  return validos.map((i) => achadas.find((a) => a.id === i)).filter((a): a is FotoDaCampanha => !!a && !fotoNaoPublicavel(a));
+}
+
+/** Imagens gravadas na campanha que ainda existem no acervo, com a linha do acervo junto. */
+async function fotosDaCampanha(servico: SupabaseClient, c: Campanha): Promise<{ imagem: ImagemDaCampanha; foto: FotoDaCampanha }[]> {
+  const imagens = normalizarImagensDaCampanha(c.imagens);
+  if (!imagens.length) return [];
+  const fotos = await fotosDoAcervoPorId(servico, c.client_id, imagens.map((i) => i.imagem_id));
+  return imagens
+    .map((imagem) => ({ imagem, foto: fotos.find((f) => f.id === imagem.imagem_id) }))
+    .filter((x): x is { imagem: ImagemDaCampanha; foto: FotoDaCampanha } => !!x.foto);
+}
+
+/** Sem imagem escolhida, o plano olha o acervo: fotos reais recentes (sem logo, arte pronta nem referência da internet). */
+async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string, limite = 10): Promise<FotoDaCampanha[]> {
+  const { data } = await servico
+    .from("cliente_imagens")
+    .select(CAMPOS_FOTO)
+    .eq("client_id", clientId)
+    .eq("ativa", true)
+    .or("categoria.is.null,categoria.not.in.(logo,arte)")
+    .order("atualizado_em", { ascending: false })
+    .limit(40);
+  const ordem = ["produto", "ambiente", "pessoa", "antes_depois", "detalhe", "equipe", "fachada"];
+  return ((data as FotoDaCampanha[] | null) ?? [])
+    .filter((f) => !fotoNaoPublicavel(f))
+    .sort((a, b) => {
+      const ia = ordem.indexOf(a.categoria || ""), ib = ordem.indexOf(b.categoria || "");
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    })
+    .slice(0, limite);
+}
+
+/** Foto reduzida para o modelo ler (lado maior 768): transformação do bucket, senão redução local. */
+async function fotoParaLeitura(servico: SupabaseClient, f: FotoDaCampanha, nome: string): Promise<ImagemEntrada | null> {
+  const lado = 768;
+  try {
+    const { data, error } = await servico.storage.from(f.storage_bucket || "mesa").download(f.storage_path, {
+      transform: { width: lado, height: lado, resize: "contain" },
+    });
+    if (!error && data) {
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      const mime = mimeDaImagem(bytes);
+      if (mime && bytes.byteLength <= 3 * 1024 * 1024) return { bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
+    }
+  } catch {
+    // cai no original
+  }
+  try {
+    const { data, error } = await servico.storage.from(f.storage_bucket || "mesa").download(f.storage_path);
+    if (error || !data) return null;
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    const mime = mimeDaImagem(bytes);
+    if (!mime || bytes.byteLength > 30 * 1024 * 1024) return null;
+    if (bytes.byteLength <= 1_500_000) return { bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
+    const img = await decodificar(bytes);
+    const reduzida = img.width > lado || img.height > lado ? img.contain(lado, lado) : img;
+    return { bytes: await reduzida.encodeJPEG(82), mime: "image/jpeg", nome: `${nome}.jpg` };
+  } catch {
+    return null;
+  }
+}
+
+/** Catálogo das fotos para o prompt: código curto (F1, F2...) em vez do UUID, que o modelo troca. */
+function catalogoDasFotos(fotos: { foto: FotoDaCampanha; imagem?: ImagemDaCampanha | null }[]) {
+  return fotos.map((x, i) => ({
+    foto: `F${i + 1}`,
+    nome: texto(x.foto.nome, 120),
+    papel_na_campanha: x.imagem ? ROTULO_DO_PAPEL[x.imagem.papel] : "do acervo (não escolhida pela equipe)",
+    por_que_a_equipe_escolheu: x.imagem?.nota || null,
+    categoria: x.foto.categoria,
+    pasta: x.foto.pasta,
+    descricao_do_acervo: texto(x.foto.descricao, 300) || null,
+  }));
+}
+
+const ESQUEMA_BRIEFING = obj({
+  produtos: { type: "array", items: obj({ nome: S("string"), por_que: S("string") }) },
+  oferta: S("string"),
+  mensagem_central: S("string"),
+  publico: S("string"),
+  provas: { type: "array", items: S("string") },
+  tom: S("string"),
+  cta: S("string"),
 });
+
+const ESQUEMA_PLANO_IMAGENS = obj({
+  resumo: S("string"),
+  analise: { type: "array", items: obj({ foto: S("string"), o_que_mostra: S("string"), forca: S("string"), serve_para: S("string") }) },
+  pecas: {
+    type: "array",
+    items: obj({
+      item: S("integer"),
+      ordem: S("integer"),
+      candidatas: { type: "array", items: S("string") },
+      uso: S("string", { enum: ["fundo", "elemento"] }),
+      por_que: S("string"),
+    }),
+  },
+  lacunas: { type: "array", items: S("string") },
+});
+
+const REGRAS_DO_PLANO_DE_IMAGENS = `Regras do plano_imagens (fotos reais da campanha, citadas pelo código F1, F2...):
+- analise: uma linha por foto que você recebeu: o_que_mostra (o que se vê de verdade, sem inventar), forca (o que ela tem de melhor para vender o produto ou a mensagem) e serve_para (capa, oferta, prova, ambiente, detalhe do produto, bastidor...).
+- pecas: uma linha por lâmina que deve usar foto real. item é a posição (1, 2, 3...) do conteúdo na lista de conteúdos; ordem é a ordem do card. candidatas: de 1 a 3 códigos de foto, a melhor primeiro. uso: fundo (a foto é a base da lâmina, fica como está, e o texto vai numa área calma dela) ou elemento (o produto recortado entra na composição desenhada). por_que: em 1 ou 2 frases, por que esta foto nesta lâmina, ligando o produto em foco, a mensagem central e o texto do card.
+- O produto herói vai na capa e na lâmina da oferta; foto de ambiente vai nas lâminas de contexto; foto de apoio em prova e detalhe. Siga a nota da equipe sobre cada foto.
+- Nunca a mesma foto como fundo em duas lâminas do mesmo conteúdo. Lâmina que a foto não serve fica fora (não force).
+- Carrossel contínuo (carrossel_infinito true) é uma cena panorâmica desenhada: ali use no máximo uso elemento, nunca fundo.
+- lacunas: as fotos que faltam para a campanha ficar completa (ex.: produto em uso, embalagem de perto, cliente real), em frases curtas. Sem fotos, analise e pecas vazias e diga nas lacunas o que fotografar.`;
+
+type PecaDoPlano = {
+  tema_id: string;
+  ordem: number;
+  imagem_id: string | null;
+  candidatas: string[];
+  uso: "fundo" | "elemento";
+  por_que: string;
+  escolha: "estrategista" | "jev";
+  confianca: number | null;
+  aviso: string | null;
+};
+
+type PlanoDeImagens = {
+  gerado_em: string;
+  assinatura: string;
+  fonte: "campanha" | "acervo";
+  resumo: string;
+  analise: { imagem_id: string; o_que_mostra: string; forca: string; serve_para: string }[];
+  pecas: PecaDoPlano[];
+  lacunas: string[];
+  jev_erro: string | null;
+};
+
+/**
+ * Plano do modelo em ids reais: código de foto desconhecido sai, item e card
+ * precisam existir, uma linha por lâmina, e nunca a mesma foto como fundo em
+ * duas lâminas do mesmo conteúdo. Carrossel contínuo não recebe fundo.
+ */
+export function normalizarPlanoDeImagens(
+  bruto: unknown,
+  codigos: Map<string, string>,
+  itens: { tema_id: string; carrossel_infinito?: boolean; cards: { ordem: number }[] }[],
+  base: { assinatura: string; fonte: "campanha" | "acervo" },
+): PlanoDeImagens {
+  const o = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
+  const idDe = (c: unknown) => codigos.get(String(c ?? "").trim().toUpperCase()) ?? null;
+  const analise = (Array.isArray(o.analise) ? o.analise : [])
+    .map((a) => {
+      const x = (a ?? {}) as Record<string, unknown>;
+      return { imagem_id: idDe(x.foto) ?? "", o_que_mostra: texto(x.o_que_mostra, 400), forca: texto(x.forca, 300), serve_para: texto(x.serve_para, 200) };
+    })
+    .filter((a, i, l) => a.imagem_id && l.findIndex((b) => b.imagem_id === a.imagem_id) === i);
+  const vistas = new Set<string>();
+  const pecas: PecaDoPlano[] = [];
+  for (const p of Array.isArray(o.pecas) ? o.pecas : []) {
+    const x = (p ?? {}) as Record<string, unknown>;
+    const item = itens[Number(x.item) - 1];
+    if (!item) continue;
+    const ordem = Number(x.ordem);
+    const nCards = Math.max(item.cards.length, 1);
+    if (!Number.isInteger(ordem) || ordem < 1 || ordem > nCards) continue;
+    const chave = `${item.tema_id}:${ordem}`;
+    if (vistas.has(chave)) continue;
+    const candidatas = (Array.isArray(x.candidatas) ? x.candidatas : []).map(idDe).filter((id): id is string => !!id)
+      .filter((id, i, l) => l.indexOf(id) === i).slice(0, 3);
+    if (!candidatas.length) continue;
+    vistas.add(chave);
+    pecas.push({
+      tema_id: item.tema_id,
+      ordem,
+      imagem_id: candidatas[0],
+      candidatas,
+      uso: item.carrossel_infinito ? "elemento" : x.uso === "elemento" ? "elemento" : "fundo",
+      por_que: texto(x.por_que, 500),
+      escolha: "estrategista",
+      confianca: null,
+      aviso: null,
+    });
+  }
+  return {
+    gerado_em: new Date().toISOString(),
+    assinatura: base.assinatura,
+    fonte: base.fonte,
+    resumo: texto(o.resumo, 1200),
+    analise,
+    pecas: semFundoRepetido(pecas),
+    lacunas: (Array.isArray(o.lacunas) ? o.lacunas : []).map((l) => texto(l, 300)).filter(Boolean).slice(0, 8),
+    jev_erro: null,
+  };
+}
+
+/** A mesma foto não vira fundo de duas lâminas do mesmo conteúdo: passa para a próxima candidata livre. */
+export function semFundoRepetido(pecas: PecaDoPlano[]): PecaDoPlano[] {
+  const usadas = new Map<string, Set<string>>();
+  return pecas
+    .slice()
+    .sort((a, b) => (a.tema_id === b.tema_id ? a.ordem - b.ordem : a.tema_id.localeCompare(b.tema_id)))
+    .map((p) => {
+      if (p.uso !== "fundo" || !p.imagem_id) return p;
+      const doItem = usadas.get(p.tema_id) ?? new Set<string>();
+      usadas.set(p.tema_id, doItem);
+      if (!doItem.has(p.imagem_id)) {
+        doItem.add(p.imagem_id);
+        return p;
+      }
+      const livre = p.candidatas.find((c) => !doItem.has(c)) ?? null;
+      if (livre) doItem.add(livre);
+      return { ...p, imagem_id: livre, aviso: livre ? p.aviso : "A foto escolhida já é fundo de outra lâmina deste conteúdo; esta lâmina fica sem foto." };
+    });
+}
+
+/**
+ * Onde há mais de uma foto candidata para a lâmina, o Jev escolhe (Choice)
+ * entre elas, com "nenhuma" como saída. Regra em código: a escolha do Jev só
+ * troca a do estrategista com probabilidade de pelo menos 0,5; "nenhuma" com
+ * 0,6 ou mais vira aviso na lâmina (a foto fica, a equipe decide). Falha do
+ * Jev não derruba o plano: fica a ordem do estrategista e o código do erro.
+ */
+async function decidirFotosComJev(
+  plano: PlanoDeImagens,
+  contexto: {
+    campanha: Record<string, unknown>;
+    fotos: Map<string, { codigo: string; descricao: string }>;
+    itens: Item[];
+  },
+  cobranca: { clientId: string; campanhaId: string; criadoPor: string },
+): Promise<{ plano: PlanoDeImagens; custo: number }> {
+  const alvos = plano.pecas.map((p, i) => ({ p, i })).filter(({ p }) => p.candidatas.length >= 2).slice(0, 40);
+  if (!alvos.length) return { plano, custo: 0 };
+  const laminas: Record<string, unknown>[] = [];
+  const questions: Record<string, PerguntaJev> = {};
+  alvos.forEach(({ p }, k) => {
+    const item = contexto.itens.find((it) => it.tema_id === p.tema_id);
+    const card = item?.cards.find((c) => c.ordem === p.ordem);
+    laminas.push({
+      conteudo: item?.tema ?? "",
+      formato: item?.formato ?? "",
+      funcao_da_lamina: card?.funcao || (p.ordem === 1 ? "capa" : "conteúdo"),
+      texto_da_lamina: card?.texto ?? "",
+      ilustracao_prevista: card?.ilustracao ?? "",
+      uso_da_foto: p.uso === "fundo" ? "a foto é a base da lâmina e o texto vai por cima numa área calma" : "o produto da foto entra recortado na composição",
+    });
+    const criteria: Record<string, unknown> = {};
+    for (const id of p.candidatas) {
+      const f = contexto.fotos.get(id);
+      if (f) criteria[f.codigo] = f.descricao;
+    }
+    criteria.nenhuma = "Nenhuma destas fotos combina com o texto e a função desta lâmina; melhor sem foto real.";
+    if (Object.keys(criteria).length < 3) return;
+    questions[`foto_${k}`] = {
+      type: "choice",
+      instructions: `Qual foto real do cliente serve melhor para a lâmina \`laminas[${k}]\` desta campanha, pensando no produto em foco, na mensagem central (\`campanha.briefing\`) e no texto e na função da lâmina?`,
+      criteria,
+    };
+  });
+  if (!Object.keys(questions).length) return { plano, custo: 0 };
+  const idDoCodigo = new Map(Array.from(contexto.fotos.entries()).map(([id, f]) => [f.codigo, id]));
+  try {
+    const r = await jevPerguntar({ state: { campanha: contexto.campanha, laminas }, questions });
+    const cobrado = await cobrarJev(r, {
+      clientId: cobranca.clientId,
+      tarefa: "calendario",
+      referencia: { tipo: "mesa_campanha", id: cobranca.campanhaId },
+      criadoPor: cobranca.criadoPor,
+    });
+    const pecas = plano.pecas.slice();
+    alvos.forEach(({ p, i }, k) => {
+      const resposta = r.answers[`foto_${k}`];
+      if (!resposta || typeof resposta.choice !== "string") return;
+      const prob = resposta.probabilities ?? {};
+      const escolhida = resposta.choice;
+      const pEscolhida = Number(prob[escolhida] ?? resposta.confidence ?? 0);
+      if (escolhida === "nenhuma") {
+        if (pEscolhida >= 0.6) pecas[i] = { ...p, confianca: Math.round(pEscolhida * 100) / 100, aviso: "O Jev acha que nenhuma das fotos serve bem a esta lâmina. Confira antes de gerar." };
+        return;
+      }
+      const id = idDoCodigo.get(escolhida);
+      if (!id || p.candidatas.indexOf(id) < 0) return;
+      if (id !== p.imagem_id && pEscolhida >= 0.5) {
+        pecas[i] = { ...p, imagem_id: id, escolha: "jev", confianca: Math.round(pEscolhida * 100) / 100 };
+      } else {
+        pecas[i] = { ...p, confianca: Math.round(Number(prob[p.imagem_id ?? ""] ?? pEscolhida) * 100) / 100 };
+      }
+    });
+    return { plano: { ...plano, pecas: semFundoRepetido(pecas), jev_erro: null }, custo: cobrado?.custoUsd ?? 0 };
+  } catch (err) {
+    const codigo = err instanceof JevErro ? err.codigo : "jev_falhou";
+    console.error("[agente-calendario] jev do plano de imagens falhou", { codigo });
+    return { plano: { ...plano, jev_erro: codigo }, custo: 0 };
+  }
+}
+
+/** Descrição curta da foto para o Jev: a análise do estrategista, o papel e a nota da equipe. */
+function descricoesDasFotos(
+  plano: PlanoDeImagens,
+  fotos: { foto: FotoDaCampanha; imagem?: ImagemDaCampanha | null }[],
+): Map<string, { codigo: string; descricao: string }> {
+  const mapa = new Map<string, { codigo: string; descricao: string }>();
+  fotos.forEach((x, i) => {
+    const a = plano.analise.find((y) => y.imagem_id === x.foto.id);
+    const partes = [
+      a?.o_que_mostra || x.foto.descricao || x.foto.nome,
+      a?.forca ? `Força: ${a.forca}` : "",
+      x.imagem ? `Papel na campanha: ${ROTULO_DO_PAPEL[x.imagem.papel]}` : "",
+      x.imagem?.nota ? `Nota da equipe: ${x.imagem.nota}` : "",
+    ].filter(Boolean);
+    mapa.set(x.foto.id, { codigo: `F${i + 1}`, descricao: texto(partes.join(". "), 600) });
+  });
+  return mapa;
+}
+
+/**
+ * O que a campanha leva para a tarefa da agenda: o briefing antes do roteiro
+ * e, em cada card, a foto escolhida no plano (nome, id do acervo, uso e por
+ * quê). O diretor de arte do Estúdio lê este texto (roteiro_e_contexto).
+ */
+async function campanhaNaAgenda(servico: SupabaseClient, c: Campanha): Promise<CampanhaNoItem> {
+  const b = normalizarBriefing(c.briefing);
+  const linhas: string[] = [`Campanha: ${c.nome}`];
+  if (c.objetivo) linhas.push(`Objetivo da campanha: ${c.objetivo}`);
+  if (b.produtos.length) linhas.push(`Produto(s) em foco: ${b.produtos.map((p) => (p.por_que ? `${p.nome} (${p.por_que})` : p.nome)).join("; ")}`);
+  if (b.oferta) linhas.push(`Oferta: ${b.oferta}`);
+  if (b.mensagem_central) linhas.push(`Mensagem central: ${b.mensagem_central}`);
+  if (b.publico) linhas.push(`Público da campanha: ${b.publico}`);
+  if (b.provas.length) linhas.push(`Provas: ${b.provas.join("; ")}`);
+  if (b.tom) linhas.push(`Tom: ${b.tom}`);
+  if (b.cta) linhas.push(`CTA da campanha: ${b.cta}`);
+  const pecas = pecasDoPlanoGravado(c.plano_imagens);
+  const fotos = await fotosDoAcervoPorId(servico, c.client_id, [...new Set(pecas.map((p) => p.imagem_id))]);
+  const nomes = new Map(fotos.map((f) => [f.id, f.nome]));
+  const porCard = new Map<string, string>();
+  for (const p of pecas) {
+    const nome = nomes.get(p.imagem_id);
+    if (!nome) continue;
+    porCard.set(`${p.tema_id}:${p.ordem}`, texto(`${nome} (acervo ${p.imagem_id}; ${p.uso === "fundo" ? "foto de fundo, usada como está" : "produto recortado como elemento"}). Por quê: ${p.por_que}`, 600));
+  }
+  return { linhas, fotoDoCard: (temaId, ordem) => porCard.get(`${temaId}:${ordem}`) ?? null };
+}
+
+/** Erro de coluna que ainda não existe (SQL de 25/09 não aplicado). */
+const faltaColunaNova = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /briefing|plano_imagens|imagens/.test(String(e.message ?? "")));
+
+const resumoDaCampanha = (c: Campanha, fotos: { imagem: ImagemDaCampanha; foto: FotoDaCampanha }[] = []) => {
+  const briefing = normalizarBriefing(c.briefing);
+  return {
+    nome: c.nome,
+    objetivo: c.objetivo,
+    conceito: c.conceito,
+    identidade: c.identidade,
+    periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim },
+    briefing: briefingVazio(briefing) ? null : briefing,
+    imagens_da_campanha: fotos.length
+      ? fotos.map((x) => ({
+        nome: texto(x.foto.nome, 120),
+        papel: ROTULO_DO_PAPEL[x.imagem.papel],
+        por_que: x.imagem.nota || null,
+        descricao: texto(x.foto.descricao, 240) || null,
+      }))
+      : null,
+  };
+};
 
 const REGRAS_DOS_ITENS = `Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
@@ -1866,11 +2363,12 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
 
-  const [ctx, anexos, projectId, conversaId] = await Promise.all([
+  const [ctx, anexos, projectId, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim),
     baixarAnexos(servico, clientId, corpo.anexos),
     projetoSocialDoCliente(servico, clientId),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+    campanha ? fotosDaCampanha(servico, campanha) : Promise.resolve([]),
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
@@ -1886,7 +2384,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 2000) }));
 
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
-${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito e a identidade):\n${JSON.stringify(resumoDaCampanha(campanha))}\n` : ""}
+${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
 
@@ -2085,7 +2583,9 @@ const ESQUEMA_CAMPANHA = {
       tom: S("string"),
       selo: obj({ texto: S("string"), descricao: S("string") }),
     }),
+    briefing: ESQUEMA_BRIEFING,
     itens: { type: "array", items: ESQUEMA_ITEM },
+    plano_imagens: ESQUEMA_PLANO_IMAGENS,
   }),
 };
 
@@ -2125,12 +2625,32 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const quantidade = Number.isInteger(Number(corpo.quantidade)) && Number(corpo.quantidade) >= 1 && Number(corpo.quantidade) <= 12 ? Number(corpo.quantidade) : null;
   const referencias = (Array.isArray(corpo.referencias_ids) ? corpo.referencias_ids : []).map(String).filter((r) => /^(g:)?[0-9a-f-]{36}$/i.test(r)).slice(0, 8);
   const hype = corpo.hype && typeof corpo.hype === "object" ? corpo.hype : null;
+  // Briefing e imagens que a equipe já definiu no formulário (valem sobre o que o estrategista sugerir).
+  const briefingDaEquipe = normalizarBriefing(corpo.briefing);
+  const imagensPedidas = normalizarImagensDaCampanha(corpo.imagens);
 
-  const [ctx, anexos, projectId] = await Promise.all([
+  const [ctx, anexos, projectId, fotosAchadas] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim),
     baixarAnexos(servico, clientId, corpo.anexos),
     projetoSocialDoCliente(servico, clientId),
+    fotosDoAcervoPorId(servico, clientId, imagensPedidas.map((i) => i.imagem_id)),
   ]);
+  const fotos = imagensPedidas
+    .map((imagem) => ({ imagem, foto: fotosAchadas.find((f) => f.id === imagem.imagem_id) }))
+    .filter((x): x is { imagem: ImagemDaCampanha; foto: FotoDaCampanha } => !!x.foto);
+  const imagensValidas = fotos.map((x) => x.imagem);
+  // As fotos da campanha vão à vista do estrategista (reduzidas), antes dos anexos do pedido.
+  const lidas = await Promise.all(fotos.map((x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`)));
+  const codigos = new Map<string, string>();
+  const fotosVistas: { imagem: ImagemDaCampanha; foto: FotoDaCampanha }[] = [];
+  const imagensDaChamada: ImagemEntrada[] = [];
+  lidas.forEach((img, i) => {
+    if (!img) return;
+    fotosVistas.push(fotos[i]);
+    codigos.set(`F${fotosVistas.length}`, fotos[i].foto.id);
+    imagensDaChamada.push({ ...img, nome: `F${fotosVistas.length}.${img.mime.split("/")[1]}` });
+  });
+  anexos.imagens.forEach((img) => imagensDaChamada.push(img));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
   // O id nasce antes: o uso de IA fica ligado à campanha, não ao cliente.
@@ -2138,15 +2658,18 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 PEDIDO DE CAMPANHA DA EQUIPE: ${pedidoTexto}
-${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}
-TAREFA: crie a campanha completa para ${inicio} a ${fim}.
+${hype ? `\nA campanha nasce deste assunto em alta: ${JSON.stringify(hype)}\n` : ""}${briefingVazio(briefingDaEquipe) ? "" : `\nBRIEFING QUE A EQUIPE JÁ DEFINIU (mantenha exatamente e complete o que faltar):\n${JSON.stringify(briefingDaEquipe)}\n`}${fotosVistas.length ? `\nFOTOS DA CAMPANHA escolhidas pela equipe (vêm nesta ordem, antes de qualquer outra imagem; cite pelo código):\n${JSON.stringify(catalogoDasFotos(fotosVistas))}\n` : ""}${anexos.imagens.length ? `\nDepois ${fotosVistas.length ? "das fotos da campanha" : "do texto"}, a equipe anexou ${anexos.imagens.length} imagem(ns) de referência ou material da campanha; use com fidelidade.\n` : ""}
+TAREFA: crie a campanha completa para ${inicio} a ${fim}. Nada genérico: cada parte fala do produto em foco, da oferta e do público deste cliente.
 - nome: nome curto e memorável da campanha (é o tema, não o nome da marca).
 - objetivo: o resultado de negócio que a campanha busca, em 1 frase.
 - conceito: a grande ideia em 2 a 4 frases (o que a campanha diz, por que funciona para este público).
+- briefing: produtos (1 a 3 produtos ou serviços em foco, cada um com por_que: por que este produto nesta campanha e neste período), oferta (a oferta concreta; se o pedido e o contexto não disserem, escreva "sem oferta definida" e nunca invente preço, desconto ou prazo), mensagem_central (a frase que o público precisa entender), publico (quem a campanha quer alcançar, concreto: quem é, o que quer, o que trava), provas (1 a 4 provas reais do contexto: depoimentos, números, garantias; nunca invente; sem prova real, lista vazia), tom (como a campanha fala), cta (a ação principal pedida).
 - identidade: a identidade visual DO TEMA, que vive dentro da marca: tema_visual (clima, fotografia, composição recorrente em 3 a 5 frases), paleta_apoio (1 a 3 cores de apoio em hex que harmonizam com a paleta da marca, nunca substituindo a principal), tipografia (como o título da campanha aparece), elementos (grafismos, formas, selo, texturas), tom (como a campanha fala), selo (texto curto do selo ou logo do tema, até 4 palavras, e a descricao visual do selo).
-- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período, contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}.
+- itens: ${quantidade ? `exatamente ${quantidade}` : "de 3 a 8"} conteúdos dentro do período, contando a campanha do teaser ao fechamento (aquecimento, lançamento, prova, urgência, último chamado), sem repetir estrutura; datas só de segunda a sexta entre ${inicio} e ${fim}. Cada conteúdo mostra o produto em foco e serve à mensagem central.${fotosVistas.length ? ' Quando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.' : ""}
+- plano_imagens: ${fotosVistas.length ? "qual foto da campanha vai em qual lâmina e por quê." : "sem fotos da campanha: analise e pecas vazias; nas lacunas, as fotos que a equipe deveria trazer."}
 - resposta: 1 a 3 frases com o resumo da campanha para a equipe.
-${REGRAS_DOS_ITENS}`;
+${REGRAS_DOS_ITENS}
+${REGRAS_DO_PLANO_DE_IMAGENS}`;
 
   const s = await chamarTexto({
     clientId,
@@ -2155,20 +2678,53 @@ ${REGRAS_DOS_ITENS}`;
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
-    mensagens: [{ papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
+    mensagens: [{ papel: "usuario", conteudo: pedido, imagens: imagensDaChamada.length ? imagensDaChamada : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CAMPANHA,
     referencia: { tipo: "mesa_campanha", id: campanhaId },
     criadoPor: chamador.userId,
   });
   const r = (s.json ?? {}) as Record<string, unknown>;
-  const itens = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
+  // Na ordem do modelo (o plano cita o conteúdo pela posição); a lista gravada sai por data.
+  const naOrdem = (Array.isArray(r.itens) ? r.itens : []).slice(0, 12).map((bruto, i) => {
     const item = normalizarItem(bruto, uteis);
     item.tema_id = `c${i + 1}`;
     (item as Item & { campanha_id?: string }).campanha_id = campanhaId;
     return item;
-  }).filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
+  });
+  const itens = naOrdem.filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
   if (!itens.length) throw new ErroHttp(502, "campanha_sem_itens", "O estrategista não devolveu os conteúdos da campanha. Tente de novo.", { uso_id: s.usoId });
+
+  const briefing = juntarBriefing(normalizarBriefing(r.briefing), briefingDaEquipe);
+  // Plano de imagens: o do estrategista, decidido pelo Jev onde há mais de uma candidata.
+  let plano: PlanoDeImagens | null = null;
+  let custoJev = 0;
+  if (fotosVistas.length) {
+    const base = normalizarPlanoDeImagens(
+      r.plano_imagens,
+      codigos,
+      naOrdem.map((i) => (i.tema ? i : { ...i, tema_id: "", cards: [] })),
+      { assinatura: assinaturaDoPlano(imagensValidas, itens), fonte: "campanha" },
+    );
+    base.pecas = base.pecas.filter((p) => p.tema_id);
+    const decidido = await decidirFotosComJev(base, {
+      campanha: { nome: texto(r.nome, 120), objetivo: texto(r.objetivo, 600), briefing },
+      fotos: descricoesDasFotos(base, fotosVistas),
+      itens,
+    }, { clientId, campanhaId, criadoPor: chamador.userId });
+    plano = decidido.plano;
+    custoJev = decidido.custo;
+  } else {
+    const lacunas = (r.plano_imagens as Record<string, unknown> | undefined)?.lacunas;
+    const soLacunas = (Array.isArray(lacunas) ? lacunas : []).map((l) => texto(l, 300)).filter(Boolean).slice(0, 8);
+    if (soLacunas.length) {
+      plano = {
+        gerado_em: new Date().toISOString(), assinatura: assinaturaDoPlano([], itens), fonte: "campanha",
+        resumo: "", analise: [], pecas: [], lacunas: soLacunas, jev_erro: null,
+      };
+    }
+  }
+  const custoTotal = Math.round((s.custoUsd + custoJev) * 1e6) / 1e6;
 
   const { data: proposta, error: erroProposta } = await servico
     .from("calendario_propostas")
@@ -2189,26 +2745,32 @@ ${REGRAS_DOS_ITENS}`;
     .single();
   if (erroProposta || !proposta) throw new ErroHttp(503, "proposta_nao_gravada", "A campanha foi escrita, mas os conteúdos não foram guardados.", { uso_id: s.usoId });
 
-  const { data: campanha, error } = await servico
+  const linhaDaCampanha: Record<string, unknown> = {
+    id: campanhaId,
+    client_id: clientId,
+    nome: texto(r.nome, 120) || "Campanha",
+    pedido: pedidoTexto,
+    objetivo: texto(r.objetivo, 600) || null,
+    periodo_inicio: inicio,
+    periodo_fim: fim,
+    conceito: texto(r.conceito, 2000) || null,
+    identidade: normalizarIdentidade(r.identidade),
+    referencias_ids: referencias,
+    proposta_id: proposta.id,
+    status: "planejada",
+    custo_usd: custoTotal,
+    criado_por: chamador.userId,
+  };
+  let { data: campanha, error } = await servico
     .from("mesa_campanhas")
-    .insert({
-      id: campanhaId,
-      client_id: clientId,
-      nome: texto(r.nome, 120) || "Campanha",
-      pedido: pedidoTexto,
-      objetivo: texto(r.objetivo, 600) || null,
-      periodo_inicio: inicio,
-      periodo_fim: fim,
-      conceito: texto(r.conceito, 2000) || null,
-      identidade: normalizarIdentidade(r.identidade),
-      referencias_ids: referencias,
-      proposta_id: proposta.id,
-      status: "planejada",
-      custo_usd: s.custoUsd,
-      criado_por: chamador.userId,
-    })
+    .insert({ ...linhaDaCampanha, briefing, imagens: imagensValidas, plano_imagens: plano })
     .select("*")
     .single();
+  if (error && faltaColunaNova(error)) {
+    // SQL de 25/09 ainda não aplicado: a campanha nasce sem briefing, imagens e plano (a resposta paga não se perde).
+    console.error("[agente-calendario] mesa_campanhas sem as colunas de 25/09; gravando sem briefing e imagens", { campanha_id: campanhaId });
+    ({ data: campanha, error } = await servico.from("mesa_campanhas").insert(linhaDaCampanha).select("*").single());
+  }
   if (error || !campanha) {
     // Sem campanha, a proposta não fica órfã na lista.
     await servico.from("calendario_propostas").update({ status: "descartada" }).eq("id", proposta.id).eq("client_id", clientId);
@@ -2226,7 +2788,7 @@ ${REGRAS_DOS_ITENS}`;
     console.error("[agente-calendario] conversa inicial da campanha nao gravada", { campanha_id: campanhaId, erro: String(e) });
   }
 
-  return json({ campanha, proposta, resposta: texto(r.resposta, 2000), project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+  return json({ campanha, proposta, resposta: texto(r.resposta, 2000), project_id: projectId, custo_usd: custoTotal, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 const ESQUEMA_AJUSTE_CAMPANHA = {
@@ -2237,6 +2799,7 @@ const ESQUEMA_AJUSTE_CAMPANHA = {
     objetivo: S("string"),
     conceito: S("string"),
     identidade: ESQUEMA_CAMPANHA.schema.properties.identidade,
+    briefing: ESQUEMA_BRIEFING,
   }),
 };
 
@@ -2254,7 +2817,7 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
     sistema: `Você é o estrategista da agência ajustando uma campanha já criada. Mantenha tudo o que o pedido não manda mudar. Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
-    mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade) e em resposta o que mudou.` }],
+    mensagens: [{ papel: "usuario", conteudo: `CAMPANHA ATUAL:\n${JSON.stringify(resumoDaCampanha(c))}\n\nPEDIDO: ${mensagem}\n\nDevolva a campanha completa atualizada (nome, objetivo, conceito, identidade, briefing) e em resposta o que mudou.` }],
     raciocinio,
     esquemaJson: ESQUEMA_AJUSTE_CAMPANHA,
     referencia: { tipo: "mesa_campanha", id: c.id },
@@ -2268,6 +2831,8 @@ async function campanhaAjustar(servico: SupabaseClient, chamador: Chamador, corp
       objetivo: texto(r.objetivo, 600) || c.objetivo,
       conceito: texto(r.conceito, 2000) || c.conceito,
       identidade: r.identidade ? normalizarIdentidade(r.identidade) : c.identidade,
+      // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
+      ...(c.briefing !== undefined && r.briefing ? { briefing: normalizarBriefing(r.briefing) } : {}),
     })
     .eq("id", c.id)
     .eq("client_id", c.client_id)
@@ -2350,6 +2915,7 @@ const ESQUEMA_CONVERSA_CAMPANHA = {
         objetivo: S("string"),
         conceito: S("string"),
         identidade: ESQUEMA_CAMPANHA.schema.properties.identidade,
+        briefing: ESQUEMA_BRIEFING,
       }),
       type: ["object", "null"],
     },
@@ -2396,10 +2962,11 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const uteis = diasUteisDoPeriodo(inicio, fim);
   const podeMudarItens = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
-  const [ctx, anexos, conversaId] = await Promise.all([
+  const [ctx, anexos, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, c.client_id, inicio, fim),
     baixarAnexos(servico, c.client_id, corpo.anexos),
     conversaDaCampanha(servico, c, chamador.userId),
+    fotosDaCampanha(servico, c),
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
@@ -2417,16 +2984,17 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 
 CAMPANHA ATUAL (JSON):
-${JSON.stringify({ ...resumoDaCampanha(c), status: c.status })}
+${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), status: c.status })}
 
 CONTEÚDOS DA CAMPANHA (JSON${podeMudarItens ? "" : "; JÁ GRAVADOS NA AGENDA, NÃO MUDE"}):
 ${JSON.stringify(proposta?.itens ?? [])}
 
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}
-Aplique o pedido. Devolva:
+${fotosDaCamp.length ? `Os conteúdos seguem o briefing e usam as imagens da campanha: a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>".
+` : ""}Aplique o pedido. Devolva:
 - resposta: o que você mudou ou respondeu, em até 4 frases.
-- campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade) só se algo dela mudou; senão null.
+- campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade, briefing) só se algo dela mudou; senão null. As imagens da campanha a equipe escolhe na tela (seção Imagens): se o pedido for trocar imagem, diga isso na resposta.
 - itens: ${podeMudarItens ? `a lista COMPLETA de conteúdos atualizada só se algum conteúdo mudou, entrou ou saiu (mantenha tema_id dos que ficam; novo recebe tema_id novo); senão null. Datas só de segunda a sexta entre ${inicio} e ${fim}.` : "sempre null (os conteúdos já estão na agenda; se o pedido for sobre eles, diga na resposta para ajustar no Estúdio)."}
 ${REGRAS_DOS_ITENS}`;
 
@@ -2453,6 +3021,8 @@ ${REGRAS_DOS_ITENS}`;
     campos.objetivo = texto(nova.objetivo, 600) || c.objetivo;
     campos.conceito = texto(nova.conceito, 2000) || c.conceito;
     if (nova.identidade) campos.identidade = normalizarIdentidade(nova.identidade);
+    // Só com a coluna no banco (select * da campanha a traz); antes do SQL de 25/09 fica de fora.
+    if (nova.briefing && c.briefing !== undefined) campos.briefing = normalizarBriefing(nova.briefing);
   }
   const { data: gravada, error } = await servico
     .from("mesa_campanhas")
@@ -2491,6 +3061,144 @@ ${REGRAS_DOS_ITENS}`;
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: propostaFinal && propostaFinal !== proposta ? [{ proposta_id: propostaFinal.id }] : [] },
   ]);
   return json({ campanha, proposta: propostaFinal, resposta, conversa_id: conversaId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+// ------------------------------------ imagens, briefing e plano da campanha
+
+/**
+ * campanha_salvar { campanha_id, briefing?, imagens?, objetivo? }: grava o que
+ * a equipe definiu na tela, sem IA e sem custo. Salva só o que veio (parcial):
+ * briefing e imagens podem ser salvos em momentos diferentes sem um apagar o
+ * outro. Cada imagem é conferida no acervo do cliente (cliente_imagens ativa,
+ * do próprio cliente, e nunca referência da internet); a recusada volta em
+ * `recusadas` e não entra. Resposta: { campanha, recusadas, custo_usd: 0 }.
+ */
+async function campanhaSalvar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const campos: Record<string, unknown> = {};
+  let recusadas: string[] = [];
+  if (corpo.briefing !== undefined) campos.briefing = normalizarBriefing(corpo.briefing);
+  if (typeof corpo.objetivo === "string") campos.objetivo = texto(corpo.objetivo, 600) || null;
+  if (corpo.imagens !== undefined) {
+    const pedidas = normalizarImagensDaCampanha(corpo.imagens);
+    const achadas = new Set((await fotosDoAcervoPorId(servico, c.client_id, pedidas.map((i) => i.imagem_id))).map((f) => f.id));
+    campos.imagens = pedidas.filter((i) => achadas.has(i.imagem_id));
+    recusadas = pedidas.filter((i) => !achadas.has(i.imagem_id)).map((i) => i.imagem_id);
+  }
+  if (!Object.keys(campos).length) throw new ErroHttp(400, "nada_para_salvar", "Nada para salvar: mande briefing, imagens ou objetivo.");
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update(campos)
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error && faltaColunaNova(error)) {
+    throw new ErroHttp(503, "campanha_sem_colunas_novas", "O banco ainda não tem os campos de imagens e briefing da campanha. Falta aplicar o SQL de 25/09 (docs/mesa/migrations).");
+  }
+  if (error || !data) throw new ErroHttp(503, "campanha_nao_salva", "Não foi possível salvar a campanha. Tente de novo.");
+  return json({ campanha: data, recusadas, custo_usd: 0 });
+}
+
+/**
+ * campanha_plano_imagens { campanha_id, modelo_id?, raciocinio? }: o
+ * estrategista olha as imagens da campanha (ou, sem nenhuma escolhida, até 10
+ * fotos reais recentes do acervo) junto com o briefing e os conteúdos, e diz
+ * qual imagem vai em qual lâmina e por quê; onde há mais de uma candidata, o
+ * Jev escolhe. Grava em mesa_campanhas.plano_imagens. O gravar leva a foto
+ * escolhida de cada lâmina ao Estúdio. Resposta: { campanha, plano_imagens,
+ * custo_usd, saldo_usd, reserva_usada }.
+ */
+async function campanhaPlanoImagens(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  if (c.plano_imagens === undefined) {
+    throw new ErroHttp(503, "campanha_sem_colunas_novas", "O banco ainda não tem os campos de imagens e briefing da campanha. Falta aplicar o SQL de 25/09 (docs/mesa/migrations).");
+  }
+  const proposta = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const itens = proposta?.itens ?? [];
+  if (!itens.length) throw new ErroHttp(409, "campanha_sem_conteudos", "A campanha ainda não tem conteúdos. Peça os conteúdos ao agente antes do plano de imagens.");
+
+  const escolhidas = await fotosDaCampanha(servico, c);
+  const fonte: "campanha" | "acervo" = escolhidas.length ? "campanha" : "acervo";
+  const candidatas: { foto: FotoDaCampanha; imagem: ImagemDaCampanha | null }[] = escolhidas.length
+    ? escolhidas
+    : (await fotosDoAcervoParaOPlano(servico, c.client_id)).map((foto) => ({ foto, imagem: null }));
+  if (!candidatas.length) {
+    throw new ErroHttp(409, "campanha_sem_imagens", "Nenhuma imagem para analisar. Escolha imagens para a campanha ou sincronize o acervo do cliente na aba Contexto.");
+  }
+  const lidas = await Promise.all(candidatas.map((x, i) => fotoParaLeitura(servico, x.foto, `F${i + 1}`)));
+  const vistas: { foto: FotoDaCampanha; imagem: ImagemDaCampanha | null }[] = [];
+  const imagens: ImagemEntrada[] = [];
+  const codigos = new Map<string, string>();
+  lidas.forEach((img, i) => {
+    if (!img) return;
+    vistas.push(candidatas[i]);
+    codigos.set(`F${vistas.length}`, candidatas[i].foto.id);
+    imagens.push({ ...img, nome: `F${vistas.length}.${img.mime.split("/")[1]}` });
+  });
+  if (!imagens.length) throw new ErroHttp(409, "imagens_ilegiveis", "Não foi possível abrir as imagens da campanha. Confira se elas ainda existem no acervo.");
+
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
+  const briefing = normalizarBriefing(c.briefing);
+  const conteudos = itens.map((it, i) => ({
+    item: i + 1,
+    tema: it.tema,
+    data: it.data,
+    formato: it.formato,
+    carrossel_infinito: it.carrossel_infinito,
+    gancho: it.gancho,
+    objetivo: ROTULO_OBJETIVO[it.objetivo] ?? it.objetivo,
+    cards: it.cards.map((card) => ({ ordem: card.ordem, funcao: card.funcao, texto: card.texto, ilustracao: card.ilustracao })),
+  }));
+  const pedido = `CAMPANHA (JSON):
+${JSON.stringify({ nome: c.nome, objetivo: c.objetivo, conceito: c.conceito, periodo: { inicio: c.periodo_inicio, fim: c.periodo_fim }, briefing, identidade: c.identidade })}
+
+FOTOS (vêm anexadas nesta ordem; cite pelo código):
+${JSON.stringify(catalogoDasFotos(vistas))}
+${fonte === "acervo" ? "\nA equipe ainda não escolheu imagens para esta campanha: estas são fotos reais recentes do acervo do cliente. Use só as que servem de verdade e diga nas lacunas o que falta.\n" : ""}
+CONTEÚDOS DA CAMPANHA (JSON; item é a posição):
+${JSON.stringify(conteudos)}
+
+TAREFA: monte o plano de imagens da campanha. Olhe cada foto de verdade (o que aparece, a luz, onde há área calma para texto, se o produto aparece inteiro e nítido) e decida qual foto vai em qual lâmina e por quê, sempre ligado ao produto em foco, à oferta e à mensagem central. resumo: em 2 a 4 frases, a lógica do plano (qual foto carrega a campanha e por quê).
+${REGRAS_DO_PLANO_DE_IMAGENS}`;
+
+  const s = await chamarTexto({
+    clientId: c.client_id,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: `Você é o estrategista da agência e diretor de fotografia da campanha. Escolhe fotos reais do cliente para cada peça com critério de venda, sem inventar o que a foto não mostra. Português do Brasil, sem travessões. Responda só com o JSON pedido.`,
+    mensagens: [{ papel: "usuario", conteudo: pedido, imagens }],
+    raciocinio,
+    esquemaJson: { nome: "plano_de_imagens", schema: ESQUEMA_PLANO_IMAGENS },
+    referencia: { tipo: REF_CAMPANHA, id: c.id },
+    criadoPor: chamador.userId,
+  });
+  const base = normalizarPlanoDeImagens(s.json, codigos, itens, {
+    assinatura: assinaturaDoPlano(normalizarImagensDaCampanha(c.imagens), itens),
+    fonte,
+  });
+  const decidido = await decidirFotosComJev(base, {
+    campanha: { nome: c.nome, objetivo: c.objetivo, briefing },
+    fotos: descricoesDasFotos(base, vistas),
+    itens,
+  }, { clientId: c.client_id, campanhaId: c.id, criadoPor: chamador.userId });
+
+  const { data, error } = await servico
+    .from("mesa_campanhas")
+    .update({ plano_imagens: decidido.plano })
+    .eq("id", c.id)
+    .eq("client_id", c.client_id)
+    .select("*")
+    .single();
+  if (error || !data) throw new ErroHttp(503, "plano_nao_salvo", "O plano de imagens foi feito, mas não foi salvo. Tente de novo.", { uso_id: s.usoId });
+  const custo = Math.round((s.custoUsd + decidido.custo) * 1e6) / 1e6;
+  await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
+  (data as Campanha).custo_usd = Math.round((Number((data as Campanha).custo_usd) + custo) * 1e6) / 1e6;
+  return json({ campanha: data, plano_imagens: decidido.plano, custo_usd: custo, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
 }
 
 // ------------------------------------------ planejar o mês conversando
@@ -3227,6 +3935,8 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   campanha_ajustar: campanhaAjustar,
   campanha_selo: campanhaSelo,
   campanha_conversar: campanhaConversar,
+  campanha_salvar: campanhaSalvar,
+  campanha_plano_imagens: campanhaPlanoImagens,
   propor_temas: proporTemas,
   escolher_temas: escolherTemas,
   detalhar,
@@ -3236,7 +3946,7 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
+const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

@@ -90,13 +90,14 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(g).toContain("const quadro = quadroDoCard(t, card);");
     // foto real do acervo e foto trazida pela equipe no tamanho do formato
     expect(g).toContain("await fotoRealNaLamina(foto, quadro.largura, quadro.altura)");
-    expect(g).toContain('await fotoNaLamina(await baixar("mesa", fundoLivre.caminho), quadro.largura, quadro.altura)');
+    // Reduzida pelo Storage antes do recorte (foto da Mesa Foto pode ser 4K), no tamanho do card.
+    expect(g).toContain('await fotoDoBucketNaLamina("mesa", fundoLivre.caminho, quadro.largura, quadro.altura)');
     // foto composta
     expect(g).toContain("editar: { bytes: baseFoto }, tamanho: quadro.tamanho, tamanhoFixo: quadro.fixo");
     // foto real com máscara e devolução do original
     expect(g).toContain("mascara: await mascara(quadro.largura, quadro.altura, areas)");
-    expect(g).toContain("const volta = img.tamanho === quadro.tamanho");
-    expect(g).toContain("? await devolverOriginalAlinhado(baseFoto, img.png, areas");
+    expect(g).toContain("} else if (img.tamanho === quadro.tamanho) {");
+    expect(g).toContain("const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas");
     expect(g).not.toContain("mascara(1088, 1360");
     // normal
     expect(g).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");
@@ -110,7 +111,8 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(corpoDe("verificar")).toContain("await laminaFinal(caminho, quadro.final)");
     expect(corpoDe("laminaFinal")).toContain("Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01");
     // O Storage só reduz a foto inteira; o recorte com foco no tamanho do card é feito na função.
-    expect(corpoDe("fotoRealNaLamina")).toContain("return await fotoNaLamina(bytes, largura, altura);");
+    expect(corpoDe("fotoRealNaLamina")).toContain("return await fotoDoBucketNaLamina(a.storage_bucket, a.storage_path, largura, altura);");
+    expect(corpoDe("fotoDoBucketNaLamina")).toContain("return await fotoNaLamina(reduzida ?? await baixar(bucket, caminho), largura, altura);");
     expect(imagemLocal).toContain("export async function fotoNaLamina(bytes: Uint8Array, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA)");
     expect(imagemLocal).toContain("return await cobrirComFoco(await decodificar(bytes), largura, altura).encode(1);");
   });
@@ -222,10 +224,10 @@ describe("Estúdio Ads: sem panorama nem série", () => {
     expect(corpoDe("usaPanorama")).toContain("if (ehAds(t)) return false;");
     const g = corpoDe("gerarCard");
     expect(g).toContain("const infinito = !ads && !!t.direcao.carrossel_infinito;");
-    // Tela dupla e ligação da última com a capa só no contínuo (nunca no anúncio).
-    expect(g).toContain("const continuar = !baseFoto && !elementos.length && infinito &&");
-    expect(g).toContain("if (infinito && ordem === total && ordem > 2) {");
-    expect(g).toContain("carrosselInfinito: infinito,");
+    // Ligação da última com a capa só no contínuo sem panorama (nunca no anúncio); a tela dupla saiu em 25/09.
+    expect(g).not.toContain("const continuar =");
+    expect(g).toContain("if (infinito && !panorama && ordem === total && ordem > 2) {");
+    expect(g).toContain("carrosselInfinito: infinito && !panorama,");
     expect(corpoDe("regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t)");
     expect(corpoDe("configurar")).toContain("carrossel_infinito: infinito && cards.length > 1 && !ehAds(x)");
   });

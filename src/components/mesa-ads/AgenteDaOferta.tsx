@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageSquarePlus, Sparkles } from "lucide-react";
+import { Loader2, MessageSquarePlus, Sparkles, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
@@ -19,7 +19,7 @@ import { chamarAds, chavesAds, lerConversa, normalizarRespostaDaOferta, partesDa
 
 const ATALHOS = [
   { rotulo: "Oferta de entrada", texto: "Monte uma oferta de entrada com risco baixo para quem nunca comprou: " },
-  { rotulo: "Mais agressiva", texto: "Deixe a oferta mais agressiva e vendedora, sem promessa de resultado: " },
+  { rotulo: "Mais agressiva", texto: "Deixe a oferta mais agressiva e vendedora: promessa concreta com número real, urgência real e CTA imperativo, sem promessa de resultado garantido: " },
   { rotulo: "Com bônus e garantia", texto: "Acrescente bônus reais e uma garantia que o cliente consiga cumprir: " },
   { rotulo: "Ideias de criativo", texto: "Traga ideias de criativo que parem a rolagem para a oferta " },
 ];
@@ -56,15 +56,35 @@ function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: Rea
   );
 }
 
+/** Pedido que chega de fora (Lapidar com o agente): texto pronto e a oferta em foco. */
+export interface PedidoAoAgente {
+  texto: string;
+  ofertaId: string | null;
+  nome: string;
+  /** Muda a cada clique, para o mesmo pedido poder chegar de novo. */
+  chave: number;
+}
+
+/** Texto pronto para lapidar uma oferta (a do contexto chega crua, com lacunas). */
+export function pedidoParaLapidar(nome: string, doContexto: boolean, lacunas: string[] = []): string {
+  const faltas = lacunas.length ? ` O que falta no contexto: ${lacunas.slice(0, 4).join(" ")}` : "";
+  return doContexto
+    ? `Lapide a oferta "${nome}" que veio do contexto do cliente: deixe a promessa específica e vendedora, complete o que entra, proponha bônus e reversão de risco (marcados para confirmar) e um CTA direto. Mantenha os fatos (preço, garantia, datas).${faltas}`
+    : `Lapide a oferta "${nome}": mais vendedora e específica, com bônus, reversão de risco e CTA direto, mantendo os fatos.`;
+}
+
 export default function AgenteDaOferta({
   conversaInicial,
   onResposta,
   className = "",
+  pedido = null,
 }: {
   /** Conversa da oferta mais recente, quando o navegador não guardou nenhuma. */
   conversaInicial: string | null;
   onResposta: (r: RespostaDaOferta) => void;
   className?: string;
+  /** v3: pedido pronto vindo da oferta (Lapidar com o agente). */
+  pedido?: PedidoAoAgente | null;
 }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
@@ -73,6 +93,20 @@ export default function AgenteDaOferta({
   const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
   const [conversaId, setConversaId] = useState<string | null>(() => lerConversaGuardada(clientId));
   const [recomecou, setRecomecou] = useState(false);
+  const [foco, setFoco] = useState<{ id: string; nome: string } | null>(null);
+  const entradaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!pedido) return;
+    setTexto(pedido.texto);
+    setFoco(pedido.ofertaId ? { id: pedido.ofertaId, nome: pedido.nome } : null);
+    const el = entradaRef.current;
+    if (el) {
+      if (typeof el.scrollIntoView === "function") el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      el.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedido ? pedido.chave : 0]);
   const enviados = useRef<string[]>([]);
   const listaRef = useRef<HTMLDivElement>(null);
   const botaoRef = useRef<HTMLSpanElement>(null);
@@ -102,7 +136,9 @@ export default function AgenteDaOferta({
         mensagem,
         conversa_id: atual || undefined,
         anexos: caminhos.length ? caminhos : undefined,
+        oferta_id: foco ? foco.id : undefined,
       });
+      setFoco(null);
       const r = normalizarRespostaDaOferta(bruto);
       if (r.conversa_id) {
         setConversaId(r.conversa_id);
@@ -208,10 +244,21 @@ export default function AgenteDaOferta({
             </button>
           ))}
         </div>
+        {foco && (
+          <div className="flex min-w-0 items-center rounded-lg border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-[11.5px]" role="note">
+            <span className="min-w-0 flex-1 truncate">
+              Lapidando: <span className="font-medium">{foco.nome}</span>
+            </span>
+            <button type="button" onClick={() => setFoco(null)} className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary" aria-label="Tirar a oferta em foco">
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <ZonaDeAnexos anexos={anexos}>
           <div className="rounded-xl border border-border bg-background p-2 focus-within:border-primary/60">
             <MiniaturasDosAnexos anexos={anexos} />
             <Textarea
+              ref={entradaRef}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               onKeyDown={(e) => {

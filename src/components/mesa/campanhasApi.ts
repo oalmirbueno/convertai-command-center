@@ -2,7 +2,19 @@ import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, padraoPara, saidaPorRaciocinio, TAMANHOS, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
-import { chaves, MAX_ANEXOS, type Campanha, type MensagemDoAgente, type PropostaV4 } from "./mesaV4Api";
+import {
+  chaves,
+  MAX_ANEXOS,
+  type BriefingDaCampanha,
+  type Campanha,
+  type ImagemDaCampanha,
+  type ItemProposto,
+  type MensagemDoAgente,
+  type PapelDaImagemDaCampanha,
+  type PecaDoPlanoDeImagens,
+  type PlanoDeImagens,
+  type PropostaV4,
+} from "./mesaV4Api";
 
 /**
  * Campanhas, versão 5 (23/09, noite): a conversa com o agente da campanha.
@@ -167,3 +179,169 @@ export function conteudosDaCampanha(qc: QueryClient, campanha: Campanha, contage
   if (contagem && Object.prototype.hasOwnProperty.call(contagem, campanha.proposta_id)) return contagem[campanha.proposta_id];
   return null;
 }
+
+// ------------------------------------------------------------------ campanha completa (25/09)
+
+/**
+ * Campanha completa: briefing (produto em foco, oferta, mensagem central,
+ * público, provas, tom, CTA), imagens do acervo com papel e nota, e o plano de
+ * imagens (qual imagem vai em qual lâmina e por quê, com o Jev decidindo onde
+ * há mais de uma candidata). Contrato das ações no agente-calendario:
+ *
+ *   campanha_salvar { campanha_id, briefing?, imagens?, objetivo? }
+ *     -> { campanha, recusadas: [imagem_id], custo_usd: 0 }   (sem IA)
+ *   campanha_plano_imagens { campanha_id, modelo_id? }
+ *     -> { campanha, plano_imagens, custo_usd, saldo_usd }     (IA com visão + Jev)
+ *   campanha_criar ganha briefing? e imagens? no corpo.
+ */
+
+export const MAX_IMAGENS_CAMPANHA = 12;
+
+export const PAPEIS_DA_IMAGEM: { valor: PapelDaImagemDaCampanha; rotulo: string; dica: string }[] = [
+  { valor: "heroi", rotulo: "Produto herói", dica: "O produto em foco: vai na capa e na oferta." },
+  { valor: "apoio", rotulo: "Apoio", dica: "Detalhe, prova, uso do produto." },
+  { valor: "ambiente", rotulo: "Ambiente", dica: "Lugar, clima, contexto da campanha." },
+];
+
+export const rotuloDoPapelDaImagem = (p?: string | null) => {
+  const achado = PAPEIS_DA_IMAGEM.filter((x) => x.valor === p)[0];
+  return achado ? achado.rotulo : "Apoio";
+};
+
+const textoLimpo = (v: unknown, max = 600) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+export function briefingEmBranco(): BriefingDaCampanha {
+  return { produtos: [], oferta: "", mensagem_central: "", publico: "", provas: [], tom: "", cta: "" };
+}
+
+/** Briefing em forma fixa (o banco pode trazer {} antes da primeira escrita). */
+export function normalizarBriefing(v: unknown): BriefingDaCampanha {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const produtos = (Array.isArray(o.produtos) ? o.produtos : [])
+    .map((p) => {
+      const x = (p && typeof p === "object" ? p : { nome: p }) as Record<string, unknown>;
+      return { nome: textoLimpo(x.nome, 120), por_que: textoLimpo(x.por_que, 500) };
+    })
+    .filter((p) => p.nome)
+    .slice(0, 5);
+  return {
+    produtos,
+    oferta: textoLimpo(o.oferta),
+    mensagem_central: textoLimpo(o.mensagem_central, 400),
+    publico: textoLimpo(o.publico),
+    provas: (Array.isArray(o.provas) ? o.provas : []).map((p) => textoLimpo(p, 300)).filter(Boolean).slice(0, 6),
+    tom: textoLimpo(o.tom, 300),
+    cta: textoLimpo(o.cta, 200),
+  };
+}
+
+const UUID_DA_IMAGEM = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Imagens da campanha: só UUID, sem repetir, papel conhecido, até 12 (igual à função). */
+export function normalizarImagensDaCampanha(v: unknown): ImagemDaCampanha[] {
+  const saida: ImagemDaCampanha[] = [];
+  const vistas: Record<string, true> = {};
+  for (const x of Array.isArray(v) ? v : []) {
+    const o = (x && typeof x === "object" ? x : { imagem_id: x }) as Record<string, unknown>;
+    const id = String(o.imagem_id || o.id || "").trim().toLowerCase();
+    if (!UUID_DA_IMAGEM.test(id) || vistas[id]) continue;
+    vistas[id] = true;
+    const papel = o.papel === "heroi" || o.papel === "ambiente" ? (o.papel as PapelDaImagemDaCampanha) : "apoio";
+    saida.push({ imagem_id: id, papel, nota: textoLimpo(o.nota, 400) });
+    if (saida.length >= MAX_IMAGENS_CAMPANHA) break;
+  }
+  return saida;
+}
+
+/** Plano gravado, em forma fixa, ou null. */
+export function normalizarPlanoDeImagens(v: unknown): PlanoDeImagens | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const pecas: PecaDoPlanoDeImagens[] = (Array.isArray(o.pecas) ? o.pecas : [])
+    .map((p) => {
+      const x = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const confianca = typeof x.confianca === "number" && isFinite(x.confianca) ? x.confianca : null;
+      return {
+        tema_id: textoLimpo(x.tema_id, 40),
+        ordem: Number(x.ordem) || 0,
+        imagem_id: typeof x.imagem_id === "string" && x.imagem_id ? x.imagem_id : null,
+        candidatas: (Array.isArray(x.candidatas) ? x.candidatas : []).map((c) => String(c || "")).filter(Boolean),
+        uso: x.uso === "elemento" ? ("elemento" as const) : ("fundo" as const),
+        por_que: textoLimpo(x.por_que, 500),
+        escolha: x.escolha === "jev" ? ("jev" as const) : ("estrategista" as const),
+        confianca,
+        aviso: textoLimpo(x.aviso, 300) || null,
+      };
+    })
+    .filter((p) => p.tema_id && p.ordem > 0);
+  return {
+    gerado_em: textoLimpo(o.gerado_em, 40),
+    assinatura: textoLimpo(o.assinatura, 4000),
+    fonte: o.fonte === "acervo" ? "acervo" : "campanha",
+    resumo: textoLimpo(o.resumo, 1200),
+    analise: (Array.isArray(o.analise) ? o.analise : [])
+      .map((a) => {
+        const x = (a && typeof a === "object" ? a : {}) as Record<string, unknown>;
+        return {
+          imagem_id: String(x.imagem_id || ""),
+          o_que_mostra: textoLimpo(x.o_que_mostra, 400),
+          forca: textoLimpo(x.forca, 300),
+          serve_para: textoLimpo(x.serve_para, 200),
+        };
+      })
+      .filter((a) => a.imagem_id),
+    pecas,
+    lacunas: (Array.isArray(o.lacunas) ? o.lacunas : []).map((l) => textoLimpo(l, 300)).filter(Boolean),
+    jev_erro: textoLimpo(o.jev_erro, 60) || null,
+  };
+}
+
+/**
+ * Assinatura do plano: imagens da campanha (id:papel) e conteúdos (tema_id:
+ * quantidade de cards). Igual à assinaturaDoPlano da função agente-calendario.
+ */
+export function assinaturaDoPlano(imagens: { imagem_id: string; papel?: string }[], itens: { tema_id?: string | null; cards?: unknown[] | null }[]): string {
+  const a = imagens.map((i) => `${i.imagem_id}:${i.papel || ""}`).sort().join(",");
+  const b = itens.map((i) => `${i.tema_id || ""}:${Array.isArray(i.cards) ? i.cards.length : 0}`).sort().join(",");
+  return `${a}|${b}`;
+}
+
+/** O plano foi feito sobre outras imagens ou outros conteúdos. */
+export function planoDesatualizado(plano: PlanoDeImagens | null, imagens: ImagemDaCampanha[], itens: ItemProposto[] | null): boolean {
+  if (!plano || !itens) return false;
+  return plano.assinatura !== assinaturaDoPlano(imagens, itens);
+}
+
+export interface CorpoDoSalvar {
+  campanhaId: string;
+  briefing?: BriefingDaCampanha;
+  imagens?: ImagemDaCampanha[];
+  objetivo?: string;
+}
+
+export function corpoDoSalvarCampanha(c: CorpoDoSalvar): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "campanha_salvar", campanha_id: c.campanhaId };
+  if (c.briefing) corpo.briefing = c.briefing;
+  if (c.imagens) corpo.imagens = c.imagens.slice(0, MAX_IMAGENS_CAMPANHA);
+  if (typeof c.objetivo === "string") corpo.objetivo = c.objetivo;
+  return corpo;
+}
+
+export const campanhaSalvar = (c: CorpoDoSalvar) =>
+  chamarFuncao<{ campanha: Campanha; recusadas?: string[] }>("agente-calendario", corpoDoSalvarCampanha(c));
+
+export const campanhaPlanoImagens = (campanhaId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "campanha_plano_imagens", campanha_id: campanhaId });
+
+/** Plano de imagens: uma chamada do estrategista com as imagens à vista (o Jev custa centavos). */
+export const partesDoPlanoDeImagens = (catalogo: ModeloIa[], imagens: number, conteudos: number): ParteDaEstimativa[] => {
+  const m = padraoPara(catalogo, "estrategista");
+  return [
+    {
+      modeloId: m ? m.id : null,
+      tipo: "texto",
+      tokensEntrada: 6000 + Math.max(imagens, 1) * TAMANHOS.imagemAnexos.entrada + conteudos * 600,
+      tokensSaida: saidaPorRaciocinio("medium") + conteudos * 300,
+    },
+  ];
+};

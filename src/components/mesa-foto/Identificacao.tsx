@@ -65,7 +65,7 @@ export function AcoesDaIdentificacao({
       <>
         <span className="mb-1.5 mr-2 inline-flex items-center text-[12px] text-muted-foreground" data-kit-da-identificacao={kit.id}>
           <Check className="mr-1 h-3.5 w-3.5 text-success" />
-          Kit {identificacao.kit_acao === "atualizado" ? "atualizado" : "salvo"} como {confirmado ? "confirmado" : "rascunho"}: {kit.nome}
+          Produto {identificacao.kit_acao === "atualizado" ? "atualizado" : "salvo"} {confirmado ? "e confirmado" : "como rascunho"}: {kit.nome}
         </span>
         {!confirmado && (
           <Button type="button" size="sm" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={confirmando} onClick={() => void confirmar()}>
@@ -74,7 +74,7 @@ export function AcoesDaIdentificacao({
           </Button>
         )}
         <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => onKits([String(kit.id)], false)}>
-          Abrir o kit
+          Ver detalhes
         </Button>
       </>
     );
@@ -83,11 +83,11 @@ export function AcoesDaIdentificacao({
     <BotaoComCusto
       rotulo={
         <>
-          <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Confirmar e montar o kit
+          <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Confirmar e montar o produto
         </>
       }
-      titulo="Kit montado"
-      descricao="Monta o kit com as fotos do cliente e as referências da internet. Volta salvo como rascunho."
+      titulo="Produto montado"
+      descricao="Junta as fotos do cliente e as referências da internet no produto. Volta salvo como rascunho."
       className="mb-1.5 mr-1.5 h-8 text-[12px]"
       disabled={!ids.length}
       partes={() => partesDaSugestao(catalogo, ids.length)}
@@ -148,7 +148,7 @@ export default function CartaoDaIdentificacao({ identificacao, acoes, compacto =
           <Globe className="mr-1 h-3.5 w-3.5" /> Referências da internet · {refs.length}
         </p>
         {refs.length === 0 ? (
-          <p className="text-[11.5px] text-muted-foreground">A internet não confirmou fotos deste modelo. O kit segue com as fotos do cliente.</p>
+          <p className="text-[11.5px] text-muted-foreground">A internet não confirmou fotos deste modelo. O produto segue com as fotos do cliente.</p>
         ) : (
           <ul className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6">
             {refs.map((r, i) => {

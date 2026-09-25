@@ -40,6 +40,12 @@ export interface CardGerado {
   /** Versão feita pela autocorreção (corrigir_card): a rodada e os motivos. */
   autocorrecao?: { rodada: number; motivos: string[]; pedido_da_equipe?: boolean } | null;
   criado_em?: string;
+  /** Como a versão nasceu (estudio-arte): normal, foto_real, foto_composta, panorama, continuo ou replicar_referencia. */
+  modo?: string;
+  /** Replicar referência com foto: a foto do cliente foi recomposta pelo gerador (a tela pede para conferir o rosto). */
+  foto_recomposta?: boolean;
+  /** Referências anexadas nesta versão (ids; "g:" = banco da agência). */
+  referencias?: string[];
 }
 
 export interface CardDaDirecao {

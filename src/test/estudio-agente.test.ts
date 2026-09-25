@@ -232,12 +232,18 @@ describe("aplicar na direção", () => {
   it("contínuo: mudar a cena apaga o fundo panorâmico e refaz todas", () => {
     const d = direcao({ carrossel_infinito: true, panorama: { fundos: { "1": "a.png", "2": "b.png", "3": "c.png" } } });
     const r = aplicarNaDirecao(d, [mud({ campos: { tratamento: "luz de fim de tarde" } })]);
-    expect(r.direcao.panorama).toBeNull();
+    // Apagado com a geração seguinte (25/09): um trecho atrasado não ressuscita o fundo velho.
+    expect(r.direcao.panorama).toEqual({ fundos: {}, geracao: 1, em_andamento: null });
     expect(r.fundoApagado).toBe(true);
     expect(r.afetadas).toEqual([1, 2, 3]);
+    // Desde 25/09 a zona do texto também é cena no contínuo: o panorama deixa calma a zona de cada lâmina.
     const soPosicao = aplicarNaDirecao(d, [mud({ campos: { zona_texto: "centro" } })]);
-    expect(soPosicao.direcao.panorama).toEqual(d.panorama);
-    expect(soPosicao.afetadas).toEqual([1]);
+    expect(soPosicao.direcao.panorama).toEqual({ fundos: {}, geracao: 1, em_andamento: null });
+    expect(soPosicao.afetadas).toEqual([1, 2, 3]);
+    // Só o alinhamento não mexe na cena: o fundo fica.
+    const soAlinhamento = aplicarNaDirecao(d, [mud({ campos: { alinhamento: "centro" } })]);
+    expect(soAlinhamento.direcao.panorama).toEqual(d.panorama);
+    expect(soAlinhamento.afetadas).toEqual([1]);
   });
 
   it("o estilo pedido vira bloco do prompt, sem escurecer e dentro da paleta", () => {
@@ -374,7 +380,9 @@ describe("tela: o diretor no Estúdio e na Mesa Ads", () => {
     expect(arteDoCriativo).toContain('{ valor: "diretor", rotulo: "Diretor", icone: MessageSquare }');
     expect(arteDoCriativo).toContain("<DiretorDoEstudio");
     expect(arteDoCriativo).toContain("onRefazer={(ordens) => gerarVarias(ordens)}");
-    expect(arteDoCriativo).toContain("}: {\n  criativo: CriativoAds;\n  trabalho: Trabalho;\n  onAtualizar: () => void;\n}) {");
+    expect(arteDoCriativo).toContain("}: {\n  criativo: CriativoAds;\n  trabalho: Trabalho;\n  onAtualizar: () => void;\n");
+    // A Mesa Ads v3 só acrescentou `irmaos` opcional; as props obrigatórias não mudam.
+    expect(arteDoCriativo).toContain("  irmaos?: IrmaoDoCriativo[];\n}) {");
   });
 
   it("componente: microfone, custo estimado, Aplicar e Aplicar e refazer", () => {

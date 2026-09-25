@@ -10,11 +10,13 @@ import { BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, FotoInteira, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
+import { MenuDeUso, MOTIVOS_RAPIDOS } from "./UsoDaFoto";
 import {
   chaveDosEnsaios,
   conferirVersao,
   decidirVersao,
   ESTADOS_DA_TOMADA,
+  fotoDaVersao,
   gerarTomada,
   guardarEnsaio,
   invalidarFotos,
@@ -38,13 +40,15 @@ import {
 } from "./fotoApi";
 
 /**
- * Etapa 5, Revisar: cada tomada com as versões lado a lado e as fontes do
+ * Revisar com calma (?etapa=revisar, dentro do passo 3; aprovar e rejeitar
+ * também dá no próprio resultado de Variações e Campanha e em Usar): cada
+ * tomada com as versões lado a lado e as fontes do
  * kit ao lado, para comparar. A conferência (visão + Jev) é um aviso, nunca
  * decide sozinha. Aprovar trava a versão e cria a derivada no acervo;
  * rejeitar pede o motivo. Refazer gera uma variação nova, com custo à vista.
  */
 
-export const MOTIVOS_RAPIDOS = ["Produto diferente", "Texto ou rótulo errado", "Proporção errada", "Rosto mudou", "Mãos estranhas", "Ingrediente inventado", "Luz ou cor fora"];
+export { MOTIVOS_RAPIDOS };
 
 function ConferenciaNaTela({ conferencia }: { conferencia: Conferencia }) {
   // ok null = não deu para avaliar (a parte não aparece nas fontes): não é falha.
@@ -136,6 +140,8 @@ function CartaoDaVersao({
   const [conferenciaLocal, setConferenciaLocal] = useState<Conferencia | null>(null);
   const conferencia = versao.conferencia || conferenciaLocal;
   const travada = tomada.versoes.some((v) => v.aprovada);
+  const fotos = useFotos(clientId);
+  const fotoAprovada = versao.aprovada ? fotoDaVersao(fotos.data || [], versao) : null;
 
   const decidir = async (decisao: "aprovar" | "rejeitar", motivo?: string) => {
     setDecidindo(true);
@@ -205,6 +211,7 @@ function CartaoDaVersao({
             }}
           />
         )}
+        {fotoAprovada && <MenuDeUso foto={fotoAprovada} className="mb-1 mr-1" />}
         {!travada && !versao.rejeitada && (
           <>
             <Button type="button" size="sm" className="mb-1 mr-1 h-8 px-2.5 text-[12px]" disabled={decidindo} onClick={() => void decidir("aprovar")}>
@@ -219,7 +226,7 @@ function CartaoDaVersao({
 }
 
 function FontesDoKit({ kit, fotos, onAbrir }: { kit: KitDeFoto | null; fotos: FotoDoAcervo[]; onAbrir: (f: FotoDoAcervo) => void }) {
-  if (!kit || !kit.refs.length) return <p className="text-[11.5px] text-muted-foreground">Sem fontes no kit.</p>;
+  if (!kit || !kit.refs.length) return <p className="text-[11.5px] text-muted-foreground">Sem fotos do produto.</p>;
   return (
     <div className="grid min-w-0 grid-cols-4 gap-1.5 md:grid-cols-2">
       {kit.refs.slice(0, 8).map((r) => {
@@ -287,7 +294,7 @@ function LinhaDaTomada({
       </div>
       <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-[150px_minmax(0,1fr)]">
         <div className="min-w-0">
-          <p className="mb-1 text-[11px] font-medium text-muted-foreground">Fontes do kit</p>
+          <p className="mb-1 text-[11px] font-medium text-muted-foreground">Fotos do produto</p>
           <FontesDoKit kit={kit} fotos={fotos} onAbrir={(f) => onAmpliar(f.storage_path, `Fonte: ${f.nome}`)} />
         </div>
         {tomada.versoes.length === 0 ? (
@@ -350,7 +357,7 @@ function Comparar({
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="min-w-0">
             <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">Fonte real</p>
-            {fonte ? <FotoInteira foto={fonte} /> : <p className="text-[12px] text-muted-foreground">Sem fonte no kit.</p>}
+            {fonte ? <FotoInteira foto={fonte} /> : <p className="text-[12px] text-muted-foreground">Sem foto do produto.</p>}
           </div>
           <div className="min-w-0">
             <p className="mb-1 text-[11.5px] font-medium text-muted-foreground">

@@ -16,8 +16,11 @@ import { classeDaFoto, proporcaoDaFoto, rotuloDoModo, type FotoDoAcervo, type Pr
 
 /**
  * Todas as telas da Mesa Foto (o valor vai no endereço: ?etapa=...). A
- * navegação mostra só o caminho principal em 3 passos e, discretas ao lado,
- * as etapas de apoio; Variações, Campanha e Preparar ficam dentro de Criar.
+ * navegação mostra só o caminho principal em 3 passos (1 Fotos, 2 Criar,
+ * 3 Usar) e, discretas ao lado, as ferramentas de apoio (Biblioteca, Modelos
+ * e Canvas). O produto (kit) é identificado dentro de Fotos; Variações,
+ * Campanha e Preparar ficam dentro de Criar; Revisar fica dentro do resultado
+ * e de Usar (a tela de comparação segue em ?etapa=revisar).
  */
 export const ETAPAS_DA_MESA_FOTO = [
   { valor: "acervo", rotulo: "Fotos" },
@@ -35,25 +38,29 @@ export const ETAPAS_DA_MESA_FOTO = [
 
 export type EtapaDaMesaFoto = (typeof ETAPAS_DA_MESA_FOTO)[number]["valor"];
 
-/** O caminho principal: 1. Fotos do produto, 2. O produto (kit), 3. Criar. */
+/**
+ * O caminho principal (pedido do dono, 25/09: "não tem um processo mais
+ * simples"): 1. Fotos do produto (com o produto identificado ali mesmo),
+ * 2. Criar, 3. Usar (revisar e levar para a Mesa, a Mesa Ads, baixar ou
+ * mandar ao cliente).
+ */
 export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo: string; dica: string; inclui: EtapaDaMesaFoto[] }[] = [
-  { passo: 1, etapa: "acervo", rotulo: "Fotos", dica: "Fotos do produto", inclui: ["acervo"] },
-  { passo: 2, etapa: "kits", rotulo: "Produto", dica: "O produto identificado e confirmado", inclui: ["kits"] },
-  { passo: 3, etapa: "criar", rotulo: "Criar", dica: "Variações, campanha ou preparar", inclui: ["criar", "ensaio", "campanha", "preparar"] },
+  { passo: 1, etapa: "acervo", rotulo: "Fotos", dica: "Fotos do produto e o produto identificado", inclui: ["acervo", "kits"] },
+  { passo: 2, etapa: "criar", rotulo: "Criar", dica: "Variações, campanha ou ajuste de uma foto", inclui: ["criar", "ensaio", "campanha", "preparar"] },
+  { passo: 3, etapa: "usar", rotulo: "Usar", dica: "Revisar e usar: Mesa, Mesa Ads, baixar ou aprovação", inclui: ["usar", "revisar"] },
 ];
 
-/** Etapas de apoio: à mão, sem disputar com o caminho principal. */
+/** Ferramentas de apoio: à mão, discretas, sem disputar com o caminho principal. */
 export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
-  { etapa: "revisar", rotulo: "Revisar" },
-  { etapa: "usar", rotulo: "Usar" },
   { etapa: "biblioteca", rotulo: "Biblioteca" },
+  { etapa: "modelos", rotulo: "Modelos" },
+  { etapa: "canvas", rotulo: "Canvas" },
 ];
 
 /**
- * Abas avançadas (Modelos e Canvas, docs/mesa-foto/MODELOS-E-CANVAS.md):
- * aparecem discretas depois das etapas de apoio, separadas por um traço fino,
- * sem entrar no caminho principal de 3 passos. Aba com disponivel false
- * some da navegação.
+ * Abas de Modelos e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md): hoje são
+ * ferramentas de apoio (ETAPAS_DE_APOIO). Aba com disponivel false some da
+ * navegação.
  */
 export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean; depoisDe: string }[] = [
   // docs/mesa-foto/MODELOS-E-CANVAS.md: Modelos depois do Produto, Canvas depois de Criar.
@@ -184,6 +191,41 @@ export function SeloDaFoto({
           <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
         </span>
       )}
+    </span>
+  );
+}
+
+/**
+ * Selo simples da foto na grade, embaixo da miniatura (a pílula "gerada" fica
+ * sempre no canto da imagem): aprovada, a aprovar (gerada sem decisão),
+ * tratada ou original; referência da internet sempre avisa.
+ */
+export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean } }) {
+  const classe = classeDaFoto(foto);
+  if (foto.referencia_web) {
+    return (
+      <span className="mb-1 inline-flex items-center rounded-full border border-warning/50 bg-card px-1.5 py-px text-[10px] font-semibold text-warning" data-selo-curto="internet" title="Referência da internet: uso interno, não publicar">
+        <Globe className="mr-0.5 h-2.5 w-2.5" /> uso interno
+      </span>
+    );
+  }
+  if (foto.aprovada) {
+    return (
+      <span className="mb-1 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[10px] font-medium text-success" data-selo-curto="aprovada">
+        <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
+      </span>
+    );
+  }
+  if (classe === "gerada") {
+    return (
+      <span className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10px] font-medium text-primary" data-selo-curto="a-aprovar" title="Gerada por IA, esperando a aprovação da equipe">
+        a aprovar
+      </span>
+    );
+  }
+  return (
+    <span className="mb-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo-curto={classe}>
+      {classe === "derivada" ? "tratada" : "original"}
     </span>
   );
 }

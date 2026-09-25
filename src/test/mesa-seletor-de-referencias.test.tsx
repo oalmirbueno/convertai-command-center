@@ -16,13 +16,19 @@ const mock = vi.hoisted(() => ({
   updates: [] as { tabela: string; valor: unknown }[],
   inserts: [] as { tabela: string; valor: unknown }[],
   assinadas: [] as { bucket: string; caminho: string }[],
+  enviados: [] as { bucket: string; caminho: string }[],
+  ordens: [] as string[],
 }));
 
 vi.mock("@/integrations/supabase/client", () => {
   const consulta = (tabela: string) => {
     const dados = mock.tabelas[tabela] === undefined ? [] : mock.tabelas[tabela];
     const b: any = {};
-    for (const m of ["select", "eq", "neq", "not", "in", "is", "or", "contains", "order", "limit", "range"]) b[m] = () => b;
+    for (const m of ["select", "eq", "neq", "not", "in", "is", "or", "contains", "limit", "range"]) b[m] = () => b;
+    b.order = (coluna: string) => {
+      mock.ordens.push(`${tabela}.${coluna}`);
+      return b;
+    };
     b.update = (valor: unknown) => {
       mock.updates.push({ tabela, valor });
       return b;
@@ -49,6 +55,11 @@ vi.mock("@/integrations/supabase/client", () => {
             mock.assinadas.push({ bucket, caminho });
             return Promise.resolve({ data: { signedUrl: `https://assinada.test/${bucket}/${caminho}` }, error: null });
           },
+          upload: (caminho: string) => {
+            mock.enviados.push({ bucket, caminho });
+            return Promise.resolve({ data: {}, error: null });
+          },
+          remove: () => Promise.resolve({ data: null, error: null }),
         }),
       },
     },
@@ -62,7 +73,7 @@ import { ExploradorDePastas } from "@/components/mesa/NavegadorDePastas";
 import SeletorDeReferencias, { PINTEREST_URL } from "@/components/mesa/SeletorDeReferencias";
 import CampanhaReferencias, { MAX_REFERENCIAS } from "@/components/mesa/CampanhaReferencias";
 import { montarArvore, pastaDaFoto, pastasDoAcervo, PASTA_ARQUIVOS, PASTA_ENVIADAS, RAIZ, trilhaAte, type NoDoWorkspace } from "@/lib/mesa/pastas";
-import { ampliavelDaFonte, ehLinkDePin, fonteDaGlobal, ordenarPorDestaque, PAPEIS, urlDeImagemExterna } from "@/lib/mesa/referencias";
+import { ampliavelDaFonte, ehLinkDePin, extensaoDaReferencia, fonteDaGlobal, ordenarPorDestaque, PAPEIS, palavrasDaBusca, urlDeImagemExterna } from "@/lib/mesa/referencias";
 
 const CLIENTE = "11111111-1111-1111-1111-111111111111";
 const raiz = resolve(__dirname, "../..");
@@ -135,6 +146,8 @@ beforeEach(() => {
   mock.updates.length = 0;
   mock.inserts.length = 0;
   mock.assinadas.length = 0;
+  mock.enviados.length = 0;
+  mock.ordens.length = 0;
   mock.tabelas = {
     cliente_referencias: [REF_WORKSPACE, REF_ARTE],
     workspace_nodes: NOS,
@@ -375,5 +388,52 @@ describe("arquivos do seletor: navegador antigo e texto", () => {
     expect(contexto).toContain('acao: "referencias", subacao: "sincronizar_workspace"');
     expect(contexto).toContain('acao: "referencias", subacao: "ler"');
     expect(ler("src/lib/mesa/referencias.ts")).toContain('subacao: "importar_pinterest"');
+  });
+});
+
+// ------------------------------------------------------------------ 25/09
+
+describe("seletor no Estúdio (25/09): Pinterest à vista, subir imagem e banco sem repetir", () => {
+  it("as abas quebram linha no painel estreito (a do Pinterest ficava fora da vista)", () => {
+    montar(h(SeletorDeReferencias, { selecionados: [], onChange: vi.fn(), max: 2, colunas: 3 }));
+    const lista = screen.getByRole("tablist", { name: "Onde escolher as referências" });
+    expect(lista.className).toContain("flex-wrap");
+    expect(lista.className).not.toContain("overflow-x-auto");
+    expect(screen.getByRole("tab", { name: /Pinterest/ })).toBeTruthy();
+  });
+
+  it("subir imagem do computador vira referência de composição (origem upload) e já escolhe", async () => {
+    mock.tabelas.cliente_referencias = [];
+    const onChange = vi.fn();
+    montar(h(SeletorDeReferencias, { selecionados: [], onChange, max: 2 }));
+    fireEvent.click(screen.getByRole("tab", { name: /Pinterest/ }));
+    expect(screen.getByRole("button", { name: /Subir imagem/ })).toBeTruthy();
+    const arquivo = new File(["x"], "print.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText("Subir imagem de referência"), { target: { files: [arquivo] } });
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(["r-novo"]), { timeout: 5000 });
+    expect(mock.enviados[0].bucket).toBe("mesa");
+    expect(mock.enviados[0].caminho).toMatch(new RegExp(`^${CLIENTE}/referencias/upload-[0-9a-f-]{36}\.png$`));
+    expect(mock.inserts[0]).toEqual({
+      tabela: "cliente_referencias",
+      valor: { client_id: CLIENTE, origem: "upload", storage_path: mock.enviados[0].caminho, papel: "tecnica", ativa: true },
+    });
+    expect(extensaoDaReferencia({ type: "image/gif", name: "a.gif" })).toBeNull();
+    expect(extensaoDaReferencia({ type: "", name: "foto.JPEG" })).toBe("jpg");
+  });
+
+  it("banco da agência: ordem com desempate pelo id (páginas sem repetir) e busca por palavra", async () => {
+    montar(h(SeletorDeReferencias, { selecionados: [], onChange: vi.fn(), max: 2 }));
+    fireEvent.click(screen.getByRole("tab", { name: /Banco da agência/ }));
+    await waitFor(() => expect(mock.ordens).toContain("referencias_globais.id"), { timeout: 5000 });
+    expect(mock.ordens).toContain("referencias_globais.criado_em");
+    expect(palavrasDaBusca("tipografia  grande tipografia")).toEqual(["tipografia", "grande"]);
+    expect(palavrasDaBusca("")).toEqual([]);
+  });
+
+  it("o Estúdio escolhe até 2 e a lâmina é o alvo padrão", () => {
+    const refs = ler("src/components/mesa/ReferenciasDoEstudio.tsx");
+    expect(refs).toContain("export const MAX_NO_ESTUDIO = 2;");
+    expect(refs).toContain("max={MAX_NO_ESTUDIO}");
+    expect(ler("src/components/mesa/AbaEstudio.tsx")).toContain('refs-alvo`, "lamina")');
   });
 });

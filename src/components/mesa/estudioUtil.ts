@@ -215,6 +215,41 @@ export interface TrechoQueFalta {
   fator: number;
 }
 
+/**
+ * O modelo de imagem faz o panorama do contínuo (espelho de modeloFazPanorama
+ * em supabase/functions/_shared/carrossel-continuo.ts): GPT Image direto na
+ * OpenAI ou pelo OpenRouter. Os outros geradores fazem as lâminas uma a uma.
+ */
+export function modeloFazContinuo(m: { provedor?: string | null; modelo_api?: string | null } | null | undefined): boolean {
+  if (!m) return false;
+  const api = String(m.modelo_api || "");
+  if (m.provedor === "openai") return /^gpt-image/.test(api);
+  if (m.provedor === "openrouter") return /^openai\/gpt-image/.test(api);
+  return false;
+}
+
+/** Aviso da tela quando o contínuo está ligado e o modelo não faz o panorama. */
+export const AVISO_CONTINUO_SEM_MODELO =
+  "O modelo de imagem escolhido não faz o carrossel contínuo: as lâminas saem uma a uma, sem o fundo panorâmico. Para o contínuo, escolha um GPT Image.";
+
+/**
+ * A versão foi feita sobre um fundo panorâmico que não é mais o da lâmina
+ * (espelho de versaoForaDoFundo do servidor): ela não emenda com as vizinhas.
+ */
+export function versaoForaDoFundo(
+  versao: { ordem: number; modo?: unknown; fundo?: unknown } | null | undefined,
+  panorama: { fundos?: Record<string, string> | null } | null | undefined,
+): boolean {
+  if (!versao || versao.modo !== "panorama" || typeof versao.fundo !== "string" || !versao.fundo) return false;
+  const atual = panorama && panorama.fundos ? panorama.fundos[String(versao.ordem)] : undefined;
+  return atual !== versao.fundo;
+}
+
+/** Quantas vezes a tela chama preparar_fundo antes de gerar: um trecho por chamada (mais folga). */
+export function limiteDePreparos(total: number): number {
+  return Math.min(10, Math.max(2, Math.ceil(total / (LAMINAS_POR_TRECHO - 1)) + 2));
+}
+
 /** A lâmina usa o fundo panorâmico: tem layout e não tem foto própria (acervo ou foto real composta). */
 export function usaFundoContinuo(card: { layout?: unknown; imagens_ids?: string[] | null; fotos_livres?: unknown[] | null }): boolean {
   return !!card.layout && !(card.imagens_ids && card.imagens_ids.length) && !(card.fotos_livres && card.fotos_livres.length);
@@ -279,4 +314,42 @@ export function partesDoPanorama(
 ): ParteDaEstimativa[] {
   if (!modeloImagemId) return [];
   return trechosQueFaltam(ordens, total, fundos).map((t) => ({ modeloId: modeloImagemId, tipo: "imagem" as const, imagens: 1, qualidade, vezes: t.fator }));
+}
+
+// ------------------------------------------------ trabalho gravado no cache
+
+/** O mínimo do trabalho que o configurar devolve (a linha inteira de estudio_trabalhos). */
+export interface TrabalhoGravado {
+  id: string;
+  task_id: string | null;
+  [campo: string]: unknown;
+}
+
+interface ClienteDoCache {
+  setQueriesData: (filtro: { queryKey: readonly unknown[] }, atualizar: (antes: any) => any) => unknown;
+}
+
+/**
+ * Troca o trabalho no JSON de uma consulta da lista (DadosDosItens) quando o
+ * id bate. Função pura: devolve o mesmo objeto se nada mudou.
+ */
+export function comTrabalhoTrocado<T extends { trabalhos?: Record<string, { id?: string }> }>(dados: T | undefined, trabalho: TrabalhoGravado): T | undefined {
+  if (!dados || !dados.trabalhos || !trabalho || !trabalho.task_id) return dados;
+  const atual = dados.trabalhos[trabalho.task_id];
+  if (!atual || atual.id !== trabalho.id) return dados;
+  const trabalhos = { ...dados.trabalhos, [trabalho.task_id]: { ...atual, ...trabalho } };
+  return { ...dados, trabalhos };
+}
+
+/**
+ * "Salvar na lâmina não atualiza" (dono, 25/09): o configurar gravava e a
+ * tela esperava a lista inteira do mês ser relida (projetos, tarefas,
+ * trabalhos, artes e publicações) para mostrar a mudança. Agora o trabalho
+ * que a função devolve entra no cache na hora, na lista do mês e no item
+ * avulso; a releitura continua depois, só para confirmar.
+ */
+export function gravarTrabalhoNoCache(queryClient: ClienteDoCache, clientId: string, trabalho: TrabalhoGravado | null | undefined) {
+  if (!trabalho || !trabalho.id) return;
+  queryClient.setQueriesData({ queryKey: ["mesa", "itens-do-mes", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
+  queryClient.setQueriesData({ queryKey: ["mesa", "item-avulso", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
 }

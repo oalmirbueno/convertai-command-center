@@ -223,6 +223,66 @@ export function normalizarFicha(bruto: unknown, descricao?: unknown): FichaDaPer
   return ficha;
 }
 
+/**
+ * Ficha sugerida pelo brief (modelo_sugerir): nunca recusa, conserta, e diz
+ * o que consertou. Idade abaixo do mínimo sobe para 25; sem idade fica 30;
+ * campo com texto proibido (sósia, pessoa conhecida, menor, sexualização)
+ * sai vazio; nome proibido sai vazio. Não grava: a equipe confere e cria (a
+ * criação passa de novo por normalizarFicha).
+ */
+export function fichaSugerida(bruto: unknown): { nome: string; ficha: FichaDaPersona; invariantes: string[]; porque: string; avisos: string[] } {
+  const r = (bruto && typeof bruto === "object" && !Array.isArray(bruto) ? bruto : {}) as Record<string, unknown>;
+  const f = (r.ficha && typeof r.ficha === "object" && !Array.isArray(r.ficha) ? r.ficha : r) as Record<string, unknown>;
+  const avisos: string[] = [];
+  let idade = Math.round(Number(f.idade_aparente ?? f.idade));
+  if (f.idade_aparente == null && f.idade == null) idade = NaN;
+  if (!Number.isFinite(idade)) {
+    idade = 30;
+    avisos.push("A sugestão veio sem idade: ficou 30 anos, ajuste se precisar.");
+  } else if (idade < IDADE_MINIMA_MODELO) {
+    avisos.push(`A idade sugerida (${idade}) ficou abaixo do mínimo de ${IDADE_MINIMA_MODELO}: subiu para 25 anos.`);
+    idade = 25;
+  } else if (idade > 80) idade = 80;
+  const cortados: string[] = [];
+  const campo = (nome: string, v: unknown, max: number): string => {
+    const t = limpo(v, max);
+    if (t && conteudoProibido(t)) {
+      cortados.push(nome);
+      return "";
+    }
+    return t;
+  };
+  const c = (f.cabelo && typeof f.cabelo === "object" && !Array.isArray(f.cabelo) ? f.cabelo : {}) as Record<string, unknown>;
+  const ficha: FichaDaPersona = {
+    idade_aparente: idade,
+    genero_apresentado: campo("apresentação", f.genero_apresentado ?? f.genero, 60),
+    tom_de_pele: campo("tom de pele", f.tom_de_pele, 120),
+    rosto: campo("rosto", f.rosto, 200),
+    olhos: campo("olhos", f.olhos, 160),
+    sobrancelhas: campo("sobrancelhas", f.sobrancelhas, 120),
+    nariz: campo("nariz", f.nariz, 120),
+    labios: campo("lábios", f.labios, 120),
+    cabelo: {
+      cor: campo("cabelo", c.cor ?? (typeof f.cabelo === "string" ? f.cabelo : ""), 80),
+      comprimento: campo("cabelo", c.comprimento, 80),
+      textura: campo("cabelo", c.textura, 80),
+    },
+    marcas: listaDeTextos(f.marcas, 8, 120).filter((m) => !conteudoProibido(m)),
+    corpo: campo("corpo", f.corpo, 200),
+    altura: campo("altura", f.altura, 40),
+    estilo: campo("estilo", f.estilo, 300),
+    notas: campo("notas", f.notas, 800),
+  };
+  let nome = limpo(r.nome ?? f.nome, 80);
+  if (nome && conteudoProibido(nome)) {
+    nome = "";
+    avisos.push("O nome sugerido lembrava alguém real e ficou em branco: dê um nome fictício.");
+  }
+  if (cortados.length) avisos.push(`Tirei da sugestão o que não pode entrar na persona (${Array.from(new Set(cortados)).join(", ")}).`);
+  const invariantes = listaDeTextos(r.invariantes, 12, 200).filter((t) => !conteudoProibido(t));
+  return { nome, ficha, invariantes, porque: limpo(r.porque, 600), avisos };
+}
+
 /** Invariantes da persona: os traços da ficha em frases curtas mais as que a equipe escreveu. */
 export function invariantesDaFicha(f: FichaDaPersona, extras: unknown = []): string[] {
   const lista = [

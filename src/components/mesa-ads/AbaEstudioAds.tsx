@@ -11,6 +11,7 @@ import {
   chamarAds,
   chavesAds,
   formatoDe,
+  irmaosDoCriativo,
   lerAnunciosDoCliente,
   lerCriativos,
   lerPlanos,
@@ -25,6 +26,7 @@ import {
   type StatusDoCriativo,
 } from "./adsApi";
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
+import ResultadoDoCriativo from "./ResultadoDoCriativo";
 import { Andamento, pilula, useAndamento } from "./Comuns";
 import { laminasSemArte, produzirLamina, situacaoDe, situacaoDoTrabalho, SITUACOES, type EtapaDoLote, type SituacaoDoCriativo } from "./loteDoEstudio";
 import PainelDaCopy from "./PainelDaCopy";
@@ -248,6 +250,10 @@ export default function AbaEstudioAds({
   }
 
   const listaDeAnuncios = anuncios.data || [];
+  // v3: formatos irmãos do criativo aberto (mesmo ângulo e variação) e o ângulo com a meta.
+  const irmaos = aberto ? irmaosDoCriativo(aberto, todos).map((c) => ({ criativo: c, trabalho: trabalhoDe(c) })) : [];
+  const planoAberto = aberto ? listaDePlanos.find((p) => p.id === aberto.plano_id) || null : null;
+  const anguloAberto = aberto && planoAberto ? planoAberto.angulos.find((a) => a.id === aberto.angulo_id) || null : null;
   const anuncioLigado = aberto && aberto.ad_id ? listaDeAnuncios.find((a) => a.ad_id === aberto.ad_id) : null;
   const situacaoAberta = aberto ? situacao(aberto) : "sem_arte";
 
@@ -437,8 +443,10 @@ export default function AbaEstudioAds({
               {situacaoAberta === "entregue" && <span className="mb-1 mt-1 text-[11.5px] text-primary">{AVISO_DA_ENTREGA}</span>}
             </div>
 
+            <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
+
             {trabalho ? (
-              <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} />
+              <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
             ) : aberto.trabalho_id && (trabalhos.isLoading || trabalhos.isFetching) ? (
               <div className="h-[50vh] animate-pulse rounded-xl bg-muted/70" />
             ) : (

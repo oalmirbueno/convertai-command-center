@@ -224,6 +224,7 @@ export default function CardDoEstudio({
   partesCorrigir,
   onConfigurar,
   onConcluido,
+  semTrocaDeFundo = false,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -254,6 +255,8 @@ export default function CardDoEstudio({
   /** Grava na lâmina sem custo (estudio-arte "configurar"). */
   onConfigurar: (card: { imagens_ids?: string[]; texto_exato?: string }) => Promise<void>;
   onConcluido: () => void;
+  /** Carrossel contínuo: o fundo é o panorama (o servidor recusa trocar só o fundo). */
+  semTrocaDeFundo?: boolean;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
@@ -279,7 +282,8 @@ export default function CardDoEstudio({
   }, [painel, direcao.ordem]);
 
   const vista = ordenadas.find((v) => v.versao === versaoVista) || ultima;
-  const modoAjuste: "livre" | "areas" | "fundo" = painel === "areas" || painel === "fundo" ? painel : "livre";
+  const modoAjuste: "livre" | "areas" | "fundo" = painel === "areas" || (painel === "fundo" && !semTrocaDeFundo) ? painel : "livre";
+  const modosDeAjuste = semTrocaDeFundo ? MODOS_DE_AJUSTE.filter((m) => m.valor !== "fundo") : MODOS_DE_AJUSTE;
 
   const acervo = useAcervo(!!fundoId || acervoAberto !== null);
   const fundo = fundoId ? (acervo.data || []).find((i) => i.id === fundoId) || null : null;
@@ -436,8 +440,8 @@ export default function CardDoEstudio({
               </button>
             </p>
           )}
-          <div className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-background p-1" role="tablist" aria-label="Tipo de ajuste">
-            {MODOS_DE_AJUSTE.map((m) => (
+          <div className={`grid ${modosDeAjuste.length === 3 ? "grid-cols-3" : "grid-cols-2"} gap-1 rounded-lg border border-border bg-background p-1`} role="tablist" aria-label="Tipo de ajuste">
+            {modosDeAjuste.map((m) => (
               <button
                 key={m.valor}
                 type="button"

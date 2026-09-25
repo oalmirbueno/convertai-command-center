@@ -97,11 +97,12 @@ describe("custo do Jev na carteira", () => {
   });
 
   it("toda pergunta ao Jev da Mesa é cobrada do cliente", () => {
-    // Temas (aderência e potencial) e hypes da semana (relevância para o cliente).
-    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(2);
+    // Temas (aderência e potencial), hypes da semana (relevância para o cliente) e
+    // plano de imagens da campanha (qual foto em cada lâmina, 25/09).
+    expect((calendario.match(/await cobrarJev\(/g) || []).length).toBe(3);
     // Referências, identidade e hashtags da legenda: cada pergunta tem a sua cobrança.
     expect((estudio.match(/await cobrarJev\(/g) || []).length).toBe(3);
-    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(2);
+    expect((calendario.match(/await jevPerguntar\(/g) || []).length).toBe(3);
     expect((estudio.match(/await jevPerguntar\(/g) || []).length).toBe(3);
   });
 });

@@ -202,7 +202,7 @@ export function normalizarCanvas(bruto: unknown): CanvasNormalizado {
     const destino = porId.get(para);
     if (!origem || !destino) throw new ErroDeRegra(400, "ligacao_invalida", "Ligação com cartão que não existe no canvas.", { de, para });
     if (de === para) throw new ErroDeRegra(400, "ligacao_invalida", "Um cartão não se liga a ele mesmo.", { de });
-    if (destino.tipo !== "saida") throw new ErroDeRegra(400, "ligacao_invalida", "As ligações vão sempre para um cartão de resultado (saida).", { de, para });
+    if (destino.tipo !== "saida") throw new ErroDeRegra(400, "ligacao_invalida", "As ligações vão sempre para um cartão de resultado.", { de, para });
     if (origem.tipo === "saida") throw new ErroDeRegra(400, "ligacao_invalida", "Um resultado não alimenta outro resultado.", { de, para });
     const chave = `${de}>${para}`;
     if (vistas.has(chave)) return;
@@ -266,8 +266,8 @@ export function escolherSaida(c: Pick<CanvasNormalizado, "nos">, pedido?: unknow
     return s;
   }
   if (saidas.length === 1) return saidas[0];
-  if (!saidas.length) throw new ErroDeRegra(409, "sem_saida", "Ponha um cartão de resultado (saida) no canvas e ligue as entradas nele.");
-  throw new ErroDeRegra(400, "saida_obrigatoria", "O canvas tem mais de um resultado: diga qual gerar (no_saida_id).", { saidas: saidas.map((s) => s.id) });
+  if (!saidas.length) throw new ErroDeRegra(409, "sem_saida", "Ponha um cartão de resultado no canvas e ligue as entradas nele.");
+  throw new ErroDeRegra(400, "saida_obrigatoria", "O canvas tem mais de um cartão de resultado: diga qual gerar (no_saida_id).", { saidas: saidas.map((s) => s.id) });
 }
 
 export type EntradasDaSaida = { produto: NoCanvas[]; modelo: NoCanvas[]; ambiente: NoCanvas[]; estilo: NoCanvas[]; prompt: NoCanvas[] };
@@ -425,10 +425,10 @@ export function promptDoCanvas(e: {
 /** Bloqueios do Canvas (regra fixa): sem produto e sem pessoa não gera. */
 export function garantirQueDaParaGerar(e: EntradasDaSaida): void {
   if (!e.produto.length && !e.modelo.length) {
-    throw new ErroDeRegra(409, "sem_produto_nem_pessoa", "Ligue ao resultado pelo menos um produto (kit) ou uma persona.");
+    throw new ErroDeRegra(409, "sem_produto_nem_pessoa", "Ligue ao resultado pelo menos um produto (kit) ou uma modelo (persona).");
   }
   for (const n of e.produto) if (!n.dados.kit_id) throw new ErroDeRegra(409, "produto_sem_kit", "Há cartão de produto sem kit escolhido.", { no_id: n.id });
-  for (const n of e.modelo) if (!n.dados.modelo_id) throw new ErroDeRegra(409, "modelo_sem_persona", "Há cartão de modelo sem persona escolhida.", { no_id: n.id });
+  for (const n of e.modelo) if (!n.dados.modelo_id) throw new ErroDeRegra(409, "modelo_sem_persona", "Há cartão de modelo sem a modelo escolhida.", { no_id: n.id });
 }
 
 /** Textos dos cartões de prompt ligados ao resultado. */

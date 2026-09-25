@@ -41,6 +41,7 @@ import {
   type MensagemDoDiretor,
   type SugestaoDoAgente,
 } from "./fotoApi";
+import { lerDaSessao } from "./sessao";
 
 /**
  * O diretor de fotografia, à mão em qualquer etapa: botão flutuante no
@@ -167,7 +168,7 @@ function useAoGravarKits() {
     if (!ids.length) return;
     void queryClient.invalidateQueries({ queryKey: chaveDosKits(clientId) });
     if (!kitId || ids.indexOf(kitId) < 0) escolherKit(ids[0]);
-    if (avisar) toast.success(ids.length === 1 ? "Kit salvo como rascunho" : `${ids.length} kits salvos como rascunho`, { description: "Já está na barra de cima e em Produto." });
+    if (avisar) toast.success(ids.length === 1 ? "Produto salvo como rascunho" : `${ids.length} kits salvos como rascunho`, { description: "Já está na barra de cima e em Produto." });
   };
 }
 
@@ -328,7 +329,7 @@ function CartaoDoPlanoDeVariacoes({ sugestao }: { sugestao: SugestaoDoAgente }) 
           })}
         </div>
       </div>
-      {!kit && <p className="text-[11.5px] text-warning">Escolha ou monte o produto (kit) antes de gerar.</p>}
+      {!kit && <p className="text-[11.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -410,9 +411,9 @@ function CartaoDaCampanha({ sugestao }: { sugestao: SugestaoDoAgente }) {
           ))}
         </ol>
       )}
-      <p className="text-[11px] leading-snug text-muted-foreground">Pessoa sintética, adulta, sem parecer com ninguém real. O produto do kit não muda. Toda foto sai marcada como gerada.</p>
+      <p className="text-[11px] leading-snug text-muted-foreground">Pessoa sintética, adulta, sem parecer com ninguém real. O produto não muda. Toda foto sai marcada como gerada.</p>
       <Pilulas rotulo="Quantidade de fotos da campanha" opcoes={QUANTIDADES} valor={quantidade} onEscolher={(n) => setQuantidade(limitarQuantidade(n))} />
-      {!kit && <p className="text-[11.5px] text-warning">Escolha ou monte o produto (kit) antes de gerar.</p>}
+      {!kit && <p className="text-[11.5px] text-warning">Escolha o produto (identifique nas fotos) antes de gerar.</p>}
       {criado ? (
         <AndamentoDoLote ensaioId={criado.id} />
       ) : (
@@ -634,7 +635,9 @@ export default function AgenteDiretor({
       l.concat([{ id: idLocal(), papel: "usuario", texto: msg, sugestoes: [], custo_usd: null, anexos: anexos.length + estilosQueCabem.length, estilos: estilosQueCabem.length }]),
     );
     try {
-      const r = await conversarComDiretor({ clientId, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa });
+      // A campanha da Mesa escolhida (sessão) vai junto: o diretor fala dentro dela.
+      const campanhaId = lerDaSessao<string>(clientId, "campanha");
+      const r = await conversarComDiretor({ clientId, mensagem: msg, conversaId, kitId, ensaioId, anexos, anexosDeEstilo: estilosQueCabem, novaConversa, campanhaId });
       setNovaConversa(false);
       if (r.conversa_id) {
         setConversaId(r.conversa_id);

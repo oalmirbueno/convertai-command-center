@@ -93,7 +93,8 @@ describe("notas do Jev (10 = melhor, inclusive risco de política)", () => {
 
 describe("aprovação do ângulo (regra em código)", () => {
   it("usa os limiares do contrato corrigido pelo coordenador", () => {
-    expect(LIMIARES_APROVACAO).toEqual({ clareza_min: 7, relevancia_min: 7, parada_min: 6, diferenciacao_min: 6, risco_politica_min: 7 });
+    // v3: tom_min só vale quando o Jev mediu o tom pedido (sóbrio ou agressivo).
+    expect(LIMIARES_APROVACAO).toEqual({ clareza_min: 7, relevancia_min: 7, parada_min: 6, diferenciacao_min: 6, risco_politica_min: 7, tom_min: 6 });
   });
   it("aprova só com todas as notas no limite e sem alerta", () => {
     expect(anguloAprovado(notas())).toBe(true);

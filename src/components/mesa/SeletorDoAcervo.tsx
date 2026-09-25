@@ -89,7 +89,8 @@ export default function SeletorDoAcervo({
 }: {
   escolhidas?: string[];
   onEscolher: (imagem: ImagemDoAcervo) => void;
-  onFechar: () => void;
+  /** Sem ele, o seletor fica fixo (sem o botão de fechar), como na ferramenta Fotos do Estúdio. */
+  onFechar?: () => void;
   titulo?: string;
 }) {
   const { clientId } = useMesa();
@@ -166,9 +167,11 @@ export default function SeletorDoAcervo({
     <div className="space-y-3 rounded-xl border border-border bg-background p-3">
       <div className="flex items-center justify-between">
         <p className="text-[12.5px] font-semibold">{titulo}</p>
-        <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={onFechar} aria-label="Fechar o acervo">
-          <X className="h-4 w-4" />
-        </Button>
+        {onFechar && (
+          <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={onFechar} aria-label="Fechar o acervo">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -212,7 +215,7 @@ export default function SeletorDoAcervo({
         {acervo.isError && <p className="rounded-lg bg-destructive/10 p-2.5 text-[12px]">{textoDoErro(acervo.error)}</p>}
         {acervo.data && lista.length === 0 && (
           <p className="text-[12px] leading-relaxed text-muted-foreground">
-            O acervo deste cliente está vazio. Sincronize as imagens das pastas na aba Contexto.
+            O acervo deste cliente está vazio. Sincronize as imagens das pastas na aba Contexto ou faça fotos na Mesa Foto.
           </p>
         )}
         {acervo.data && lista.length > 0 && filtradas.length === 0 && (

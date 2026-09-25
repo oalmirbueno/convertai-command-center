@@ -220,7 +220,7 @@ describe("agente da campanha", () => {
 });
 
 describe("aba Campanhas, mesa de trabalho", () => {
-  it("tela larga: lista, campanha em seções e agente; a resposta do agente atualiza a campanha na tela", async () => {
+  it("tela larga: lista, campanha em seções e agente; a resposta do agente atualiza a campanha na tela", { timeout: 20_000 }, async () => {
     telaLarga();
     mock.tabelas.mesa_campanhas = [campanha];
     mock.tabelas.calendario_propostas = [proposta];

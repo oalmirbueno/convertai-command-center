@@ -98,20 +98,24 @@ describe("carrossel contínuo por panorama (dono, 23/09 noite)", () => {
   });
   it("a lâmina contínua usa a fatia do panorama como base e só desenha o texto por cima", () => {
     const g = corpoDe(estudio, "gerarCard");
-    expect(g).toContain("usaPanorama(t, card, modeloImagem.provedor)");
-    expect(g).toContain("await garantirFundoContinuo(ch, t, ordem, kit)");
+    expect(g).toContain("usaPanorama(t, card, modeloImagem)");
+    // gerar_card nunca gera o trecho: sem a fatia, 409 fundo_pendente e a tela prepara.
+    expect(g).not.toContain("garantirFundoContinuo(");
+    expect(g).toContain('throw new ErroEstudio(409, "fundo_pendente"');
     expect(g).toContain('modo: panorama ? "panorama" : "foto_real"');
-    // A continuidade antiga (tela dupla) só roda sem base: com panorama a base existe.
-    expect(g.indexOf("await garantirFundoContinuo(")).toBeLessThan(g.indexOf("const continuar ="));
+    // A tela dupla antiga saiu (código morto desde o panorama).
+    expect(g).not.toContain("const continuar =");
+    expect(estudio).not.toContain("telaDupla");
   });
-  it("o trecho seguinte continua da lâmina de ligação e corrige o tom na emenda", () => {
+  it("o trecho seguinte continua da lâmina de ligação, alinhado a ela, e corrige o tom na emenda", () => {
     const f = corpoDe(estudio, "garantirFundoContinuo");
-    expect(f).toContain("telaDoTrecho(k, await baixar(\"mesa\", ligacao))");
-    expect(f).toContain("corrigirEmenda(await baixar(\"mesa\", ligacao), fatias[1])");
+    expect(f).toContain("await telaDoTrecho(k, bytesDaLigacao)");
+    expect(f).toContain("await fatiarTrecho(img.png, k, bytesDaLigacao)");
+    expect(f).toContain("corrigirEmenda(bytesDaLigacao, fatias[1])");
     expect(f).toContain("tamanhoFixo: true");
   });
   it("ligar, desligar ou refazer apaga o panorama; a tela prepara o fundo antes de cada lâmina", () => {
-    expect(corpoDe(estudio, "configurar")).toContain("conjunto.refazer_fundo === true ? { panorama: null }");
+    expect(corpoDe(estudio, "configurar")).toContain("conjunto.refazer_fundo === true ? { panorama: panoramaApagado(x.direcao.panorama) }");
     expect(estudio).toContain("  preparar_fundo: prepararFundo,");
     const aba = ler("src/components/mesa/AbaEstudio.tsx");
     expect(aba).toContain('acao: "preparar_fundo"');
@@ -161,7 +165,10 @@ describe("auditoria do servidor (23/09 noite)", () => {
     const f = corpoDe(estudio, "garantirFundoContinuo");
     expect(f).toContain("{ ...novos, ...(x.direcao.panorama?.fundos ?? {}) }");
     expect(f).toContain('return { ...antes, caminho: "", pendente: true };');
-    expect(ler("src/components/mesa/AbaEstudio.tsx")).toContain("if (!f || !f.pendente) break;");
+    // A tela repete o preparo até não haver pendência, com limite pelo número de trechos.
+    const aba = ler("src/components/mesa/AbaEstudio.tsx");
+    expect(aba).toContain("const limite = limiteDePreparos(cardsDaDirecao.length);");
+    expect(aba).toContain("if (!f || !f.pendente) {");
   });
   it("campanha: tema_id não repete e a conversa mais recente é a usada", () => {
     const c = corpoDe(calendario, "campanhaConversar");
@@ -211,7 +218,9 @@ describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica,
     const g = corpoDe(estudio, "gerarCard");
     expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);");
     expect(estudio).toContain("const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };");
-    expect(g).toContain("devolverOriginalAlinhado(baseFoto, img.png, areas, panorama ? 40 : 28, { texto: fotoFixa })");
+    // Desde 25/09 a fatia nunca é reenquadrada: só as letras são coladas nela (sem faixa dupla na borda).
+    expect(g).toContain("await colarMudancasNaBase(baseFoto, img.png, areasDoTexto, {");
+    expect(g).toContain("devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa })");
   });
   it("texto sobre foto ou panorama nunca vem numa caixa, e a foto não é escurecida", () => {
     expect(corpoDe(estudio, "gerarCard")).toContain("SEM_CAIXA_ATRAS_DO_TEXTO,");
@@ -261,5 +270,138 @@ describe("GPT Image 2.5 pelo OpenRouter (dono, 23/09)", () => {
     expect(migration).toContain("'openrouter:openai/gpt-image-2.5-flare'");
     expect(migration).toContain("AND NOT (_provedor = 'openrouter' AND modelo_api LIKE 'openai/gpt-image%');");
     expect(migration).toContain("array_append(array_remove(padrao_para, 'imagem'), 'imagem') WHERE id = 'openrouter:openai/gpt-image-2.5-sunburst'");
+  });
+});
+
+/**
+ * Auditoria do contínuo (dono, 25/09: "o carrossel contínuo não está
+ * funcionando, é muito bugado"). Regras puras em _shared/carrossel-continuo.ts.
+ */
+describe("carrossel contínuo: auditoria de 25/09", () => {
+  const motor = ler("supabase/functions/_shared/ia-motor.ts");
+  const imagem = ler("supabase/functions/_shared/imagem-local.ts");
+  const aba = ler("src/components/mesa/AbaEstudio.tsx");
+
+  it("1: vale a capacidade do modelo (GPT Image direto ou pelo OpenRouter), não o provedor openai", async () => {
+    const { modeloFazPanorama } = await import("../../supabase/functions/_shared/carrossel-continuo");
+    expect(modeloFazPanorama({ provedor: "openai", modelo_api: "gpt-image-2" })).toBe(true);
+    expect(modeloFazPanorama({ provedor: "openrouter", modelo_api: "openai/gpt-image-2.5-sunburst" })).toBe(true);
+    expect(modeloFazPanorama({ provedor: "openrouter", modelo_api: "google/gemini-3-pro-image" })).toBe(false);
+    expect(modeloFazPanorama({ provedor: "openai", modelo_api: "gpt-6-sol" })).toBe(false);
+    expect(modeloFazPanorama(null)).toBe(false);
+    expect(corpoDe(estudio, "usaPanorama")).toContain("modeloFazPanorama(modelo)");
+    expect(corpoDe(estudio, "usaPanorama")).not.toContain('provedor === "openai"');
+    // A tela espelha a regra e avisa quando o modelo não faz o contínuo.
+    const { modeloFazContinuo } = await import("@/components/mesa/estudioUtil");
+    for (const m of [
+      { provedor: "openai", modelo_api: "gpt-image-2" },
+      { provedor: "openrouter", modelo_api: "openai/gpt-image-2.5-flare" },
+      { provedor: "openrouter", modelo_api: "google/gemini-3-pro-image" },
+    ]) expect(modeloFazContinuo(m)).toBe(modeloFazPanorama(m));
+    expect(aba).toContain("const comFundoContinuo = ordemTravada && modeloFazContinuo(modeloDoFundo);");
+    expect(aba).toContain("{AVISO_CONTINUO_SEM_MODELO}");
+  });
+
+  it("2: o trecho só é atendido pelo mesmo modelo e a proporção real é conferida antes de fatiar", async () => {
+    const f = corpoDe(estudio, "garantirFundoContinuo");
+    expect(f).toContain("mesmoModelo: true,");
+    expect(f).toContain('"panorama_fora_do_formato"');
+    expect(motor).toContain("mesmoModelo?: boolean;");
+    expect(motor).toContain('if (!achado && pedido.tipo === "imagem" && !soOMesmo) {');
+    expect(motor).toContain("imagemOpenRouter(mod, segredo, e), !!e.mesmoModelo");
+    expect(imagem).toContain("if (!proporcaoDoTrechoConfere(largura, altura, k)) {");
+    const { proporcaoDoTrechoConfere } = await import("../../supabase/functions/_shared/carrossel-continuo");
+    expect(proporcaoDoTrechoConfere(3264, 1360, 3)).toBe(true);
+    expect(proporcaoDoTrechoConfere(2176, 1360, 2)).toBe(true);
+    // 21:9 de outro gerador (2688 x 1152) cortaria com zoom: recusado.
+    expect(proporcaoDoTrechoConfere(2688, 1152, 3)).toBe(false);
+    expect(proporcaoDoTrechoConfere(1024, 1536, 3)).toBe(false);
+  });
+
+  it("3: no panorama a fatia fica intacta: letras coladas por cima e logo pelo código", () => {
+    const g = corpoDe(estudio, "gerarCard");
+    expect(g).toContain("if ((fotoFixa || panorama) && tomDaLogo) {");
+    expect(g).toContain("logo: logoNoCodigo ? { bytes: logoNoCodigo, caixa: areaDaLogo, clara: !!tomDaLogo?.clara } : null,");
+    expect(imagem).toContain("export async function colarMudancasNaBase(");
+    // O gerado vai para o enquadramento da base (inverso do devolverOriginalAlinhado).
+    expect(imagem).toContain("const xg = (x: number) => (((x + 0.5) / W - al.cu) * al.escala + 0.5) * W - 0.5;");
+  });
+
+  it("4: a emenda entre trechos alinha o trecho novo à ligação e recusa quando a cena mudou", () => {
+    expect(imagem).toContain("const est = estimarAlinhamento(lig, img.clone().crop(0, 0, W, H), []);");
+    expect(imagem).toContain("if (!(erro <= LIMITE_CENA_MUDADA)) return { fatias: [], largura, altura, proporcaoOk: true, erro, alinhou, cenaMudada: true };");
+    expect(corpoDe(estudio, "garantirFundoContinuo")).toContain('"emenda_recusada"');
+  });
+
+  it("5: a versão grava o fundo usado e a tela mostra 'fora do fundo'", async () => {
+    expect(corpoDe(estudio, "gerarCard")).toContain("fundo: fundoUsado, fundo_geracao: geracaoDoPanorama(t.direcao.panorama)");
+    const { versaoForaDoFundo } = await import("../../supabase/functions/_shared/carrossel-continuo");
+    const tela = await import("@/components/mesa/estudioUtil");
+    const casos: [unknown, unknown][] = [
+      [{ ordem: 2, modo: "panorama", fundo: "a.png" }, { fundos: { "2": "a.png" } }],
+      [{ ordem: 2, modo: "panorama", fundo: "a.png" }, { fundos: { "2": "b.png" } }],
+      [{ ordem: 2, modo: "panorama", fundo: "a.png" }, { fundos: {} }],
+      [{ ordem: 2, modo: "normal" }, { fundos: {} }],
+    ];
+    const esperado = [false, true, true, false];
+    casos.forEach(([v, p], i) => {
+      expect(versaoForaDoFundo(v as never, p as never)).toBe(esperado[i]);
+      expect(tela.versaoForaDoFundo(v as never, p as never)).toBe(esperado[i]);
+    });
+    expect(aba).toContain("foraDoFundo={versaoForaDoFundo(versaoNaTela as any, (trabalho.direcao as any)?.panorama)}");
+  });
+
+  it("6: fundo apagado sobe a geração; o trecho atrasado é descartado", async () => {
+    const { panoramaApagado, geracaoDoPanorama } = await import("../../supabase/functions/_shared/carrossel-continuo");
+    expect(panoramaApagado(null)).toEqual({ fundos: {}, geracao: 1, em_andamento: null });
+    expect(panoramaApagado({ geracao: 4 }).geracao).toBe(5);
+    expect(geracaoDoPanorama(undefined)).toBe(0);
+    const f = corpoDe(estudio, "garantirFundoContinuo");
+    expect(f).toContain("descartado = !x.direcao.carrossel_infinito || geracaoDoPanorama(p) !== geracao;");
+    expect(f).toContain('"fundo_descartado"');
+    expect(estudio).toContain("panorama: panoramaApagado(anterior.panorama),");
+  });
+
+  it("7: trava de ~6 min por trecho e 409 fundo_em_andamento", async () => {
+    const { travaDoTrecho, semATrava, ESPERA_DO_FUNDO_MS } = await import("../../supabase/functions/_shared/carrossel-continuo");
+    expect(ESPERA_DO_FUNDO_MS).toBe(6 * 60 * 1000);
+    const agora = Date.parse("2026-09-25T12:00:00Z");
+    const p = { fundos: {}, em_andamento: { "1": { token: "t1", desde: "2026-09-25T11:57:00Z" }, "3": { token: "t3", desde: "2026-09-25T11:50:00Z" } } };
+    expect(travaDoTrecho(p, 1, agora)?.token).toBe("t1");
+    // Vencida: livre de novo.
+    expect(travaDoTrecho(p, 3, agora)).toBeNull();
+    // Só quem travou solta.
+    expect(semATrava(p.em_andamento, 1, "outro")).toEqual(p.em_andamento);
+    expect(semATrava(p.em_andamento, 1, "t1")).toEqual({ "3": p.em_andamento["3"] });
+    expect(corpoDe(estudio, "garantirFundoContinuo")).toContain('"fundo_em_andamento"');
+    expect(aba).toContain('e.codigo === "fundo_em_andamento" && esperas < ESPERAS_DO_FUNDO');
+  });
+
+  it("8: a tela repete o preparo com limite e trata 409 fundo_pendente do gerar_card", async () => {
+    const { limiteDePreparos } = await import("@/components/mesa/estudioUtil");
+    expect(limiteDePreparos(2)).toBe(3);
+    expect(limiteDePreparos(6)).toBe(5);
+    expect(limiteDePreparos(40)).toBe(10);
+    expect(aba).toContain('if (!(infinito && e instanceof ErroDaMesa && e.codigo === "fundo_pendente")) throw e;');
+  });
+
+  it("9: o prompt do panorama não pede pose nova nem fundo claro atrás da logo", () => {
+    const g = corpoDe(estudio, "gerarCard");
+    expect(g).toContain("carrosselInfinito: infinito && !panorama,");
+    expect(g).toContain("if (infinito && !panorama && ordem === total && ordem > 2) {");
+    expect(g).toContain("NÃO copie a cena dele, a cena desta lâmina é a imagem 1 e já está pronta");
+    expect(corpoDe(estudio, "regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t) && !cenaPronta");
+  });
+
+  it("10: ajuste no contínuo não reenquadra, devolve as bordas do fundo e não troca o fundo", () => {
+    const a = corpoDe(estudio, "ajustarCard");
+    expect(a).toContain('throw new ErroEstudio(409, "fundo_no_continuo"');
+    expect(a).toContain("bordasDe: fundoGravado,");
+    expect(a).toContain("colarMudancasNaBase(atual, gerado.png, areasDoAjuste, {");
+    expect(ler("src/components/mesa/CardDoEstudio.tsx")).toContain('semTrocaDeFundo ? MODOS_DE_AJUSTE.filter((m) => m.valor !== "fundo")');
+  });
+
+  it("12: mudar a zona do texto no contínuo refaz o fundo", () => {
+    expect(ler("supabase/functions/estudio-arte/conversa-do-diretor.ts")).toContain('"cor_fundo", "foto_acervo", "zona_texto"];');
   });
 });

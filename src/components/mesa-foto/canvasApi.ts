@@ -107,26 +107,31 @@ export interface Montagem {
 // ------------------------------------------------------------------ constantes
 
 /** Tamanho fixo dos cartões no quadro (px). Sem medir depois de montar: o polyfill mínimo de ResizeObserver não percebe. */
-export const TAMANHO_DO_CARTAO = { largura: 208, altura: 132 };
-export const TAMANHO_DA_SAIDA = { largura: 256, altura: 248 };
+export const TAMANHO_DO_CARTAO = { largura: 216, altura: 196 };
+/** O Resultado é maior: mostra o que junta, a foto gerada, o andamento e o botão de gerar. */
+export const TAMANHO_DA_SAIDA = { largura: 320, altura: 476 };
 
 export const ORDEM_DAS_ENTRADAS: Entrada[] = ["produto", "pessoa", "ambiente", "estilo", "texto"];
 
+/**
+ * Cada papel tem a sua cor (a mesma no cartão, na alça e na linha). Classes
+ * do Tailwind escritas por inteiro para o purge achar.
+ */
 export const TIPOS_DE_NO: Record<TipoDeNo, { rotulo: string; dica: string; entrada: Entrada | null; cor: string; borda: string; fundo: string; texto: string }> = {
-  produto: { rotulo: "Produto", dica: "Um produto do kit: identidade, nunca muda.", entrada: "produto", cor: "hsl(var(--primary))", borda: "border-primary/60", fundo: "bg-primary/10", texto: "text-primary" },
-  modelo: { rotulo: "Modelo", dica: "Uma persona sintética pronta (âncora e folha).", entrada: "pessoa", cor: "hsl(var(--info))", borda: "border-info/60", fundo: "bg-info/10", texto: "text-info" },
-  ambiente: { rotulo: "Ambiente", dica: "Foto de lugar ou uma descrição: lugar, luz e clima.", entrada: "ambiente", cor: "hsl(var(--warning))", borda: "border-warning/60", fundo: "bg-warning/10", texto: "text-warning" },
-  estilo: { rotulo: "Estilo", dica: "Referência da biblioteca: só paleta, luz e enquadramento.", entrada: "estilo", cor: "hsl(280 70% 62%)", borda: "border-fuchsia-400/60", fundo: "bg-fuchsia-400/10", texto: "text-fuchsia-500" },
-  texto: { rotulo: "Prompt", dica: "O pedido em palavras, ou uma restrição.", entrada: "texto", cor: "hsl(var(--muted-foreground))", borda: "border-border", fundo: "bg-muted", texto: "text-muted-foreground" },
-  gerar: { rotulo: "Saída", dica: "Junta tudo, mostra o pedido e gera.", entrada: null, cor: "hsl(var(--foreground))", borda: "border-foreground/40", fundo: "bg-card", texto: "text-foreground" },
+  produto: { rotulo: "Produto", dica: "Um produto do kit. Ele nunca muda na foto.", entrada: "produto", cor: "hsl(var(--primary))", borda: "border-primary/50", fundo: "bg-primary/10", texto: "text-primary" },
+  modelo: { rotulo: "Modelo", dica: "Uma modelo sintética da aba Modelos (com âncora escolhida).", entrada: "pessoa", cor: "hsl(var(--info))", borda: "border-info/50", fundo: "bg-info/10", texto: "text-info" },
+  ambiente: { rotulo: "Ambiente", dica: "Foto de um lugar ou uma descrição: lugar, luz e clima.", entrada: "ambiente", cor: "hsl(var(--warning))", borda: "border-warning/50", fundo: "bg-warning/10", texto: "text-warning" },
+  estilo: { rotulo: "Estilo", dica: "Referência de pegada: só paleta, luz e enquadramento.", entrada: "estilo", cor: "hsl(292 84% 67%)", borda: "border-fuchsia-400/50", fundo: "bg-fuchsia-400/10", texto: "text-fuchsia-400" },
+  texto: { rotulo: "Pedido", dica: "O que você quer na foto, em palavras (ou uma restrição).", entrada: "texto", cor: "hsl(215 25% 72%)", borda: "border-slate-400/50", fundo: "bg-slate-400/10", texto: "text-slate-300" },
+  gerar: { rotulo: "Resultado", dica: "Junta os cartões ligados e gera a foto.", entrada: null, cor: "hsl(var(--foreground))", borda: "border-primary/40", fundo: "bg-card", texto: "text-foreground" },
 };
 
 export const ROTULOS_DAS_ENTRADAS: Record<Entrada, string> = {
   produto: "Produto",
-  pessoa: "Pessoa",
+  pessoa: "Modelo",
   ambiente: "Ambiente",
   estilo: "Estilo",
-  texto: "Prompt",
+  texto: "Pedido",
 };
 
 export const TIPOS_DA_PALETA: TipoDeNo[] = ["produto", "modelo", "ambiente", "estilo", "texto", "gerar"];
@@ -273,7 +278,7 @@ export const canvasVazio = (clientId: string, nome = "Canvas novo"): Canvas => (
   atualizado_em: "",
 });
 
-/** A entrada da ligação se ela é possível (origem que não é Saída, destino que é Saída, sem repetir); senão null. */
+/** A entrada da ligação se ela é possível (origem que não é Resultado, destino que é Resultado, sem repetir); senão null. */
 export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para: string): Entrada | null {
   if (!de || !para || de === para) return null;
   const origem = c.nos.find((n) => n.id === de);
@@ -291,7 +296,7 @@ export function ligar<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, de: stri
   return { ...c, ligacoes: c.ligacoes.concat([{ id: novoId("lig"), de, para, entrada, ordem }]) };
 }
 
-/** Reescreve a ordem 0, 1, 2... dentro de cada entrada de cada Saída (depois de tirar uma ligação). */
+/** Reescreve a ordem 0, 1, 2... dentro de cada entrada de cada Resultado (depois de tirar uma ligação). */
 export function renumerar(ligacoes: Ligacao[]): Ligacao[] {
   const contagem: Record<string, number> = {};
   return ligacoes
@@ -325,7 +330,7 @@ export interface EntradaDoGerar {
   no: NoDoCanvas;
 }
 
-/** As entradas de uma Saída na ordem em que vão ao gerador: produto, pessoa, ambiente, estilo, texto; dentro de cada, a ordem da ligação. */
+/** As entradas de um Resultado na ordem em que vão ao gerador: produto, pessoa, ambiente, estilo, texto; dentro de cada, a ordem da ligação. */
 export function entradasDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: string): EntradaDoGerar[] {
   const saida: EntradaDoGerar[] = [];
   ORDEM_DAS_ENTRADAS.forEach((entrada) => {
@@ -344,13 +349,13 @@ export function entradasDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: st
 export function faltaNoCartao(no: NoDoCanvas): string {
   const d = no.dados;
   if (no.tipo === "produto" && !d.kit_id) return "Escolha o produto";
-  if (no.tipo === "modelo" && !d.modelo_id) return "Escolha a persona";
-  if ((no.tipo === "ambiente" || no.tipo === "estilo") && !d.imagem_id && !d.biblioteca_id && !(d.texto || "").trim()) return no.tipo === "ambiente" ? "Escolha uma foto ou descreva" : "Escolha uma referência";
+  if (no.tipo === "modelo" && !d.modelo_id) return "Escolha a modelo";
+  if ((no.tipo === "ambiente" || no.tipo === "estilo") && !d.imagem_id && !d.biblioteca_id && !(d.texto || "").trim()) return no.tipo === "ambiente" ? "Escolha uma foto ou descreva" : "Escolha uma referência ou descreva";
   if (no.tipo === "texto" && !(d.texto || "").trim()) return "Escreva o pedido";
   return "";
 }
 
-/** Junta resultados novos na Saída (sem repetir a mesma geração; guarda os 24 mais novos). */
+/** Junta resultados novos no Resultado (sem repetir a mesma geração; guarda os 24 mais novos). */
 export function juntarResultados(c: Canvas, porGerar: Record<string, ResultadoDoCanvas[]>): Canvas {
   let novo = c;
   Object.keys(porGerar).forEach((gerarId) => {
@@ -364,55 +369,203 @@ export function juntarResultados(c: Canvas, porGerar: Record<string, ResultadoDo
 }
 
 /**
- * Por que a Saída ainda não gera (mesmas recusas da função, ditas antes):
- * sem produto e sem pessoa; persona sem âncora; cartão ligado incompleto;
+ * Por que o Resultado ainda não gera (mesmas recusas da função, ditas antes):
+ * sem produto e sem modelo; modelo sem âncora; cartão ligado incompleto;
  * nenhum motor ligado.
  */
 export function bloqueiosDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: string, personas: Persona[] = []): string[] {
   const gerar = c.nos.find((n) => n.id === gerarId);
-  if (!gerar || gerar.tipo !== "gerar") return ["Saída não encontrada."];
+  if (!gerar || gerar.tipo !== "gerar") return ["Resultado não encontrado."];
   const entradas = entradasDoGerar(c, gerarId);
   const b: string[] = [];
-  if (!entradas.some((e) => e.entrada === "produto" || e.entrada === "pessoa")) b.push("Ligue ao menos um produto ou uma persona.");
+  if (!entradas.some((e) => e.entrada === "produto" || e.entrada === "pessoa")) b.push("Adicione um produto ou uma modelo.");
   entradas.forEach((e) => {
     const falta = faltaNoCartao(e.no);
     if (falta) b.push(`${e.numero}. ${TIPOS_DE_NO[e.no.tipo].rotulo}: ${falta.toLowerCase()}.`);
     if (e.no.tipo === "modelo" && e.no.dados.modelo_id) {
       const p = personas.find((x) => x.id === e.no.dados.modelo_id);
-      if (p && (p.status === "rascunho" || p.status === "candidatos")) b.push(`${e.numero}. A persona ${p.nome} ainda não tem âncora escolhida.`);
-      if (p && p.status === "arquivada") b.push(`${e.numero}. A persona ${p.nome} está arquivada.`);
+      if (p && (p.status === "rascunho" || p.status === "candidatos")) b.push(`${e.numero}. A modelo ${p.nome} ainda não tem âncora escolhida (aba Modelos).`);
+      if (p && p.status === "arquivada") b.push(`${e.numero}. A modelo ${p.nome} está arquivada.`);
     }
   });
-  if (!(gerar.dados.motores || []).length) b.push("Ligue ao menos um motor.");
+  if (!(gerar.dados.motores || []).length) b.push("Escolha ao menos um motor nos ajustes.");
   return b;
 }
 
-/** Avisos que não impedem (persona com folha incompleta). */
+/** Avisos que não impedem (modelo com folha incompleta). */
 export function avisosDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: string, personas: Persona[] = []): string[] {
   const a: string[] = [];
   entradasDoGerar(c, gerarId).forEach((e) => {
     if (e.no.tipo !== "modelo") return;
     const p = personas.find((x) => x.id === e.no.dados.modelo_id);
-    if (p && (p.status === "ancora" || p.status === "folha")) a.push(`A persona ${p.nome} tem só a âncora (folha incompleta): o rosto pode variar mais.`);
+    if (p && (p.status === "ancora" || p.status === "folha")) a.push(`A modelo ${p.nome} tem só a âncora (folha incompleta): o rosto pode variar mais.`);
   });
   return a;
 }
 
-/** Monta o grafo de um modelo pronto ao redor de uma posição. */
-export const MODELOS_PRONTOS: { chave: string; rotulo: string; tipos: TipoDeNo[] }[] = [
-  { chave: "produto-pessoa-ambiente", rotulo: "Produto + pessoa + ambiente", tipos: ["produto", "modelo", "ambiente"] },
-  { chave: "produto-estilo", rotulo: "Produto no estilo da marca", tipos: ["produto", "estilo", "texto"] },
+/**
+ * A frase do Resultado: "Junta: produto X + modelo Y + ambiente Z". O nome de
+ * cada cartão vem de quem chama (a tela sabe o nome do kit e da modelo).
+ */
+export function resumoDoResultado(entradas: EntradaDoGerar[], nome: (no: NoDoCanvas) => string): string {
+  if (!entradas.length) return "";
+  const partes = entradas.map((e) => {
+    const rotulo = TIPOS_DE_NO[e.no.tipo].rotulo.toLowerCase();
+    const n = (nome(e.no) || "").trim();
+    return n && n.toLowerCase() !== rotulo ? `${rotulo} ${n}` : `${rotulo} (a escolher)`;
+  });
+  return `Junta: ${partes.join(" + ")}`;
+}
+
+// ------------------------------------------------------------------ pôr cartões no quadro (ligação automática)
+
+const VAO_X = 110;
+const VAO_Y = 24;
+const LINHAS_POR_COLUNA = 3;
+
+const alturaDoNo = (n: Pick<NoDoCanvas, "tipo">) => (n.tipo === "gerar" ? TAMANHO_DA_SAIDA.altura : TAMANHO_DO_CARTAO.altura);
+
+/**
+ * O Resultado que recebe o cartão novo: o pedido (o que está aberto na tela),
+ * senão o primeiro. Null quando o quadro não tem Resultado.
+ */
+export function resultadoAlvo(c: Pick<Canvas, "nos">, preferido?: string | null): string | null {
+  const resultados = c.nos.filter((n) => n.tipo === "gerar");
+  if (preferido && resultados.some((n) => n.id === preferido)) return preferido;
+  return resultados.length ? resultados[0].id : null;
+}
+
+/**
+ * Onde o cartão novo fica: em colunas de 3 à esquerda do Resultado, centradas
+ * nele, na primeira vaga livre (sem cartão em cima de cartão).
+ */
+export function posicaoParaCartao(c: Pick<Canvas, "nos">, gerarId: string): { x: number; y: number } {
+  const g = c.nos.find((n) => n.id === gerarId);
+  if (!g) return { x: 0, y: c.nos.length * (TAMANHO_DO_CARTAO.altura + VAO_Y) };
+  const altura = LINHAS_POR_COLUNA * TAMANHO_DO_CARTAO.altura + (LINHAS_POR_COLUNA - 1) * VAO_Y;
+  const topo = g.y + TAMANHO_DA_SAIDA.altura / 2 - altura / 2;
+  const ocupada = (x: number, y: number) => c.nos.some((n) => n.id !== gerarId && Math.abs(n.x - x) < 80 && Math.abs(n.y - y) < 80);
+  for (let i = 0; i < 60; i++) {
+    const coluna = Math.floor(i / LINHAS_POR_COLUNA);
+    const linha = i % LINHAS_POR_COLUNA;
+    const x = Math.round(g.x - (coluna + 1) * (TAMANHO_DO_CARTAO.largura + VAO_X / 2) - VAO_X / 2);
+    const y = Math.round(topo + linha * (TAMANHO_DO_CARTAO.altura + VAO_Y));
+    if (!ocupada(x, y)) return { x, y };
+  }
+  return { x: g.x - TAMANHO_DO_CARTAO.largura - VAO_X, y: g.y };
+}
+
+/** Um Resultado a mais fica abaixo de tudo o que já está no quadro. */
+export function posicaoParaResultado(c: Pick<Canvas, "nos">): { x: number; y: number } {
+  if (!c.nos.length) return { x: 420, y: 0 };
+  const resultados = c.nos.filter((n) => n.tipo === "gerar");
+  const x = resultados.length ? Math.max.apply(null, resultados.map((n) => n.x)) : 420;
+  const fundo = Math.max.apply(null, c.nos.map((n) => n.y + alturaDoNo(n)));
+  return { x, y: Math.round(fundo + 120) };
+}
+
+/**
+ * Põe um cartão (criado fora, com id já dado) no quadro. Cartão de entrada já
+ * se liga sozinho ao Resultado (o pedido ou o primeiro); sem Resultado no
+ * quadro, entra o de reserva e o cartão se liga nele. Ligar à mão continua
+ * possível (vários Resultados), mas não é necessário.
+ */
+export function porCartao<T extends Pick<Canvas, "nos" | "ligacoes">>(
+  c: T,
+  no: NoDoCanvas,
+  o: { gerarId?: string | null; resultadoReserva?: NoDoCanvas | null; posicao?: { x: number; y: number } | null } = {},
+): T {
+  if (no.tipo === "gerar") {
+    const p = o.posicao || posicaoParaResultado(c);
+    return { ...c, nos: c.nos.concat([{ ...no, x: Math.round(p.x), y: Math.round(p.y) }]) };
+  }
+  let novo: T = c;
+  let alvo = resultadoAlvo(c, o.gerarId);
+  if (!alvo && o.resultadoReserva && o.resultadoReserva.tipo === "gerar") {
+    const p = posicaoParaResultado(novo);
+    novo = { ...novo, nos: novo.nos.concat([{ ...o.resultadoReserva, x: p.x, y: p.y }]) };
+    alvo = o.resultadoReserva.id;
+  }
+  const p = o.posicao || (alvo ? posicaoParaCartao(novo, alvo) : { x: no.x, y: no.y });
+  novo = { ...novo, nos: novo.nos.concat([{ ...no, x: Math.round(p.x), y: Math.round(p.y) }]) };
+  return alvo ? ligar(novo, no.id, alvo) : novo;
+}
+
+/** Resultado sem nenhum cartão ligado (um modelo pronto pode usar ele). */
+export const resultadoVazio = (c: Pick<Canvas, "ligacoes">, gerarId: string) => !c.ligacoes.some((l) => l.para === gerarId);
+
+// ------------------------------------------------------------------ modelos prontos
+
+export interface CartaoDoModeloPronto {
+  tipo: Exclude<TipoDeNo, "gerar">;
+  dados?: DadosDoNo;
+}
+
+/** Quadros que montam em 1 clique: os cartões já ligados ao Resultado. */
+export const MODELOS_PRONTOS: { chave: string; rotulo: string; dica: string; cartoes: CartaoDoModeloPronto[] }[] = [
+  {
+    chave: "produto-na-mao",
+    rotulo: "Produto na mão da modelo",
+    dica: "A modelo segura o produto perto do rosto, com o produto nítido em primeiro plano.",
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "modelo" },
+      { tipo: "texto", dados: { texto: "A modelo segura o produto na mão, perto do rosto, com o produto em primeiro plano, nítido e inteiro.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "produto-no-ambiente",
+    rotulo: "Produto no ambiente da marca",
+    dica: "O produto em destaque num lugar com a cara da marca. Escolha a foto do lugar.",
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "ambiente" },
+      { tipo: "texto", dados: { texto: "O produto em destaque no ambiente, apoiado numa superfície real, com sombra de contato e as cores da marca no cenário.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "modelo-na-rua",
+    rotulo: "Modelo usando o produto na rua",
+    dica: "Foto espontânea de rua, com luz natural do fim da tarde.",
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "modelo" },
+      { tipo: "ambiente", dados: { texto: "Rua da cidade com calçada e fachadas, luz natural do fim da tarde." } },
+      { tipo: "texto", dados: { texto: "A modelo usa o produto enquanto caminha pela rua, foto espontânea de lifestyle.", papel: "pedido" } },
+    ],
+  },
 ];
 
-export function aplicarModeloPronto(c: Canvas, chave: string, motorPadrao: string | null, origem = { x: 0, y: 0 }): Canvas {
+/**
+ * Monta o modelo pronto: usa o Resultado que ainda não tem nada ligado (o do
+ * centro, num quadro novo) ou cria outro abaixo. O que o dono tem de um só
+ * (um kit, uma modelo) vem preenchido; o resto fica para escolher.
+ */
+export function aplicarModeloPronto(
+  c: Canvas,
+  chave: string,
+  motorPadrao: string | null,
+  preencher: { kit_id?: string | null; modelo_id?: string | null; versao?: number | null } = {},
+): Canvas {
   const m = MODELOS_PRONTOS.find((x) => x.chave === chave);
   if (!m) return c;
   let novo: Canvas = { ...c };
-  const gerar = novoNo("gerar", origem.x + 320, origem.y + 40, { motores: motorPadrao ? [motorPadrao] : [] });
-  novo = { ...novo, nos: novo.nos.concat([gerar]) };
-  m.tipos.forEach((t, i) => {
-    const n = novoNo(t, origem.x, origem.y + i * (TAMANHO_DO_CARTAO.altura + 24));
-    novo = ligar({ ...novo, nos: novo.nos.concat([n]) }, n.id, gerar.id);
+  const livre = novo.nos.find((n) => n.tipo === "gerar" && resultadoVazio(novo, n.id));
+  let gerarId: string;
+  if (livre) gerarId = livre.id;
+  else {
+    const g = novoNo("gerar", 0, 0, { motores: motorPadrao ? [motorPadrao] : [] });
+    novo = porCartao(novo, g);
+    gerarId = g.id;
+  }
+  m.cartoes.forEach((cartao) => {
+    const dados: DadosDoNo = { ...(cartao.dados || {}) };
+    if (cartao.tipo === "produto" && preencher.kit_id) dados.kit_id = preencher.kit_id;
+    if (cartao.tipo === "modelo" && preencher.modelo_id) {
+      dados.modelo_id = preencher.modelo_id;
+      dados.versao = preencher.versao || null;
+    }
+    novo = porCartao(novo, novoNo(cartao.tipo, 0, 0, dados), { gerarId });
   });
   return novo;
 }
@@ -504,7 +657,7 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
     return { imagem_ids: d.imagem_id ? [d.imagem_id] : [], biblioteca_ids: d.biblioteca_id ? [d.biblioteca_id] : [], guia: (d.texto || "").trim() || null };
   }
   if (tipo === "texto") return { texto: d.texto || "", papel: d.papel === "restricao" ? "restricao" : "pedido" };
-  // Saída: os resultados vão junto (a função guarda o atalho, sem a URL assinada, que expira).
+  // Resultado: as fotos vão junto (a função guarda o atalho, sem a URL assinada, que expira).
   return {
     motores: d.motores || [],
     formato: d.formato || "4:5",
@@ -583,7 +736,7 @@ export function normalizarMontagem(data: any): Montagem {
 /**
  * Corpo de canvas_montar e canvas_gerar (canvas.ts, montar): o canvas salvo,
  * o cartão de resultado (no_saida_id) e o gerador (modelo_imagem_id). Formato
- * e qualidade de base vêm da Saída salva; a qualidade daqui vale por cima.
+ * e qualidade de base vêm do Resultado salvo; a qualidade daqui vale por cima.
  */
 export function corpoDoPedidoDoCanvas(acao: "canvas_montar" | "canvas_gerar", p: { canvasId: string; gerarId: string; motorId: string; qualidade: Qualidade; resolucao?: Resolucao | null }): Record<string, unknown> {
   const corpo: Record<string, unknown> = { acao, canvas_id: p.canvasId, no_saida_id: p.gerarId, modelo_imagem_id: p.motorId, qualidade: p.qualidade };
@@ -619,6 +772,32 @@ export async function gerarNoCanvas(p: {
   return { resultado, imagem, custo_usd: data && data.custo_usd };
 }
 
+/** Nome do arquivo baixado: sempre com "gerada" (foto sintética não sai sem a marca). */
+export function nomeParaBaixar(nome: string, caminho: string): string {
+  const ext = (/\.([a-z0-9]{2,5})$/i.exec(caminho || "") || ["", "png"])[1].toLowerCase();
+  const base = (nome || "foto-do-canvas")
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[^A-Za-z0-9À-ÿ _-]+/g, " ")
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "foto-do-canvas";
+  return `${base.toLowerCase().indexOf("gerada") >= 0 ? base : `${base}-gerada`}.${ext}`;
+}
+
+/** Baixa uma foto do Resultado (link assinado de download, sem passar pelo ZIP). */
+export async function baixarImagem(bucket: string, caminho: string, nome: string): Promise<void> {
+  const arquivo = nomeParaBaixar(nome, caminho);
+  const { data, error } = await (supabase.storage.from(bucket || "mesa") as any).createSignedUrl(caminho, 600, { download: arquivo });
+  if (error || !data || !data.signedUrl) throw new Error("Não foi possível baixar a foto agora. Tente de novo.");
+  const a = document.createElement("a");
+  a.href = String(data.signedUrl);
+  a.download = arquivo;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
 export async function conferirGeracao(geracaoId: string): Promise<{ conferencia: ConferenciaDaPersona | null; custo_usd?: number }> {
   const data = await chamarFuncao<any>("mesa-foto", { acao: "canvas_conferir", geracao_id: geracaoId });
   return { conferencia: normalizarConferenciaDaPersona(data), custo_usd: data && data.custo_usd };
@@ -628,7 +807,7 @@ export async function conferirGeracao(geracaoId: string): Promise<{ conferencia:
 
 const ENTRADA_POR_REFERENCIA = 1600;
 
-/** Uma imagem por motor ligado na Saída (uma chamada por motor). */
+/** Uma imagem por motor ligado no Resultado (uma chamada por motor). */
 export function partesDoGerar(motores: string[], qualidade: Qualidade, referencias: number): ParteDaEstimativa[] {
   return motores.map((id) => ({ modeloId: id, tipo: "imagem" as const, imagens: 1, qualidade, tokensEntrada: 3000 + referencias * ENTRADA_POR_REFERENCIA }));
 }

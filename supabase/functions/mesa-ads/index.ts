@@ -42,6 +42,22 @@
  * - pacote_enviar { client_id, plano_id?, criativo_ids?, criar_tarefa? }:
  *   Markdown em Arquivos (Criativos de anúncio) e tarefa do gestor de tráfego.
  *
+ * Mesa Ads v3 (pedido do dono em 25/09/2026; sem SQL novo):
+ * - oferta_do_contexto { client_id, gravar?, forcar? }: sem IA e grátis; monta a
+ *   oferta em rascunho com o contexto do cliente (briefing de ads, contexto
+ *   consolidado, brief do cliente, campanhas do mês, conta de anúncios), com a
+ *   fonte de cada campo e as lacunas. Com gravar, vira oferta em ads_ofertas.
+ * - oferta_conversar aceita oferta_id: a oferta em foco para o agente lapidar.
+ * - tom ("sobrio" | "direto" | "agressivo") em plano_gerar, plano_conversar,
+ *   criativos_produzir e copy_variar; sem tom, o pedido livre decide
+ *   (tomDoPedido). O tom muda os ângulos, a copy e a direção da arte, e o Jev
+ *   confere o tom e o "genérico" como aviso (sem laço de correção).
+ * - referencia_para_estudio { client_id, referencia_id? | url? }: leva a
+ *   referência da Mesa Ads (ou um link novo) para as referências do Estúdio
+ *   (cliente_referencias) e devolve o id que o criativo escolhe.
+ * - plano: ordem de teste, porquê e regra de corte por ângulo (números do
+ *   briefing e da conta, calculados em código).
+ *
  * Regras: só dado real; toda leitura e escrita presa ao client_id; nenhuma
  * falha responde 200; toda ação que gasta devolve custo_usd e saldo_usd;
  * números de conta vêm do código, nunca da IA; relógio de 400 s controlado
@@ -61,14 +77,23 @@ import {
   type ModeloIa,
   type Tarefa,
 } from "../_shared/ia-motor.ts";
-import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
+import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
-import { lerContextoConsolidado, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   CONHECIMENTO_AGRESSIVO,
   CONHECIMENTO_ESTRATEGISTA_ADS,
+  CRITERIOS_GENERICO,
   CTAS_META,
+  direcaoDoTomParaArte,
+  regrasDoTomParaAngulos,
+  regrasDoTomParaCopy,
+  tomDoPedido,
+  TONS,
+  tomValido,
+  tratamentoDoTom,
+  type TomDoCriativo,
   ESCALA_DE_EVIDENCIA,
   ESTILOS_VISUAIS,
   ESTILOS_VISUAIS_IDS,
@@ -93,7 +118,14 @@ import {
 import {
   alertaDePolitica,
   anguloAprovado,
+  anguloGenerico,
   aplicarConferenciaNoPacote,
+  avisosDeTom,
+  type CorteDoAngulo,
+  numerosReais,
+  ofertaDoContextoEmCodigo,
+  ordemDeTeste,
+  regraDeCorte,
   cortarNaPalavra,
   type CriativoDoPacote,
   type Diaria,
@@ -218,6 +250,8 @@ type NotasJev = {
   risco_politica: number | null;
   parada: number | null;
   diferenciacao: number | null;
+  /** v3: quanto cumpre o tom pedido (só medido em sóbrio e agressivo). */
+  tom?: number | null;
   alerta_politica: boolean;
 };
 
@@ -248,6 +282,12 @@ type Angulo = {
   aprovado: boolean;
   motivos: string[];
   reprovado?: boolean;
+  /** v3: tom pedido, genérico pela nota do Jev, por que testar primeiro, ordem e corte (código). */
+  tom?: TomDoCriativo | null;
+  generico?: boolean;
+  porque_testar_primeiro?: string;
+  ordem_teste?: number | null;
+  corte?: CorteDoAngulo | null;
 };
 
 type Plano = {
@@ -421,6 +461,7 @@ const ESQUEMA_ANGULO = obj({
   estagio_consciencia: Snulo(ESTAGIOS),
   estilo_visual: Snulo(ESTILOS_VISUAIS_IDS),
   objetivo: Snulo(ACOES_OBJETIVO),
+  porque_testar_primeiro: S("string"),
 });
 
 const ESQUEMA_ESTRUTURA = obj({
@@ -815,7 +856,32 @@ type ContextoAds = {
   cliente: string;
   marca: Awaited<ReturnType<typeof lerMarcaParaDirecao>>;
   dados: Record<string, unknown>;
+  /** v3: números da conta nos últimos 90 dias (código), para a regra de corte. */
+  conta: { gasto: number; resultados: number; custo_por_resultado: number | null; anuncios_com_entrega: number };
+  /** v3: o que a Mesa principal sabe do cliente, lido para a oferta do contexto. */
+  consolidado: Awaited<ReturnType<typeof lerContextoConsolidado>>;
+  campanhas: CampanhaDoMes[];
+  brief: Record<string, unknown> | null;
 };
+
+type CampanhaDoMes = { nome: string; objetivo: string | null; conceito: string | null; periodo_inicio: string | null; periodo_fim: string | null; status: string };
+
+/** Respostas do brief do cliente (formulário), sem campo vazio e com texto curto. */
+function resumoDoBrief(bruto: unknown, limite = 5000): Record<string, unknown> | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const saida: Record<string, unknown> = {};
+  let usado = 0;
+  for (const [k, v] of Object.entries(bruto as Record<string, unknown>)) {
+    if (v == null || v === "" || (Array.isArray(v) && !v.length)) continue;
+    const t = typeof v === "string" ? v.trim() : JSON.stringify(v);
+    if (!t) continue;
+    const corte = t.slice(0, Math.max(0, Math.min(800, limite - usado)));
+    if (!corte) break;
+    saida[k] = corte;
+    usado += corte.length + k.length;
+  }
+  return Object.keys(saida).length ? saida : null;
+}
 
 /**
  * Contexto do estrategista de ads só com dado real: kit, contexto consolidado,
@@ -823,8 +889,11 @@ type ContextoAds = {
  * e memória. O que não existe vai vazio ou null, nunca preenchido.
  */
 async function montarContextoAds(servico: SupabaseClient, clientId: string): Promise<ContextoAds> {
-  const desde = somarDias(hojeSaoPaulo(), -90);
-  const [marca, consolidado, dossie, anuncios, diarias, aprendizados, memoria] = await Promise.all([
+  const hoje = hojeSaoPaulo();
+  const desde = somarDias(hoje, -90);
+  const inicioDoMes = `${hoje.slice(0, 7)}-01`;
+  const fimDoMes = somarDias(`${somarDias(`${hoje.slice(0, 7)}-28`, 5).slice(0, 7)}-01`, -1);
+  const [marca, consolidado, dossie, anuncios, diarias, aprendizados, memoria, campanhasQ, briefQ, documentos] = await Promise.all([
     lerMarcaParaDirecao(servico, clientId),
     lerContextoConsolidado(servico, clientId),
     servico.from("client_dossiers").select("content, summary, version, effective_at")
@@ -836,7 +905,22 @@ async function montarContextoAds(servico: SupabaseClient, clientId: string): Pro
       .eq("client_id", clientId).order("criado_em", { ascending: false }).limit(20),
     servico.from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(40),
+    // Campanhas do mês da Mesa principal (as que valem neste mês ou sem período).
+    servico.from("mesa_campanhas").select("nome, objetivo, conceito, periodo_inicio, periodo_fim, status")
+      .eq("client_id", clientId).neq("status", "encerrada").order("criado_em", { ascending: false }).limit(12),
+    // Brief respondido pelo cliente (formulário): produtos, preços e diferenciais costumam estar aqui.
+    servico.from("briefings").select("responses, submitted, created_at").eq("client_id", clientId)
+      .order("created_at", { ascending: false }).limit(3),
+    lerDocumentosDeMarca(servico, clientId, 6000).catch(() => []),
   ]);
+  const campanhas = ((campanhasQ.data as CampanhaDoMes[] | null) ?? [])
+    .filter((c) => (!c.periodo_fim || c.periodo_fim >= inicioDoMes) && (!c.periodo_inicio || c.periodo_inicio <= fimDoMes))
+    .slice(0, 8)
+    .map((c) => ({ ...c, conceito: c.conceito ? String(c.conceito).slice(0, 600) : null }));
+  const briefs = (briefQ.data as { responses: unknown; submitted: boolean | null; created_at: string }[] | null) ?? [];
+  const briefLinha = briefs.find((b) => b.submitted) ?? briefs[0] ?? null;
+  const brief = briefLinha ? resumoDoBrief(briefLinha.responses) : null;
+  const totalConta = somarMetricas(diarias);
   const d = ((dossie.data as { content: string; summary: string | null; version: number; effective_at: string }[] | null) ?? [])[0];
   const mapa = porAnuncio(diarias);
   const resumoAnuncios = anuncios
@@ -870,7 +954,24 @@ async function montarContextoAds(servico: SupabaseClient, clientId: string): Pro
       anuncios_ultimos_90_dias: { total_lidos: anuncios.length, com_entrega: resumoAnuncios },
       aprendizados_registrados: aprendizados.data ?? [],
       memoria_do_estrategista_ads: memoria.data ?? [],
+      campanhas_do_mes: campanhas,
+      brief_do_cliente: brief,
+      documentos_do_cliente: (documentos as { nome: string; texto: string }[]).map((x) => ({ nome: x.nome, texto: x.texto })),
+      conta_ultimos_90_dias: {
+        gasto: totalConta.gasto,
+        resultados: totalConta.resultados,
+        custo_por_resultado: totalConta.custo_por_resultado,
+      },
     },
+    conta: {
+      gasto: totalConta.gasto,
+      resultados: totalConta.resultados,
+      custo_por_resultado: totalConta.custo_por_resultado,
+      anuncios_com_entrega: resumoAnuncios.length,
+    },
+    consolidado,
+    campanhas,
+    brief,
   };
 }
 
@@ -971,8 +1072,10 @@ async function pontuarAngulosComJev(
   angulos: Angulo[],
   briefing: Briefing | null,
   cobranca: { clientId: string; planoId: string; criadoPor: string },
-  extra: { oferta?: Record<string, unknown> | null; jaRodou?: unknown[] } = {},
+  extra: { oferta?: Record<string, unknown> | null; jaRodou?: unknown[]; tom?: TomDoCriativo | null } = {},
 ): Promise<{ angulos: Angulo[]; jev_erro: string | null; custo: number }> {
+  // Tom medido só quando foi pedido explicitamente fora do padrão (sóbrio ou agressivo).
+  const tomMedido = extra.tom && extra.tom !== "direto" ? TONS[extra.tom] : null;
   const alvo = angulos.map((a, i) => ({ a, i })).filter((x) => !x.a.jev);
   if (!alvo.length) return { angulos, jev_erro: null, custo: 0 };
   const state = {
@@ -1025,7 +1128,15 @@ async function pontuarAngulosComJev(
       instructions: `Quanto o ângulo \`angulos[${k}]\` foge do "mais do mesmo" da categoria (a mesma cena, a mesma frase, a mesma prova que todo concorrente usa) e dos \`anuncios_que_o_cliente_ja_rodou\`, sem perder a clareza da oferta?`,
       criteria: NIVEIS_DIFERENCIACAO,
     };
+    if (tomMedido) {
+      questions[`tom_${k}`] = {
+        type: "score",
+        instructions: `A equipe pediu o tom \`tom_pedido\`. Quanto o gancho verbal, o gancho visual e a situação do ângulo \`angulos[${k}]\` cumprem esse tom, dentro da política?`,
+        criteria: tomMedido.niveis_jev,
+      };
+    }
   });
+  if (tomMedido) (state as Record<string, unknown>).tom_pedido = { nome: tomMedido.nome, o_que_e: tomMedido.resumo, regras: tomMedido.angulos };
   try {
     const r = await jevPerguntar({ state, questions });
     const cobrado = await cobrarJev(r, { clientId: cobranca.clientId, tarefa: TAREFA, referencia: { tipo: REF_PLANO, id: cobranca.planoId }, criadoPor: cobranca.criadoPor });
@@ -1041,6 +1152,7 @@ async function pontuarAngulosComJev(
           risco_politica: notaDe0a10(risco, NIVEIS_RISCO_POLITICA.length),
           parada: notaDe0a10(notaScore(r.answers[`parada_${k}`]), NIVEIS_PARADA.length),
           diferenciacao: notaDe0a10(notaScore(r.answers[`diferenciacao_${k}`]), NIVEIS_DIFERENCIACAO.length),
+          ...(tomMedido ? { tom: notaDe0a10(notaScore(r.answers[`tom_${k}`]), tomMedido.niveis_jev.length) } : {}),
           alerta_politica: alertaDePolitica(risco),
         },
       });
@@ -1055,26 +1167,39 @@ async function pontuarAngulosComJev(
 
 /** Aprovação, pontuação e motivos do ângulo pelas regras em código (calculos.ts). */
 function avaliarAngulo(a: Angulo): Angulo {
-  return { ...a, aprovado: anguloAprovado(a.jev), motivos: motivosDoAngulo(a.jev), pontuacao: pontuacaoDoAngulo(a.jev) };
+  return { ...a, aprovado: anguloAprovado(a.jev), motivos: motivosDoAngulo(a.jev), pontuacao: pontuacaoDoAngulo(a.jev), generico: anguloGenerico(a.jev) };
 }
 
-/** risco_politica: 0 a 10, 10 = sem risco. */
-type NotasCopy = { risco_politica: number | null; clareza: number | null; alerta_politica: boolean };
+/** risco_politica: 0 a 10, 10 = sem risco. v3: genérico (Noul do Jev, aviso) e tom pedido (0 a 10). */
+type NotasCopy = {
+  risco_politica: number | null;
+  clareza: number | null;
+  alerta_politica: boolean;
+  generico?: boolean | null;
+  prob_generico?: number | null;
+  tom?: number | null;
+};
+
+/** Probabilidade do Noul "genérico" a partir da qual a peça leva o aviso. */
+const LIMIAR_GENERICO = 0.6;
 
 /** O Jev confere cada copy: risco de política (10 = sem risco) e clareza da oferta. */
 async function conferirCopiesComJev(
   copies: Array<{ texto_principal: string; titulo: string; descricao: string | null; cta_meta: string; texto_na_arte?: string }>,
   briefing: Briefing | null,
   cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string },
+  tom: TomDoCriativo | null = null,
 ): Promise<{ notas: (NotasCopy | null)[]; jev_erro: string | null; custo: number }> {
   if (!copies.length) return { notas: [], jev_erro: null, custo: 0 };
-  const state = {
+  const regrasTom = tom ? TONS[tom] : null;
+  const state: Record<string, unknown> = {
     oferta: briefing?.oferta ?? "não informada",
     destino: briefing?.destino ?? "não informado",
     provas_disponiveis: briefing?.provas ?? [],
     politicas: POLITICAS_META,
     copies,
   };
+  if (regrasTom) state.tom_pedido = { nome: regrasTom.nome, o_que_e: regrasTom.resumo, regras: regrasTom.copy };
   const questions: Record<string, PerguntaJev> = {};
   copies.forEach((_, i) => {
     questions[`risco_${i}`] = {
@@ -1087,6 +1212,18 @@ async function conferirCopiesComJev(
       instructions: `Quão clara fica a oferta do anúncio \`copies[${i}]\` para quem lê no celular, considerando a \`oferta\` e o \`destino\`?`,
       criteria: NIVEIS_CLAREZA,
     };
+    questions[`generico_${i}`] = {
+      type: "noul",
+      instructions: `O anúncio \`copies[${i}]\` (texto principal, título e texto na arte) é genérico, isto é, serviria para qualquer concorrente da categoria trocando só o nome, sem situação específica do público nem promessa concreta da \`oferta\`?`,
+      criteria: CRITERIOS_GENERICO,
+    };
+    if (regrasTom) {
+      questions[`tom_${i}`] = {
+        type: "score",
+        instructions: `A equipe pediu o tom \`tom_pedido\`. Quanto o anúncio \`copies[${i}]\` (principalmente a frase da arte e a primeira linha) cumpre esse tom, dentro da política?`,
+        criteria: regrasTom.niveis_jev,
+      };
+    }
   });
   try {
     const r = await jevPerguntar({ state, questions });
@@ -1094,10 +1231,14 @@ async function conferirCopiesComJev(
     return {
       notas: copies.map((_, i) => {
         const risco = notaScore(r.answers[`risco_${i}`]);
+        const prob = probabilidadeNoul(r.answers[`generico_${i}`]);
         return {
           risco_politica: notaDe0a10(risco, NIVEIS_RISCO_POLITICA.length),
           clareza: notaDe0a10(notaScore(r.answers[`clareza_${i}`]), NIVEIS_CLAREZA.length),
           alerta_politica: alertaDePolitica(risco),
+          generico: prob == null ? null : prob >= LIMIAR_GENERICO,
+          prob_generico: prob == null ? null : Math.round(prob * 100) / 100,
+          tom: regrasTom ? notaDe0a10(notaScore(r.answers[`tom_${i}`]), regrasTom.niveis_jev.length) : null,
         };
       }),
       jev_erro: null,
@@ -1187,6 +1328,8 @@ function normalizarAngulo(bruto: unknown, id: string, refsValidas: Set<string>, 
     rodadas: anterior?.rodadas ?? 0,
     aprovado: false,
     motivos: [],
+    tom: anterior?.tom ?? null,
+    porque_testar_primeiro: texto(o.porque_testar_primeiro, 600) || anterior?.porque_testar_primeiro || "",
   };
   // Ângulo que não mudou de conteúdo mantém as notas do Jev (e a avaliação).
   if (anterior && assinaturaDoAngulo(anterior) === assinaturaDoAngulo(a) && anterior.jev) return avaliarAngulo({ ...a, jev: anterior.jev });
@@ -1275,8 +1418,11 @@ function direcaoDoAnuncio(
     /** v2: estilo visual do criativo e objetivo da campanha (vão para o layout e as regras). */
     estilo?: { id: string; nome: string; como_fazer: string } | null;
     objetivo?: { id: string; nome: string; como_o_criativo_muda: string } | null;
+    /** v3: tom da peça (muda o tratamento do layout e as regras do criativo). */
+    tom?: TomDoCriativo | null;
   },
 ): Record<string, unknown> {
+  const tom = info.tom ?? "direto";
   const carrossel = formato === "carrossel";
   const formatoDoCard: Exclude<FormatoAds, "carrossel"> = carrossel ? "feed_4x5" : formato;
   const base = direcaoDoRoteiro(
@@ -1288,6 +1434,8 @@ function direcaoDoAnuncio(
     const r = roteiro[i];
     const funcao = carrossel ? c.funcao : "capa";
     const layout = layoutDoAnuncio(c.layout!, formatoDoCard, funcao, r?.ilustracao || info.ganchoVisual);
+    // O tom vem antes do estilo: se o campo cortar, o tom não se perde.
+    layout.tratamento = `${layout.tratamento}; ${tratamentoDoTom(tom)}`;
     if (info.estilo) layout.tratamento = `${layout.tratamento}; estilo ${info.estilo.nome}: ${info.estilo.como_fazer}`.slice(0, 900);
     const linhas = c.texto_exato.split("\n").map((l) => l.trim()).filter(Boolean);
     // Blocos em código: headline, apoio e o CTA escrito na peça (último da capa única ou do fechamento).
@@ -1319,19 +1467,23 @@ function direcaoDoAnuncio(
     tamanho: TAMANHO_DO_FORMATO[formatoDoCard],
     estilo_visual: info.estilo ? { id: info.estilo.id, nome: info.estilo.nome } : null,
     objetivo: info.objetivo ? { id: info.objetivo.id, nome: info.objetivo.nome } : null,
+    tom,
     regras_do_criativo: [
       regrasDoCriativo(formato),
+      direcaoDoTomParaArte(tom),
       info.estilo ? `ESTILO VISUAL DESTA PEÇA (${info.estilo.nome}): ${info.estilo.como_fazer}` : "",
       info.objetivo ? `OBJETIVO DA CAMPANHA (${info.objetivo.nome}): ${info.objetivo.como_o_criativo_muda}` : "",
-      CONHECIMENTO_AGRESSIVO,
-      "Agressivo e vendedor dentro da política da Meta. Nunca escurecer a foto ou a capa para dar destaque: o destaque vem de contraste, composição, tipografia, escala e cor.",
+      tom === "sobrio" ? "" : CONHECIMENTO_AGRESSIVO,
+      tom === "sobrio"
+        ? "Sóbrio e vendedor dentro da política da Meta. Nunca escurecer a foto ou a capa para dar destaque: o destaque vem de composição, tipografia, escala e cor."
+        : "Vendedor dentro da política da Meta. Nunca escurecer a foto ou a capa para dar destaque: o destaque vem de contraste, composição, tipografia, escala e cor.",
     ].filter(Boolean).join("\n\n"),
   };
 }
 
 /** Roteiro da peça: capa única (headline + apoio + CTA) ou 3 a 5 cards do carrossel (técnica 16). */
-function roteiroDaVariacao(v: Record<string, unknown>, formato: FormatoAds, ganchoVisual: string): RoteiroCard[] {
-  const headline = cortarNaPalavra(texto(v.headline_arte, 120), 60);
+function roteiroDaVariacao(v: Record<string, unknown>, formato: FormatoAds, ganchoVisual: string, maxHeadline = 60): RoteiroCard[] {
+  const headline = cortarNaPalavra(texto(v.headline_arte, 120), maxHeadline);
   const apoio = texto(v.apoio_arte, 160);
   const cta = texto(v.cta_arte, 60);
   const capaTexto = [headline, apoio, cta].filter(Boolean).slice(0, 3).join("\n");
@@ -1730,6 +1882,10 @@ function ofertaDaLinha(l: LinhaOferta) {
     cta: String(o.cta ?? ""),
     provas_necessarias: lista(o.provas_necessarias),
     riscos: lista(o.riscos),
+    /** v3: "contexto" quando montada em código a partir do contexto do cliente. */
+    origem: typeof o.origem === "string" ? o.origem : null,
+    fontes: o.fontes && typeof o.fontes === "object" ? o.fontes as Record<string, string> : null,
+    lacunas: lista(o.lacunas),
     status: l.status,
     jev: (l.jev ?? null) as { clareza: number | null; forca: number | null; risco_politica: number | null; alerta_politica: boolean } | null,
     briefing_id: l.briefing_id,
@@ -1783,6 +1939,56 @@ function exemploParaPrompt(r: ReferenciaCompleta) {
   };
 }
 
+/**
+ * Foco em resultado (v3): ordem de teste pela conferência e regra de corte com
+ * os números reais (custo tolerável do briefing ou média da conta), em código.
+ */
+function comFocoEmResultado(
+  angulos: Angulo[],
+  briefing: Briefing | null,
+  objetivo: { metrica_que_decide: string } | null,
+  conta: ContextoAds["conta"],
+): Angulo[] {
+  const tolera = numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl);
+  const metricaDoPlano = texto((briefing?.objetivo ?? {}).metrica_principal, 200) || null;
+  const ordem = ordemDeTeste(angulos);
+  return angulos
+    .map((a) => ({
+      ...a,
+      ordem_teste: ordem.get(a.id) ?? null,
+      corte: regraDeCorte({
+        metrica: metricaDoPlano || a.metrica || (objetivo ? objetivo.metrica_que_decide.split(/[.(]/)[0].trim() : null),
+        custoToleravel: tolera,
+        custoMedioConta: conta.custo_por_resultado,
+        janelaDias: a.janela_dias,
+      }),
+    }))
+    .sort((x, y) => (x.ordem_teste ?? 99) - (y.ordem_teste ?? 99));
+}
+
+/** Resumo do foco em resultado para a estrutura do plano (a tela mostra "Testar primeiro"). */
+function testarPrimeiro(angulos: Angulo[]) {
+  return angulos.slice(0, 3).map((a) => ({
+    angulo_id: a.id,
+    ordem: a.ordem_teste ?? null,
+    nome: a.nome,
+    porque: a.porque_testar_primeiro || "",
+    hipotese: a.hipotese,
+    metrica: a.corte?.metrica ?? a.metrica,
+    corte: a.corte?.texto ?? null,
+  }));
+}
+
+const baseDaConta = (conta: ContextoAds["conta"], briefing: Briefing | null) => ({
+  periodo_dias: 90,
+  gasto: conta.gasto,
+  resultados: conta.resultados,
+  custo_por_resultado: conta.custo_por_resultado,
+  custo_toleravel: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+});
+
+const REGRA_PORQUE_TESTAR = `- porque_testar_primeiro: uma frase dizendo por que este ângulo pode mover a métrica que decide, ligada a dado real (o que a conta mostrou, a prova do briefing, a campanha do mês). Sem número inventado.`;
+
 /** O que o cliente já rodou (títulos e começo do texto), para o Jev medir a diferenciação. */
 function jaRodouDoContexto(ctx: ContextoAds): unknown[] {
   const bloco = (ctx.dados.anuncios_ultimos_90_dias ?? {}) as { com_entrega?: { titulo: string | null; texto: string | null }[] };
@@ -1807,6 +2013,8 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const qtdGerar = Math.min(8, qtd + ANGULOS_EXTRAS);
   const pedidoEquipe = texto(corpo.pedido, 2000);
   const modo = corpo.modo === "variar_vencedor" ? "variar_vencedor" : "novo";
+  // v3: tom escolhido na tela; sem escolha, o pedido livre decide ("mais agressivo" vira agressivo).
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, "direto");
   if (corpo.objetivo != null && corpo.objetivo !== "" && !objetivoPorId(corpo.objetivo)) {
     throw new ErroHttp(400, "objetivo_invalido", `Objetivo desconhecido. Use um de: ${ACOES_OBJETIVO.join(", ")}.`);
   }
@@ -1843,6 +2051,8 @@ OFERTA ESCOLHIDA PARA ESTE PLANO: ${JSON.stringify(ofertaParaPrompt)}
 
 OBJETIVO DA CAMPANHA: ${JSON.stringify(objetivo ?? null)}
 
+${regrasDoTomParaAngulos(tom)}
+
 EXEMPLOS ESCOLHIDOS PELA EQUIPE (métricas reais só dos anúncios próprios, lidas do painel):
 ${JSON.stringify(exemplos.map(exemploParaPrompt), null, 1)}
 
@@ -1856,7 +2066,8 @@ Regras dos ângulos:
 - situacao: a cena concreta vivida pelo comprador, com a linguagem dele, ligada a uma situação do briefing.
 - mecanismo e tecnica: qual das dezoito técnicas e qual mecanismo (sem citar marca de terceiros).
 - prova: só prova do briefing, com a fonte; se não houver, diga "sem prova no briefing" e use demonstração ou mecanismo.
-- gancho_visual: o que aparece na imagem e faz parar a rolagem (sem escurecer a foto: contraste, composição, tipografia, escala e cor); gancho_verbal: a headline curta (até 7 palavras).
+- gancho_visual: o que aparece na imagem e faz parar a rolagem (sem escurecer a foto: contraste, composição, tipografia, escala e cor); gancho_verbal: a headline curta (até ${TONS[tom].headline_max_palavras} palavras), no tom pedido.
+${REGRA_PORQUE_TESTAR}
 - estilo_visual: um id da lista de estilos; ângulos diferentes usam estilos diferentes sempre que fizer sentido. Evite estilo de risco de política alto.
 - objetivo: ${objetivo ? `"${objetivo.id}"` : "o id do objetivo que o briefing sustenta, ou null"}.
 - hipotese no formato: "Acreditamos que [situação + mecanismo] aumentará [resultado], porque [evidência do público]. Vamos comparar com [base] durante [janela], mantendo [condições] e registrando [dados]."
@@ -1890,10 +2101,10 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
   const r = (s.json ?? {}) as Record<string, unknown>;
   let custo = s.custoUsd + achado.custo;
   let saldo = s.saldoUsd;
-  const comObjetivo = (a: Angulo): Angulo => ({ ...a, objetivo: a.objetivo ?? objetivo?.id ?? null });
+  const comObjetivo = (a: Angulo): Angulo => ({ ...a, objetivo: a.objetivo ?? objetivo?.id ?? null, tom });
   let angulos = (Array.isArray(r.angulos) ? r.angulos : []).slice(0, 8).map((a, i) => comObjetivo(normalizarAngulo(a, `a${i + 1}`, refsValidas))).filter((a) => a.nome && a.situacao);
   const cobranca = { clientId, planoId, criadoPor: chamador.userId };
-  const extraJev = { oferta: ofertaParaPrompt as Record<string, unknown> | null, jaRodou };
+  const extraJev = { oferta: ofertaParaPrompt as Record<string, unknown> | null, jaRodou, tom };
   const primeira = await pontuarAngulosComJev(angulos, briefing, cobranca, extraJev);
   angulos = primeira.angulos;
   custo += primeira.custo;
@@ -1995,6 +2206,8 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
     principais = separados.principais;
     descartados = separados.descartados;
   }
+  // Foco em resultado: ordem de teste e regra de corte (números do código).
+  principais = comFocoEmResultado(principais, briefing, objetivo, ctx.conta);
   const aprovadosTotal = angulos.filter((a) => a.aprovado).length;
   const qualidade = { rodadas, aprovados: aprovadosTotal, reprovados: angulos.length - aprovadosTotal };
   const estrutura = normalizarEstrutura(r.estrutura, new Set(principais.map((a) => a.id)));
@@ -2025,6 +2238,9 @@ TAREFA: reescreva SOMENTE os ângulos reprovados, mantendo o mesmo id, corrigind
         referencia_ids: exemplos.map((x) => x.id),
         descartados,
         qualidade,
+        tom,
+        base_da_conta: baseDaConta(ctx.conta, briefing),
+        testar_primeiro: testarPrimeiro(principais),
       },
       pedido: pedidoEquipe || null,
       conversa_id: conversaId,
@@ -2061,6 +2277,9 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
     baixarAnexos(servico, p.client_id, corpo.anexos),
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
+  // v3: o tom do plano, trocado pela tela (tom) ou pela fala ("deixa mais agressivo").
+  const tomAnterior = tomValido(p.estrutura.tom) ?? "direto";
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(mensagem, tomAnterior);
   let conversaId = p.conversa_id;
   if (!conversaId) {
     conversaId = await abrirConversa(servico, p.client_id, p.id, chamador.userId);
@@ -2082,12 +2301,14 @@ REFERÊNCIAS DISPONÍVEIS: ${JSON.stringify(refs.map(resumoDaReferencia))}
 PLANO ATUAL (${p.status}${podeMudar ? "" : "; CONCLUÍDO, NÃO MUDE OS ÂNGULOS"}):
 ${JSON.stringify({ nome: p.nome, angulos: p.angulos.map(({ jev: _j, ...a }) => a), estrutura: p.estrutura })}
 
+${regrasDoTomParaAngulos(tom)}${tom !== tomAnterior ? `\nO TOM MUDOU de ${TONS[tomAnterior].nome.toLowerCase()} para ${TONS[tom].nome.toLowerCase()}: reescreva os ganchos, as situações e as hipóteses para cumprir o tom novo de verdade, não só trocar adjetivos.` : ""}
+
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `A equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}
 Aplique o pedido. Devolva:
 - resposta: o que mudou ou a resposta, em até 4 frases.
 - nome: novo nome só se mudou; senão null.
-- angulos: ${podeMudar ? "a lista COMPLETA atualizada só se algum ângulo mudou, entrou ou saiu (mantenha o id dos que ficam; novo recebe id novo); senão null. Mesmas regras de ângulo, hipótese e referências." : "sempre null."}
+- angulos: ${podeMudar ? `a lista COMPLETA atualizada só se algum ângulo mudou, entrou ou saiu (mantenha o id dos que ficam; novo recebe id novo); senão null. Mesmas regras de ângulo, hipótese e referências.\n${REGRA_PORQUE_TESTAR}` : "sempre null."}
 - estrutura: a estrutura completa só se mudou; senão null.`;
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
@@ -2111,25 +2332,31 @@ Aplique o pedido. Devolva:
     const porId = new Map(p.angulos.map((a) => [a.id, a]));
     let seq = Math.max(p.angulos.length, ...p.angulos.map((a) => Number(String(a.id).replace(/^a/, "")) || 0));
     const usados = new Set<string>();
-    let angulos = r.angulos.slice(0, 6).map((bruto) => {
+    let angulos: Angulo[] = r.angulos.slice(0, 6).map((bruto): Angulo => {
       let id = String((bruto as Record<string, unknown>)?.id ?? "");
       if (!porId.has(id) || usados.has(id)) {
         do id = `a${++seq}`; while (usados.has(id) || porId.has(id));
       }
       usados.add(id);
-      return normalizarAngulo(bruto, id, new Set(refs.map((x) => x.id)), porId.get(id));
+      // Tom novo invalida as notas antigas (o Jev mede o tom de novo).
+      const anterior = porId.get(id);
+      return { ...normalizarAngulo(bruto, id, new Set(refs.map((x) => x.id)), tom === tomAnterior ? anterior : undefined), tom };
     }).filter((a) => a.nome && a.situacao);
     if (angulos.length) {
-      const jev = await pontuarAngulosComJev(angulos, briefing, { clientId: p.client_id, planoId: p.id, criadoPor: chamador.userId });
-      angulos = jev.angulos;
+      const jev = await pontuarAngulosComJev(angulos, briefing, { clientId: p.client_id, planoId: p.id, criadoPor: chamador.userId }, { tom });
+      angulos = comFocoEmResultado(jev.angulos, briefing, objetivoPorId(p.estrutura.objetivo), ctx.conta);
       jevErro = jev.jev_erro;
       custoJev = jev.custo;
       campos.angulos = angulos;
     }
   }
+  if (tom !== tomAnterior || campos.angulos) {
+    const lista = (campos.angulos as Angulo[] | undefined) ?? p.angulos;
+    campos.estrutura = { ...p.estrutura, tom, testar_primeiro: testarPrimeiro(lista), base_da_conta: baseDaConta(ctx.conta, briefing) };
+  }
   if (r.estrutura && typeof r.estrutura === "object") {
     const ids = new Set(((campos.angulos as Angulo[] | undefined) ?? p.angulos).map((a) => a.id));
-    campos.estrutura = { ...p.estrutura, ...normalizarEstrutura(r.estrutura, ids) };
+    campos.estrutura = { ...((campos.estrutura as Record<string, unknown> | undefined) ?? p.estrutura), ...normalizarEstrutura(r.estrutura, ids) };
   }
   const plano = Object.keys(campos).length ? await salvarPlano(servico, p, campos) : p;
   const custo = arred6(s.custoUsd + custoJev);
@@ -2177,6 +2404,11 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
 
   // Objetivo do plano (v2): o do ângulo, o do plano ou o do briefing.
   const objetivoDoPlano = objetivoPorId(p.estrutura.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao);
+  // v3: tom da produção (tela, pedido ou o do plano) e os números reais da oferta para o aviso de tom.
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(texto(corpo.pedido, 1000), tomValido(p.estrutura.tom) ?? "direto");
+  const regrasTom = TONS[tom];
+  const bo = (briefing?.oferta ?? {}) as Record<string, unknown>;
+  const numerosDaOferta = numerosReais([bo.preco_confirmado as string, bo.condicao as string, bo.garantia as string, bo.promessa as string]);
 
   const produzirAngulo = async (a: Angulo) => {
     const formatos = formatosDo(a);
@@ -2188,15 +2420,18 @@ MARCA: ${JSON.stringify({ nome: marca.nomeCliente, tom_de_voz: marca.tomDeVoz, r
 ESTILO VISUAL DO ÂNGULO: ${JSON.stringify(estilo ? { id: estilo.id, nome: estilo.nome, como_fazer: estilo.como_fazer } : null)}
 OBJETIVO DA CAMPANHA: ${JSON.stringify(objetivo ? { id: objetivo.id, nome: objetivo.nome, ctas: objetivo.ctas, como_o_criativo_muda: objetivo.como_o_criativo_muda } : null)}
 FORMATOS: ${formatos.join(", ")}
+NÚMEROS REAIS DA OFERTA (os únicos que podem aparecer): ${JSON.stringify(numerosDaOferta)}
 
-TAREFA: escreva ${a.variacoes} variação(ões) de anúncio para este ângulo, agressivas e vendedoras dentro da política da Meta, feitas para parar a rolagem e converter no objetivo acima. Mantenha o mecanismo do ângulo; entre uma variação e outra mude o gancho E a execução visual (composição, escala, estilo), para que as peças NÃO fiquem parecidas entre si nem com o "mais do mesmo" da categoria.
+${regrasDoTomParaCopy(tom)}
+
+TAREFA: escreva ${a.variacoes} variação(ões) de anúncio para este ângulo, no tom ${regrasTom.nome.toLowerCase()} e vendedoras dentro da política da Meta, feitas para parar a rolagem e converter no objetivo acima. Nada genérico: cada peça tem a situação concreta do público e a promessa concreta da oferta. Mantenha o mecanismo do ângulo; entre uma variação e outra mude o gancho E a execução visual (composição, escala, estilo), para que as peças NÃO fiquem parecidas entre si nem com o "mais do mesmo" da categoria.
 Para cada variação (variacao = 1, 2, 3):
 - estilo_visual: a variação 1 usa o estilo do ângulo (se houver); as outras podem usar outro estilo da lista que sirva ao mesmo mecanismo. Evite estilo de risco de política alto.
 - texto_principal: a ideia inteira em até 125 caracteres (o que aparece antes do "ver mais").
 - texto_principal_longo: a versão completa do texto do anúncio (pode repetir o início do texto_principal).
 - titulo: até 40 caracteres, com o benefício ou a oferta. descricao: curta ou null.
 - cta_meta: um dos botões da Meta coerente com o destino do briefing.
-- headline_arte: até 7 palavras, a frase grande na imagem. apoio_arte: uma linha curta ou null. cta_arte: o CTA escrito na peça, coerente com o botão.
+- headline_arte: até ${regrasTom.headline_max_palavras} palavras, a frase grande na imagem, no tom pedido. apoio_arte: uma linha curta ou null (no tom agressivo, a promessa concreta com o número real). cta_arte: o CTA escrito na peça, coerente com o botão.
 - gancho_visual: o que a imagem mostra (o gancho visual do ângulo, ajustado à variação), descrito para o diretor de arte.
 - carrossel: ${formatos.includes("carrossel") ? "de 3 a 5 cards seguindo a sequência tensão, explicação, demonstração, objeção, próximo passo (cada lâmina acrescenta algo; a primeira é a capa com o gancho, a última o próximo passo); texto_exato curto por card e a ilustracao de cada um" : "null"}.
 Nada de número, depoimento, prazo, preço ou urgência que não esteja no briefing. Nunca peça para escurecer a foto: o destaque vem de contraste, composição, tipografia, escala e cor.`;
@@ -2228,6 +2463,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       })),
       briefing,
       { clientId: p.client_id, referencia: { tipo: REF_PLANO, id: p.id }, criadoPor: chamador.userId },
+      tom === "direto" ? null : tom,
     );
     custo += conferencia.custo;
     if (conferencia.jev_erro) jevErro = conferencia.jev_erro;
@@ -2263,12 +2499,17 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       const copy = f.copies[i];
       const nota = f.notas[i];
       if (nota?.alerta_politica) avisos.push(`${a.nome}, variação ${i + 1}: o Jev viu risco de política. Revise antes de subir.`);
+      // Conferência como aviso (sem laço): genérico pelo Jev, tom abaixo do pedido e as regras em código.
+      const avisosTom = avisosDeTom({ headline: texto(v.headline_arte, 120), texto_principal: copy.texto_principal }, regrasTom, numerosDaOferta);
+      if (nota?.generico) avisosTom.unshift("Genérico pela conferência do Jev: serviria para qualquer concorrente.");
+      if (typeof nota?.tom === "number" && nota.tom < 6) avisosTom.unshift(`Abaixo do tom ${regrasTom.nome.toLowerCase()} pedido (nota ${String(nota.tom).replace(".", ",")}).`);
+      for (const x of avisosTom) avisos.push(`${a.nome}, variação ${i + 1}: ${x}`);
       const gancho = texto(v.gancho_visual, 600) || a.gancho_visual;
       const estiloDaVariacao = estiloPorId(v.estilo_visual) ?? f.estilo;
       for (const formato of f.formatos) {
         const trabalhoId = crypto.randomUUID();
         const criativoId = crypto.randomUUID();
-        const roteiro = roteiroDaVariacao(v, formato, gancho);
+        const roteiro = roteiroDaVariacao(v, formato, gancho, regrasTom.headline_max_caracteres);
         const direcao = direcaoDoAnuncio(roteiro, formato, marca, {
           conceito: `${a.nome}. Situação: ${a.situacao} Mecanismo: ${a.mecanismo}.${estiloDaVariacao ? ` Estilo visual: ${estiloDaVariacao.nome}.` : ""}`.slice(0, 900),
           fioVisual: `${gancho}${marca.estilo ? ` Estilo da marca: ${marca.estilo}` : ""}`.slice(0, 800),
@@ -2276,6 +2517,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
           ctaArte: texto(v.cta_arte, 60),
           estilo: estiloDaVariacao ? { id: estiloDaVariacao.id, nome: estiloDaVariacao.nome, como_fazer: estiloDaVariacao.como_fazer } : null,
           objetivo: f.objetivo ? { id: f.objetivo.id, nome: f.objetivo.nome, como_o_criativo_muda: f.objetivo.como_o_criativo_muda } : null,
+          tom,
         });
         direcao.ads = { criativo_id: criativoId, plano_id: p.id, angulo_id: a.id, variacao: i + 1 };
         trabalhos.push({
@@ -2300,7 +2542,17 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
           trabalho_id: trabalhoId,
           nome: `${a.nome} | V${i + 1} | ${formato}`.slice(0, 200),
           formato,
-          copy: { ...copy, headline_arte: texto(v.headline_arte, 120), apoio_arte: textoOuNulo(v.apoio_arte, 160), cta_arte: texto(v.cta_arte, 60), estilo_visual: estiloDaVariacao?.id ?? null, jev: nota },
+          copy: {
+            ...copy,
+            headline_arte: texto(v.headline_arte, 120),
+            apoio_arte: textoOuNulo(v.apoio_arte, 160),
+            cta_arte: texto(v.cta_arte, 60),
+            estilo_visual: estiloDaVariacao?.id ?? null,
+            jev: nota,
+            tom,
+            variacao: i + 1,
+            avisos_tom: avisosTom,
+          },
           roteiro_video: null,
           status: "rascunho",
           evidencia: "E0",
@@ -2345,6 +2597,7 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const angulo = plano?.angulos.find((a) => a.id === c.angulo_id) ?? null;
   const briefing = await carregarBriefing(servico, c.client_id, plano?.briefing_id ?? undefined).catch(() => null);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? tomDoPedido(pedidoEquipe, tomValido(c.copy.tom) ?? tomValido(plano?.estrutura.tom) ?? "direto");
   const s = await chamarTexto({
     timeoutMs: TIMEOUT_TEXTO_ADS_MS,
     clientId: c.client_id,
@@ -2358,7 +2611,9 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
 ÂNGULO: ${JSON.stringify(angulo ? { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, hipotese: angulo.hipotese } : null)}
 COPY ATUAL: ${JSON.stringify({ texto_principal: c.copy.texto_principal, titulo: c.copy.titulo, descricao: c.copy.descricao, cta_meta: c.copy.cta_meta })}
 
-TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, mudando uma coisa por vez e mantendo o mecanismo do ângulo.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
+${regrasDoTomParaCopy(tom)}
+
+TAREFA: escreva ${qtd} variação(ões) de texto principal (até 125 caracteres), texto principal longo, título (até 40), descrição e CTA do botão, no tom ${TONS[tom].nome.toLowerCase()}, mudando uma coisa por vez e mantendo o mecanismo do ângulo. Nada genérico.${pedidoEquipe ? ` Pedido da equipe: ${pedidoEquipe}` : ""}
 o_que_mudou: uma frase dizendo a variável que mudou.`,
     }],
     raciocinio,
@@ -2368,8 +2623,8 @@ o_que_mudou: uma frase dizendo a variável que mudou.`,
   });
   const brutas = (((s.json as Record<string, unknown>)?.variacoes as Record<string, unknown>[] | undefined) ?? []).slice(0, qtd);
   const copies = brutas.map((v) => ({ ...normalizarCopy(v), o_que_mudou: texto(v.o_que_mudou, 300) }));
-  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId });
-  const variacoes = copies.map((v, i) => ({ ...v, jev: conferencia.notas[i] ?? null, gerado_em: new Date().toISOString() }));
+  const conferencia = await conferirCopiesComJev(copies, briefing, { clientId: c.client_id, referencia: { tipo: REF_CRIATIVO, id: c.id }, criadoPor: chamador.userId }, tom === "direto" ? null : tom);
+  const variacoes = copies.map((v, i) => ({ ...v, tom, jev: conferencia.notas[i] ?? null, gerado_em: new Date().toISOString() }));
   // Guarda as alternativas no criativo (as 10 mais recentes); a equipe escolhe e salva a copy na tela.
   const alternativas = [...variacoes, ...(Array.isArray(c.copy.alternativas) ? c.copy.alternativas : [])].slice(0, 10);
   const { data: criativo, error } = await servico.from("ads_criativos").update({ copy: { ...c.copy, alternativas } }).eq("id", c.id).eq("client_id", c.client_id).select("*").single();
@@ -3095,6 +3350,12 @@ async function referenciaAbrir(servico: SupabaseClient, chamador: Chamador, corp
 async function referenciaImportarUrl(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
+  const r = await importarUrlInterno(servico, chamador, clientId, corpo.url, corpo.titulo);
+  return json({ ...r.aberta, criada: r.criada, custo_usd: 0 });
+}
+
+async function importarUrlInterno(servico: SupabaseClient, chamador: Chamador, clientId: string, urlBruta: unknown, titulo: unknown): Promise<{ aberta: Aberta; criada: boolean }> {
+  const corpo = { url: urlBruta, titulo };
   const u = urlPublicaSegura(corpo.url);
   if (!u) throw new ErroHttp(400, "url_invalida", "Cole um link https público (Pinterest, Instagram, Behance, imagem ou página).");
   const url = u.toString();
@@ -3121,7 +3382,87 @@ async function referenciaImportarUrl(servico: SupabaseClient, chamador: Chamador
   }
   ref.ficha = (ref.ficha ?? {}) as Record<string, unknown>;
   const aberta = await abrirReferenciaInterna(servico, clientId, ref, false);
-  return json({ ...aberta, criada, custo_usd: 0 });
+  return { aberta, criada };
+}
+
+/** Imagem da referência já guardada no bucket mesa (print, galeria ou imagem do anúncio). */
+function imagemGuardada(ref: LinhaReferencia, clientId: string): string | null {
+  if (caminhoPermitido(ref, clientId, ref.storage_path)) return ref.storage_path;
+  const galeria = Array.isArray(ref.ficha?.galeria) ? ref.ficha.galeria as { caminho?: unknown }[] : [];
+  for (const g of galeria) if (caminhoPermitido(ref, clientId, g?.caminho)) return g.caminho as string;
+  return null;
+}
+
+/** Leitura curta para o diretor de arte: o mecanismo e o que transportar, sem inventar. */
+function leituraParaOEstudio(ref: LinhaReferencia): string {
+  const f = ref.ficha ?? {};
+  const partes = [
+    `Referência de anúncio da Mesa Ads: ${ref.titulo}.`,
+    ref.mecanismo || f.mecanismo ? `Mecanismo: ${String(ref.mecanismo || f.mecanismo)}.` : "",
+    f.gancho_visual ? `Gancho visual: ${String(f.gancho_visual)}.` : "",
+    f.gancho_verbal ? `Gancho verbal: ${String(f.gancho_verbal)}.` : "",
+    f.o_que_transportar ? `Transportar: ${String(f.o_que_transportar)}.` : "",
+    f.o_que_substituir ? `Substituir: ${String(f.o_que_substituir)}.` : "",
+    f.estilo_visual ? `Estilo visual: ${String(f.estilo_visual)}.` : "",
+  ];
+  return semTravessao(partes.filter(Boolean).join(" ")).slice(0, 1500);
+}
+
+/**
+ * referencia_para_estudio { client_id, referencia_id? | url?, titulo? }
+ * -> { estudio_referencia_id, referencia_id, titulo, criada, aviso, custo_usd: 0 }
+ * Sem IA (v3): a referência da Mesa Ads (biblioteca da agência, padrão do
+ * nicho, anúncio próprio, link) ou um link novo vira referência do Estúdio
+ * (cliente_referencias, papel técnica) apontando para a imagem já guardada
+ * no bucket mesa. O criativo escolhe pelo id devolvido (configurar do
+ * estudio-arte), e a escolha da equipe é seguida de perto.
+ */
+async function referenciaParaEstudio(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  let aviso: string | null = null;
+  let ref: LinhaReferencia;
+  if (corpo.url) {
+    const r = await importarUrlInterno(servico, chamador, clientId, corpo.url, corpo.titulo);
+    ref = r.aberta.referencia;
+    aviso = r.aberta.aviso;
+  } else {
+    ref = await carregarReferencia(servico, clientId, corpo.referencia_id);
+  }
+  let caminho = imagemGuardada(ref, clientId);
+  if (!caminho) {
+    // Ainda não aberta: baixa as imagens uma vez (sem IA) e tenta de novo.
+    const aberta = await abrirReferenciaInterna(servico, clientId, { ...ref, ficha: ref.ficha ?? {} }, false);
+    ref = aberta.referencia;
+    aviso = aberta.aviso ?? aviso;
+    caminho = imagemGuardada(ref, clientId);
+  }
+  if (!caminho) {
+    throw new ErroHttp(409, "referencia_sem_imagem", aviso || "Esta referência não tem imagem guardada. Abra a referência e suba um print ou cole o link da imagem.");
+  }
+  const leitura = leituraParaOEstudio(ref);
+  // Cópia própria na pasta do cliente: tirar a referência no Contexto apaga o
+  // arquivo dela, e a imagem da Mesa Ads (ou da biblioteca) tem que ficar.
+  const ext = (/\.(png|jpe?g|webp)$/i.exec(caminho) || [".png"])[0].toLowerCase();
+  const destino = `${clientId}/referencias/mesa-ads-${ref.id}${ext}`;
+  const { data: ja, error: erroLer } = await servico.from("cliente_referencias").select("id, ativa").eq("client_id", clientId).eq("storage_path", destino).limit(1);
+  if (erroLer) throw new ErroHttp(503, "referencias_indisponiveis", "Não foi possível ler as referências do Estúdio.");
+  const existente = ((ja as { id: string; ativa: boolean }[] | null) ?? [])[0] ?? null;
+  if (existente) {
+    await servico.from("cliente_referencias").update({ ativa: true, leitura }).eq("id", existente.id).eq("client_id", clientId);
+    return json({ estudio_referencia_id: existente.id, referencia_id: ref.id, titulo: ref.titulo, criada: false, aviso, custo_usd: 0 });
+  }
+  const { error: erroCopia } = await servico.storage.from("mesa").copy(caminho, destino);
+  if (erroCopia && !/exist/i.test(erroCopia.message || "")) {
+    throw new ErroHttp(503, "referencia_nao_copiada", "Não foi possível copiar a imagem da referência para o Estúdio.");
+  }
+  const { data, error } = await servico
+    .from("cliente_referencias")
+    .insert({ client_id: clientId, origem: "upload", papel: "tecnica", storage_path: destino, leitura, tags: ["mesa-ads", ...(ref.tags ?? []).slice(0, 6)] })
+    .select("id")
+    .single();
+  if (error || !data) throw new ErroHttp(503, "referencia_nao_ligada", "Não foi possível levar a referência para o Estúdio.");
+  return json({ estudio_referencia_id: (data as { id: string }).id, referencia_id: ref.id, titulo: ref.titulo, criada: true, aviso, custo_usd: 0 });
 }
 
 // ------------------------------------------------------------ Jev: política e ofertas
@@ -3338,7 +3679,8 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
     conversaNova = true;
   }
 
-  const [briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
+  const [emFoco, briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
+    corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
     carregarBriefing(servico, clientId).catch(() => null),
     montarContextoAds(servico, clientId),
     baixarAnexos(servico, clientId, corpo.anexos),
@@ -3352,14 +3694,15 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
     .filter((m) => m.papel === "usuario" || m.papel === "agente")
     .map((m) => ({ papel: m.papel as "usuario" | "agente", conteudo: m.conteudo.slice(0, 3000) }));
   const existentes = ((ofertasAtuais as LinhaOferta[] | null) ?? []).map(ofertaDaLinha)
-    .map((o) => ({ id: o.id, nome: o.nome, promessa: o.promessa, para_quem: o.para_quem, status: o.status }));
+    .map((o) => ({ id: o.id, nome: o.nome, promessa: o.promessa, para_quem: o.para_quem, status: o.status, origem: o.origem }));
+  const foco = emFoco ? (({ status: _s, jev: _j, briefing_id: _b, conversa_id: _c, criado_em: _ce, atualizado_em: _ae, ...o }) => o)(ofertaDaLinha(emFoco)) : null;
 
   const pedido = `DADOS REAIS DO CLIENTE (JSON; null ou vazio = não existe):
 ${JSON.stringify(ctx.dados)}
 
 BRIEFING ATUAL: ${JSON.stringify(resumoDoBriefing(briefing))}
 OFERTAS JÁ CRIADAS: ${JSON.stringify(existentes)}
-${achado.nicho ? textoDoNicho(achado.nicho) : "NICHO: não identificado com segurança; use o negócio descrito nos dados."}
+${foco ? `OFERTA EM FOCO (a equipe quer lapidar esta; ${foco.origem === "contexto" ? "foi montada em código a partir do contexto, com as fontes de cada campo, e ainda está crua" : "já existe"}):\n${JSON.stringify(foco)}\nNesta resposta, a primeira oferta de "ofertas" é a versão lapidada DESTA oferta: mais vendedora, com promessa específica, entregáveis, bônus, reversão de risco e CTA, mantendo o que é fato (preço, garantia, datas) e sem inventar número. No máximo 1 alternativa além dela.\n` : ""}${achado.nicho ? textoDoNicho(achado.nicho) : "NICHO: não identificado com segurança; use o negócio descrito nos dados."}
 
 MENSAGEM DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `A equipe anexou ${anexos.imagens.length} imagem(ns) (exemplos ou material do cliente); use o conteúdo com fidelidade.\n` : ""}
@@ -3515,7 +3858,9 @@ async function ofertaSalvar(servico: SupabaseClient, chamador: Chamador, corpo: 
     const mudou = n.nome !== linha.nome || JSON.stringify(n.oferta) !== JSON.stringify(normalizarOferta(base).oferta);
     if (mudou) {
       update.nome = n.nome;
-      update.oferta = n.oferta;
+      // Origem e fontes (oferta do contexto) continuam com a oferta editada.
+      const o = (linha.oferta ?? {}) as Record<string, unknown>;
+      update.oferta = { ...n.oferta, ...(o.origem ? { origem: o.origem } : {}), ...(o.fontes ? { fontes: o.fontes } : {}), ...(o.lacunas ? { lacunas: o.lacunas } : {}) };
       update.jev = null;
     }
   }
@@ -3528,6 +3873,69 @@ async function ofertaSalvar(servico: SupabaseClient, chamador: Chamador, corpo: 
   const { data, error } = await servico.from("ads_ofertas").update(update).eq("id", linha.id).eq("client_id", clientId).select("*").single();
   if (error || !data) throw new ErroHttp(503, "oferta_nao_salva", "Não foi possível salvar a oferta.");
   return json({ oferta: ofertaDaLinha(data as LinhaOferta) });
+}
+
+/**
+ * oferta_do_contexto { client_id, gravar?, forcar? }
+ * -> { rascunho, fontes, lacunas, contexto, oferta, criada, custo_usd: 0 }
+ * Sem IA e grátis (v3): a oferta montada em código com o contexto do cliente
+ * (briefing de ads, contexto consolidado da Mesa, brief, campanhas do mês e
+ * a conta). gravar = vira oferta em ads_ofertas (origem "contexto"); se já
+ * houver uma oferta do contexto em uso, devolve ela (forcar = remonta a que
+ * ainda é rascunho).
+ */
+async function ofertaDoContexto(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const [briefing, ctx, ofertasQ] = await Promise.all([
+    carregarBriefing(servico, clientId).catch(() => null),
+    montarContextoAds(servico, clientId),
+    servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("criado_em", { ascending: false }).limit(50),
+  ]);
+  const bloco = (ctx.dados.anuncios_ultimos_90_dias ?? {}) as { com_entrega?: { nome: string | null; titulo: string | null; custo_por_resultado: number | null; resultados: Record<string, number> }[] };
+  const comResultado = (bloco.com_entrega ?? [])
+    .map((a) => ({ ...a, total: Object.values(a.resultados ?? {}).reduce((x, y) => x + (Number(y) || 0), 0) }))
+    .filter((a) => a.total > 0)
+    .sort((x, y) => (x.custo_por_resultado ?? Infinity) - (y.custo_por_resultado ?? Infinity));
+  const melhor = comResultado[0] ?? null;
+  const montada = ofertaDoContextoEmCodigo({
+    cliente: ctx.cliente,
+    briefing: briefing ? { oferta: briefing.oferta, publico: briefing.publico, destino: briefing.destino, provas: briefing.provas as { texto?: string; autorizado?: boolean }[] } : null,
+    consolidado: ctx.consolidado,
+    brief: ctx.brief,
+    campanhas: ctx.campanhas,
+    melhorAnuncio: melhor ? { nome: melhor.nome, titulo: melhor.titulo, custo_por_resultado: melhor.custo_por_resultado, resultados: melhor.total } : null,
+  });
+  const contexto = {
+    tem_briefing: !!briefing,
+    tem_contexto_consolidado: Object.keys(ctx.consolidado ?? {}).length > 0,
+    tem_brief: !!ctx.brief,
+    campanhas: ctx.campanhas.map((c) => ({ nome: c.nome, periodo_fim: c.periodo_fim })),
+    conta: ctx.conta,
+  };
+  let oferta: ReturnType<typeof ofertaDaLinha> | null = null;
+  let criada = false;
+  if (corpo.gravar === true) {
+    const doContexto = ((ofertasQ.data as LinhaOferta[] | null) ?? []).find((l) => (l.oferta ?? {}).origem === "contexto") ?? null;
+    const conteudo = { ...montada.campos, origem: "contexto", fontes: montada.fontes, lacunas: montada.lacunas };
+    const { nome, ...campos } = conteudo;
+    if (doContexto && !(corpo.forcar === true && doContexto.status === "rascunho")) {
+      oferta = ofertaDaLinha(doContexto);
+    } else if (doContexto) {
+      const { data, error } = await servico.from("ads_ofertas").update({ nome, oferta: campos, jev: null, briefing_id: briefing?.id ?? null })
+        .eq("id", doContexto.id).eq("client_id", clientId).select("*").single();
+      if (error || !data) throw new ErroHttp(503, "oferta_nao_salva", "Não foi possível remontar a oferta do contexto.");
+      oferta = ofertaDaLinha(data as LinhaOferta);
+    } else {
+      const { data, error } = await servico.from("ads_ofertas")
+        .insert({ client_id: clientId, briefing_id: briefing?.id ?? null, conversa_id: null, nome, oferta: campos, jev: null, status: "rascunho", criado_por: chamador.userId })
+        .select("*").single();
+      if (error || !data) throw new ErroHttp(503, "oferta_nao_salva", "Não foi possível gravar a oferta do contexto.");
+      oferta = ofertaDaLinha(data as LinhaOferta);
+      criada = true;
+    }
+  }
+  return json({ rascunho: montada.campos, fontes: montada.fontes, lacunas: montada.lacunas, contexto, oferta, criada, custo_usd: 0 });
 }
 
 /** oferta_listar { client_id, incluir_arquivadas? } -> { ofertas } */
@@ -4308,6 +4716,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   biblioteca_do_nicho: bibliotecaDoNicho,
   copy_pacote: copyPacote,
   pacote_enviar: pacoteEnviar,
+  // v3 (pedido do dono em 25/09/2026)
+  oferta_do_contexto: ofertaDoContexto,
+  referencia_para_estudio: referenciaParaEstudio,
 };
 
 /**
@@ -4318,6 +4729,7 @@ const ACOES_LONGAS = new Set([
   "briefing_sugerir", "referencia_ler", "referencias_importar_proprias", "plano_gerar", "plano_conversar",
   "criativos_produzir", "copy_variar", "oferta_conversar", "conta_sincronizar", "conta_analisar",
   "referencia_abrir", "referencia_importar_url", "biblioteca_do_nicho", "copy_pacote", "pacote_enviar",
+  "referencia_para_estudio",
 ]);
 
 Deno.serve(async (req) => {

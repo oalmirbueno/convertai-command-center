@@ -74,4 +74,10 @@ export type FerramentasDaMesa = {
   modeloDeTexto: (papel: "diretor_arte" | "leitura", pedido?: unknown) => Promise<ModeloIa>;
   camposImagem: string;
   timeoutTextoMs: number;
+  /**
+   * Contexto consolidado do cliente que a Mesa usa (brief, marca, história,
+   * porquê, público, campanha escolhida ou do mês), o mesmo do diretor.
+   * campanha_id inexistente para o cliente vira erro 404.
+   */
+  contextoDoCliente?: (clientId: string, campanhaId?: unknown) => Promise<{ cliente: string; dados: Record<string, unknown>; campanha: { id: string; nome: string; papel: string } | null }>;
 };

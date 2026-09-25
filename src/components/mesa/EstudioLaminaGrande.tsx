@@ -69,6 +69,7 @@ export default function EstudioLaminaGrande({
   andamento,
   onAmpliar,
   soPelaLargura,
+  faixa,
 }: {
   card: CardDaDirecao;
   total: number;
@@ -86,6 +87,8 @@ export default function EstudioLaminaGrande({
   andamento?: AndamentoDaLamina;
   onAmpliar: () => void;
   soPelaLargura?: boolean;
+  /** Faixa logo abaixo do título: a foto e as referências da próxima geração (EstudioBaseDaLamina). */
+  faixa?: ReactNode;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
@@ -126,6 +129,7 @@ export default function EstudioLaminaGrande({
           </Button>
         )}
       </div>
+      {faixa}
       <QuadroQueCabe soPelaLargura={soPelaLargura}>
         {(largura) =>
           desenhandoAreas && ultima ? (

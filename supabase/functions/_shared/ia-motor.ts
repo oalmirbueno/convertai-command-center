@@ -192,6 +192,13 @@ export type EntradaImagem = {
   resolucao?: Resolucao | null;
   /** Semente (reprodutibilidade), só nos modelos que aceitam. */
   seed?: number | null;
+  /**
+   * Só o mesmo modelo (ou o equivalente dele em outra conta) pode atender:
+   * sem a reserva por "gerador da mesma família" ou "qualquer gerador ativo".
+   * O panorama do carrossel contínuo precisa do tamanho em pixels do GPT
+   * Image; outro gerador devolveria outra proporção e o corte daria zoom.
+   */
+  mesmoModelo?: boolean;
   referencia?: ReferenciaUso;
   criadoPor?: string | null;
   tarefa?: Tarefa;
@@ -477,14 +484,14 @@ export async function resolverRota(
  * mesma familia no OpenRouter (o mais barato disponivel); sem isso, qualquer
  * gerador de imagem ativo no OpenRouter. Precisa da chave do OpenRouter.
  */
-export async function rotaOpenRouter(clientId: string, pedido: ModeloIa): Promise<{ m: ModeloIa; chave: ChaveResolvida } | null> {
+export async function rotaOpenRouter(clientId: string, pedido: ModeloIa, soOMesmo = false): Promise<{ m: ModeloIa; chave: ChaveResolvida } | null> {
   if (pedido.provedor === "openrouter") return null;
   const db = clienteServico();
   const base = () => db.from("ia_modelos").select("*").eq("provedor", "openrouter").eq("tipo", pedido.tipo).neq("disponivel", false);
   let achado: ModeloIa | null = null;
   const { data: igual } = await base().eq("modelo_api", `${pedido.provedor}/${pedido.modelo_api}`).limit(1);
   achado = ((igual ?? [])[0] as ModeloIa | undefined) ?? null;
-  if (!achado && pedido.tipo === "imagem") {
+  if (!achado && pedido.tipo === "imagem" && !soOMesmo) {
     const { data: familia } = await base().like("modelo_api", `${pedido.provedor}/%`).limit(20);
     const { data: ativos } = await base().eq("ativo", true).limit(20);
     const preco = (m: ModeloIa) => num((m.preco_imagem as Record<string, unknown> | null)?.media) || 999;
@@ -532,13 +539,14 @@ async function comReservaOpenRouter<R>(
   rota: { m: ModeloIa; chave: ChaveResolvida; reserva?: ReservaUsada },
   estimativaPara: (m: ModeloIa) => number,
   despachar: (m: ModeloIa, segredo: string) => Promise<R>,
+  soOMesmo = false,
 ): Promise<{ r: R; m: ModeloIa; chave: ChaveResolvida; reserva?: ReservaUsada }> {
   try {
     return { r: await despachar(rota.m, rota.chave.segredo), m: rota.m, chave: rota.chave, reserva: rota.reserva };
   } catch (err) {
     // Conta direta sem credito: a mesma chamada vai pelo OpenRouter.
     if (ehDiretoSemCredito(err, rota.m)) {
-      const viaOpenRouter = await rotaOpenRouter(clientId, rota.m);
+      const viaOpenRouter = await rotaOpenRouter(clientId, rota.m, soOMesmo);
       if (!viaOpenRouter) throw err;
       const estimativa = estimativaPara(viaOpenRouter.m);
       garantirCota(viaOpenRouter.chave, estimativa);
@@ -1429,7 +1437,7 @@ export async function chamarImagem(e: EntradaImagem): Promise<SaidaImagem> {
 
   // Provedor; com 402 ou 401 do OpenRouter, reserva no equivalente direto.
   const { r, m, chave, reserva } = await comReservaOpenRouter(e.clientId, rota, estimativaPara, (mod, segredo) =>
-    mod.provedor === "openai" ? imagemOpenAi(mod, segredo, e) : imagemOpenRouter(mod, segredo, e)
+    mod.provedor === "openai" ? imagemOpenAi(mod, segredo, e) : imagemOpenRouter(mod, segredo, e), !!e.mesmoModelo
   );
 
   const custoFonte: "provedor" | "tabela" = r.custoProvedor != null ? "provedor" : "tabela";

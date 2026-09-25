@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from "react";
-import { AlertTriangle, Archive, ArchiveRestore, Check, ClipboardList, Loader2, PenLine, Rocket } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, Check, ClipboardList, Loader2, PenLine, Rocket, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { partesDoPlanoV2, type Oferta, type StatusDaOferta } from "./adsApi";
+import { partesDoPlanoV2, ROTULOS_DAS_FONTES, type Oferta, type StatusDaOferta } from "./adsApi";
 import { BarraDeNota, BarraDePolitica } from "./Comuns";
 
 /**
@@ -114,6 +114,7 @@ export default function CartaoDaOferta({
   onStatus,
   onAplicar,
   onCriar,
+  onLapidar,
 }: {
   oferta: Oferta;
   nova?: boolean;
@@ -122,6 +123,8 @@ export default function CartaoDaOferta({
   onStatus: (s: StatusDaOferta) => void;
   onAplicar: () => void;
   onCriar: () => void;
+  /** v3: leva a oferta ao agente ao lado, com o pedido pronto (o custo aparece no Enviar). */
+  onLapidar?: () => void;
 }) {
   const { catalogo } = useMesa();
   const [editando, setEditando] = useState<Rascunho | null>(null);
@@ -131,7 +134,9 @@ export default function CartaoDaOferta({
   const jev = o.jev;
   const st = STATUS[o.status];
   const arquivada = o.status === "arquivada";
-  const temDetalhes = o.entregaveis.length > 0 || o.bonus.length > 0 || o.provas_necessarias.length > 0 || o.riscos.length > 0 || !!o.ancoragem;
+  const doContexto = o.origem === "contexto";
+  const fontes = o.fontes ? Object.keys(o.fontes).filter((k) => !!ROTULOS_DAS_FONTES[k]) : [];
+  const temDetalhes = o.entregaveis.length > 0 || o.bonus.length > 0 || o.provas_necessarias.length > 0 || o.riscos.length > 0 || !!o.ancoragem || fontes.length > 0;
 
   if (editando) {
     return (
@@ -191,6 +196,11 @@ export default function CartaoDaOferta({
           <div className="flex min-w-0 flex-wrap items-center">
             <span className={`mb-1 mr-1.5 inline-flex h-5 items-center rounded-full px-2 text-[10.5px] font-medium ${st.tom}`}>{st.rotulo}</span>
             {nova && <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full bg-primary/10 px-2 text-[10.5px] font-medium text-primary">Nova</span>}
+            {doContexto && (
+              <span className="mb-1 mr-1.5 inline-flex h-5 items-center rounded-full border border-primary/30 px-2 text-[10.5px] font-medium text-primary" title="Montada a partir do contexto do cliente, sem IA. Cada campo diz de onde veio.">
+                Do contexto
+              </span>
+            )}
             {o.para_quem && <span className="mb-1 min-w-0 truncate text-[11.5px] text-muted-foreground">para {o.para_quem}</span>}
           </div>
           <h3 className="text-[15px] font-semibold leading-snug [overflow-wrap:anywhere]">{o.nome}</h3>
@@ -219,6 +229,17 @@ export default function CartaoDaOferta({
               {o.ancoragem && <Bloco rotulo="Ancoragem">{o.ancoragem}</Bloco>}
               {o.provas_necessarias.length > 0 && <Bloco rotulo="Provas necessárias"><Lista itens={o.provas_necessarias} /></Bloco>}
               {o.riscos.length > 0 && <Bloco rotulo="Riscos"><Lista itens={o.riscos} /></Bloco>}
+              {fontes.length > 0 && o.fontes && (
+                <Bloco rotulo="De onde veio cada campo">
+                  <ul className="space-y-0.5">
+                    {fontes.map((k) => (
+                      <li key={k} className="text-[12px]">
+                        <span className="font-medium">{ROTULOS_DAS_FONTES[k]}:</span> <span className="text-muted-foreground">{o.fontes ? o.fontes[k] : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Bloco>
+              )}
             </div>
           )}
         </div>
@@ -256,6 +277,11 @@ export default function CartaoDaOferta({
               }}
             />
           </span>
+        )}
+        {onLapidar && !arquivada && (
+          <Button type="button" size="sm" variant={doContexto ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={onLapidar} title="Leva esta oferta ao agente ao lado com o pedido pronto. O custo aparece antes de enviar.">
+            <Sparkles className="mr-1 h-3.5 w-3.5" /> Lapidar com o agente
+          </Button>
         )}
         {o.status !== "escolhida" && !arquivada && (
           <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8" disabled={ocupada} onClick={() => onStatus("escolhida")}>

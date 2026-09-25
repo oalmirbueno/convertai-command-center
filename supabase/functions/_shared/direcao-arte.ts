@@ -340,6 +340,12 @@ export function promptDaLamina(
     logoNoCodigo?: boolean;
     /** Criativo de anúncio (trabalho tipo 'ads'): quadro, zona segura e regras do formato. */
     anuncio?: { formato: FormatoCriativo } | null;
+    /**
+     * Modo replicar referência (blocoReplicarReferencia vem antes deste
+     * prompt): a composição, a posição e a escala do texto vêm da referência
+     * escolhida, não do layout da direção. `comFoto`: a foto do cliente é o assunto.
+     */
+    replicar?: { comFoto: boolean } | null;
   },
 ): string {
   const formato = opcoes.anuncio && FORMATOS_CRIATIVO.includes(opcoes.anuncio.formato) ? opcoes.anuncio.formato : null;
@@ -368,10 +374,16 @@ export function promptDaLamina(
   const fonteTexto = marca.fontes.find((f) => f.papel === "texto")?.nome || marca.tipografiaCitada?.texto || fonteTitulo;
 
   const tamanhos = tamanhosDaLamina(blocos, capa);
+  // Replicando a referência, posição, escala e peso do texto vêm dela (não da conta do layout).
+  const replicar = !!opcoes.replicar;
   const linhasBlocos = blocos.map((b, i) => {
     const t = tamanhos[i];
     const fonte = b.papel === "headline" || b.papel === "numero" ? fonteTitulo : fonteTexto;
     const cor = b.papel === "cta" || b.papel === "numero" ? corDestaque || corTexto : corTexto;
+    if (replicar) {
+      return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}" (as barras indicam quebra de linha, não desenhe as barras)` +
+        `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}; mesma posição, escala e peso do texto equivalente da referência.`;
+    }
     return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}" (as barras indicam quebra de linha, não desenhe as barras), letra de cerca de ${t.px} px numa arte de ${quadro.largura} x ${quadro.altura}, peso ${t.peso}` +
       `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}.`;
   });
@@ -396,35 +408,48 @@ export function promptDaLamina(
     opcoes.conceito ? `Conceito do conjunto: ${opcoes.conceito}` : "",
     "",
     "IMAGEM E COMPOSIÇÃO",
-    foto
+    replicar
+      ? opcoes.replicar!.comFoto
+        ? "- Imagem: a FOTO REAL do cliente anexada é o assunto desta lâmina, recomposta no layout da referência (veja MODO REPLICAR REFERÊNCIA), com a pessoa ou o produto idêntico."
+        : `- Imagem: ${layout.imagem}. É o assunto desta lâmina, no lugar do assunto da referência.`
+      : foto
       ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz, cores, corte e enquadramento ficam exatamente como estão. Desenhe só o texto, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás dele.`
       : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
-    opcoes.fioVisual && serie && !foto
+    replicar ? "- Composição, grid, recorte e tratamento da imagem: os da referência escolhida (veja MODO REPLICAR REFERÊNCIA), não um layout novo." : "",
+    opcoes.fioVisual && serie && !foto && !opcoes.replicar?.comFoto
       ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").slice(0, 600)} Mesma pessoa, mesmo cenário, mesma luz e paleta em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
       : "",
-    foto && capa
+    replicar
+      ? ""
+      : foto && capa
       ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, legível até no tamanho da miniatura do feed. A foto já é o elemento visual forte: não mude a foto. Nada competindo com a headline."
       : anuncio && capa
       ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : capa
       ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma luz, cenário e paleta das lâminas seguintes. Não escureça a imagem para criar destaque. Nada competindo com a headline."
       : "",
-    opcoes.anteriores && opcoes.anteriores.length && serie && !foto
+    opcoes.anteriores && opcoes.anteriores.length && serie && !foto && !replicar
       ? `- Lâminas anteriores desta série mostraram: ${opcoes.anteriores.map((a) => a.replace(/\s+/g, " ").slice(0, 160)).join(" | ")}. Mantenha a mesma protagonista, cenário e luz; mude só a pose e o enquadramento (não repita a pose da lâmina anterior).`
       : "",
-    foto
+    replicar
+      ? ""
+      : foto
       ? `- O texto fica na área indicada (${layout.zona_texto.replace("-", " ")}), sobre a parte mais calma da foto; o contraste vem da cor e do peso das letras, nunca de escurecer ou cobrir a foto.`
       : `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
-    foto ? "" : `- Ponto focal: ${layout.ponto_focal}.`,
-    foto ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
-    foto ? "" : `- Tratamento: ${layout.tratamento}.`,
+    foto || replicar ? "" : `- Ponto focal: ${layout.ponto_focal}.`,
+    foto || replicar ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
+    foto || replicar ? "" : `- Tratamento: ${layout.tratamento}.`,
     marca.estilo ? `- Estilo visual da marca, obrigatório: ${marca.estilo}` : "",
     "",
     "TEXTO (escrito pela própria arte, integrado à composição)",
-    `- Área do texto: ${descreverPosicao(caixa)}, alinhamento à ${layout.alinhamento === "centro" ? "centro" : layout.alinhamento}, todos os blocos no mesmo eixo e com a mesma margem.`,
+    replicar
+      ? "- Posição, alinhamento e quebra do texto: os da referência, com o texto exato abaixo no lugar do texto dela (o título dela vira a headline, o texto menor vira o apoio)."
+      : `- Área do texto: ${descreverPosicao(caixa)}, alinhamento à ${layout.alinhamento === "centro" ? "centro" : layout.alinhamento}, todos os blocos no mesmo eixo e com a mesma margem.`,
     ...linhasBlocos,
-    `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
-    "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
+    replicar ? "" : `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
+    replicar
+      ? "- Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima."
+      : "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
     "",
     "MARCA",
     `- Paleta (use só estas cores, na proporção 60-30-10, com um destaque único): ${paletaTxt}.`,
@@ -435,7 +460,9 @@ export function promptDaLamina(
     opcoes.logoNoCodigo && opcoes.levaLogo
       ? `- Logo: NÃO desenhe logo, símbolo nem marca. A logo oficial é aplicada depois pelo sistema no canto ${cantoDaLogo}; deixe esse canto só com a foto, sem texto e sem nenhuma forma.`
       : opcoes.levaLogo && marca.temLogo
-      ? `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${cantoDaLogo} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.` +
+      ? (replicar
+        ? `- Logo oficial anexada, sem redesenhar, no lugar em que a referência põe a marca dela (se a referência não tem marca, no canto ${cantoDaLogo}), com 48 a 72 px de altura e no máximo 20% da largura, dentro das margens${anuncio ? " e da zona segura" : ""}.`
+        : `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${cantoDaLogo} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.`) +
         (opcoes.logo
           ? opcoes.logo.clara
             ? " A logo é clara: o fundo atrás dela é escuro o bastante para ela aparecer inteira."
@@ -491,6 +518,57 @@ export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCri
   }
   const base = AREA.y1 - m.base;
   return { x0: esq, x1: esq + 22, y0: base - alturaLogo, y1: base };
+}
+
+/**
+ * Modo replicar referência (pedido do dono em 25/09: "escolhi a referência e
+ * a imagem e gerou nada a ver"; "faz idêntico à referência com a identidade
+ * visual da empresa, o conteúdo da empresa, com a foto"). Vai ANTES do prompt
+ * da lâmina: a referência escolhida manda no layout; a marca manda nas cores,
+ * nas fontes e na logo; o texto exato e a foto do cliente são o conteúdo.
+ * Com duas referências, a 1ª dá a estrutura e a 2ª o tratamento. Os índices
+ * são a posição de cada imagem anexada (1 = a primeira).
+ */
+export function blocoReplicarReferencia(e: {
+  referencias: { indice: number; leitura?: string | null }[];
+  fotos: { indice: number; descricao?: string | null; papel: "fundo" | "elemento" }[];
+  logo?: number | null;
+  capa?: boolean;
+}): string {
+  const refs = e.referencias.slice(0, 2);
+  if (!refs.length) return "";
+  const leitura = (l?: string | null) => {
+    const t = String(l || "").replace(/\s+/g, " ").trim().slice(0, 600);
+    return t ? ` O que se vê nela: ${t}` : "";
+  };
+  const linhasDasRefs = refs.length === 1
+    ? [
+      `- Referência: imagem ${refs[0].indice}. Copie dela a estrutura do layout (grid, divisão da tela, posição de cada bloco de texto e de cada imagem), a escala e a hierarquia da tipografia (qual texto é o maior, peso, caixa alta ou baixa, alinhamento, quebra em linhas), o recorte e o tratamento da imagem (plano, enquadramento, recorte do assunto, fundo, luz, cor aplicada) e os elementos gráficos (faixas, formas, setas, texturas), na mesma proporção de espaço vazio.${leitura(refs[0].leitura)}`,
+    ]
+    : [
+      `- Referência 1: imagem ${refs[0].indice}. Dela vem a ESTRUTURA: grid, divisão da tela, posição de cada bloco de texto e de cada imagem, escala e hierarquia da tipografia (qual texto é o maior, peso, caixa, alinhamento, quebra em linhas) e a proporção de espaço vazio.${leitura(refs[0].leitura)}`,
+      `- Referência 2: imagem ${refs[1].indice}. Dela vem o TRATAMENTO: recorte e tratamento da imagem (plano, enquadramento, luz, cor aplicada, fundo), os elementos gráficos (faixas, formas, setas, texturas) e o acabamento.${leitura(refs[1].leitura)}`,
+      "- Onde as duas brigarem, vale a referência 1 para posição e tamanho e a referência 2 para o acabamento.",
+    ];
+  const fotos = e.fotos.filter((f) => f.indice > 0);
+  const nomeDasFotos = fotos.map((f) => `imagem ${f.indice}`).join(" e ");
+  const linhasDoAssunto = fotos.length
+    ? [
+      `- Assunto: a pessoa ou o produto da foto real do cliente (${nomeDasFotos}) entra no lugar do assunto da referência. É a mesma pessoa, idêntica: mesmo rosto, feições, formato do rosto, olhos, nariz, boca, tom de pele, cabelo, idade, corpo e roupa. Produto idêntico: mesma forma, proporções, cores, rótulo e detalhes.`,
+      "- Pode recortar, reposicionar, mudar a escala e integrar a foto à luz e ao layout da referência; não redesenhe nem troque a pessoa ou o produto, não mude a expressão e não escureça a foto.",
+      fotos.length > 1 ? `- Use todas as fotos do cliente (${nomeDasFotos}) na composição, cada uma no espaço de imagem equivalente da referência.` : "",
+    ]
+    : ["- Assunto: o desta lâmina (descrito em IMAGEM E COMPOSIÇÃO), no lugar do assunto da referência."];
+  return [
+    `MODO REPLICAR REFERÊNCIA (prioridade máxima nesta lâmina)`,
+    `A equipe escolheu ${refs.length === 1 ? "esta referência" : "estas duas referências"} para esta lâmina. Recrie a lâmina seguindo de perto a referência: quem olhar as duas lado a lado reconhece o mesmo layout, quase igual, só que com a marca e o conteúdo deste cliente.`,
+    ...linhasDasRefs,
+    ...linhasDoAssunto,
+    `- Troque: o texto da referência pelo texto exato desta lâmina (mesmo papel e mesma posição: o título dela vira a headline, o texto menor vira o apoio); as cores dela pelas da paleta da marca, na mesma função (fundo por fundo, destaque por destaque); as fontes dela pelas da marca, com o mesmo peso e a mesma escala; a marca dela pela logo oficial${e.logo ? ` (imagem ${e.logo})` : ""}.`,
+    "- Não copie da referência: o texto, a logo, o nome ou o site de outra marca, marcas d'água e as pessoas dela.",
+    e.capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed, na posição em que a referência põe o título." : "",
+    "- Onde o padrão de design ou a composição descrita adiante divergirem da referência, vale a referência. Continuam valendo: o texto exato, a paleta, as fontes e a logo da marca, as margens de segurança e a ortografia.",
+  ].filter(Boolean).join("\n");
 }
 
 export function formatoPara2x3(prompt: string): string {

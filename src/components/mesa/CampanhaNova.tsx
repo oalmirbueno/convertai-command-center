@@ -22,17 +22,23 @@ import {
   partesDaCampanha,
   pedidoDaCampanhaDoHype,
   somarDiasIso,
+  type BriefingDaCampanha,
   type Campanha,
   type Hype,
+  type ImagemDaCampanha,
 } from "./mesaV4Api";
-import { trocarCampanhaNoCache } from "./campanhasApi";
+import { briefingEmBranco, MAX_IMAGENS_CAMPANHA, trocarCampanhaNoCache } from "./campanhasApi";
+import CampanhaImagens from "./CampanhaImagens";
+import { briefingParaEnviar, FormularioDoBriefing } from "./CampanhaBriefing";
 
 /**
  * Nova campanha, numa coluna só e com o mínimo à vista: um campo grande
  * ("O que é a campanha?", com microfone e imagens), o período, quantos
- * conteúdos e o botão. As referências ficam em "Mais opções". Um clique e o
- * estrategista cria o tema, a identidade (com o selo a desenhar) e os
- * conteúdos; a campanha abre com o agente ao lado para os ajustes.
+ * conteúdos, as imagens da campanha (acervo ou enviadas, com papel e porquê)
+ * e o botão. O briefing (produto, oferta, mensagem, público, provas) e as
+ * referências ficam em "Mais opções". Um clique e o estrategista cria o
+ * tema, o briefing, a identidade (com o selo a desenhar), os conteúdos e o
+ * plano de imagens; a campanha abre com o agente ao lado para os ajustes.
  */
 
 const QUANTIDADES = ["3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
@@ -57,6 +63,8 @@ export default function CampanhaNova({
   const [fim, setFim] = useState(() => somarDiasIso(hoje, DIAS_PADRAO_CAMPANHA));
   const [quantidade, setQuantidade] = useState("auto");
   const [referencias, setReferencias] = useState<string[]>([]);
+  const [imagens, setImagens] = useState<ImagemDaCampanha[]>([]);
+  const [briefing, setBriefing] = useState<BriefingDaCampanha>(briefingEmBranco);
   const [maisOpcoes, setMaisOpcoes] = useState(false);
   const [galeria, setGaleria] = useState(false);
   const [desde, setDesde] = useState<number | null>(null);
@@ -83,6 +91,8 @@ export default function CampanhaNova({
         anexos: anexos.caminhos,
         referenciasIds: referencias,
         hype: hype || null,
+        briefing: briefingParaEnviar(briefing),
+        imagens,
       });
     } finally {
       setDesde(null);
@@ -170,6 +180,19 @@ export default function CampanhaNova({
         </div>
         {erroDoPeriodo && <p className="mt-2 text-[12px] text-destructive">{erroDoPeriodo}</p>}
 
+        {/* Imagens da campanha: o estrategista olha cada uma e diz em qual peça ela vai e por quê. */}
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-2 text-[12px] font-medium text-muted-foreground">
+            Imagens da campanha <span className="font-normal">({imagens.length} de {MAX_IMAGENS_CAMPANHA}, opcional)</span>
+          </p>
+          <CampanhaImagens
+            valor={imagens}
+            onChange={setImagens}
+            desabilitado={desde !== null}
+            vazio="Escolha no acervo (inclusive as fotos da Mesa Foto) ou envie do computador. Marque o produto herói: o agente analisa e diz em qual peça cada imagem vai e por quê."
+          />
+        </div>
+
         {/* Mais opções: as referências da campanha. */}
         <div className="mt-4 border-t border-border pt-3">
           <button
@@ -181,9 +204,16 @@ export default function CampanhaNova({
             <ChevronDown className={`mr-1 h-4 w-4 transition-transform ${maisOpcoes ? "" : "-rotate-90"}`} />
             Mais opções
             {referencias.length > 0 && <span className="ml-1.5 font-normal">({referencias.length} referência(s))</span>}
+            <span className="ml-1.5 font-normal">(briefing e referências)</span>
           </button>
           {maisOpcoes && (
             <div className="mt-3 space-y-2">
+              <div className="mb-3 rounded-lg border border-border bg-background p-3">
+                <p className="mb-2 text-[12px] font-medium text-muted-foreground">
+                  Briefing <span className="font-normal">(o que você preencher vale; o agente completa o resto)</span>
+                </p>
+                <FormularioDoBriefing valor={briefing} onChange={setBriefing} prefixo="briefing-nova" desabilitado={desde !== null} />
+              </div>
               <div className="flex min-w-0 items-center">
                 <p className="min-w-0 flex-1 text-[12px] font-medium text-muted-foreground">
                   Referências <span className="font-normal">({referencias.length} de {MAX_REFERENCIAS})</span>
@@ -207,7 +237,7 @@ export default function CampanhaNova({
             rotulo={<><Sparkles className="mr-1.5 h-3.5 w-3.5" />Criar campanha</>}
             titulo="Campanha criada"
             descricao="O estrategista cria o tema, a identidade com o selo e os conteúdos do período, pelo contexto do cliente."
-            partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length)}
+            partes={() => partesDaCampanha(catalogo, qtd, anexos.caminhos.length + imagens.length)}
             executar={criar}
             aoConcluir={concluir}
             disabled={!pedido.trim() || !!erroDoPeriodo || anexos.subindo || desde !== null}

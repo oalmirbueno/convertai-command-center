@@ -71,6 +71,8 @@ const diretor = modelo({ id: "openai:diretor", padrao_para: ["diretor_arte"] });
 const leitor = modelo({ id: "openai:leitor", rotulo: "Leitor", padrao_para: ["leitura"], preco_entrada_1m: 0.1, preco_saida_1m: 0.4 });
 const imagem = modelo({
   id: "openai:imagem",
+  // O contínuo vale pela capacidade (GPT Image), não pelo provedor (25/09).
+  modelo_api: "gpt-image-2",
   tipo: "imagem",
   rotulo: "Imagem",
   preco_entrada_1m: 0,

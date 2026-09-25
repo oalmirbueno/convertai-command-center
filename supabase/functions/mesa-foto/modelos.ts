@@ -4,6 +4,8 @@
  * ficam em personas.ts; aqui ficam banco, armazenamento e IA.
  *
  * Ações (POST { acao, ... } na função mesa-foto):
+ * - modelo_sugerir { client_id, pedido?, campanha_id? } -> { sugestao: { nome, ficha, invariantes, porque }, avisos, campanha_mesa }
+ *     (texto, 300 s; preenche a ficha pelo contexto do cliente que a Mesa usa; não grava)
  * - modelos_listar { client_id, incluir_arquivadas? } -> { modelos }
  * - modelo_ler { modelo_id } -> { modelo, imagens, folha, custo_usd_total, rodada_padrao }
  * - modelo_criar { client_id, nome, ficha, descricao?, invariantes?, referencias?|referencias_ids?, uso_referencias?, escopo, etica_confirmada: true }
@@ -49,6 +51,7 @@ import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramen
 import {
   type AlvoDoDetalhe,
   alertasDoRealismo,
+  fichaSugerida,
   DESCRICAO_DA_VISTA,
   type FichaDaPersona,
   garantirPermitido,
@@ -81,6 +84,8 @@ import {
 } from "./personas.ts";
 
 export const REF_MODELO = "foto_modelo";
+/** referencia_tipo de ia_usos da sugestão pelo brief (o id é o do cliente: a persona ainda não existe). */
+const REF_SUGESTAO = "foto_modelo_sugestao";
 const TAMANHO_DA_PERSONA = "1088x1360";
 const LADO_REFERENCIA = 1280;
 const LADO_ORIGEM_DETALHE = 2048;
@@ -906,8 +911,101 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
     throw new ErroDeRegra(400, "alvo_invalido", "acao_alvo desconhecida para Modelos.");
   }
 
+  // ---------------------------------------------------------------- sugerir pelo brief
+
+  const ESQUEMA_SUGESTAO_PERSONA = {
+    nome: "persona_sugerida",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["nome", "ficha", "invariantes", "porque"],
+      properties: {
+        nome: { type: "string" },
+        ficha: {
+          type: "object",
+          additionalProperties: false,
+          required: ["idade_aparente", "genero_apresentado", "tom_de_pele", "rosto", "olhos", "cabelo", "marcas", "corpo", "estilo", "notas"],
+          properties: {
+            idade_aparente: { type: "number" },
+            genero_apresentado: { type: "string" },
+            tom_de_pele: { type: "string" },
+            rosto: { type: "string" },
+            olhos: { type: "string" },
+            cabelo: {
+              type: "object",
+              additionalProperties: false,
+              required: ["cor", "comprimento", "textura"],
+              properties: { cor: { type: "string" }, comprimento: { type: "string" }, textura: { type: "string" } },
+            },
+            marcas: { type: "array", items: { type: "string" } },
+            corpo: { type: "string" },
+            estilo: { type: "string" },
+            notas: { type: "string" },
+          },
+        },
+        invariantes: { type: "array", items: { type: "string" } },
+        porque: { type: "string" },
+      },
+    },
+  };
+
+  const SISTEMA_SUGESTAO_PERSONA = `Você é o diretor de casting da agência Aceleriq. Recebe o contexto real do cliente que a Mesa usa (brief, marca, história, porquê, público, oferta e a campanha escolhida ou a do mês) e sugere UMA pessoa sintética para as fotos de campanha desse cliente.
+Regras:
+- A pessoa não existe: nunca parecida com alguém real ou conhecido, sem citar nomes de pessoas, sem "parecida com".
+- Adulta, com idade aparente de 21 anos ou mais; sem sexualização.
+- Escolha pelo público do cliente e pelo que a marca vende: quem compra ou usa o produto, no estilo da marca.
+- Ficha em traços concretos e fotográficos (tom de pele com subtom, formato do rosto, olhos, cabelo com cor, comprimento e textura, marcas naturais pequenas, corpo, estilo de roupa), sem adjetivo de perfeição.
+- Nome fictício curto e comum no Brasil.
+- invariantes: de 3 a 6 traços que nunca mudam entre as fotos.
+- porque: uma ou duas frases dizendo por que esta pessoa conversa com o público e a campanha.
+- Se a equipe mandou um pedido, ele vale sobre a sua escolha (menos quando fere as regras).
+Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
+
+  /**
+   * modelo_sugerir { client_id, pedido?, campanha_id?, modelo_id? }
+   * -> { sugestao: { nome, ficha, invariantes, porque }, avisos, campanha_mesa, custo_usd, saldo_usd }
+   * Preenche a ficha pelo contexto do cliente que a Mesa usa. Não grava: a
+   * equipe confere, ajusta e cria (modelo_criar valida de novo).
+   */
+  async function modeloSugerir(ch: Chamador, corpo: Record<string, unknown>) {
+    const clientId = idOuNulo(corpo.client_id);
+    if (!clientId) throw new ErroDeRegra(400, "client_id_obrigatorio", "Diga o cliente (client_id) para ler o brief.");
+    await f.garantirAcesso(ch, clientId);
+    const pedido = limpo(corpo.pedido, 1000);
+    garantirPermitido(pedido);
+    if (!f.contextoDoCliente) throw new ErroDeRegra(503, "contexto_indisponivel", "O contexto do cliente não está disponível nesta função.");
+    const [contexto, diretor] = await Promise.all([f.contextoDoCliente(clientId, corpo.campanha_id), f.modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+    const saida = await chamarTexto({
+      clientId,
+      tarefa: "estudio",
+      agente: "diretor_arte",
+      modeloId: diretor.id,
+      sistema: SISTEMA_SUGESTAO_PERSONA,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Sugira a persona com os dados reais do cliente:
+${JSON.stringify({ cliente: contexto.dados, pedido_da_equipe: pedido || null })}`,
+      }],
+      esquemaJson: ESQUEMA_SUGESTAO_PERSONA,
+      maxTokensSaida: 3_000,
+      timeoutMs: 300_000,
+      referencia: { tipo: REF_SUGESTAO, id: clientId },
+      criadoPor: ch.userId,
+    });
+    const s = fichaSugerida(saida.json ?? {});
+    return f.json({
+      sugestao: { nome: s.nome, ficha: s.ficha, invariantes: s.invariantes, porque: s.porque },
+      avisos: s.avisos,
+      campanha_mesa: contexto.campanha,
+      custo_usd: saida.custoUsd,
+      saldo_usd: saida.saldoUsd,
+      reserva_usada: saida.reservaUsada ?? null,
+    });
+  }
+
   return {
     acoes: {
+      modelo_sugerir: modeloSugerir,
       modelos_listar: modelosListar,
       modelo_ler: modeloLer,
       modelo_criar: modeloCriar,
@@ -928,7 +1026,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
 
 /** Ações de Modelos que chamam IA ou baixam imagens (respondem com fôlego). */
 export const ACOES_LONGAS_DE_MODELOS = [
-  "modelo_candidata_gerar", "modelo_vista_gerar", "modelo_detalhar", "modelo_conferir", "modelo_ler", "modelos_listar", "modelo_criar",
+  "modelo_sugerir", "modelo_candidata_gerar", "modelo_vista_gerar", "modelo_detalhar", "modelo_conferir", "modelo_ler", "modelos_listar", "modelo_criar",
 ];
 
 /** Alvos que a ação estimar repassa para Modelos. */

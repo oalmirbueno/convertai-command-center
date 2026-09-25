@@ -54,14 +54,23 @@ export default function BarraDoEnsaio() {
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => irPara("kits")} className="text-[12.5px]">
-            <Plus className="mr-2 h-3.5 w-3.5" /> Identificar ou montar produto
+          <DropdownMenuItem onSelect={() => irPara("acervo")} className="text-[12.5px]">
+            <Plus className="mr-2 h-3.5 w-3.5" /> Identificar um produto pelas fotos
           </DropdownMenuItem>
+          {kit && (
+            <DropdownMenuItem onSelect={() => irPara("kits")} className="text-[12.5px]">
+              <Layers className="mr-2 h-3.5 w-3.5" /> Detalhes deste produto
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <button type="button" onClick={() => irPara(ensaio ? "revisar" : "criar")} className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground">
+      <button
+        type="button"
+        onClick={() => irPara(ensaio ? (ensaio.receita_id === "campanha-com-modelo" ? "campanha" : "ensaio") : "criar", ensaio ? { ensaio: ensaio.id } : undefined)}
+        className="mr-3 inline-flex min-w-0 max-w-full items-center rounded-md py-0.5 hover:text-foreground"
+      >
         <Camera className="mr-1 h-3.5 w-3.5 shrink-0" />
-        <span className="mr-1">Ensaio:</span>
+        <span className="mr-1">Criando:</span>
         <span className={`min-w-0 truncate ${ensaio ? "font-medium text-foreground" : ""}`}>
           {ensaio ? `${nomeDaReceita(receitas.data ? receitas.data.receitas : null, ensaio.receita_id)} · ${rotuloDoEstadoDoEnsaio(ensaio.status)}` : "nenhum"}
         </span>

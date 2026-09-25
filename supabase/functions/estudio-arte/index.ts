@@ -75,17 +75,17 @@ import {
   cobrarJev,
   IaMotorErro,
   modeloPadrao,
-  recusouTamanho,
   TAMANHO_2X3,
   TAMANHO_4X5,
   type ImagemEntrada,
   type ModeloIa,
   type Qualidade,
 } from "../_shared/ia-motor.ts";
-import { JevErro, jevPerguntar, notaScore, type PerguntaJev } from "../_shared/jev.ts";
+import { JevErro, jevPerguntar, notaScore, type PerguntaJev, probabilidadeNoul } from "../_shared/jev.ts";
 import { CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM } from "../_shared/conhecimento-design.ts";
 import {
   blocosDoTexto,
+  blocoReplicarReferencia,
   FORMATOS_CRIATIVO,
   type FormatoCriativo,
   QUADRO_FINAL,
@@ -130,17 +130,25 @@ import {
   fotoNaLamina,
   logoLimpa,
   mascara,
-  metadeDireita,
   normalizarAreas,
-  TAMANHO_TELA_DUPLA,
-  telaDupla,
   ALTURA_LAMINA,
+  colarMudancasNaBase,
   corrigirEmenda,
-  fatiarPanorama,
+  fatiarTrecho,
   LARGURA_LAMINA,
   tamanhoDoTrecho,
   telaDoTrecho,
 } from "../_shared/imagem-local.ts";
+import {
+  geracaoDoPanorama,
+  modeloFazPanorama,
+  panoramaApagado,
+  type PanoramaGravado,
+  semATrava,
+  travaDoTrecho,
+} from "../_shared/carrossel-continuo.ts";
+import { aplicarFotosDoPlano, fotoNaoPublicavel, pecasDoPlanoGravado } from "../_shared/fotos-do-plano.ts";
+import { TONS, tomValido } from "../_shared/conhecimento-ads.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -353,8 +361,14 @@ type Direcao = {
   estilo_pedido?: string | null;
   /** Campanha (mesa_campanhas) do conteúdo: identidade do tema e selo entram em cada lâmina. */
   campanha_id?: string | null;
-  /** Carrossel contínuo: fundo panorâmico fatiado por lâmina (ordem -> caminho no bucket mesa). */
-  panorama?: { fundos: Record<string, string> } | null;
+  /**
+   * Carrossel contínuo: fundo panorâmico fatiado por lâmina (ordem -> caminho
+   * no bucket mesa), a geração do fundo e as travas dos trechos em andamento
+   * (_shared/carrossel-continuo.ts).
+   */
+  panorama?: PanoramaGravado | null;
+  /** Tom do criativo de anúncio (sobrio, direto, agressivo), enviado pela Mesa Ads. */
+  tom?: string | null;
   /** Entrega do criativo de anúncio (tipo 'ads'): fora de file_ids, que guiam a aprovação e a agenda do post. */
   entrega_ads?: EntregaAnuncio | null;
 };
@@ -373,31 +387,89 @@ type CampanhaDaLamina = {
   identidade: { tema_visual?: string; paleta_apoio?: { nome?: string; hex?: string }[]; tipografia?: string; elementos?: string; tom?: string; selo?: { texto?: string; descricao?: string } } | null;
   referencias_ids: string[] | null;
   selo_path: string | null;
+  /**
+   * Colunas de 25/09 (docs/mesa/migrations/20260925120000_mesa_campanhas_completas.sql):
+   * ausentes antes do SQL, por isso o select("*") e tudo opcional.
+   */
+  briefing?: Record<string, unknown> | null;
+  imagens?: unknown;
+  plano_imagens?: Record<string, unknown> | null;
 };
 
 async function lerCampanha(clientId: string, id: unknown): Promise<CampanhaDaLamina | null> {
   const cid = typeof id === "string" ? id : "";
   if (!UUID.test(cid)) return null;
+  // select("*"): traz briefing, imagens e plano_imagens quando o SQL de 25/09 já rodou, sem quebrar antes dele.
   const { data } = await servico()
     .from("mesa_campanhas")
-    .select("id, nome, conceito, identidade, referencias_ids, selo_path")
+    .select("*")
     .eq("id", cid)
     .eq("client_id", clientId)
     .maybeSingle();
   return (data as CampanhaDaLamina | null) ?? null;
 }
 
-/** Bloco do prompt da lâmina com a identidade do tema da campanha (dentro da marca). */
+/** Briefing da campanha lido com cuidado (JSON do banco): produto em foco, oferta e mensagem central. */
+function briefingDaCampanha(c: Pick<CampanhaDaLamina, "briefing">): { produtos: { nome: string; por_que: string }[]; oferta: string; mensagem_central: string } {
+  const b = (c.briefing && typeof c.briefing === "object" ? c.briefing : {}) as Record<string, unknown>;
+  const produtos = (Array.isArray(b.produtos) ? b.produtos : [])
+    .map((p) => {
+      const x = (p && typeof p === "object" ? p : { nome: p }) as Record<string, unknown>;
+      return { nome: texto(x.nome, 120), por_que: texto(x.por_que, 300) };
+    })
+    .filter((p) => p.nome)
+    .slice(0, 5);
+  return { produtos, oferta: texto(b.oferta, 600), mensagem_central: texto(b.mensagem_central, 400) };
+}
+
+/** Imagens escolhidas para a campanha (id do acervo, papel e nota da equipe), até 12. */
+function imagensDaCampanha(c: Pick<CampanhaDaLamina, "imagens">): { imagem_id: string; papel: string; nota: string }[] {
+  const saida: { imagem_id: string; papel: string; nota: string }[] = [];
+  for (const x of Array.isArray(c.imagens) ? c.imagens : []) {
+    const o = (x && typeof x === "object" ? x : { imagem_id: x }) as Record<string, unknown>;
+    const id = String(o.imagem_id ?? o.id ?? "").trim().toLowerCase();
+    if (!UUID.test(id) || saida.some((s) => s.imagem_id === id)) continue;
+    const papel = o.papel === "heroi" || o.papel === "ambiente" ? String(o.papel) : "apoio";
+    saida.push({ imagem_id: id, papel, nota: texto(o.nota, 400) });
+    if (saida.length >= 12) break;
+  }
+  return saida;
+}
+
+const ROTULO_DO_PAPEL_NA_CAMPANHA: Record<string, string> = { heroi: "produto herói", apoio: "apoio", ambiente: "ambiente" };
+
+/** Bloco do prompt da lâmina com a identidade do tema da campanha (dentro da marca) e o que ela vende. */
 function blocoDaCampanha(c: CampanhaDaLamina): string {
   const i = c.identidade ?? {};
   const apoio = (i.paleta_apoio ?? []).filter((p) => p.hex).map((p) => `${p.nome || "apoio"} ${p.hex}`).join(", ");
+  const b = briefingDaCampanha(c);
   return [
     `CAMPANHA "${c.nome}" (identidade do tema, sempre dentro da marca)`,
     i.tema_visual ? `- Tema visual: ${i.tema_visual}` : "",
     apoio ? `- Cores de apoio da campanha (só como acento, a paleta da marca continua dominante): ${apoio}` : "",
     i.tipografia ? `- Título da campanha: ${i.tipografia}` : "",
     i.elementos ? `- Elementos gráficos: ${i.elementos}` : "",
+    b.produtos.length
+      ? `- Produto em foco (o que a imagem mostra quando a lâmina fala dele): ${b.produtos.map((p) => (p.por_que ? `${p.nome} (${p.por_que})` : p.nome)).join("; ")}`
+      : "",
+    b.oferta ? `- Oferta da campanha (contexto; na arte vai só o texto exato da lâmina): ${b.oferta}` : "",
+    b.mensagem_central ? `- Mensagem central (o clima e a imagem reforçam esta ideia): ${b.mensagem_central}` : "",
   ].filter(Boolean).join("\n");
+}
+
+/**
+ * Peças do plano de imagens da campanha para ESTE conteúdo (tema_id do item
+ * da proposta) e as fotos delas no acervo do cliente (ativas e publicáveis).
+ */
+async function planoDaCampanhaNoItem(clientId: string, c: CampanhaDaLamina | null, temaId: unknown) {
+  const tema = typeof temaId === "string" ? temaId.trim() : "";
+  const pecas = c && tema ? pecasDoPlanoGravado(c.plano_imagens).filter((p) => p.tema_id === tema) : [];
+  const ids = [...new Set([...pecas.map((p) => p.imagem_id), ...(c ? imagensDaCampanha(c).map((i) => i.imagem_id) : [])])].slice(0, 30);
+  const { data } = ids.length
+    ? await servico().from("cliente_imagens").select(`${CAMPOS_ACERVO}, ativa`).eq("client_id", clientId).eq("ativa", true).in("id", ids)
+    : { data: [] };
+  const fotos = new Map(((data as ImagemAcervo[] | null) ?? []).filter((f) => !fotoNaoPublicavel(f)).map((f) => [f.id, f]));
+  return { tema, pecas: pecas.filter((p) => fotos.has(p.imagem_id)), fotos };
 }
 
 /** Conferencia ainda nao feita: gerar_card e ajustar_card gravam so isto. */
@@ -419,6 +491,13 @@ type Verificacao = {
   politica?: NotaJev | null;
   /** Só no criativo de anúncio: clareza da oferta (0 confusa, 4 imediata). */
   clareza?: NotaJev | null;
+  /**
+   * Só no criativo de anúncio, como AVISO (a autocorreção não lê; sem laço):
+   * a IMAGEM é genérica (Noul do Jev, probabilidade de sim) e quanto ela
+   * cumpre o tom pedido pela Mesa Ads (direcao.tom: sobrio, direto, agressivo).
+   */
+  generico?: { probabilidade: number | null; generico: boolean | null } | { erro: string } | null;
+  tom?: (NotaJev & { tom: string }) | { erro: string; tom: string } | null;
   erro?: string;
   conferido_em?: string;
   uso_ids?: string[];
@@ -558,9 +637,17 @@ const VARIACOES_DE_TEXTO = [
   "hierarquia diferente: a palavra-chave bem maior e o resto menor, em outra disposição de linhas",
   "outro arranjo do bloco de texto (alinhamento, largura e quebra de linhas diferentes)",
 ];
-export function blocoDeVariacao(versoesAntes: number, cenaFixa: boolean): string {
+export function blocoDeVariacao(versoesAntes: number, cenaFixa: boolean, replicar = false): string {
   if (versoesAntes < 1) return "";
   const i = versoesAntes - 1;
+  // Replicando a referência escolhida, refazer não pode fugir dela: a estrutura fica e muda só o acabamento.
+  if (replicar) {
+    return [
+      `NOVA VERSÃO (${versoesAntes + 1}ª) DESTA LÂMINA: continue seguindo a referência escolhida de perto, com a mesma estrutura de layout.`,
+      "Mude só detalhes de execução: o recorte e a posição do assunto dentro do mesmo espaço da referência, a textura e a luz.",
+      "Continuam iguais: o texto exato, a mensagem, a marca (cores, fontes, logo) e a pessoa ou o produto da foto do cliente.",
+    ].join(" ");
+  }
   return [
     `NOVA VERSÃO (${versoesAntes + 1}ª) DESTA LÂMINA: a equipe pediu para refazer, então NÃO repita a composição da versão anterior.`,
     cenaFixa
@@ -864,18 +951,43 @@ const resumoDaFoto = (a: ImagemAcervo) =>
  * com foco é feito aqui.
  */
 async function fotoRealNaLamina(a: ImagemAcervo, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
+  return await fotoDoBucketNaLamina(a.storage_bucket, a.storage_path, largura, altura);
+}
+
+/**
+ * Bytes da foto já reduzidos pelo Storage (contain em 2000 x 2500, sem
+ * cortar), ou null. As fotos da Mesa Foto chegam a 4K: decodificar o original
+ * aqui estourava o limite de CPU da função.
+ */
+async function baixarReduzida(bucket: string, caminho: string): Promise<Uint8Array | null> {
   try {
-    const { data, error } = await servico().storage.from(a.storage_bucket).download(a.storage_path, {
+    const { data, error } = await servico().storage.from(bucket).download(caminho, {
       transform: { width: 2000, height: 2500, resize: "contain", format: "origin" },
     });
     if (!error && data) {
       const bytes = new Uint8Array(await data.arrayBuffer());
-      if (mimeDe(bytes)) return await fotoNaLamina(bytes, largura, altura);
+      if (mimeDe(bytes)) return bytes;
     }
   } catch {
-    // cai no original abaixo
+    // sem a transformação: o original
   }
-  return await fotoNaLamina(await baixar(a.storage_bucket, a.storage_path), largura, altura);
+  return null;
+}
+
+/** Foto (do acervo ou trazida pela equipe) no formato da lâmina, recortada pelo foco. */
+async function fotoDoBucketNaLamina(bucket: string, caminho: string, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
+  const reduzida = await baixarReduzida(bucket, caminho);
+  return await fotoNaLamina(reduzida ?? await baixar(bucket, caminho), largura, altura);
+}
+
+/** Foto de pessoa ou objeto anexada ao gerador como é (reduzida quando dá, sem decodificar aqui). */
+async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada> {
+  const reduzida = await baixarReduzida(bucket, caminho);
+  if (reduzida) {
+    const mime = mimeDe(reduzida)!;
+    return { bytes: reduzida, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
+  }
+  return await baixarImagem(bucket, caminho, nome);
 }
 
 async function modeloDoPapel(papel: "diretor_arte" | "leitura" | "imagem"): Promise<ModeloIa> {
@@ -1053,7 +1165,8 @@ NARRATIVA E CONTINUIDADE (obrigatório)
 - A capa (de carrossel ou de post estático) existe para PARAR A ROLAGEM: gancho de até 7 palavras que gera curiosidade ou identificação, a maior headline do conjunto em peso black com a palavra-chave na cor de destaque, e um elemento visual forte e inesperado (escala, recorte ousado, rosto ou olhar, gesto em ação), sempre na mesma luz, cenário e paleta da série. Nunca escureça a imagem para criar destaque, e nunca ponha fundo da mesma cor da logo. Zona da capa pela foto: esquerda quando o sujeito está à direita; topo-centro ou centro quando o sujeito está no centro ou embaixo.
 - Nunca escreva o nome da marca no texto das lâminas; a marca aparece pela logo.
 - Se \`pedido_da_equipe\` vier preenchido, refaça a direção atendendo o pedido e mantenha o que ele não manda mudar da \`direcao_atual\`.
-- Se \`item.campanha\` vier, o conteúdo é de uma campanha: siga o tema visual, as cores de apoio, os elementos e o tom da campanha, sempre dentro da marca; o fio_visual inclui o tema da campanha.
+- Se \`item.campanha\` vier, o conteúdo é de uma campanha: siga o tema visual, as cores de apoio, os elementos e o tom da campanha, sempre dentro da marca; o fio_visual inclui o tema da campanha. O briefing (produto em foco, oferta, mensagem central) guia a escolha das imagens; as fotos em \`item.campanha.imagens_da_campanha\` também estão no \`acervo\`.
+- Se o plano indicar foto para a lâmina (\`item.campanha.pecas_do_plano\`, pela ordem da lâmina), use imagem_acervo = esse id nessa lâmina (com uso "elemento", descreva em layout.imagem o produto da foto na cena). No carrossel contínuo deixe imagem_acervo vazio: a cena é o panorama.
 
 Seja específico e curto: cada campo em uma ou duas frases.`;
 
@@ -1202,6 +1315,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         : null;
   const levaLogoFn = (ordem: number, total: number) => ordem === 1 || ordem === total;
   const campanha = await lerCampanha(clientId, item.itemProposta?.campanha_id);
+  // Plano de imagens da campanha para este conteúdo (pelo tema_id do item) e as fotos dela no acervo.
+  const plano = await planoDaCampanhaNoItem(clientId, campanha, item.itemProposta?.tema_id);
   const laminasPedidas = Number.isInteger(Number(corpo.laminas)) && Number(corpo.laminas) >= 1 && Number(corpo.laminas) <= 10
     ? Number(corpo.laminas)
     : null;
@@ -1226,12 +1341,20 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       conceito: texto(item.itemProposta?.resumo ?? item.itemProposta?.tema, 600) || null,
       levaLogo: levaLogoFn,
     });
+    // Mesma regra do gravar (agente-calendario): a foto do plano de imagens vai para a lâmina.
+    if (campanha && plano.pecas.length) aplicarFotosDoPlano(direcao, plano.tema, plano.pecas, plano.fotos);
   } else {
     const modeloDiretor = await modeloDoPapel("diretor_arte");
     const [prompt, memoria, acervo, refsRes, artesRes] = await Promise.all([
       promptDoDiretor(clientId),
       memoriaDoDiretor(clientId),
-      lerAcervo(clientId, 40),
+      lerAcervo(clientId, 40).then((lista) => {
+        // As fotos da campanha entram no acervo que o diretor vê: senão a
+        // checagem de fotos conhecidas recusava o id que o plano indicou.
+        const junto = lista.slice();
+        for (const f of plano.fotos.values()) if (!junto.some((a) => a.id === f.id)) junto.push(f);
+        return junto;
+      }),
       db.from("cliente_referencias")
         .select("id, origem, papel, leitura, tags")
         .eq("client_id", clientId)
@@ -1261,7 +1384,19 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         carrossel_infinito_pedido: pedidoInfinito,
         // Escolhida na tela antes da direção; nula = o diretor decide pelo conteúdo.
         quantidade_de_laminas_pedida: laminasPedidas,
-        campanha: campanha ? { nome: campanha.nome, conceito: campanha.conceito, identidade: campanha.identidade } : null,
+        campanha: campanha
+          ? {
+            nome: campanha.nome,
+            conceito: campanha.conceito,
+            identidade: campanha.identidade,
+            briefing: campanha.briefing && Object.keys(campanha.briefing).length ? campanha.briefing : null,
+            imagens_da_campanha: imagensDaCampanha(campanha)
+              .filter((i) => plano.fotos.has(i.imagem_id))
+              .map((i) => ({ id: i.imagem_id, nome: texto(plano.fotos.get(i.imagem_id)!.nome, 120), papel: ROTULO_DO_PAPEL_NA_CAMPANHA[i.papel] ?? i.papel, nota: i.nota || null })),
+            // Fotos que o plano de imagens da campanha indicou para as lâminas deste conteúdo.
+            pecas_do_plano: plano.pecas.map((p) => ({ ordem: p.ordem, imagem_acervo: p.imagem_id, uso: p.uso, por_que: p.por_que || null })),
+          }
+          : null,
       },
       marca: {
         nome: marca.nomeCliente,
@@ -1343,6 +1478,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         cards: cardsMesclados,
         referencias_ids: anterior.referencias_ids,
         pedido: instrucao || null,
+        // Direção nova, cena nova: o fundo contínuo nasce de novo (e um trecho atrasado não volta).
+        panorama: panoramaApagado(anterior.panorama),
       },
       custo_usd: arred(num(x.custo_usd) + custo),
     }));
@@ -1442,6 +1579,17 @@ async function globaisParaALamina(card: CardDirecao, limite = 20): Promise<Linha
   return (data as LinhaGlobal[] | null) ?? [];
 }
 
+/**
+ * Referências escolhidas pela equipe na tela (as da lâmina valem no lugar das
+ * do conjunto), na ordem da escolha, no máximo 2: a 1ª dá a estrutura e a 2ª
+ * o tratamento (modo replicar referência). Vazio quando ninguém escolheu.
+ */
+async function referenciasDaEquipe(t: Trabalho, card: CardDirecao): Promise<Referencia[]> {
+  const ids = (card.referencias_ids?.length ? card.referencias_ids : t.direcao.referencias_ids) ?? [];
+  if (!ids.length) return [];
+  return (await referenciasPorId(t.client_id, ids)).slice(0, MAX_REFERENCIAS);
+}
+
 async function escolherReferencias(
   t: Trabalho,
   card: CardDirecao,
@@ -1449,11 +1597,8 @@ async function escolherReferencias(
   criadoPor: string,
 ): Promise<{ refs: Referencia[]; jev: string }> {
   // Escolha da equipe na tela (da lâmina ou do conjunto) vale sem passar pelo Jev.
-  const escolhidasNaTela = (card.referencias_ids?.length ? card.referencias_ids : t.direcao.referencias_ids) ?? [];
-  if (escolhidasNaTela.length) {
-    const refs = await referenciasPorId(t.client_id, escolhidasNaTela);
-    if (refs.length) return { refs: refs.slice(0, MAX_REFERENCIAS), jev: "escolha_da_equipe" };
-  }
+  const daEquipe = await referenciasDaEquipe(t, card);
+  if (daEquipe.length) return { refs: daEquipe, jev: "escolha_da_equipe" };
   // Em destaque (marcadas pela equipe): entram sempre, antes das outras.
   const { data: emDestaque } = await servico()
     .from("cliente_referencias")
@@ -1594,6 +1739,8 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
   const v: Verificacao = { pendente: false, texto_lido: null, ortografia_ok: null, identidade: null };
   const quadro = quadroDoCard(t, card);
   const ads = ehAds(t);
+  // Tom do criativo enviado pela Mesa Ads (sobrio, direto, agressivo); inválido ou ausente: sem a pergunta do tom.
+  const tomPedido = ads ? tomValido(t.direcao.tom) : null;
   try {
     const recorte = await laminaFinal(caminho, quadro.final);
     v.leitura_no_recorte = recorte.redimensionada;
@@ -1660,6 +1807,22 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
         instructions: "Quão clara é a oferta do anúncio descrito em `anuncio` para quem vê a peça por 1 segundo no celular: o que é oferecido, para quem e qual o próximo passo?",
         criteria: NIVEIS_CLAREZA,
       };
+      // Pedido da Mesa Ads (25/09, "os criativos estão muito genéricos"): a IMAGEM genérica, como aviso.
+      questions.generico = {
+        type: "noul",
+        instructions: "A IMAGEM do anúncio descrita em `anuncio.descricao_visual` é genérica, do tipo que serviria para qualquer concorrente da categoria em `anuncio.categoria`?",
+        criteria: {
+          true: "Imagem genérica: cena de banco de imagem ou clichê da categoria (pessoa sorrindo sem contexto, aperto de mão, fachada comum, objeto solto sem uso), sem o produto, o serviço em ação, o lugar, a pessoa ou um detalhe real deste cliente, e sem nada que chame atenção no feed.",
+          false: "Imagem específica: mostra o produto, o serviço em ação, o lugar, a pessoa ou um detalhe real deste cliente, ou uma composição que foge do padrão visual da categoria.",
+        },
+      };
+      if (tomPedido) {
+        questions.tom = {
+          type: "score",
+          instructions: "Quanto a peça descrita em `anuncio` (imagem em `anuncio.descricao_visual` e texto lido em `anuncio.texto_lido`) cumpre o tom pedido em `tom_pedido`, pelas regras da arte em `tom_pedido.arte` (contraste, escala da headline, cor de destaque, energia da composição, CTA)?",
+          criteria: TONS[tomPedido].niveis_jev,
+        };
+      }
     }
     const res = await jevPerguntar({
       state: {
@@ -1679,8 +1842,10 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
               descricao_visual: v.descricao_visual,
               texto_exato: card.texto_exato,
               texto_lido: v.texto_lido,
+              categoria: texto(t.direcao.conceito, 400) || null,
             },
             politicas_meta: POLITICAS_META,
+            ...(tomPedido ? { tom_pedido: { nome: TONS[tomPedido].nome, resumo: TONS[tomPedido].resumo, arte: TONS[tomPedido].arte } } : {}),
           }
           : {}),
       },
@@ -1697,12 +1862,17 @@ async function verificar(ch: Chamador, t: Trabalho, card: CardDirecao, caminho: 
     if (ads) {
       v.politica = notaDoJev(res.answers.politica, NIVEIS_RISCO_POLITICA);
       v.clareza = notaDoJev(res.answers.clareza, NIVEIS_CLAREZA);
+      const p = probabilidadeNoul(res.answers.generico);
+      v.generico = { probabilidade: p == null ? null : Math.round(p * 100) / 100, generico: p == null ? null : p >= 0.5 };
+      if (tomPedido) v.tom = { ...notaDoJev(res.answers.tom, TONS[tomPedido].niveis_jev), tom: tomPedido } as Verificacao["tom"];
     }
   } catch (e) {
     v.identidade = { erro: codigoMotor(e) };
     if (ads) {
       v.politica = { erro: codigoMotor(e) };
       v.clareza = { erro: codigoMotor(e) };
+      v.generico = { erro: codigoMotor(e) };
+      if (tomPedido) v.tom = { erro: codigoMotor(e), tom: tomPedido };
     }
   }
   return { verificacao: v, usos };
@@ -1766,7 +1936,13 @@ async function conferirCard(ch: Chamador, corpo: Record<string, unknown>) {
 const REGRA_TEXTO_NA_ARTE =
   "Arte final completa numa imagem só. Todo o texto é desenhado pela própria arte, integrado à composição, nunca uma caixa de texto solta por cima da imagem.";
 
-function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLogo: boolean): string {
+/**
+ * Regras fixas do render. `comLogo`: "fixa" quando a logo já está na imagem
+ * editada e fica como está (ajuste de lâmina contínua). `cenaPronta`: a base é
+ * a fatia do panorama; a regra "continue na lâmina vizinha" sai (contradizia
+ * a cena fixa).
+ */
+function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLogo: boolean | "fixa", replicar = false, cenaPronta = false): string {
   // Direção com layout é composta para 4:5; a antiga, sem layout, segue o recorte de 2:3.
   const formatoAntigo = !card.layout;
   return [
@@ -1778,15 +1954,19 @@ function regrasDeRender(t: Trabalho, card: CardDirecao, anexos: string[], comLog
       ? "- ÁREA ÚTIL: todo o texto, a logo e os elementos importantes ficam DENTRO da área central de 1024 x 1280 (de y = 128 a y = 1408), com margem de respiro de pelo menos 48 px até o limite dela. Nenhuma letra pode encostar ou entrar nas faixas de 128 px do topo e da base."
       : "",
     formatoAntigo ? "- As faixas de 128 px no topo e na base recebem só continuação do fundo: serão cortadas." : "",
-    comLogo
+    comLogo === "fixa"
+      ? "- Logo: a que já está na imagem 1 fica exatamente como está, no mesmo lugar; não desenhe outra."
+      : comLogo
       ? "- Logo: use a logo oficial anexada exatamente como é, sem redesenhar, sem mudar cor nem proporção."
       : "- Sem logo nesta lâmina.",
-    t.direcao.carrossel_infinito && !ehAds(t)
+    t.direcao.carrossel_infinito && !ehAds(t) && !cenaPronta
       ? "- Carrossel infinito: o que chega à borda continua na lâmina vizinha com a mesma posição, escala, perspectiva e luz."
       : "",
     anexos.length ? `- Imagens anexadas, na ordem: ${anexos.join("; ")}.` : "",
     "- Pessoas com anatomia correta e natural: cabeça alinhada ao corpo e virada para o mesmo lado do tronco, pescoço natural, mãos com cinco dedos e segurando os objetos de um jeito possível, braços e pernas inteiros e na proporção certa.",
-    "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda da tela. Faixas e formas gráficas só as do layout da marca.",
+    replicar
+      ? "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda da tela. Faixas e formas gráficas como as da referência, nas cores da marca."
+      : "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda da tela. Faixas e formas gráficas só as do layout da marca.",
     "- Sem travessão no texto.",
   ].filter(Boolean).join("\n");
 }
@@ -1861,110 +2041,213 @@ const descreverArea = (a: Area) =>
 // ---------------------------------------------- fundo do carrossel contínuo
 
 /**
- * A lâmina usa o fundo panorâmico: contínuo ligado, mais de uma lâmina, editor
- * da OpenAI e layout definido. Nunca no criativo de anúncio (peças independentes).
+ * A lâmina usa o fundo panorâmico: contínuo ligado, mais de uma lâmina,
+ * modelo que faz o panorama (GPT Image direto ou pelo OpenRouter: até 24/09
+ * a regra exigia provedor openai e o padrão pelo OpenRouter desligava o
+ * contínuo sem aviso) e layout definido. Nunca no criativo de anúncio.
  */
-function usaPanorama(t: Trabalho, card: CardDirecao, provedor: string): boolean {
+function usaPanorama(t: Trabalho, card: CardDirecao, modelo: Pick<ModeloIa, "provedor" | "modelo_api">): boolean {
   if (ehAds(t)) return false;
-  return !!t.direcao.carrossel_infinito && totalCards(t) > 1 && provedor === "openai" && !!card.layout;
+  return !!t.direcao.carrossel_infinito && totalCards(t) > 1 && modeloFazPanorama(modelo) && !!card.layout;
+}
+
+/** Sinal interno: outra chamada terminou o trecho enquanto esta ia travar. */
+class TrechoJaPronto extends Error {}
+
+/** Solta a trava do trecho (só a desta chamada) e soma o que já foi cobrado. */
+async function soltarTrava(id: string, inicio: number, token: string, custo: number) {
+  try {
+    await mutarTrabalho(id, (x) => {
+      const p = x.direcao.panorama;
+      return {
+        ...(p ? { direcao: { ...x.direcao, panorama: { ...p, em_andamento: semATrava(p.em_andamento, inicio, token) } } } : {}),
+        custo_usd: arred(num(x.custo_usd) + custo),
+      };
+    });
+  } catch {
+    // A trava vence sozinha em ESPERA_DO_FUNDO_MS.
+  }
 }
 
 /**
  * Garante o fundo contínuo da lâmina: gera o trecho do panorama que falta (só
  * a cena, sem texto) e guarda as fatias em direcao.panorama.fundos. Um trecho
- * por vez; o trecho seguinte continua a partir do fundo da lâmina de ligação.
+ * por chamada: faltando o trecho anterior (a lâmina de ligação), ele é feito
+ * primeiro e a resposta sai pendente (a tela chama de novo). Regras de 25/09:
+ * - trava por trecho (em_andamento, 6 min): outro pedido do mesmo trecho
+ *   recebe 409 fundo_em_andamento em vez de pagar de novo;
+ * - a geração do fundo é lida no começo: se o fundo foi apagado ou refeito
+ *   enquanto o trecho era gerado, o trecho é descartado (não ressuscita);
+ * - só o mesmo modelo atende (mesmoModelo) e a proporção do que voltou é
+ *   conferida antes de fatiar: nada de corte com zoom;
+ * - com lâmina de ligação, o trecho novo é alinhado a ela antes de fatiar e
+ *   recusado quando a cena mudou.
  */
 async function garantirFundoContinuo(
   ch: Chamador,
   t: Trabalho,
   ordem: number,
   kit: Kit,
-  umPorVez = true,
 ): Promise<{ t: Trabalho; caminho: string; custo: number; pendente?: boolean }> {
   const pronto = t.direcao.panorama?.fundos?.[String(ordem)];
   if (pronto) return { t, caminho: pronto, custo: 0 };
   const total = totalCards(t);
   const { inicio, fim } = trechoDaLamina(ordem, total);
-  let atual = t;
-  let custo = 0;
   // O trecho seguinte precisa do fundo da lâmina de ligação (do trecho anterior).
   // Um panorama por chamada (cada um leva até ~2 min): o anterior sai primeiro e
   // a tela chama de novo (preparar_fundo devolve pendente).
-  if (inicio > 1 && !atual.direcao.panorama?.fundos?.[String(inicio)]) {
-    if (!umPorVez) {
-      const antes = await garantirFundoContinuo(ch, atual, inicio, kit, false);
-      atual = antes.t;
-      custo += antes.custo;
-    } else {
-      const antes = await garantirFundoContinuo(ch, atual, inicio, kit, true);
-      return { ...antes, caminho: "", pendente: true };
-    }
+  if (inicio > 1 && !t.direcao.panorama?.fundos?.[String(inicio)]) {
+    const antes = await garantirFundoContinuo(ch, t, inicio, kit);
+    return { ...antes, caminho: "", pendente: true };
   }
-  const ligacao = inicio > 1 ? atual.direcao.panorama?.fundos?.[String(inicio)] ?? null : null;
-  const k = fim - inicio + 1;
-  const cards = atual.direcao.cards.filter((c) => c.ordem >= inicio && c.ordem <= fim).sort((a, b) => a.ordem - b.ordem);
-  const cores = (kit as { paleta?: unknown } | null)?.paleta;
-  const paleta = (Array.isArray(cores) ? (cores as { nome?: string; hex?: string }[]) : [])
-    .filter((p) => p && p.hex).map((p) => `${p.nome || "cor"} ${p.hex}`).join(", ");
-  const quadros = cards.map((c, i) => {
-    const zona = c.layout?.zona_texto ?? "base-esquerda";
-    const cena = texto(c.layout?.imagem || c.ilustracao || c.composicao, 500);
-    return `- trecho ${i + 1} de ${k} (da esquerda para a direita): o que aparece nesta parte da MESMA cena: ${cena}. Deixe calma e uniforme a zona "${zona}" desta parte (ali entra o texto depois).`;
-  }).join("\n");
-  const divisas: number[] = [];
-  for (let i = 1; i < k; i++) divisas.push(LARGURA_LAMINA * i);
-  const prompt = [
-    `UMA ÚNICA FOTOGRAFIA PANORÂMICA de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px: um só lugar, visto por uma só câmera, na mesma altura e no mesmo ângulo, com o mesmo chão, a mesma parede, o mesmo horizonte e a mesma luz de ponta a ponta. NÃO é um tríptico nem uma colagem: nada de quadros separados, cenas diferentes, mudança de ângulo (por exemplo, de frente para vista de cima), bordas ou divisões. Depois ela será cortada em ${k} partes verticais 4:5 de ${LARGURA_LAMINA} px (cortes em x = ${divisas.join(" e ")} px) para um carrossel do Instagram, então a cena atravessa esses cortes sem emenda: móveis, objetos e o chão continuam de uma parte para a outra; nenhum rosto fica cortado num corte. É só o fundo: nenhum texto, letra, número ou logo.`,
-    ligacao ? "A imagem 1 já traz o PRIMEIRO quadro pronto (à esquerda): não mude nada nele e continue a cena exatamente a partir da borda direita dele." : "",
-    atual.direcao.fio_visual ? `Fio visual da série (igual em todos os quadros): ${texto(atual.direcao.fio_visual, 800)}` : "",
-    atual.direcao.estilo_pedido ? `Estilo pedido pela equipe: ${texto(atual.direcao.estilo_pedido, 600)}. Sem escurecer a cena.` : "",
-    `Conceito: ${texto(atual.direcao.conceito, 600)}`,
-    `O que aparece ao longo da cena, da esquerda para a direita (tudo no mesmo ambiente; adapte o que for de outro ambiente para caber neste mesmo lugar):\n${quadros}`,
-    paleta ? `Paleta da marca para luz, objetos e ambiente: ${paleta}.` : "",
-    "Fotografia realista de campanha, luz natural coerente, alta qualidade.",
-  ].filter(Boolean).join("\n\n");
 
-  const qualidade = (QUALIDADES.includes(atual.qualidade as Qualidade) ? atual.qualidade : QUALIDADE_PADRAO) as Qualidade;
-  const tela = ligacao ? await telaDoTrecho(k, await baixar("mesa", ligacao)) : null;
-  const img = await chamarImagem({
-    clientId: atual.client_id,
-    modeloId: atual.modelo_imagem_id!,
-    prompt,
-    referencias: [],
-    qualidade,
-    tamanho: tamanhoDoTrecho(k),
-    tamanhoFixo: true,
-    ...(tela ? { editar: { bytes: tela.tela, mascara: tela.mascara } } : {}),
-    referencia: { tipo: "estudio_trabalho", id: atual.id },
-    criadoPor: ch.userId,
-    tarefa: "estudio",
-    agente: "gerador_imagem",
-  });
-  custo += img.custoUsd;
-  const fatias = await fatiarPanorama(img.png, k);
-  // A lâmina de ligação fica com o fundo que já tinha; a seguinte ganha a correção de tom na emenda.
-  if (ligacao && fatias.length > 1) fatias[1] = await corrigirEmenda(await baixar("mesa", ligacao), fatias[1]);
-  const novos: Record<string, string> = {};
-  const carimbo = Date.now();
-  for (let i = 0; i < k; i++) {
-    const o = inicio + i;
-    if (ligacao && i === 0) continue;
-    const caminho = `${atual.client_id}/estudio/${atual.id}/fundo-${o}-${carimbo}.png`;
-    const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(fatias[i])], { type: "image/png" }), { contentType: "image/png", upsert: false });
-    if (error) throw new ErroEstudio(503, "armazenamento_falhou", "O fundo contínuo foi gerado, mas não foi possível guardá-lo.");
-    novos[String(o)] = caminho;
+  // Trava do trecho, na geração atual do fundo.
+  const geracao = geracaoDoPanorama(t.direcao.panorama);
+  const token = crypto.randomUUID();
+  let atual: Trabalho;
+  try {
+    atual = await mutarTrabalho(t.id, (x) => {
+      const p = x.direcao.panorama ?? null;
+      if (!x.direcao.carrossel_infinito || geracaoDoPanorama(p) !== geracao) {
+        throw new ErroEstudio(409, "fundo_mudou", "O fundo contínuo foi refeito ou desligado agora há pouco. Gere de novo.");
+      }
+      if (p?.fundos?.[String(ordem)]) throw new TrechoJaPronto();
+      const trava = travaDoTrecho(p, inicio);
+      if (trava) {
+        throw new ErroEstudio(409, "fundo_em_andamento", "O fundo contínuo deste trecho já está sendo feito por outra geração. Espere terminar: ele não é cobrado duas vezes.", {
+          desde: trava.desde,
+        });
+      }
+      return {
+        direcao: {
+          ...x.direcao,
+          panorama: {
+            fundos: p?.fundos ?? {},
+            geracao,
+            em_andamento: { ...(p?.em_andamento ?? {}), [String(inicio)]: { token, desde: new Date().toISOString() } },
+          },
+        },
+      };
+    });
+  } catch (e) {
+    if (!(e instanceof TrechoJaPronto)) throw e;
+    const relido = await lerTrabalho(t.id);
+    return { t: relido, caminho: relido.direcao.panorama?.fundos?.[String(ordem)] ?? "", custo: 0 };
   }
-  const gravado = await mutarTrabalho(atual.id, (x) => ({
-    // Fatia já gravada vence: outra lâmina pode já estar usando.
-    direcao: { ...x.direcao, panorama: { fundos: { ...novos, ...(x.direcao.panorama?.fundos ?? {}) } } },
-    custo_usd: arred(num(x.custo_usd) + img.custoUsd),
-  }));
-  const caminho = gravado.direcao.panorama?.fundos?.[String(ordem)];
-  if (!caminho) throw new ErroEstudio(500, "fundo_ausente", "O fundo contínuo desta lâmina não foi gerado. Tente de novo.");
-  return { t: gravado, caminho, custo };
+
+  let custo = 0;
+  try {
+    const ligacao = inicio > 1 ? atual.direcao.panorama?.fundos?.[String(inicio)] ?? null : null;
+    const k = fim - inicio + 1;
+    const cards = atual.direcao.cards.filter((c) => c.ordem >= inicio && c.ordem <= fim).sort((a, b) => a.ordem - b.ordem);
+    const cores = (kit as { paleta?: unknown } | null)?.paleta;
+    const paleta = (Array.isArray(cores) ? (cores as { nome?: string; hex?: string }[]) : [])
+      .filter((p) => p && p.hex).map((p) => `${p.nome || "cor"} ${p.hex}`).join(", ");
+    const quadros = cards.map((c, i) => {
+      const zona = c.layout?.zona_texto ?? "base-esquerda";
+      const cena = texto(c.layout?.imagem || c.ilustracao || c.composicao, 500);
+      return `- trecho ${i + 1} de ${k} (da esquerda para a direita): o que aparece nesta parte da MESMA cena: ${cena}. Deixe calma e uniforme a zona "${zona}" desta parte (ali entra o texto depois).`;
+    }).join("\n");
+    const divisas: number[] = [];
+    for (let i = 1; i < k; i++) divisas.push(LARGURA_LAMINA * i);
+    const prompt = [
+      `UMA ÚNICA FOTOGRAFIA PANORÂMICA de ${LARGURA_LAMINA * k} x ${ALTURA_LAMINA} px: um só lugar, visto por uma só câmera, na mesma altura e no mesmo ângulo, com o mesmo chão, a mesma parede, o mesmo horizonte e a mesma luz de ponta a ponta. NÃO é um tríptico nem uma colagem: nada de quadros separados, cenas diferentes, mudança de ângulo (por exemplo, de frente para vista de cima), bordas ou divisões. Depois ela será cortada em ${k} partes verticais 4:5 de ${LARGURA_LAMINA} px (cortes em x = ${divisas.join(" e ")} px) para um carrossel do Instagram, então a cena atravessa esses cortes sem emenda: móveis, objetos e o chão continuam de uma parte para a outra; nenhum rosto fica cortado num corte. É só o fundo: nenhum texto, letra, número ou logo.`,
+      ligacao
+        ? `A imagem 1 já traz o PRIMEIRO quadro pronto (os ${LARGURA_LAMINA} px da esquerda): repita esse quadro exatamente como está, no mesmo lugar, mesma escala e mesmo enquadramento, e continue a cena a partir da borda direita dele.`
+        : "",
+      atual.direcao.fio_visual ? `Fio visual da série (igual em todos os quadros): ${texto(atual.direcao.fio_visual, 800)}` : "",
+      atual.direcao.estilo_pedido ? `Estilo pedido pela equipe: ${texto(atual.direcao.estilo_pedido, 600)}. Sem escurecer a cena.` : "",
+      `Conceito: ${texto(atual.direcao.conceito, 600)}`,
+      `O que aparece ao longo da cena, da esquerda para a direita (tudo no mesmo ambiente; adapte o que for de outro ambiente para caber neste mesmo lugar):\n${quadros}`,
+      paleta ? `Paleta da marca para luz, objetos e ambiente: ${paleta}.` : "",
+      "Fotografia realista de campanha, luz natural coerente, alta qualidade.",
+    ].filter(Boolean).join("\n\n");
+
+    const qualidade = (QUALIDADES.includes(atual.qualidade as Qualidade) ? atual.qualidade : QUALIDADE_PADRAO) as Qualidade;
+    const bytesDaLigacao = ligacao ? await baixar("mesa", ligacao) : null;
+    const tela = bytesDaLigacao ? await telaDoTrecho(k, bytesDaLigacao) : null;
+    const img = await chamarImagem({
+      clientId: atual.client_id,
+      modeloId: atual.modelo_imagem_id!,
+      prompt,
+      referencias: [],
+      qualidade,
+      tamanho: tamanhoDoTrecho(k),
+      tamanhoFixo: true,
+      // Reserva de rota só no mesmo modelo: outro gerador devolveria outra proporção.
+      mesmoModelo: true,
+      ...(tela ? { editar: { bytes: tela.tela, mascara: tela.mascara } } : {}),
+      referencia: { tipo: "estudio_trabalho", id: atual.id },
+      criadoPor: ch.userId,
+      tarefa: "estudio",
+      agente: "gerador_imagem",
+    });
+    custo = img.custoUsd;
+    // Dimensões reais do que voltou (não o tamanho pedido) e alinhamento à ligação.
+    const trecho = await fatiarTrecho(img.png, k, bytesDaLigacao);
+    if (!trecho.proporcaoOk) {
+      throw new ErroEstudio(502, "panorama_fora_do_formato", `O gerador devolveu o fundo contínuo em ${trecho.largura} x ${trecho.altura}, fora da proporção de ${k} lâminas lado a lado. Nada foi cortado com zoom: gere de novo.`, {
+        custo_usd: custo,
+      });
+    }
+    if (trecho.cenaMudada) {
+      throw new ErroEstudio(409, "emenda_recusada", `O trecho novo do fundo contínuo não continuou a cena da lâmina ${inicio} e foi recusado para não quebrar a emenda. Gere de novo ou refaça o fundo no Conjunto.`, {
+        custo_usd: custo,
+        erro_da_emenda: trecho.erro == null ? null : Math.round(trecho.erro * 10) / 10,
+      });
+    }
+    const fatias = trecho.fatias;
+    // A lâmina de ligação fica com o fundo que já tinha; a seguinte ganha a correção de tom na emenda.
+    if (ligacao && bytesDaLigacao && fatias.length > 1) fatias[1] = await corrigirEmenda(bytesDaLigacao, fatias[1]);
+    const novos: Record<string, string> = {};
+    const carimbo = Date.now();
+    for (let i = 0; i < k; i++) {
+      const o = inicio + i;
+      if (ligacao && i === 0) continue;
+      const caminho = `${atual.client_id}/estudio/${atual.id}/fundo-${o}-${carimbo}.png`;
+      const { error } = await servico().storage.from("mesa").upload(caminho, new Blob([new Uint8Array(fatias[i])], { type: "image/png" }), { contentType: "image/png", upsert: false });
+      if (error) throw new ErroEstudio(503, "armazenamento_falhou", "O fundo contínuo foi gerado, mas não foi possível guardá-lo.", { custo_usd: custo });
+      novos[String(o)] = caminho;
+    }
+    let descartado = false;
+    const gravado = await mutarTrabalho(atual.id, (x) => {
+      const p = x.direcao.panorama ?? null;
+      // Fundo apagado ou refeito enquanto este trecho era gerado: só o custo entra.
+      descartado = !x.direcao.carrossel_infinito || geracaoDoPanorama(p) !== geracao;
+      if (descartado) return { custo_usd: arred(num(x.custo_usd) + img.custoUsd) };
+      return {
+        // Fatia já gravada vence: outra lâmina pode já estar usando.
+        direcao: {
+          ...x.direcao,
+          panorama: { fundos: { ...novos, ...(x.direcao.panorama?.fundos ?? {}) }, geracao, em_andamento: semATrava(p?.em_andamento, inicio, token) },
+        },
+        custo_usd: arred(num(x.custo_usd) + img.custoUsd),
+      };
+    });
+    custo = 0;
+    if (descartado) {
+      await servico().storage.from("mesa").remove(Object.values(novos)).catch(() => null);
+      throw new ErroEstudio(409, "fundo_descartado", "O fundo contínuo foi refeito ou desligado enquanto este trecho era gerado. O trecho foi descartado para não voltar o fundo antigo.", {
+        custo_usd: img.custoUsd,
+      });
+    }
+    const caminho = gravado.direcao.panorama?.fundos?.[String(ordem)];
+    if (!caminho) throw new ErroEstudio(500, "fundo_ausente", "O fundo contínuo desta lâmina não foi gerado. Tente de novo.", { custo_usd: img.custoUsd });
+    return { t: gravado, caminho, custo: img.custoUsd };
+  } catch (e) {
+    // Falhou depois de travar: solta a trava (e soma o que já foi cobrado, se foi).
+    await soltarTrava(t.id, inicio, token, custo);
+    throw e;
+  }
 }
 
-/** preparar_fundo { trabalho_id, ordem }: gera antes o trecho do panorama da lâmina (a tela chama antes de gerar_card no contínuo). */
+/**
+ * preparar_fundo { trabalho_id, ordem }: gera o trecho do panorama da lâmina
+ * antes do gerar_card (que nunca gera panorama: trecho e lâmina na mesma
+ * chamada passavam de 400 s). Devolve pendente quando fez o trecho anterior
+ * primeiro; a tela repete até não haver pendência. Modelo que não faz o
+ * panorama: fundo null e `continuo_indisponivel` (a lâmina sai no modo normal).
+ */
 async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
   const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
   const ordem = lerOrdem(corpo);
@@ -1972,19 +2255,34 @@ async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
   const card = cardDaDirecao(t, ordem);
   const modelo = await carregarModelo(t.modelo_imagem_id!, "imagem");
   const temFotoPropria = !!card.imagens_ids?.length || !!(card.fotos_livres ?? []).length;
-  if (!usaPanorama(t, card, modelo.provedor) || temFotoPropria) return json({ trabalho: t, custo_usd: 0, fundo: null });
+  const continuoPedido = !ehAds(t) && !!t.direcao.carrossel_infinito && totalCards(t) > 1;
+  if (!usaPanorama(t, card, modelo) || temFotoPropria) {
+    return json({ trabalho: t, custo_usd: 0, fundo: null, pendente: false, continuo_indisponivel: continuoPedido && !modeloFazPanorama(modelo) });
+  }
   const r = await garantirFundoContinuo(ch, t, ordem, await lerKit(t.client_id));
   return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.pendente ? null : r.caminho, pendente: !!r.pendente });
 }
 
 /**
- * gerar_card { trabalho_id, ordem }: uma lâmina por chamada, em um de três modos:
+ * gerar_card { trabalho_id, ordem }: uma lâmina por chamada, em um destes modos:
+ * - replicar referência (pedido do dono em 25/09: "escolhi a referência e a
+ *   imagem e gerou nada a ver"): a equipe escolheu 1 ou 2 referências (da
+ *   lâmina ou do conjunto). O gerador recompõe a lâmina seguindo de perto o
+ *   layout da referência (a 1ª dá a estrutura, a 2ª o tratamento), com as
+ *   cores, fontes e logo da marca, o texto exato e a foto do cliente (se
+ *   houver) como o assunto, idêntico. A foto é recomposta, não devolvida:
+ *   a versão grava modo replicar_referencia e foto_recomposta para a tela
+ *   avisar "confira o rosto". Não vale no carrossel contínuo (panorama);
  * - foto real: a lâmina tem imagens_ids; a foto do acervo é a base, o gerador
  *   só desenha a área do texto e da logo, e o código devolve a foto original
  *   em todo o resto (a foto não é refeita);
- * - carrossel contínuo: a lâmina N nasce da borda direita da N-1 numa tela
- *   dupla (metade esquerda pronta, metade direita pintada) e sai o recorte da
- *   metade direita; sem tela dupla no provedor, cai no modo normal;
+ * - carrossel contínuo (panorama): a base é a fatia do fundo panorâmico já
+ *   pronta (preparar_fundo; gerar_card nunca gera o trecho e devolve 409
+ *   fundo_pendente sem ele). O gerador escreve o texto; o código cola só as
+ *   letras sobre a fatia intacta (sem reenquadrar: a emenda fica) e aplica a
+ *   logo. A versão grava o fundo usado (fundo, fundo_geracao) para a tela
+ *   mostrar "fora do fundo" quando o panorama muda depois. A tela dupla antiga
+ *   (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava;
  * - normal: prompt composto com a lâmina anterior como referência.
  */
 async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
@@ -2011,31 +2309,33 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const livres = card.fotos_livres ?? [];
   const fundoLivre = foto ? undefined : livres.find((f) => f.papel === "fundo");
   const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
+  // Referências escolhidas pela equipe: com elas a lâmina replica o layout da referência (fora do contínuo).
+  const refsDaEquipe = await referenciasDaEquipe(t, card);
   let baseFoto: Uint8Array | null = foto ? await fotoRealNaLamina(foto, quadro.largura, quadro.altura) : null;
   if (!baseFoto && fundoLivre) {
     try {
-      baseFoto = await fotoNaLamina(await baixar("mesa", fundoLivre.caminho), quadro.largura, quadro.altura);
+      // Reduzida pelo Storage antes do recorte: foto da Mesa Foto pode ser 4K (limite de CPU).
+      baseFoto = await fotoDoBucketNaLamina("mesa", fundoLivre.caminho, quadro.largura, quadro.altura);
     } catch {
       throw new ErroEstudio(409, "foto_sumiu", "A foto de fundo desta lâmina não foi encontrada. Escolha outra na ferramenta Fotos.");
     }
   }
   let resumoDoFundo = foto ? resumoDaFoto(foto) : fundoLivre ? texto(fundoLivre.nota || "foto real trazida pela equipe", 300) : null;
-  // Carrossel contínuo: o fundo é a fatia do panorama; o gerador só desenha o texto e a logo por cima.
-  const panorama = !baseFoto && !elementos.length && usaPanorama(t, card, modeloImagem.provedor);
-  let custoFundo = 0;
+  // Carrossel contínuo: o fundo é a fatia do panorama; o gerador só desenha o texto por cima.
+  // gerar_card nunca gera o trecho (passava de 400 s junto com a lâmina): sem fatia, 409 e a tela prepara o fundo.
+  const panorama = !baseFoto && !elementos.length && usaPanorama(t, card, modeloImagem);
+  let fundoUsado: string | null = null;
   if (panorama) {
-    const f = await garantirFundoContinuo(ch, t, ordem, kit);
-    if (f.pendente) {
-      throw new ErroEstudio(409, "fundo_pendente", "O fundo contínuo das lâminas anteriores ainda está sendo feito. Gere de novo em seguida.", { custo_usd: f.custo });
+    const f = t.direcao.panorama?.fundos?.[String(ordem)];
+    if (!f) {
+      throw new ErroEstudio(409, "fundo_pendente", "O fundo contínuo desta lâmina ainda não foi feito. Prepare o fundo e gere de novo (a tela faz isso sozinha).");
     }
-    custoFundo = f.custo;
-    baseFoto = await baixar("mesa", f.caminho);
-    resumoDoFundo = "fundo panorâmico contínuo do carrossel, já pronto: o texto e a logo entram por cima, sem mudar a cena";
+    fundoUsado = f;
+    baseFoto = await baixar("mesa", f);
+    resumoDoFundo = "fundo panorâmico contínuo do carrossel, já pronto: o texto entra por cima, sem mudar a cena";
   }
 
-  // Continuidade real: só no carrossel contínuo, com a anterior pronta, sem foto real e no editor da OpenAI (máscara).
   const anterior = ordem > 1 ? versaoAtual(t, ordem - 1) : null;
-  const continuar = !baseFoto && !elementos.length && infinito && !!anterior && modeloImagem.provedor === "openai" && !!card.layout;
 
   const anexos: ImagemEntrada[] = [];
   // Rótulo de cada anexo; a numeração sai na hora do prompt, porque a imagem
@@ -2044,9 +2344,13 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const legendar = (txt: string) => rotulos.push(txt);
   const legendas = (deslocamento: number) => rotulos.map((r, i) => `imagem ${i + 1 + deslocamento}: ${r}`);
 
-  // Foto real fixa (sem panorama e sem elementos soltos): a foto não é refeita,
-  // o gerador só escreve o texto e a logo oficial entra pelo código.
-  const fotoFixa = !!baseFoto && !panorama && !elementos.length;
+  // Replicar a referência escolhida: só fora do contínuo (o panorama manda na cena).
+  const replicar = refsDaEquipe.length > 0 && !panorama;
+
+  // Foto real fixa (sem panorama, sem elementos soltos e sem referência a
+  // replicar): a foto não é refeita, o gerador só escreve o texto e a logo
+  // oficial entra pelo código.
+  const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;
 
   // Logo só quando o arquivo existe de fato: pedir "a logo anexada" sem anexo faz o gerador inventar uma.
   let comLogo = false;
@@ -2057,8 +2361,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (logo) {
       // Medida em código: o prompt põe atrás da logo um fundo de valor oposto.
       tomDaLogo = await analisarLogo(logo.bytes).catch(() => null);
-      if (fotoFixa && tomDaLogo) {
+      if ((fotoFixa || panorama) && tomDaLogo) {
         // Sobre foto real o gerador desenhava a logo torta, dentro de uma caixa fosca (24/09).
+        // No panorama também: o que o gerador desenha fora das letras não volta (a fatia fica intacta).
         logoNoCodigo = logo.bytes;
       } else {
         anexos.push(logo);
@@ -2081,23 +2386,31 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       // Selo sumido não impede a lâmina.
     }
   }
-  // Sem tela dupla, a anterior vai como referência; no contínuo o final também vê a capa.
-  if (anterior && !continuar) {
+  // A anterior vai como referência; no contínuo sem panorama o final também vê a capa.
+  if (anterior) {
     anexos.push({ bytes: await baixar("mesa", anterior.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
-    // Com foto real a cena já está decidida: "mude a pose e o enquadramento" fazia o gerador reenquadrar a foto.
-    legendar(fotoFixa
+    // Com foto real ou panorama a cena já está decidida: "mude a pose e o enquadramento" fazia o gerador reenquadrar a base.
+    legendar(replicar
+      ? `card ${ordem - 1} desta mesma série: mantenha só a mesma paleta, fontes e acabamento; o layout desta lâmina vem da referência escolhida, não deste card`
+      : panorama
+      ? `card ${ordem - 1} desta mesma série: siga só a tipografia, as cores do texto e a hierarquia dele; NÃO copie a cena dele, a cena desta lâmina é a imagem 1 e já está pronta`
+      : fotoFixa
       ? `card ${ordem - 1} desta mesma série: siga só a tipografia, as cores do texto e a hierarquia dele; NÃO copie a foto nem o enquadramento dele, a foto desta lâmina é a imagem 1`
       : `card ${ordem - 1} já aprovado desta mesma série: mantenha a mesma protagonista, cenário, luz, paleta, tipografia e posição da marca; mude só a pose, o enquadramento e o texto`);
   }
-  if (infinito && ordem === total && ordem > 2) {
+  if (infinito && !panorama && ordem === total && ordem > 2) {
     const capa = versaoAtual(t, 1);
     if (capa) {
       anexos.push({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1.png" });
       legendar("capa, o final se conecta visualmente com ela");
     }
   }
-  // Foto real dispensa referência de técnica: a imagem já está decidida.
-  const escolhida = baseFoto ? { refs: [] as Referencia[], jev: "foto_real" } : await escolherReferencias(t, card, kit, ch.userId);
+  // Referência escolhida pela equipe vale mesmo com foto (antes a foto real
+  // descartava a escolha: "gerou nada a ver", 25/09). Sem escolha, foto real
+  // dispensa referência de técnica: a imagem já está decidida.
+  const escolhida = replicar
+    ? { refs: refsDaEquipe, jev: "escolha_da_equipe" }
+    : baseFoto ? { refs: [] as Referencia[], jev: "foto_real" } : await escolherReferencias(t, card, kit, ch.userId);
   const daEquipe = escolhida.jev === "escolha_da_equipe";
   // Do miolo em diante, a lâmina anterior da série é o guia de estilo: só a
   // identidade da marca continua junto (técnica solta puxava cada lâmina para um lado).
@@ -2105,7 +2418,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     ? { ...escolhida, refs: escolhida.refs.filter((r) => r.papel === "identidade") }
     : escolhida;
   // Pessoas, rostos ou objetos reais trazidos pela equipe: entram iguais.
-  for (const el of elementos) {
+  // (Replicando a referência, fotos e referências entram primeiro, no bloco próprio abaixo.)
+  for (const el of replicar ? [] : elementos) {
     try {
       anexos.push(await baixarImagem("mesa", el.caminho, "elemento-real"));
       legendar(`foto REAL trazida pela equipe (${el.nota ? texto(el.nota, 200) : "pessoa ou objeto real"}): coloque esta pessoa ou objeto na lâmina exatamente como é, mesmo rosto, feições, cabelo, roupa e proporções, integrado à luz da cena; não redesenhe nem troque por outra pessoa`);
@@ -2114,7 +2428,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     }
   }
   const idsReferencias: string[] = [];
-  for (const ref of escolha.refs) {
+  for (const ref of replicar ? [] : escolha.refs) {
     try {
       anexos.push(await imagemDaReferencia(ref));
       idsReferencias.push(ref.id);
@@ -2134,11 +2448,14 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const base = card.layout
     ? promptDaLamina(card, marca, {
       total,
-      carrosselInfinito: infinito,
+      // No panorama a cena é a fatia pronta: "continue na vizinha" e "conecte com a capa" contradiziam a base fixa.
+      carrosselInfinito: infinito && !panorama,
       levaLogo: levaLogo(t, ordem),
       conceito: t.direcao.conceito,
       anteriores: imagensAnteriores(t.direcao.cards, ordem),
-      fotoReal: resumoDoFundo,
+      // Replicando, a foto não é a base editada: é o assunto recomposto no layout da referência.
+      fotoReal: replicar ? null : resumoDoFundo,
+      replicar: replicar ? { comFoto: !!baseFoto || elementos.length > 0 } : null,
       logoNoCodigo: !!logoNoCodigo,
       fioVisual: t.direcao.fio_visual ?? null,
       logo: tomDaLogo,
@@ -2153,7 +2470,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     base,
     campanha ? blocoDaCampanha(campanha) : "",
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
-    blocoDeVariacao(versoesAntes, !!baseFoto),
+    blocoDeVariacao(versoesAntes, !!baseFoto, replicar),
   ].filter(Boolean).join("\n\n");
   const comum = {
     clientId: t.client_id,
@@ -2165,6 +2482,76 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     tarefa: "estudio" as const,
     agente: "gerador_imagem" as const,
   };
+
+  // 0) Replicar a referência escolhida pela equipe: geração nova (sem máscara)
+  // com as fotos do cliente primeiro, depois as referências, depois logo,
+  // fontes, selo e a lâmina anterior. A foto é recomposta, nunca escurecida.
+  if (replicar) {
+    const imagens: ImagemEntrada[] = [];
+    const nomes: string[] = [];
+    const fotos: { indice: number; descricao: string; papel: "fundo" | "elemento" }[] = [];
+    if (baseFoto !== null) {
+      imagens.push({ bytes: baseFoto, mime: "image/png", nome: "foto-do-cliente.png" });
+      nomes.push("FOTO REAL do cliente: o assunto desta lâmina (pessoa ou produto idêntico)");
+      fotos.push({ indice: imagens.length, descricao: resumoDoFundo || "foto real do cliente", papel: "fundo" });
+    }
+    for (const el of elementos) {
+      try {
+        imagens.push(await imagemReduzida("mesa", el.caminho, "elemento-real"));
+        nomes.push(`FOTO REAL trazida pela equipe (${el.nota ? texto(el.nota, 200) : "pessoa ou objeto real"}): entra idêntica`);
+        fotos.push({ indice: imagens.length, descricao: el.nota ? texto(el.nota, 200) : "pessoa ou objeto real", papel: "elemento" });
+      } catch {
+        // Foto removida do bucket fica de fora.
+      }
+    }
+    const refsNoPrompt: { indice: number; leitura: string | null }[] = [];
+    for (const ref of refsDaEquipe) {
+      try {
+        imagens.push(await imagemDaReferencia(ref));
+        idsReferencias.push(ref.id);
+        nomes.push(refsNoPrompt.length === 0 ? "REFERÊNCIA 1 escolhida pela equipe (layout a replicar)" : "REFERÊNCIA 2 escolhida pela equipe (tratamento a replicar)");
+        refsNoPrompt.push({ indice: imagens.length, leitura: ref.leitura ? texto(ref.leitura, 700) : null });
+      } catch {
+        // Referência sem arquivo: fica de fora; sem nenhuma, a lâmina não é gerada às cegas (abaixo).
+      }
+    }
+    if (!refsNoPrompt.length) {
+      throw new ErroEstudio(409, "referencia_sem_imagem", "A imagem da referência escolhida não foi encontrada. Escolha outra referência para esta lâmina.");
+    }
+    // Com logo, ela é o primeiro dos anexos comuns (entra antes das fontes).
+    const logoIndice = comLogo ? imagens.length + 1 : null;
+    for (let i = 0; i < anexos.length; i++) {
+      imagens.push(anexos[i]);
+      nomes.push(rotulos[i]);
+    }
+    const prompt = [
+      blocoReplicarReferencia({ referencias: refsNoPrompt, fotos, logo: logoIndice, capa: card.funcao === "capa" || ordem === 1 }),
+      baseComCampanha,
+      regrasDeRender(t, card, nomes.map((n, i) => `imagem ${i + 1}: ${n}`), comLogo, true),
+    ].join("\n\n");
+    const img = await chamarImagem({
+      ...comum,
+      referencias: imagens,
+      prompt,
+      promptSe2x3: card.layout && !quadro.fixo ? formatoPara2x3(prompt) : undefined,
+      tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,
+      tamanhoFixo: !!card.layout && quadro.fixo,
+    });
+    return await gravarVersao(ch, t, card, img, {
+      origem: "gerar",
+      referencias: idsReferencias,
+      extra: {
+        referencias_jev: escolha.jev,
+        tamanho: img.tamanho,
+        modo: "replicar_referencia",
+        // A foto do cliente foi recomposta pelo gerador (não é o original): a tela pede para conferir o rosto.
+        foto_recomposta: fotos.length > 0,
+        imagem_id: foto?.id ?? null,
+        foto_livre: fundoLivre ? fundoLivre.caminho : null,
+        fotos_livres: livres.length,
+      },
+    });
+  }
 
   // 1a) Foto de fundo com pessoas ou objetos reais: edição sem máscara, a foto
   // continua o fundo e os elementos entram por cima, integrados.
@@ -2184,19 +2571,23 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
 
   // 1b) Foto real ou fundo contínuo como base.
   if (baseFoto) {
-    // Contínuo: a lâmina inteira é redesenhada sobre a fatia do panorama (texto
-    // integrado à cena) e só as faixas das bordas voltam do fundo original: é o
-    // que mantém a emenda. Antes a máscara abria só o retângulo do texto e o
-    // gerador pintava ali uma caixa de fundo (Para Si Ótica, 23/09).
+    // Contínuo: a máscara abre o interior (texto integrado à cena, sem caixa;
+    // Para Si Ótica, 23/09), mas o que volta é a fatia INTACTA com só as letras
+    // coladas por cima (colarMudancasNaBase): a fatia nunca é reenquadrada e a
+    // emenda com as vizinhas fica exata. Antes o original era alinhado ao
+    // gerado e a borda saía com faixa dupla (25/09).
     const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);
+    const zonaDaLogo = normalizarLayout(card.layout, card.funcao, card.ordem, total).zona_texto;
+    const caixaLogo = caixaDaLogo(zonaDaLogo, card.funcao === "capa" || card.ordem === 1, quadro.formato);
+    const areaDaLogo: Area = { x0: caixaLogo.x0 / 100, y0: caixaLogo.y0 / 100, x1: caixaLogo.x1 / 100, y1: caixaLogo.y1 / 100 };
     const prompt = [
       panorama
-        ? `EDITE a imagem 1: ela é a cena desta lâmina, parte de um panorama que atravessa o carrossel. Mantenha a mesma cena, luz, pessoas e objetos, na mesma posição e escala. Não mude nada nas faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado): elas emendam com as lâminas vizinhas.`
+        ? `EDITE a imagem 1: ela é a cena desta lâmina, parte de um panorama que atravessa o carrossel, e já está pronta. Escreva só o texto por cima, na área indicada. Mantenha a mesma cena, luz, pessoas e objetos, na mesma posição e escala. Não mude nada nas faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado): elas emendam com as lâminas vizinhas.`
         : `EDITE a imagem 1 (foto real do cliente). Desenhe SÓ dentro destas áreas: ${areas.map(descreverArea).join("; ")}. Fora delas a foto fica exatamente como está.`,
       NAO_REENQUADRAR,
       SEM_CAIXA_ATRAS_DO_TEXTO,
       baseComCampanha,
-      regrasDeRender(t, card, legendas(1), comLogo),
+      regrasDeRender(t, card, legendas(1), comLogo, false, panorama),
     ].join("\n\n");
     const img = await chamarImagem({
       ...comum,
@@ -2205,19 +2596,38 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       tamanho: quadro.tamanho,
       tamanhoFixo: quadro.fixo,
     });
-    // O gerador redesenha tudo mesmo com máscara (e reenquadra): o original é
-    // alinhado ao que ele devolveu e volta fora das áreas; na foto real, dentro
-    // da área do texto fica só o que ele escreveu.
-    const volta = img.tamanho === quadro.tamanho
-      ? await devolverOriginalAlinhado(baseFoto, img.png, areas, panorama ? 40 : 28, { texto: fotoFixa })
-      : null;
-    let final = volta ? volta.png : img.png;
+    let final = img.png;
+    let medida: Record<string, unknown> | null = null;
+    let cenaMudada = false;
     let logoAplicada = false;
-    if (logoNoCodigo) {
+    let logoPendente = !!logoNoCodigo;
+    if (panorama) {
+      // Só as letras, dentro da área do texto (com folga); o canto da logo fica
+      // da fatia e a logo entra na mesma passada (limite de CPU).
+      const areasDoTexto = areasDeDesenho(card, total, false, quadro).map((a) => ampliar(a, 0.03));
+      const colado = await colarMudancasNaBase(baseFoto, img.png, areasDoTexto, {
+        protegidas: logoNoCodigo ? [areaDaLogo] : [],
+        logo: logoNoCodigo ? { bytes: logoNoCodigo, caixa: areaDaLogo, clara: !!tomDaLogo?.clara } : null,
+      });
+      cenaMudada = colado.cenaMudada || !colado.png;
+      // Cena mudada: fica a imagem inteira do gerador (coerente), marcada fora da emenda.
+      if (colado.png) {
+        final = colado.png;
+        logoAplicada = colado.logo;
+        logoPendente = false;
+      }
+      medida = { ...colado.alinhamento, alinhou: colado.alinhou, erro: Math.round(colado.erro * 10) / 10, recorte_texto: !!colado.png, cena_mudada: cenaMudada };
+    } else if (img.tamanho === quadro.tamanho) {
+      // Foto real: o gerador redesenha tudo mesmo com máscara (e reenquadra): o
+      // original é alinhado ao que ele devolveu e volta fora das áreas; dentro
+      // da área do texto fica só o que ele escreveu.
+      const volta = await devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa });
+      final = volta.png;
+      medida = { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada };
+    }
+    if (logoNoCodigo && logoPendente) {
       try {
-        const zona = normalizarLayout(card.layout, card.funcao, card.ordem, total).zona_texto;
-        const c = caixaDaLogo(zona, card.funcao === "capa" || card.ordem === 1, quadro.formato);
-        final = await aplicarLogo(final, logoNoCodigo, { x0: c.x0 / 100, y0: c.y0 / 100, x1: c.x1 / 100, y1: c.y1 / 100 }, !!tomDaLogo?.clara);
+        final = await aplicarLogo(final, logoNoCodigo, areaDaLogo, !!tomDaLogo?.clara);
         logoAplicada = true;
       } catch {
         // Raro (analisarLogo já abriu a logo): a lâmina segue sem ela e a versão fica marcada logo_no_codigo: false.
@@ -2226,49 +2636,18 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: final, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
-      custoExtraUsd: custoFundo || undefined,
       extra: {
         referencias_jev: escolha.jev,
         tamanho: img.tamanho,
         modo: panorama ? "panorama" : "foto_real",
         imagem_id: foto?.id ?? null,
         foto_livre: fundoLivre ? fundoLivre.caminho : null,
-        alinhamento: volta
-          ? { ...volta.alinhamento, alinhou: volta.alinhou, erro: Math.round(volta.erro * 10) / 10, recorte_texto: volta.recortouTexto, cena_mudada: volta.cenaMudada }
-          : null,
+        alinhamento: medida,
         logo_no_codigo: logoNoCodigo ? logoAplicada : null,
+        // Contínuo: o fundo usado e a geração dele (a tela compara com o panorama atual: "fora do fundo").
+        ...(panorama ? { fundo: fundoUsado, fundo_geracao: geracaoDoPanorama(t.direcao.panorama), fora_da_emenda: cenaMudada } : {}),
       },
     });
-  }
-
-  // 2) Carrossel contínuo: tela dupla com a lâmina anterior à esquerda.
-  if (continuar) {
-    try {
-      const dupla = await telaDupla(await baixar("mesa", anterior!.storage_path));
-      const prompt = [
-        `TELA DUPLA ${TAMANHO_TELA_DUPLA.replace("x", " x ")}: a metade esquerda (imagem 1) é a lâmina ${ordem - 1}, já pronta, e não pode mudar. Pinte SÓ a metade direita como a lâmina ${ordem} de ${total}, continuação direta da mesma cena: o fundo, o horizonte, a luz, a escala e os elementos que chegam à borda direita da esquerda continuam na mesma altura, sem emenda visível. O quadro 1080 x 1350 descrito abaixo é a metade direita. Nenhum texto cruza a divisa e todo texto fica a pelo menos 90 px dela. O fundo da metade direita é a continuação da cena da esquerda: ignore qualquer cor de fundo sugerida abaixo que quebre essa continuidade.`,
-        baseComCampanha,
-        regrasDeRender(t, card, legendas(1), comLogo),
-      ].join("\n\n");
-      const img = await chamarImagem({
-        ...comum,
-        prompt,
-        editar: { bytes: dupla.tela, mascara: dupla.mascara },
-        tamanho: TAMANHO_TELA_DUPLA,
-        tamanhoFixo: true,
-      });
-      const direita = await metadeDireita(img.png);
-      return await gravarVersao(ch, t, card, { ...img, png: direita, mime: "image/png" }, {
-        origem: "gerar",
-        referencias: idsReferencias,
-        extra: { referencias_jev: escolha.jev, tamanho: TAMANHO_GERADOR, modo: "continuo", continua_de: anterior!.versao },
-      });
-    } catch (e) {
-      // Provedor sem tela dupla: segue no modo normal, com a anterior como referência.
-      if (!recusouTamanho(e)) throw e;
-      anexos.push({ bytes: await baixar("mesa", anterior!.storage_path), mime: "image/png", nome: `card-${ordem - 1}.png` });
-      legendar(`card ${ordem - 1} já aprovado, esta lâmina continua a cena dele pela borda direita`);
-    }
   }
 
   // 3) Normal.
@@ -2386,6 +2765,20 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   const card = cardDaDirecao(t, ordem);
   const atualVersao = versaoAtual(t, ordem);
   if (!atualVersao) throw new ErroEstudio(409, "card_sem_versao", "Gere este card antes de pedir ajuste.");
+  // Lâmina do carrossel contínuo (feita sobre a fatia do panorama): o fundo é o
+  // panorama, então "trocar o fundo" quebraria a emenda com as vizinhas.
+  const marcaDaVersao = atualVersao as VersaoCard & {
+    modo?: string;
+    fundo?: string | null;
+    fundo_geracao?: number | null;
+    fora_da_emenda?: boolean;
+    logo_no_codigo?: boolean | null;
+    alinhamento?: { cena_mudada?: boolean } | null;
+  };
+  const naEmenda = !ehAds(t) && !!t.direcao.carrossel_infinito && marcaDaVersao.modo === "panorama";
+  if (naEmenda && tipo === "fundo") {
+    throw new ErroEstudio(409, "fundo_no_continuo", "No carrossel contínuo o fundo é o panorama: para mudar a cena, use Refazer o fundo no Conjunto (todas as lâminas mudam juntas).");
+  }
   const [atual, fotoFundo] = await Promise.all([
     baixar("mesa", atualVersao.storage_path),
     corpo.imagem_id ? imagensDoAcervo(t.client_id, [texto(corpo.imagem_id, 64)]).then((l) => l[0] ?? null) : Promise.resolve(null),
@@ -2446,11 +2839,27 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   // vai junto na capa e no final para nao ser redesenhada.
   const referencias: ImagemEntrada[] = [];
   const legendas = ["imagem 1: versão atual da lâmina, que deve ser editada"];
-  if (levaLogo(base, ordem)) {
+  // Na lâmina contínua a logo já foi aplicada pelo código e fica como está.
+  if (levaLogo(base, ordem) && !naEmenda) {
     const logo = await baixarLogo(base.client_id, kit);
     if (logo) {
       referencias.push(logo);
       legendas.push(`imagem ${referencias.length + 1}: logo oficial da marca`);
+    }
+  }
+  // Referências escolhidas pela equipe (da lâmina ou do conjunto), como no
+  // gerar_card: o ajuste segue o layout delas (pedido da Mesa Ads, 25/09).
+  // Fora do contínuo (lá a cena é o panorama) e fora da autocorreção (só texto).
+  const idsReferencias: string[] = [];
+  if (!auto && !naEmenda) {
+    for (const ref of await referenciasDaEquipe(base, card)) {
+      try {
+        referencias.push(await imagemDaReferencia(ref));
+        idsReferencias.push(ref.id);
+        legendas.push(`imagem ${referencias.length + 1}: referência ESCOLHIDA PELA EQUIPE: ao aplicar o ajuste, siga de perto a estrutura de layout, a hierarquia, a escala da tipografia e o tratamento desta peça, com as cores, as fontes e a logo desta marca; não copie o texto nem a marca dela`);
+      } catch {
+        // Referência sem arquivo fica de fora do ajuste.
+      }
     }
   }
   const quadro = quadroDoCard(base, card);
@@ -2470,9 +2879,12 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
       : "Mantenha exatamente igual tudo o que a instrução não manda mudar: composição, fundo, cores, tipografia, texto e posição dos elementos.";
   const promptEdicao = [
     `EDITE a imagem 1. ${abertura}`,
+    naEmenda
+      ? `${NAO_REENQUADRAR} As faixas das bordas esquerda e direita (${Math.round(INTERIOR_DA_LAMINA.x0 * 100)}% de cada lado) emendam com as lâminas vizinhas: não mude nada nelas. A cena é o fundo contínuo e não muda; o texto continua na mesma área da lâmina.`
+      : "",
     instrucaoEdicao,
-    regrasDeRender(base, cardAjustado, legendas, levaLogo(base, ordem)),
-  ].join("\n\n");
+    regrasDeRender(base, cardAjustado, legendas, naEmenda && levaLogo(base, ordem) ? "fixa" : levaLogo(base, ordem), false, naEmenda),
+  ].filter(Boolean).join("\n\n");
   const gerado = await chamarImagem({
     clientId: base.client_id,
     modeloId: base.modelo_imagem_id!,
@@ -2489,9 +2901,43 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     agente: "gerador_imagem",
   });
   // Ajuste pontual de verdade: fora das áreas marcadas voltam os pixels da versão anterior.
-  const img = comMascara && gerado.tamanho === tamanhoAtual
+  let img = comMascara && gerado.tamanho === tamanhoAtual && !naEmenda
     ? { ...gerado, png: await devolverOriginalForaDasAreas(atual, gerado.png, abertas, 16), mime: "image/png" }
     : gerado;
+  // Lâmina contínua: nada é reenquadrado. Só o que mudou (nas áreas marcadas
+  // ou no interior) é colado sobre a versão atual, o canto da logo fica e as
+  // bordas voltam exatas do fundo gravado: a emenda com as vizinhas não quebra.
+  let emenda: Record<string, unknown> | null = null;
+  if (naEmenda) {
+    const q = quadroDoCard(base, card);
+    const zona = normalizarLayout(card.layout, card.funcao, card.ordem, totalCards(base)).zona_texto;
+    const c = caixaDaLogo(zona, card.funcao === "capa" || card.ordem === 1, q.formato);
+    const protegidas: Area[] = marcaDaVersao.logo_no_codigo ? [{ x0: c.x0 / 100, y0: c.y0 / 100, x1: c.x1 / 100, y1: c.y1 / 100 }] : [];
+    // Bordas do fundo gravado só quando a versão atual está no enquadramento dele.
+    const comBordas = !!marcaDaVersao.fundo && !marcaDaVersao.fora_da_emenda && !marcaDaVersao.alinhamento?.cena_mudada;
+    // Fundo sumido (refeito): ficam as bordas da versão atual, que já eram as dele.
+    const fundoGravado = comBordas ? await baixar("mesa", marcaDaVersao.fundo!).catch(() => null) : null;
+    // Sem área marcada, o ajuste livre muda o texto: vale a área do texto da
+    // lâmina (com folga). A cena é o panorama e não muda por ajuste.
+    const areasDoAjuste = abertas.length ? abertas : areasDeDesenho(card, totalCards(base), false, q).map((a) => ampliar(a, 0.03));
+    const colado = await colarMudancasNaBase(atual, gerado.png, areasDoAjuste, {
+      protegidas,
+      bordasDe: fundoGravado,
+      fracaoDasBordas: INTERIOR_DA_LAMINA.x0,
+    });
+    const png = colado.png;
+    img = png ? { ...gerado, png, mime: "image/png" } : gerado;
+    emenda = {
+      modo: "panorama",
+      fundo: marcaDaVersao.fundo ?? null,
+      fundo_geracao: marcaDaVersao.fundo_geracao ?? null,
+      // Cena mudada no ajuste: fica a imagem inteira do gerador, marcada fora da emenda.
+      fora_da_emenda: !png || !!marcaDaVersao.fora_da_emenda,
+      alinhamento: { ...colado.alinhamento, alinhou: colado.alinhou, erro: Math.round(colado.erro * 10) / 10, cena_mudada: colado.cenaMudada },
+      bordas_do_fundo: colado.bordas,
+      logo_no_codigo: marcaDaVersao.logo_no_codigo ?? null,
+    };
+  }
 
   // O que foi pedido vai para a memoria do diretor (origem ajuste). A
   // autocorreção não é gosto da marca: fica fora da memória.
@@ -2511,7 +2957,9 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     origem: "ajuste",
     instrucao: auto ? `Correção automática ${auto.rodada}: ${auto.motivos.join("; ")}` : pedido,
     custoExtraUsd: dir.custoUsd,
+    referencias: idsReferencias,
     extra: {
+      ...(emenda ?? {}),
       ...(auto ? { autocorrecao: auto } : {}),
       instrucao_edicao: instrucaoEdicao,
       versao_editada: atualVersao.versao,
@@ -3329,9 +3777,10 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
         ...x.direcao,
         cards,
         ...(refsConjunto !== undefined ? { referencias_ids: refsConjunto } : {}),
-        // Ligar, desligar ou pedir para refazer apaga o panorama: o próximo gerar faz outro.
-        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1 && !ehAds(x), panorama: null } : {}),
-        ...(conjunto && conjunto.refazer_fundo === true ? { panorama: null } : {}),
+        // Ligar, desligar ou pedir para refazer apaga o panorama (e sobe a geração:
+        // um trecho que termina depois é descartado): o próximo gerar faz outro.
+        ...(infinito !== undefined ? { carrossel_infinito: infinito && cards.length > 1 && !ehAds(x), panorama: panoramaApagado(x.direcao.panorama) } : {}),
+        ...(conjunto && conjunto.refazer_fundo === true ? { panorama: panoramaApagado(x.direcao.panorama) } : {}),
       },
     };
   });

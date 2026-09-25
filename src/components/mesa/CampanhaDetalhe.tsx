@@ -20,7 +20,20 @@ import {
   salvarReferenciasDaCampanha,
   type Campanha,
 } from "./mesaV4Api";
-import { aplicarRespostaDaCampanha, marcarPedidoDaCampanha, trocarCampanhaNoCache, usePedidoDaCampanha } from "./campanhasApi";
+import {
+  aplicarRespostaDaCampanha,
+  marcarPedidoDaCampanha,
+  MAX_IMAGENS_CAMPANHA,
+  normalizarBriefing,
+  normalizarImagensDaCampanha,
+  normalizarPlanoDeImagens,
+  planoDesatualizado,
+  trocarCampanhaNoCache,
+  usePedidoDaCampanha,
+} from "./campanhasApi";
+import CampanhaBriefing from "./CampanhaBriefing";
+import { ImagensDaCampanhaSalvas } from "./CampanhaImagens";
+import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
 
 /**
  * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
@@ -39,7 +52,7 @@ export function SeloDoEstado({ estado }: { estado: string }) {
 
 // ------------------------------------------------------------------ seções
 
-type IdDaSecao = "visao" | "identidade" | "referencias" | "conteudos";
+type IdDaSecao = "visao" | "briefing" | "imagens" | "plano" | "identidade" | "referencias" | "conteudos";
 
 const CHAVE_DAS_SECOES = "mesa:campanha:secoes-fechadas";
 
@@ -130,6 +143,7 @@ export default function CampanhaDetalhe({
   const [fechadas, setFechadas] = useState<IdDaSecao[]>(lerFechadas);
   const [referencias, setReferencias] = useState<string[]>(campanha.referencias_ids || []);
   const [salvandoRefs, setSalvandoRefs] = useState(0);
+  const [salvandoImagens, setSalvandoImagens] = useState(0);
   const fila = useRef<Promise<void>>(Promise.resolve());
   /** Última lista gravada no banco e a última pedida (a última vence). */
   const refsSalvas = useRef<string[]>(campanha.referencias_ids || []);
@@ -217,6 +231,17 @@ export default function CampanhaDetalhe({
     />
   );
 
+  const briefing = normalizarBriefing(campanha.briefing);
+  const produtosEmFoco = briefing.produtos.map((p) => p.nome).join(", ");
+  const imagensDaCampanha = normalizarImagensDaCampanha(campanha.imagens);
+  const plano = normalizarPlanoDeImagens(campanha.plano_imagens);
+  const planoVelho = planoDesatualizado(plano, imagensDaCampanha, proposta.data ? itens : null);
+  const planoResumo = !plano
+    ? "ainda não montado"
+    : planoVelho
+      ? "desatualizado"
+      : `${plano.pecas.filter((p) => !!p.imagem_id).length} lâmina(s) com foto`;
+
   const conteudosResumo = proposta.isLoading ? "lendo…" : itens.length ? `${itens.length} conteúdo(s)${gravada ? ", na agenda" : ""}` : "nenhum ainda";
 
   return (
@@ -294,6 +319,27 @@ export default function CampanhaDetalhe({
             </div>
           )}
         </dl>
+      </Secao>
+
+      {/* Briefing: produto em foco, oferta, mensagem, público, provas, tom e CTA. */}
+      <Secao titulo="Briefing" resumo={produtosEmFoco || briefing.oferta || undefined} aberta={aberta("briefing")} onAlternar={() => alternar("briefing")}>
+        <CampanhaBriefing campanha={campanha} onPedirAoAgente={onPedirAoAgente ? pedir : undefined} />
+      </Secao>
+
+      {/* Imagens da campanha: do acervo (inclusive Mesa Foto) ou enviadas, com papel e porquê. */}
+      <Secao
+        titulo="Imagens da campanha"
+        resumo={`${imagensDaCampanha.length} de ${MAX_IMAGENS_CAMPANHA}`}
+        aberta={aberta("imagens")}
+        onAlternar={() => alternar("imagens")}
+        acao={salvandoImagens > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-label="Salvando as imagens" /> : undefined}
+      >
+        <ImagensDaCampanhaSalvas campanha={campanha} onSalvando={setSalvandoImagens} />
+      </Secao>
+
+      {/* Plano de imagens: qual imagem vai em qual lâmina e por quê (estrategista + Jev). */}
+      <Secao titulo="Plano de imagens" resumo={planoResumo} aberta={aberta("plano")} onAlternar={() => alternar("plano")}>
+        <CampanhaPlanoDeImagens campanha={campanha} itens={proposta.data ? itens : campanha.proposta_id ? null : []} />
       </Secao>
 
       {/* Identidade do tema, com o selo grande. */}

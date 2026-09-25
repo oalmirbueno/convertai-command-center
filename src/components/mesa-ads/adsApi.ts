@@ -124,10 +124,152 @@ export interface NotasDoJev {
   risco_politica?: number | null;
   parada?: number | null;
   diferenciacao?: number | null;
+  /** v3: quanto cumpre o tom pedido (só quando sóbrio ou agressivo). */
+  tom?: number | null;
   alerta_politica?: unknown;
 }
 
+// ------------------------------------------------------------------ v3: tom e foco em resultado
+
+export type TomDoCriativo = "sobrio" | "direto" | "agressivo";
+
+/** Os três tons (regras completas em supabase/functions/_shared/conhecimento-ads.ts, TONS). */
+export const TONS_DO_CRIATIVO: { valor: TomDoCriativo; rotulo: string; dica: string }[] = [
+  { valor: "sobrio", rotulo: "Sóbrio", dica: "Autoridade calma: benefício e prova na frente, sem pressão." },
+  { valor: "direto", rotulo: "Direto", dica: "Oferta na primeira leitura, contraste alto, CTA de ação." },
+  { valor: "agressivo", rotulo: "Agressivo", dica: "Frase curta e dura, número real, contraste máximo, escala gigante, urgência real e CTA imperativo." },
+];
+
+export const tomDe = (v: unknown): TomDoCriativo | null =>
+  v === "sobrio" || v === "direto" || v === "agressivo" ? v : null;
+
+export const rotuloDoTom = (v: unknown) => {
+  const t = TONS_DO_CRIATIVO.find((x) => x.valor === v);
+  return t ? t.rotulo : "";
+};
+
+/** Mesma regra do servidor (tomDoPedido): "sóbrio" e "menos agressivo" vencem; "agressivo", "mais forte" e afins viram agressivo. */
+export function tomDoPedido(texto: string | null | undefined): TomDoCriativo | null {
+  const t = String(texto || "");
+  if (!t.trim()) return null;
+  if (/s[oó]bri|elegant|discret|institucional|mais leve|mais suave|menos agressiv/i.test(t)) return "sobrio";
+  if (/agressiv|mais pesad|mais forte|sem d[oó]|sem medo|mais vendedor|mais direto ao ponto|mais duro|chamar mais aten|mais impactante|apelativ/i.test(t)) return "agressivo";
+  return null;
+}
+
+/**
+ * Direção de arte do tom agressivo que acompanha um pedido de ajuste com
+ * "agressivo" (o Estúdio recebe a instrução com as regras concretas, não só o
+ * adjetivo). Espelha TONS.agressivo.arte do servidor (teste confere).
+ */
+export const ARTE_DO_TOM_AGRESSIVO = [
+  "Contraste máximo: fundo chapado saturado (ou preto e branco com UMA cor de destaque) e texto em bloco sólido; nada de cinza sobre cinza.",
+  "Escala gigante: a headline ocupa de 35% a 50% da altura da peça em peso black ou extra bold; o elemento dominante (produto, número, objeto) ocupa de 40% a 60% do quadro.",
+  "O número real da oferta (preço, prazo, vagas) aparece enorme, na cor de destaque.",
+  "Composição com energia: diagonal, corte ousado com o produto saindo do quadro, sobreposição; nunca tudo centralizado e pequeno.",
+  "CTA escrito em botão ou faixa de cor sólida, curto e visível.",
+  "Nunca escurecer a foto ou a capa: o destaque vem de cor, escala, tipografia e composição.",
+];
+
+/** Instrução de ajuste com o tom: pedido "mais agressivo" leva as regras concretas junto. */
+export function instrucaoComTom(instrucao: string): string {
+  if (tomDoPedido(instrucao) !== "agressivo") return instrucao;
+  return `${instrucao.trim()}\n\nTOM AGRESSIVO DE VERDADE (regras da agência):\n${ARTE_DO_TOM_AGRESSIVO.map((x) => `- ${x}`).join("\n")}\nTexto exato da peça continua o mesmo, só mais curto se a equipe pediu; nenhum número que não esteja no texto.`;
+}
+
+/** Regra de corte do ângulo (calculada no servidor, calculos.ts regraDeCorte). */
+export interface CorteDoAngulo {
+  metrica: string;
+  limite_brl: number | null;
+  gasto_sem_resultado_brl: number | null;
+  impressoes_minimas: number;
+  dias_minimos: number;
+  fonte: "briefing" | "media_da_conta" | null;
+  texto: string;
+}
+
+export function normalizarCorte(bruto: unknown): CorteDoAngulo | null {
+  const c = obj(bruto);
+  if (!c.texto) return null;
+  return {
+    metrica: txt(c.metrica) || "custo por resultado",
+    limite_brl: numeroOuNada(c.limite_brl),
+    gasto_sem_resultado_brl: numeroOuNada(c.gasto_sem_resultado_brl),
+    impressoes_minimas: numeroOuNada(c.impressoes_minimas) || 1000,
+    dias_minimos: numeroOuNada(c.dias_minimos) || 3,
+    fonte: c.fonte === "briefing" ? "briefing" : c.fonte === "media_da_conta" ? "media_da_conta" : null,
+    texto: txt(c.texto),
+  };
+}
+
+export interface ItemDeTeste {
+  angulo_id: string;
+  ordem: number | null;
+  nome: string;
+  porque: string;
+  hipotese: string;
+  metrica: string;
+  corte: string | null;
+}
+
+export interface BaseDaConta {
+  periodo_dias: number;
+  gasto: number | null;
+  resultados: number | null;
+  custo_por_resultado: number | null;
+  custo_toleravel: number | null;
+}
+
+/** "Testar primeiro" do plano: o que o servidor gravou ou, em plano antigo, a ordem dos ângulos. */
+export function testarPrimeiroDoPlano(p: PlanoAds): { itens: ItemDeTeste[]; base: BaseDaConta | null; tom: TomDoCriativo | null } {
+  const e = obj(p.estrutura);
+  const gravados = lista(e.testar_primeiro).map((x) => {
+    const o = obj(x);
+    return {
+      angulo_id: txt(o.angulo_id),
+      ordem: numeroOuNada(o.ordem),
+      nome: txt(o.nome),
+      porque: txt(o.porque),
+      hipotese: txt(o.hipotese),
+      metrica: txt(o.metrica),
+      corte: txt(o.corte) || null,
+    };
+  }).filter((x) => !!x.angulo_id);
+  const itens = gravados.length
+    ? gravados
+    : p.angulos
+        .filter((a) => typeof a.ordem_teste === "number")
+        .sort((a, b) => (a.ordem_teste || 99) - (b.ordem_teste || 99))
+        .slice(0, 3)
+        .map((a) => ({
+          angulo_id: a.id,
+          ordem: a.ordem_teste ?? null,
+          nome: a.nome,
+          porque: a.porque_testar_primeiro || "",
+          hipotese: a.hipotese || "",
+          metrica: (a.corte && a.corte.metrica) || a.metrica || "",
+          corte: a.corte ? a.corte.texto : null,
+        }));
+  const b = obj(e.base_da_conta);
+  const base: BaseDaConta | null = Object.keys(b).length
+    ? {
+        periodo_dias: numeroOuNada(b.periodo_dias) || 90,
+        gasto: numeroOuNada(b.gasto),
+        resultados: numeroOuNada(b.resultados),
+        custo_por_resultado: numeroOuNada(b.custo_por_resultado),
+        custo_toleravel: numeroOuNada(b.custo_toleravel),
+      }
+    : null;
+  return { itens, base, tom: tomDe(e.tom) };
+}
+
 export interface Angulo {
+  /** v3: tom, genérico pela nota do Jev, por que testar primeiro, ordem de teste e corte (código). */
+  tom?: TomDoCriativo | null;
+  generico?: boolean;
+  porque_testar_primeiro?: string;
+  ordem_teste?: number | null;
+  corte?: CorteDoAngulo | null;
   /** v2: laço de qualidade do servidor. */
   estilo_visual?: string;
   objetivo?: string;
@@ -660,7 +802,7 @@ export function normalizarPlano(p: any): PlanoAds {
     briefing_id: p.briefing_id ? String(p.briefing_id) : null,
     nome: txt(p.nome) || "Plano de teste",
     status: (p.status || "rascunho") as StatusDoPlano,
-    angulos: lista(p.angulos).map((a, i) => ({ ...obj(a), id: txt(obj(a).id) || `a${i + 1}`, nome: txt(obj(a).nome) || `Ângulo ${i + 1}` })) as Angulo[],
+    angulos: lista(p.angulos).map((a, i) => ({ ...obj(a), id: txt(obj(a).id) || `a${i + 1}`, nome: txt(obj(a).nome) || `Ângulo ${i + 1}`, corte: normalizarCorte(obj(a).corte) })) as Angulo[],
     estrutura: obj(p.estrutura),
     pedido: p.pedido ? String(p.pedido) : null,
     conversa_id: p.conversa_id ? String(p.conversa_id) : null,
@@ -1074,6 +1216,10 @@ export interface Oferta {
   jev: NotasDaOferta | null;
   conversa_id: string | null;
   criado_em: string;
+  /** v3: "contexto" quando montada do contexto do cliente (sem IA), com a fonte de cada campo. */
+  origem?: string | null;
+  fontes?: Record<string, string> | null;
+  lacunas?: string[];
 }
 
 export interface Ideia {
@@ -1131,8 +1277,61 @@ export function normalizarOferta(bruto: unknown, i = 0): Oferta {
     jev: notasDaOferta(linha.jev || dentro.jev),
     conversa_id: linha.conversa_id ? String(linha.conversa_id) : null,
     criado_em: txt(linha.criado_em),
+    origem: txt(o.origem) || null,
+    fontes: fontesDaOferta(o.fontes),
+    lacunas: textos(o.lacunas),
   };
 }
+
+function fontesDaOferta(v: unknown): Record<string, string> | null {
+  const f = obj(v);
+  const saida: Record<string, string> = {};
+  Object.keys(f).forEach((k) => {
+    if (typeof f[k] === "string" && f[k]) saida[k] = f[k];
+  });
+  return Object.keys(saida).length ? saida : null;
+}
+
+/** Oferta do contexto (sem IA, grátis): gravar = vira oferta em ads_ofertas. */
+export interface OfertaDoContexto {
+  oferta: Oferta | null;
+  lacunas: string[];
+  fontes: Record<string, string>;
+  criada: boolean;
+  contexto: { tem_briefing: boolean; tem_contexto_consolidado: boolean; tem_brief: boolean; campanhas: { nome: string; periodo_fim: string | null }[] };
+}
+
+export async function montarOfertaDoContexto(clientId: string, opcoes: { gravar?: boolean; forcar?: boolean } = {}): Promise<OfertaDoContexto> {
+  const r = obj(await chamarAds<any>("oferta_do_contexto", { client_id: clientId, gravar: opcoes.gravar === true, forcar: opcoes.forcar === true || undefined }));
+  const c = obj(r.contexto);
+  return {
+    oferta: r.oferta ? normalizarOferta(r.oferta) : null,
+    lacunas: textos(r.lacunas),
+    fontes: fontesDaOferta(r.fontes) || {},
+    criada: r.criada === true,
+    contexto: {
+      tem_briefing: c.tem_briefing === true,
+      tem_contexto_consolidado: c.tem_contexto_consolidado === true,
+      tem_brief: c.tem_brief === true,
+      campanhas: lista(c.campanhas).map((x) => ({ nome: txt(obj(x).nome), periodo_fim: obj(x).periodo_fim ? String(obj(x).periodo_fim) : null })),
+    },
+  };
+}
+
+/** Rótulo curto da fonte de cada campo da oferta do contexto. */
+export const ROTULOS_DAS_FONTES: Record<string, string> = {
+  nome: "Nome",
+  produto: "Produto",
+  para_quem: "Para quem",
+  promessa: "Promessa",
+  mecanismo: "Mecanismo",
+  entregaveis: "O que entra",
+  garantia: "Garantia",
+  ancoragem: "Preço",
+  urgencia_real: "Urgência",
+  cta: "CTA",
+  riscos: "Base da conta",
+};
 
 export function normalizarIdeia(bruto: unknown): Ideia {
   const i = obj(bruto);
@@ -1807,6 +2006,8 @@ export const nomeDeArquivo = (t: string) =>
  */
 export interface PedidoDePlano {
   rotulo: string;
+  /** v3: tom pedido (sóbrio, direto, agressivo). */
+  tom?: TomDoCriativo;
   oferta_id?: string;
   objetivo?: string;
   modo?: "novo" | "variar_vencedor";
@@ -1825,6 +2026,7 @@ export function corpoDoPlano(base: {
   objetivo?: string | null;
   modo?: "novo" | "variar_vencedor";
   referencia_ids?: string[];
+  tom?: TomDoCriativo | null;
 }): Record<string, unknown> {
   const corpo: Record<string, unknown> = { client_id: base.client_id, quantidade_angulos: base.quantidade_angulos };
   if (base.briefing_id) corpo.briefing_id = base.briefing_id;
@@ -1833,5 +2035,42 @@ export function corpoDoPlano(base: {
   if (base.objetivo) corpo.objetivo = base.objetivo;
   if (base.modo && base.modo !== "novo") corpo.modo = base.modo;
   if (base.referencia_ids && base.referencia_ids.length) corpo.referencia_ids = base.referencia_ids;
+  if (base.tom) corpo.tom = base.tom;
   return corpo;
+}
+
+// ------------------------------------------------------------------ v3: irmãos do criativo e referência no Estúdio
+
+/**
+ * Formatos irmãos do criativo: mesmo plano, mesmo ângulo e mesma variação de
+ * copy, outro formato (o 1:1, o 4:5 e o Stories do mesmo ângulo). A variação
+ * vem da copy (v3) ou do nome "Ângulo | V2 | formato".
+ */
+export function variacaoDoCriativo(c: CriativoAds): number | null {
+  const v = numeroOuNada((c.copy as Record<string, unknown>).variacao);
+  if (v !== null) return v;
+  const m = /\|\s*V(\d+)\s*\|/.exec(c.nome || "");
+  return m ? Number(m[1]) : null;
+}
+
+export function irmaosDoCriativo(c: CriativoAds, todos: CriativoAds[]): CriativoAds[] {
+  if (!c.plano_id || !c.angulo_id) return [];
+  const v = variacaoDoCriativo(c);
+  return todos.filter(
+    (x) =>
+      x.id !== c.id &&
+      x.plano_id === c.plano_id &&
+      x.angulo_id === c.angulo_id &&
+      x.formato !== c.formato &&
+      !!x.trabalho_id &&
+      variacaoDoCriativo(x) === v,
+  );
+}
+
+/** Leva a referência da Mesa Ads (ou um link novo) para as referências do Estúdio; devolve o id a escolher. */
+export async function levarReferenciaAoEstudio(clientId: string, alvo: { referencia_id?: string; url?: string }): Promise<{ id: string; titulo: string; aviso: string | null }> {
+  const r = obj(await chamarAds<any>("referencia_para_estudio", { client_id: clientId, ...alvo }));
+  const id = txt(r.estudio_referencia_id);
+  if (!id) throw new Error("A referência não voltou ligada ao Estúdio. Tente de novo.");
+  return { id, titulo: txt(r.titulo), aviso: r.aviso ? String(r.aviso) : null };
 }

@@ -11,6 +11,7 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Cus
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { Cartao, ListaCurta, MiniaturaDaFoto, Pilulas, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import CartaoDaIdentificacao, { AcoesDaIdentificacao } from "./Identificacao";
+import { gravarNaSessao, lerDaSessao } from "./sessao";
 import SeletorDeFotos from "./SeletorDeFotos";
 import {
   chaveDosKits,
@@ -62,26 +63,7 @@ import {
  * "sumia": vivia só no estado desta tela, que desmonta ao trocar de etapa).
  */
 
-/** Guardado na sessão do navegador, por cliente (só JSON). */
-const chaveDaSessao = (clientId: string, nome: string) => `mesa-foto:${nome}:${clientId}`;
-
-export function lerDaSessao<T>(clientId: string, nome: string): T | null {
-  try {
-    const bruto = window.sessionStorage.getItem(chaveDaSessao(clientId, nome));
-    return bruto ? (JSON.parse(bruto) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function gravarNaSessao(clientId: string, nome: string, valor: unknown) {
-  try {
-    if (valor === null || valor === undefined || (Array.isArray(valor) && !valor.length)) window.sessionStorage.removeItem(chaveDaSessao(clientId, nome));
-    else window.sessionStorage.setItem(chaveDaSessao(clientId, nome), JSON.stringify(valor));
-  } catch {
-    /* sem armazenamento: vale só nesta tela */
-  }
-}
+export { gravarNaSessao, lerDaSessao } from "./sessao";
 
 function propostasDaSessao(clientId: string): PropostaDeKit[] {
   const brutas = lerDaSessao<any[]>(clientId, "propostas");
@@ -441,7 +423,7 @@ export default function EtapaKits() {
               </p>
             )}
             {kits.isError && <AvisoDeErro erro={kits.error} />}
-            {kits.isSuccess && lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhum kit ainda. Selecione fotos no Acervo e peça uma sugestão, ou crie um novo.</p>}
+            {kits.isSuccess && lista.length === 0 && <p className="text-[12px] text-muted-foreground">Nenhum produto ainda. Em Fotos, toque em Identificar o produto, ou crie um novo aqui.</p>}
             <ul className="space-y-1.5">
               {lista.map((k) => {
                 const capa = todas.find((f) => f.id === (k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id)));
@@ -664,7 +646,7 @@ export default function EtapaKits() {
 
                 <div className="space-y-2">
                   <div className="flex min-w-0 flex-wrap items-center">
-                    <p className="mr-auto text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fontes do kit</p>
+                    <p className="mr-auto text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fotos do produto</p>
                     {selecionadasFora.length > 0 && (
                       <Button
                         type="button"

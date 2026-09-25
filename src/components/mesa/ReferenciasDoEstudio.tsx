@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { useMesa } from "./MesaContexto";
 import SeletorDeReferencias, { MiniaturasEscolhidas, type AbaDoSeletor } from "./SeletorDeReferencias";
+import { gravarTrabalhoNoCache, type TrabalhoGravado } from "./estudioUtil";
 import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
 
 /**
@@ -12,7 +15,12 @@ import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
  * as pastas do workspace, o banco da agência (páginas de 24) e o Pinterest.
  * A escolha vale para o conjunto ou só para a lâmina selecionada (sobrepõe as
  * do conjunto) e vai para o estúdio pelo "configurar", sem custo. Id do banco
- * da agência leva "g:". O servidor guarda até 4 por alvo.
+ * da agência leva "g:".
+ *
+ * Até 2 por alvo (25/09): o gerador só usa 2, e antes a tela deixava marcar 4
+ * (a 3ª e a 4ª eram ignoradas sem aviso). Com referência escolhida, a lâmina
+ * é recomposta seguindo o layout dela (modo replicar referência): a 1ª dá a
+ * estrutura e a 2ª o tratamento. A escolha entra no cache na hora.
  */
 
 export type AlvoDasReferencias = "conjunto" | "lamina";
@@ -20,8 +28,14 @@ type AbaDasReferencias = "cliente" | "banco";
 
 const POR_PAGINA = 24;
 const PREFIXO_GLOBAL = "g:";
-/** configurar guarda no máximo 4 referências por alvo (idsDeReferencia). */
-const MAX_NO_ESTUDIO = 4;
+/** O gerador replica no máximo 2 referências por lâmina (1ª estrutura, 2ª tratamento). */
+export const MAX_NO_ESTUDIO = 2;
+
+/** O papel de cada escolhida no modo replicar referência, na ordem da escolha. */
+export function papelDaEscolhida(indice: number, total: number): string {
+  if (total <= 1) return "layout a replicar";
+  return indice === 0 ? "1ª: estrutura e layout" : "2ª: tratamento da imagem";
+}
 
 const iguais = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.indexOf(x) >= 0);
 
@@ -42,6 +56,8 @@ export default function ReferenciasDoEstudio({
   onAba: (a: AbaDasReferencias) => void;
   onAtualizar: () => void;
 }) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
   const [rascunho, setRascunho] = useState<string[] | null>(null);
   const [salvando, setSalvando] = useState(0);
   // Pastas do workspace e Pinterest ficam só nesta tela; cliente e banco seguem guardados pelo Estúdio.
@@ -69,13 +85,14 @@ export default function ReferenciasDoEstudio({
     setSalvando((n) => n + 1);
     fila.current = fila.current.then(async () => {
       try {
-        await chamarFuncao("estudio-arte", {
+        const r = await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", {
           acao: "configurar",
           trabalho_id: trabalho.id,
           ...(alvoDaVez === "lamina" && ordem !== null
             ? { card: { ordem, referencias_ids: lista } }
             : { conjunto: { referencias_ids: lista } }),
         });
+        gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
         onAtualizar();
       } catch (e) {
         setRascunho(null);
@@ -93,8 +110,8 @@ export default function ReferenciasDoEstudio({
         : `A lâmina ${cardSelecionado?.ordem} usa as do conjunto. Escolha aqui para ela ter as próprias.`;
     }
     return doConjunto.length
-      ? "O diretor e o gerador seguem estas de perto em todas as lâminas."
-      : "Nenhuma escolhida: o estúdio escolhe sozinho entre as do cliente, as em destaque primeiro.";
+      ? "O gerador replica estas de perto em todas as lâminas que não têm as próprias."
+      : "Nenhuma escolhida: o estúdio escolhe sozinho entre as do cliente, as em destaque primeiro, sem replicar layout.";
   }, [alvoReal, daLamina.length, doConjunto.length, cardSelecionado?.ordem]);
 
   const doBanco = escolhidas.filter((id) => id.indexOf(PREFIXO_GLOBAL) === 0).length;
@@ -136,6 +153,13 @@ export default function ReferenciasDoEstudio({
           )}
         </div>
         <MiniaturasEscolhidas ids={escolhidas} colunas={5} onTirar={(id) => gravar(escolhidas.filter((x) => x !== id))} />
+        {escolhidas.length > 0 && (
+          <p className="text-[11px] leading-snug text-muted-foreground">
+            {escolhidas.length === 1
+              ? "A lâmina segue o layout desta referência, com as cores, as fontes e a logo da marca, o texto exato e a foto da lâmina."
+              : "Com duas: a 1ª dá a estrutura e o layout; a 2ª dá o tratamento da imagem e os elementos gráficos."}
+          </p>
+        )}
       </div>
 
       <SeletorDeReferencias
@@ -145,7 +169,7 @@ export default function ReferenciasDoEstudio({
         modo="escolher"
         colunas={3}
         porPagina={POR_PAGINA}
-        alturaMax="min(58vh, 520px)"
+        alturaMax="520px"
         aba={abaDoSeletor}
         onAba={(a) => {
           if (a === "cliente" || a === "banco") {

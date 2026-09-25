@@ -1,7 +1,8 @@
 /**
  * Operações de imagem feitas na própria função, sem IA e sem custo:
- * tela dupla para o carrossel contínuo, máscara de edição, recorte, foto real
- * no formato 4:5 e a devolução dos pixels originais fora da área editada.
+ * panorama do carrossel contínuo (fatias, emenda e letras coladas na fatia),
+ * máscara de edição, recorte, foto real no formato 4:5 e a devolução dos
+ * pixels originais fora da área editada.
  *
  * Regra do dono (23/09): quando a lâmina usa uma foto real do cliente, a foto
  * não é refeita pelo gerador. O gerador desenha só onde a máscara abre (texto,
@@ -12,10 +13,10 @@
  */
 
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+import { proporcaoDoTrechoConfere } from "./carrossel-continuo.ts";
 
 export const LARGURA_LAMINA = 1088;
 export const ALTURA_LAMINA = 1360;
-export const TAMANHO_TELA_DUPLA = `${LARGURA_LAMINA * 2}x${ALTURA_LAMINA}`;
 
 /** Área relativa à lâmina, de 0 a 1 (canto superior esquerdo até o inferior direito). */
 export type Area = { x0: number; y0: number; x1: number; y1: number };
@@ -77,29 +78,6 @@ export async function mascara(largura: number, altura: number, abertas: Area[]):
     m.drawBox(x + 1, y + 1, w, h, 0x00000000);
   }
   return await m.encode(1);
-}
-
-/**
- * Tela dupla do carrossel contínuo: a lâmina anterior à esquerda, a metade
- * direita vazia para o gerador pintar a continuação. Devolve a tela e a máscara.
- */
-export async function telaDupla(anterior: Uint8Array): Promise<{ tela: Uint8Array; mascara: Uint8Array }> {
-  const esquerda = cobrir(await decodificar(anterior));
-  const tela = new Image(LARGURA_LAMINA * 2, ALTURA_LAMINA);
-  tela.fill(0x808080ff);
-  tela.composite(esquerda, 0, 0);
-  return {
-    tela: await tela.encode(1),
-    mascara: await mascara(LARGURA_LAMINA * 2, ALTURA_LAMINA, [{ x0: 0.5, y0: 0, x1: 1, y1: 1 }]),
-  };
-}
-
-/** Metade direita da tela dupla, já no tamanho da lâmina. */
-export async function metadeDireita(bytes: Uint8Array): Promise<Uint8Array> {
-  const img = await decodificar(bytes);
-  const meio = Math.floor(img.width / 2);
-  const direita = img.clone().crop(meio, 0, img.width - meio, img.height);
-  return await cobrir(direita).encode(1);
 }
 
 /**
@@ -523,7 +501,12 @@ export function cobrirComFoco(img: Image, largura = LARGURA_LAMINA, altura = ALT
  */
 export async function aplicarLogo(arte: Uint8Array, logo: Uint8Array, caixa: Area, clara: boolean): Promise<Uint8Array> {
   const img = await decodificar(arte);
-  const L = await decodificar(logo);
+  logoNaImagem(img, await decodificar(logo), caixa, clara);
+  return await img.encode(1);
+}
+
+/** O mesmo que aplicarLogo, sobre a imagem já aberta (o panorama aplica na mesma passada do recorte). */
+function logoNaImagem(img: Image, L: Image, caixa: Area, clara: boolean) {
   const W = img.width, H = img.height;
   const cw = Math.max(8, Math.round((caixa.x1 - caixa.x0) * W));
   const ch = Math.max(8, Math.round((caixa.y1 - caixa.y0) * H));
@@ -567,7 +550,6 @@ export async function aplicarLogo(arte: Uint8Array, logo: Uint8Array, caixa: Are
     img.composite(halo, x - r, y - r);
   }
   img.composite(logoNaCaixa, x, y);
-  return await img.encode(1);
 }
 
 /** Desfoque de caixa separável (horizontal e vertical) com raio r. */
@@ -741,4 +723,262 @@ export async function corrigirEmenda(anterior: Uint8Array, nova: Uint8Array, fai
     }
   }
   return await n.encode(1);
+}
+
+// ------------------------------------------------ panorama sem deformar (25/09)
+//
+// Auditoria do contínuo (dono, 25/09: "é muito bugado"):
+// - a fatia do panorama nunca é reenquadrada: devolverOriginalAlinhado punha a
+//   fatia no enquadramento do gerador e a borda saía com faixa dupla. Agora o
+//   gerado é que vai para o enquadramento da fatia e só o que ele acrescentou
+//   (letras) é colado sobre a fatia intacta (colarMudancasNaBase);
+// - o trecho seguinte é alinhado à lâmina de ligação antes de fatiar, e é
+//   recusado quando a cena mudou (fatiarTrecho);
+// - ajuste no contínuo devolve as bordas exatas do fundo gravado (restaurarBordas).
+
+/** Amostra bilinear RGB de um bitmap RGBA (coordenadas limitadas à imagem). */
+function amostraRgb(b: Uint8ClampedArray, W: number, H: number, x: number, y: number, saida: Float32Array, k: number) {
+  const xc = Math.max(0, Math.min(W - 1, x)), yc = Math.max(0, Math.min(H - 1, y));
+  const x0 = Math.floor(xc), y0 = Math.floor(yc);
+  const x1 = Math.min(W - 1, x0 + 1), y1 = Math.min(H - 1, y0 + 1);
+  const fx = xc - x0, fy = yc - y0;
+  const i00 = (y0 * W + x0) * 4, i10 = (y0 * W + x1) * 4, i01 = (y1 * W + x0) * 4, i11 = (y1 * W + x1) * 4;
+  for (let c = 0; c < 3; c++) {
+    const cima = b[i00 + c] * (1 - fx) + b[i10 + c] * fx;
+    const baixo = b[i01 + c] * (1 - fx) + b[i11 + c] * fx;
+    saida[k + c] = cima * (1 - fy) + baixo * fy;
+  }
+}
+
+/** Máscara por pixel das áreas (1 dentro): consulta barata nos laços. */
+function mapaDasAreas(W: number, H: number, lista: Area[]): Uint8Array {
+  const m = new Uint8Array(W * H);
+  for (const a of lista) {
+    const x0 = Math.max(0, Math.floor(a.x0 * W)), x1 = Math.min(W - 1, Math.ceil(a.x1 * W));
+    const y0 = Math.max(0, Math.floor(a.y0 * H)), y1 = Math.min(H - 1, Math.ceil(a.y1 * H));
+    for (let y = y0; y <= y1; y++) m.fill(1, y * W + x0, y * W + x1 + 1);
+  }
+  return m;
+}
+
+/**
+ * Cola na base (fatia do panorama ou versão atual da lâmina contínua) só o que
+ * o gerador mudou dentro das `areas`: o gerado é posto no enquadramento da
+ * base (o inverso de devolverOriginalAlinhado) e o recorte pega o que difere
+ * da base (letras, sombra das letras). Fora das áreas, e nas `protegidas`
+ * (o canto da logo aplicada pelo código), a base fica intacta, pixel por
+ * pixel. A diferença média de cor do gerado (ele clareia ou esquenta a cena
+ * toda) é descontada antes do recorte. Cena mudada (erro acima de
+ * LIMITE_ERRO_RECORTE): png null, e quem chama decide.
+ * Na mesma passada (sem abrir e gravar a imagem de novo, limite de CPU):
+ * `bordasDe` devolve as faixas laterais exatas desse fundo (ajuste de lâmina
+ * contínua) e `logo` aplica a logo oficial como aplicarLogo.
+ */
+export async function colarMudancasNaBase(
+  base: Uint8Array,
+  gerado: Uint8Array,
+  areas: Area[],
+  opcoes: {
+    protegidas?: Area[];
+    bordasDe?: Uint8Array | null;
+    fracaoDasBordas?: number;
+    logo?: { bytes: Uint8Array; caixa: Area; clara: boolean } | null;
+  } = {},
+): Promise<{ png: Uint8Array | null; alinhamento: Alinhamento; alinhou: boolean; erro: number; cenaMudada: boolean; bordas: boolean; logo: boolean }> {
+  const b = await decodificar(base);
+  const W = b.width, H = b.height;
+  const g0 = await decodificar(gerado);
+  const g = g0.width === W && g0.height === H ? g0 : cobrir(g0, W, H);
+  const est = estimarAlinhamento(b, g, areas);
+  const alinhou = Number.isFinite(est.erro) && est.erro < est.erroSemAlinhar * 0.9;
+  const al = alinhou ? est.alinhamento : IDENTIDADE;
+  const erro = alinhou ? est.erro : est.erroSemAlinhar;
+  if (!(erro <= LIMITE_ERRO_RECORTE) || !areas.length) {
+    return { png: null, alinhamento: al, alinhou, erro, cenaMudada: !(erro <= LIMITE_ERRO_RECORTE), bordas: false, logo: false };
+  }
+  const bb = b.bitmap, gb = g.bitmap;
+  // 1 = área aberta; 0 = fora dela ou protegida.
+  const aberta = mapaDasAreas(W, H, areas);
+  const protegida = mapaDasAreas(W, H, opcoes.protegidas ?? []);
+  for (let k = 0; k < aberta.length; k++) if (protegida[k]) aberta[k] = 0;
+  // Onde, no gerado, está o ponto (x, y) da base.
+  const xg = (x: number) => (((x + 0.5) / W - al.cu) * al.escala + 0.5) * W - 0.5;
+  const yg = (y: number) => (((y + 0.5) / H - al.cv) * al.escala + 0.5) * H - 0.5;
+  const px = new Float32Array(3);
+
+  // Diferença média de cor fora das áreas (amostra a cada 6 px).
+  const soma = [0, 0, 0];
+  let n = 0;
+  for (let y = 3; y < H; y += 6) {
+    const gy = yg(y);
+    if (gy < 0 || gy > H - 1) continue;
+    for (let x = 3; x < W; x += 6) {
+      if (aberta[y * W + x]) continue;
+      const gx = xg(x);
+      if (gx < 0 || gx > W - 1) continue;
+      amostraRgb(gb, W, H, gx, gy, px, 0);
+      const i = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) soma[c] += px[c] - bb[i + c];
+      n++;
+    }
+  }
+  const d0 = n ? soma[0] / n : 0, d1 = n ? soma[1] / n : 0, d2 = n ? soma[2] / n : 0;
+
+  // Janela que envolve as áreas (limite de CPU da função).
+  const bx0 = Math.max(0, Math.floor(Math.min(...areas.map((a) => a.x0)) * W));
+  const by0 = Math.max(0, Math.floor(Math.min(...areas.map((a) => a.y0)) * H));
+  const bx1 = Math.min(W - 1, Math.ceil(Math.max(...areas.map((a) => a.x1)) * W));
+  const by1 = Math.min(H - 1, Math.ceil(Math.max(...areas.map((a) => a.y1)) * H));
+  const lw = bx1 - bx0 + 1, lh = by1 - by0 + 1;
+  const ga = new Float32Array(lw * lh * 3);
+  for (let y = by0; y <= by1; y++) {
+    const gy = yg(y);
+    for (let x = bx0; x <= bx1; x++) {
+      if (aberta[y * W + x]) amostraRgb(gb, W, H, xg(x), gy, ga, ((y - by0) * lw + (x - bx0)) * 3);
+    }
+  }
+
+  // Matte: o que difere da base, tolerando 2 px de sobra de alinhamento.
+  let matte: Float32Array<ArrayBufferLike> = new Float32Array(W * H);
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      if (!aberta[y * W + x]) continue;
+      const kg = ((y - by0) * lw + (x - bx0)) * 3;
+      const r = ga[kg] - d0, gr = ga[kg + 1] - d1, bl = ga[kg + 2] - d2;
+      let menor = Infinity;
+      for (let dy = -2; dy <= 2 && menor > 26; dy += 2) {
+        const yy = y + dy < 0 ? 0 : y + dy > H - 1 ? H - 1 : y + dy;
+        for (let dx = -2; dx <= 2; dx += 2) {
+          const xx = x + dx < 0 ? 0 : x + dx > W - 1 ? W - 1 : x + dx;
+          const i = (yy * W + xx) * 4;
+          let d = Math.abs(r - bb[i]);
+          const e1 = Math.abs(gr - bb[i + 1]);
+          if (e1 > d) d = e1;
+          const e2 = Math.abs(bl - bb[i + 2]);
+          if (e2 > d) d = e2;
+          if (d < menor) menor = d;
+        }
+      }
+      if (menor <= 26) continue;
+      const t = menor >= 70 ? 1 : (menor - 26) / (70 - 26);
+      matte[y * W + x] = t * t * (3 - 2 * t);
+    }
+  }
+  const janela = { x0: Math.max(0, bx0 - 2), y0: Math.max(0, by0 - 2), x1: Math.min(W - 1, bx1 + 2), y1: Math.min(H - 1, by1 + 2) };
+  matte = suavizarMatte(dilatarMatte(matte, W, H, janela), W, H, janela);
+
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      const k = y * W + x;
+      const m = matte[k];
+      if (m <= 0 || !aberta[k]) continue;
+      const i = k * 4, kg = ((y - by0) * lw + (x - bx0)) * 3;
+      bb[i] = bb[i] * (1 - m) + ga[kg] * m;
+      bb[i + 1] = bb[i + 1] * (1 - m) + ga[kg + 1] * m;
+      bb[i + 2] = bb[i + 2] * (1 - m) + ga[kg + 2] * m;
+      bb[i + 3] = 255;
+    }
+  }
+  let bordas = false;
+  if (opcoes.bordasDe) {
+    try {
+      aplicarBordas(b, cobrir(await decodificar(opcoes.bordasDe), W, H), opcoes.fracaoDasBordas ?? 0.07);
+      bordas = true;
+    } catch {
+      // Fundo que não abre: ficam as bordas da base.
+    }
+  }
+  let logo = false;
+  if (opcoes.logo) {
+    try {
+      logoNaImagem(b, await decodificar(opcoes.logo.bytes), opcoes.logo.caixa, opcoes.logo.clara);
+      logo = true;
+    } catch {
+      // Logo que não abre: a lâmina segue sem ela (quem chama marca logo_no_codigo: false).
+    }
+  }
+  return { png: await b.encode(1), alinhamento: al, alinhou, erro, cenaMudada: false, bordas, logo };
+}
+
+/**
+ * Corta o trecho gerado em k fundos 1088 x 1360, sem zoom: a proporção do que
+ * voltou é conferida antes (reserva de rota ou provedor que devolve outro
+ * formato daria corte com zoom e a emenda não bateria). Com `ligacao` (o
+ * fundo já gravado da primeira lâmina do trecho), o trecho é primeiro alinhado
+ * a ela: o gerador redesenha a lâmina de ligação (pelo OpenRouter nem há
+ * máscara), então as fatias novas saem no enquadramento dela e a emenda bate.
+ * Cena mudada na ligação: nenhuma fatia (quem chama recusa). A fatia 0 com
+ * ligação é a própria ligação, intacta.
+ */
+export async function fatiarTrecho(
+  bytes: Uint8Array,
+  k: number,
+  ligacao: Uint8Array | null,
+): Promise<{ fatias: Uint8Array[]; largura: number; altura: number; proporcaoOk: boolean; erro: number | null; alinhou: boolean; cenaMudada: boolean }> {
+  const bruto = await decodificar(bytes);
+  const largura = bruto.width, altura = bruto.height;
+  if (!proporcaoDoTrechoConfere(largura, altura, k)) {
+    return { fatias: [], largura, altura, proporcaoOk: false, erro: null, alinhou: false, cenaMudada: false };
+  }
+  const W = LARGURA_LAMINA, H = ALTURA_LAMINA, LW = W * k;
+  const img = largura === LW && altura === H ? bruto : cobrir(bruto, LW, H);
+  if (!ligacao) {
+    const fatias: Uint8Array[] = [];
+    for (let i = 0; i < k; i++) fatias.push(await img.clone().crop(i * W, 0, W, H).encode(1));
+    return { fatias, largura, altura, proporcaoOk: true, erro: null, alinhou: false, cenaMudada: false };
+  }
+  const lig = cobrir(await decodificar(ligacao));
+  const est = estimarAlinhamento(lig, img.clone().crop(0, 0, W, H), []);
+  const alinhou = Number.isFinite(est.erro) && est.erro < est.erroSemAlinhar * 0.9;
+  const al = alinhou ? est.alinhamento : IDENTIDADE;
+  const erro = alinhou ? est.erro : est.erroSemAlinhar;
+  if (!(erro <= LIMITE_CENA_MUDADA)) return { fatias: [], largura, altura, proporcaoOk: true, erro, alinhou, cenaMudada: true };
+  const fatias: Uint8Array[] = [ligacao];
+  const fonte = img.bitmap;
+  const px = new Float32Array(3);
+  for (let i = 1; i < k; i++) {
+    if (!alinhou) {
+      fatias.push(await img.clone().crop(i * W, 0, W, H).encode(1));
+      continue;
+    }
+    const f = new Image(W, H);
+    const fb = f.bitmap;
+    for (let y = 0; y < H; y++) {
+      const gy = (((y + 0.5) / H - al.cv) * al.escala + 0.5) * H - 0.5;
+      for (let x = 0; x < W; x++) {
+        // Em unidades da lâmina de ligação: a fatia i começa em u = i.
+        const gx = (((i * W + x + 0.5) / W - al.cu) * al.escala + 0.5) * W - 0.5;
+        amostraRgb(fonte, LW, H, gx, gy, px, 0);
+        const o = (y * W + x) * 4;
+        fb[o] = px[0];
+        fb[o + 1] = px[1];
+        fb[o + 2] = px[2];
+        fb[o + 3] = 255;
+      }
+    }
+    fatias.push(await f.encode(1));
+  }
+  return { fatias, largura, altura, proporcaoOk: true, erro, alinhou, cenaMudada: false };
+}
+
+/**
+ * Bordas exatas do fundo gravado de volta na lâmina contínua (depois de um
+ * ajuste): `fracao` de cada lateral vem do fundo, com pena para dentro. Só
+ * vale quando a lâmina está no enquadramento do fundo (versão sem cena mudada).
+ */
+function aplicarBordas(a: Image, f: Image, fracao = 0.07, penaPx = 24) {
+  const W = a.width, H = a.height;
+  const ab = a.bitmap, fb = f.bitmap;
+  const faixa = Math.round(W * fracao);
+  const ate = Math.min(Math.floor(W / 2), faixa + penaPx);
+  for (let y = 0; y < H; y++) {
+    for (let d = 0; d < ate; d++) {
+      const peso = d < faixa ? 1 : 1 - (d - faixa) / penaPx;
+      for (const x of [d, W - 1 - d]) {
+        const i = (y * W + x) * 4;
+        for (let c = 0; c < 3; c++) ab[i + c] = ab[i + c] * (1 - peso) + fb[i + c] * peso;
+        ab[i + 3] = 255;
+      }
+    }
+  }
 }

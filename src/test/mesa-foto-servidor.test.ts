@@ -84,6 +84,7 @@ import {
   conteudoProibido,
   DESCRICAO_DA_VISTA,
   fichaEmTexto,
+  fichaSugerida,
   FOLHA_PADRAO,
   identidadesDaVista,
   invariantesDaFicha,
@@ -111,6 +112,13 @@ import {
   ordenarReferencias,
   promptDoCanvas,
 } from "../../supabase/functions/mesa-foto/canvas-regras";
+import {
+  campanhaParaOContexto,
+  itensDasPropostas,
+  type LinhaCampanhaDaMesa,
+  marcarCampanhaDoMes,
+  mesDeSaoPaulo,
+} from "../../supabase/functions/mesa-foto/campanhas";
 
 /**
  * Mesa Foto, frente A (docs/mesa-foto/CONTRATO.md): lógica pura executando de
@@ -1519,5 +1527,160 @@ describe("personas da agência só com admin (servidor)", () => {
     expect(m).toContain('db().rpc("has_role", { _user_id: ch.userId, _role: "admin" })');
     expect(m).toContain('if (escopo === "agencia") await garantirAdminDaAgencia(ch);');
     expect(m).toContain('if (!p.client_id || corpo.escopo === "agencia") await garantirAdminDaAgencia(ch);');
+  });
+});
+
+// ================================================================== ligada à Mesa (pedido do dono, 25/09)
+
+describe("ligada à Mesa: campanha do mês pelo calendário (campanhas.ts, sem IA)", () => {
+  const linha = (id: string, extra: Partial<LinhaCampanhaDaMesa> = {}): LinhaCampanhaDaMesa => ({
+    id,
+    nome: `Campanha ${id}`,
+    pedido: null,
+    objetivo: "vender mais",
+    conceito: null,
+    periodo_inicio: null,
+    periodo_fim: null,
+    status: "planejada",
+    identidade: { tema_visual: "primavera em tons claros", paleta_apoio: [{ nome: "verde", hex: "#22aa55" }, { nome: "ruim", hex: "verde" }] },
+    referencias_ids: [],
+    proposta_id: null,
+    criado_em: "2026-09-01T10:00:00Z",
+    ...extra,
+  });
+  // 25/09/2026 10h em São Paulo.
+  const agora = new Date("2026-09-25T13:00:00Z");
+
+  it("mês de São Paulo (UTC-3): a virada do mês segue o fuso, não o UTC", () => {
+    expect(mesDeSaoPaulo(agora)).toEqual({ mes: "2026-09", hoje: "2026-09-25", inicio: "2026-09-01", fim: "2026-09-30" });
+    // 30/09 às 23h30 em São Paulo ainda é setembro, embora já seja 01/10 no UTC.
+    expect(mesDeSaoPaulo(new Date("2026-10-01T02:30:00Z")).mes).toBe("2026-09");
+    expect(mesDeSaoPaulo(new Date("2026-02-10T12:00:00Z")).fim).toBe("2026-02-28");
+  });
+
+  it("a que acontece hoje vence; conteúdo no calendário do mês conta; encerrada nunca é a do mês", () => {
+    const itens = itensDasPropostas([
+      { id: "prop-b", itens: [{ data: "2026-09-12", tema: "Dia do cliente", campanha_id: "b" }, { data: "2026-09-19", tema: "Depoimento", campanha_id: "b" }, { data: "sem data", tema: "x" }] },
+      { id: "prop-velha", itens: [{ data: "2026-08-10", tema: "Agosto", campanha_id: "d" }] },
+    ]);
+    expect(itens).toHaveLength(3);
+    const r = marcarCampanhaDoMes(
+      [
+        linha("a", { periodo_inicio: "2026-09-20", periodo_fim: "2026-10-05", criado_em: "2026-09-10T00:00:00Z" }),
+        linha("b", { criado_em: "2026-09-15T00:00:00Z" }),
+        linha("c", { periodo_inicio: "2026-09-01", periodo_fim: "2026-09-30", status: "encerrada" }),
+        linha("d", { periodo_inicio: "2026-08-01", periodo_fim: "2026-08-31" }),
+      ],
+      itens,
+      agora,
+    );
+    expect(r.mes).toBe("2026-09");
+    expect(r.campanha_do_mes_id).toBe("a");
+    expect(r.campanhas.map((c) => c.id)).toEqual(["a", "b", "d", "c"]);
+    const a = r.campanhas[0];
+    expect(a).toMatchObject({ do_mes: true, acontecendo_hoje: true, no_mes: true, motivo: "Acontece hoje (20/09 a 05/10)." });
+    expect(a.identidade.paleta_apoio).toEqual([{ nome: "verde", hex: "#22AA55" }]);
+    // Sem período escrito: o período sai das datas do calendário.
+    const b = r.campanhas[1];
+    expect(b).toMatchObject({ do_mes: false, no_mes: true, periodo_inicio: "2026-09-12", periodo_fim: "2026-09-19", periodo_pelo_calendario: true, conteudos_no_mes: 2 });
+    expect(b.pautas_no_mes).toEqual(["12/09 Dia do cliente", "19/09 Depoimento"]);
+    expect(r.campanhas[3]).toMatchObject({ id: "c", do_mes: false, acontecendo_hoje: false, motivo: "Campanha encerrada." });
+    expect(r.campanhas[2]).toMatchObject({ id: "d", no_mes: false, motivo: "Fora deste mês (01/08 a 31/08)." });
+  });
+
+  it("sem nada acontecendo hoje, vence a que tem conteúdo no calendário do mês; sem nenhuma no mês, não há campanha do mês", () => {
+    const itens = itensDasPropostas([{ id: "p1", itens: [{ data: "2026-09-28", tema: "Lançamento" }] }]);
+    const r = marcarCampanhaDoMes([linha("x", { periodo_inicio: "2026-09-01", periodo_fim: "2026-09-10" }), linha("y", { proposta_id: "p1" })], itens, agora);
+    expect(r.campanha_do_mes_id).toBe("y");
+    expect(r.campanhas[0]).toMatchObject({ id: "y", conteudos_no_mes: 1, pautas_no_mes: ["28/09 Lançamento"] });
+    expect(marcarCampanhaDoMes([linha("z", { periodo_inicio: "2026-07-01", periodo_fim: "2026-07-31" })], [], agora).campanha_do_mes_id).toBeNull();
+    expect(marcarCampanhaDoMes([], [], agora)).toMatchObject({ campanha_do_mes_id: null, campanhas: [] });
+  });
+
+  it("o diretor recebe tema, período, paleta de apoio e pautas, e sabe se a campanha foi escolhida ou é a do mês", () => {
+    const r = marcarCampanhaDoMes([linha("a", { periodo_inicio: "2026-09-20", periodo_fim: "2026-09-30" })], [], agora);
+    const ctx = campanhaParaOContexto(r.campanhas[0], "escolhida");
+    expect(ctx).toMatchObject({ nome: "Campanha a", periodo: "2026-09-20 a 2026-09-30", tema_visual: "primavera em tons claros", paleta_de_apoio: ["verde #22AA55"] });
+    expect(ctx.como_usar).toContain("dentro da marca");
+    expect(campanhaParaOContexto(r.campanhas[0], "do_mes").como_usar).toContain("calendário editorial");
+  });
+
+  it("a função lista as campanhas, e todo planejamento (diretor, variações, campanha, ensaio, persona) usa o contexto da Mesa com a campanha", () => {
+    const campanhasFonte = ler("supabase/functions/mesa-foto/campanhas.ts");
+    const f = fonte.replace(/\r\n/g, "\n");
+    expect(campanhasFonte).toContain('.from("mesa_campanhas")');
+    expect(campanhasFonte).toContain('.from("calendario_propostas")');
+    expect(campanhasFonte).toContain('.in("status", ["pronta", "gravada"])');
+    expect(campanhasFonte).toContain("custo_usd: 0");
+    expect(f).toContain("campanhas_listar: CAMPANHAS.campanhas_listar,");
+    expect(f).toContain("async function contextoDoCliente(clientId: string, campanhaId?: unknown): Promise<ContextoFoto>");
+    expect(f).toContain('const semCampanha = campanhaId === "nenhuma";');
+    expect(f).toContain('throw new ErroHttp(404, "campanha_inexistente"');
+    expect(f).toContain('campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,');
+    expect(f).toContain('campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,');
+    expect(f).toContain("A Mesa é a principal e a Mesa Foto é ferramenta dela");
+    expect(f.match(/contextoDoCliente\(clientId, corpo\.campanha_id\)/g) || []).toHaveLength(4);
+    // Gravada na direção do ensaio (ensaio e variações) e devolvida na resposta (variações e campanha).
+    expect(f.match(/campanha_mesa: contexto\.campanha/g) || []).toHaveLength(4);
+    expect(f).toContain("campanha_mesa: d.campanhaMesa ?? null,");
+    expect(f).toContain("  contextoDoCliente,\n};");
+  });
+
+  it("foto aprovada entra no acervo marcada (origem mesa_foto, gerada, aprovada, tags) para o Estúdio achar", () => {
+    const f = fonte.replace(/\r\n/g, "\n");
+    const decidir = f.slice(f.indexOf("async function versaoDecidir"), f.indexOf("// ------------------------------------------------------------------ preparar"));
+    expect(decidir).toContain('origem: "mesa_foto",');
+    expect(decidir).toContain("client_id: ensaio.client_id,");
+    expect(decidir).toContain('"mesa_foto", "ensaio", "gerada", `tomada:${tomada.id}`, `ensaio:${ensaio.id}`,');
+    expect(decidir).toContain("gerada: true,");
+    expect(decidir).toContain("aprovada: true,");
+  });
+});
+
+describe("ligada à Mesa: persona sugerida pelo brief (modelo_sugerir)", () => {
+  it("a ação lê o contexto da Mesa, usa texto com 300 s e fôlego, e não grava", () => {
+    const m = modelosFonte.replace(/\r\n/g, "\n");
+    const acao = m.slice(m.indexOf("async function modeloSugerir"), m.indexOf("return {\n    acoes: {"));
+    expect(acao).toContain("f.contextoDoCliente(clientId, corpo.campanha_id)");
+    expect(acao).toContain("timeoutMs: 300_000,");
+    expect(acao).toContain("garantirPermitido(pedido);");
+    expect(acao).not.toMatch(/\.insert\(|\.update\(/);
+    expect(m).toContain("modelo_sugerir: modeloSugerir,");
+    expect(m).toContain('"modelo_sugerir", "modelo_candidata_gerar"');
+    expect(m).toContain("Adulta, com idade aparente de 21 anos ou mais; sem sexualização.");
+  });
+
+  it("fichaSugerida conserta sem recusar: idade mínima, texto proibido e nome de pessoa conhecida saem, com aviso", () => {
+    const s = fichaSugerida({
+      nome: "Anitta",
+      ficha: {
+        idade_aparente: 18,
+        genero_apresentado: "feminino",
+        tom_de_pele: "pele morena, subtom quente",
+        rosto: "parecida com a Anitta",
+        olhos: "castanhos",
+        cabelo: { cor: "castanho", comprimento: "longo", textura: "ondulado" },
+        marcas: ["sardas leves", "sexy"],
+        corpo: "porte médio",
+        estilo: "urbano",
+        notas: "",
+      },
+      invariantes: ["sardas no nariz", "lembra a Anitta"],
+      porque: "Conversa com o público jovem da marca.",
+    });
+    expect(s.nome).toBe("");
+    expect(s.ficha.idade_aparente).toBe(25);
+    expect(s.ficha.rosto).toBe("");
+    expect(s.ficha.cabelo).toEqual({ cor: "castanho", comprimento: "longo", textura: "ondulado" });
+    expect(s.ficha.marcas).toEqual(["sardas leves"]);
+    expect(s.invariantes).toEqual(["sardas no nariz"]);
+    expect(s.porque).toBe("Conversa com o público jovem da marca.");
+    expect(s.avisos.join(" ")).toContain("abaixo do mínimo de 21");
+    expect(s.avisos.join(" ")).toContain("nome fictício");
+    expect(s.avisos.join(" ")).toContain("rosto");
+    // Sem idade: 30 anos, com aviso; o resultado passa na validação de criar.
+    const vazia = fichaSugerida({});
+    expect(vazia.ficha.idade_aparente).toBe(30);
+    expect(() => normalizarFicha(vazia.ficha)).not.toThrow();
   });
 });

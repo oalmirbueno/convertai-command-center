@@ -1,12 +1,12 @@
-import { Aperture, ArrowRight, Images, Megaphone, Wand2 } from "lucide-react";
+import { Aperture, ArrowRight, CalendarDays, Images, Megaphone, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { MiniaturaDaFoto, useMesaFoto, Vazio } from "./Comuns";
-import { rotuloDoTipo, useEnsaios, useFotos, useKits } from "./fotoApi";
+import { periodoDaCampanha, rotuloDoTipo, useCampanhasDaMesa, useEnsaios, useFotos, useKits } from "./fotoApi";
 
 /**
- * Passo 3, Criar: as três formas de criar com o produto aberto, em cartões
- * grandes e diretos. Variações (várias fotos do produto de uma vez),
+ * Passo 2, Criar: as três formas de criar com o produto aberto, em cartões
+ * diretos. Variações (várias fotos do produto de uma vez),
  * Campanha (modelo sintético usando o produto) e Preparar (ajuste fino de
  * uma foto). O ensaio por receita segue dentro de Variações.
  */
@@ -42,14 +42,16 @@ export default function EtapaCriar() {
   const kit = kitId ? lista.find((k) => k.id === kitId) || null : null;
   const capa = kit ? (fotos.data || []).find((f) => f.id === (kit.frente_imagem_id || (kit.refs[0] && kit.refs[0].imagem_id))) || null : null;
   const doKit = kit ? (ensaios.data || []).filter((e) => e.kit_id === kit.id).length : 0;
+  const campanhas = useCampanhasDaMesa(clientId);
+  const doMes = campanhas.data && campanhas.data.campanhaDoMesId ? campanhas.data.campanhas.find((c) => c.id === (campanhas.data && campanhas.data.campanhaDoMesId)) || null : null;
 
   if (kits.isSuccess && !lista.length) {
     return (
       <Vazio
         titulo="Primeiro, o produto"
         acao={
-          <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("kits")}>
-            Identificar o produto <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => irPara("acervo")}>
+            Identificar o produto nas fotos <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
           </Button>
         }
       >
@@ -65,13 +67,22 @@ export default function EtapaCriar() {
         <div className="mr-auto min-w-0">
           <p className="truncate text-[13px] font-semibold">{kit ? kit.nome : "Nenhum produto escolhido"}</p>
           <p className="truncate text-[11.5px] text-muted-foreground">
-            {kit ? `${rotuloDoTipo(kit.tipo)}${kit.variante ? ` · ${kit.variante}` : ""} · ${doKit} ${doKit === 1 ? "ensaio" : "ensaios"}` : "Escolha o produto na barra de cima ou no passo 2."}
+            {kit ? `${rotuloDoTipo(kit.tipo)}${kit.variante ? ` · ${kit.variante}` : ""} · ${doKit} ${doKit === 1 ? "lote criado" : "lotes criados"}` : "Escolha o produto na barra de cima ou no passo 1 (Fotos)."}
           </p>
         </div>
-        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("kits")}>
+        <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px]" onClick={() => irPara("acervo")}>
           {kit ? "Trocar" : "Escolher"}
         </Button>
       </div>
+
+      {doMes && (
+        <p className="flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground" data-campanha-do-mes={doMes.id}>
+          <CalendarDays className="mr-1.5 h-3.5 w-3.5 text-primary" />
+          <span className="mr-1">Campanha do mês na Mesa:</span>
+          <span className="mr-1 font-medium text-foreground">{doMes.nome}</span>
+          <span>({periodoDaCampanha(doMes)}). Variações e Campanha já partem dela; dá para trocar lá dentro.</span>
+        </p>
+      )}
 
       <ul className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
         {FORMAS.map((f) => {

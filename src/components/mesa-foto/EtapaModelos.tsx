@@ -10,12 +10,14 @@ import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Cus
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
 import { SeletorDeQualidade } from "@/components/mesa/Seletores";
 import { padraoPara, precoDoModelo, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
+import { useCampanhaEscolhida } from "./CampanhaDaMesa";
 import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
 import { acrescentarFotos, invalidarFotos, subirOriginais, useFotos } from "./fotoApi";
 import {
   acharNoCatalogo,
+  aplicarSugestaoNaPersona,
   candidatasPorMotor,
   caminhoDaImagem,
   chaveDasImagensDaPersona,
@@ -42,6 +44,7 @@ import {
   novoIdDeRodada,
   partesDaConferenciaDaPersona,
   partesDaRodada,
+  partesDaSugestaoDePersona,
   partesDaVista,
   pedirAoCanvas,
   problemasDaPersona,
@@ -49,6 +52,7 @@ import {
   rascunhoVazio,
   resumoDaPersona,
   rotuloDaVista,
+  sugerirPersona,
   rotuloDoMotor,
   STATUS_DA_PERSONA,
   useAncoras,
@@ -63,6 +67,7 @@ import {
   type OpcaoDeMotor,
   type Persona,
   type RascunhoDaPersona,
+  type SugestaoDePersona,
   type UsoDaReferencia,
 } from "./modelosApi";
 
@@ -71,6 +76,12 @@ import {
  * personas sintéticas do cliente e da agência, e o caminho de cada uma:
  * ficha, rodada lado a lado com vários geradores (o dono escolhe a mais
  * real), âncora, folha de 6 vistas e "Detalhar em 4K" com antes e depois.
+ *
+ * 25/09 (pedido do dono: "dá para simplificar e preencher com base no
+ * brief"): a ficha nova começa em "Sugerir pelo brief" (modelo_sugerir, que
+ * lê o contexto do cliente que a Mesa usa e a campanha escolhida ou do mês);
+ * na tela ficam nome, idade, apresentação e estilo, e o resto em "Mais
+ * detalhes".
  *
  * Regras: pessoa sintética e adulta (idade aparente mínima 21), sem
  * semelhança com pessoa real (referência do dono só como estilo, pose, luz ou
@@ -398,13 +409,19 @@ function ReferenciasDeEstilo({ refs, onMudar }: { refs: RascunhoDaPersona["refer
 }
 
 function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void; onCancelar: () => void }) {
-  const { clientId, isAdmin } = useMesa();
+  const { clientId, isAdmin, catalogo } = useMesa();
   const avisarErro = useAvisarErro();
+  const campanha = useCampanhaEscolhida();
   const [r, setR] = useState<RascunhoDaPersona>(rascunhoVazio);
   const [criando, setCriando] = useState(false);
   const [tentou, setTentou] = useState(false);
+  const [avancado, setAvancado] = useState(false);
+  const [pedido, setPedido] = useState("");
+  const [porque, setPorque] = useState("");
+  const [avisos, setAvisos] = useState<string[]>([]);
   const problemas = problemasDaPersona(r);
   const ficha = (campo: keyof RascunhoDaPersona["ficha"], valor: string | number | null) => setR({ ...r, ficha: { ...r.ficha, [campo]: valor } });
+  const resumo = [r.ficha.tom_de_pele, r.ficha.cabelo, r.ficha.rosto, r.ficha.olhos, r.ficha.corpo].filter((x) => x && x.trim()).join(" · ");
 
   const criar = async () => {
     setTentou(true);
@@ -423,8 +440,47 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
   };
 
   return (
-    <Cartao titulo="Nova persona" dica="Uma pessoa que não existe, descrita em traços. O texto segura o que a imagem não mostra.">
-      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+    <Cartao titulo="Nova persona" dica="Uma pessoa que não existe. Comece pelo brief: a ficha sai pronta do contexto do cliente (público, marca, campanha da Mesa) e você só ajusta.">
+      <div className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-2.5" data-sugerir-pelo-brief="">
+        <div className="flex min-w-0 flex-wrap items-center">
+          <Input
+            value={pedido}
+            onChange={(e) => setPedido(e.target.value)}
+            placeholder="Pedido (opcional). Ex.: mulher de uns 30 anos, estilo urbano"
+            aria-label="Pedido para a sugestão"
+            className="mb-1.5 mr-2 h-9 min-w-0 flex-1 text-[12.5px]"
+          />
+          <BotaoComCusto
+            rotulo={
+              <>
+                <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Sugerir pelo brief
+              </>
+            }
+            titulo="Ficha sugerida"
+            descricao="O diretor lê o contexto do cliente que a Mesa usa (brief, público, marca e campanha) e preenche a ficha. Não cria nada: você confere e cria."
+            className="mb-1.5 h-9 text-[12.5px]"
+            partes={() => partesDaSugestaoDePersona(padraoPara(catalogo, "diretor_arte"))}
+            executar={() => sugerirPersona(clientId, pedido, campanha.campanhaId)}
+            aoConcluir={(s: SugestaoDePersona) => {
+              if (!s) return;
+              setR((atual) => aplicarSugestaoNaPersona(atual, s));
+              setPorque(s.porque);
+              setAvisos(s.avisos);
+            }}
+          />
+        </div>
+        <p className="text-[11px] leading-snug text-muted-foreground">
+          Usa o brief do cliente{campanha.campanha ? ` e a campanha ${campanha.campanha.nome}` : ""}. A pessoa é sintética, adulta e sem semelhança com ninguém real.
+        </p>
+        {porque && <p className="mt-1.5 text-[12px] leading-snug [overflow-wrap:anywhere]" data-porque="">{porque}</p>}
+        {avisos.map((a) => (
+          <p key={a} className="mt-1 flex items-start text-[11.5px] leading-snug text-warning">
+            <AlertTriangle className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{a}</span>
+          </p>
+        ))}
+      </div>
+
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
         <Campo rotulo="Nome fictício">
           <Input value={r.nome} onChange={(e) => setR({ ...r, nome: e.target.value })} placeholder="Ex.: Marina" aria-label="Nome da persona" className="h-9 text-[12.5px]" />
         </Campo>
@@ -440,47 +496,63 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
             className="h-9 text-[12.5px]"
           />
         </Campo>
-        <div className="min-w-0 md:col-span-2">
+        <div className="min-w-0">
           <p className="mb-1 text-[11.5px] text-muted-foreground">Apresentação</p>
           <Pilulas rotulo="Apresentação da persona" opcoes={GENEROS} valor={r.ficha.genero_apresentado || null} onEscolher={(v) => ficha("genero_apresentado", v)} />
         </div>
-        <Campo rotulo="Tom de pele">
-          <Input value={r.ficha.tom_de_pele} onChange={(e) => ficha("tom_de_pele", e.target.value)} placeholder="Ex.: pele morena clara, subtom quente" aria-label="Tom de pele" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Cabelo">
-          <Input value={r.ficha.cabelo} onChange={(e) => ficha("cabelo", e.target.value)} placeholder="Ex.: castanho escuro, ondulado, na altura do ombro" aria-label="Cabelo" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Rosto e olhos">
-          <Input value={r.ficha.rosto} onChange={(e) => ficha("rosto", e.target.value)} placeholder="Ex.: rosto oval, olhos castanhos amendoados" aria-label="Rosto e olhos" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="Marcas (opcional)">
-          <Input value={r.ficha.marcas} onChange={(e) => ficha("marcas", e.target.value)} placeholder="Ex.: sardas leves, pinta no queixo" aria-label="Marcas" className="h-9 text-[12.5px]" />
-        </Campo>
         <Campo rotulo="Estilo">
           <Input value={r.ficha.estilo} onChange={(e) => ficha("estilo", e.target.value)} placeholder="Ex.: urbano minimalista, roupa neutra" aria-label="Estilo" className="h-9 text-[12.5px]" />
         </Campo>
-        <Campo rotulo="Corpo (opcional)">
-          <Input value={r.ficha.corpo} onChange={(e) => ficha("corpo", e.target.value)} placeholder="Ex.: altura média, porte atlético" aria-label="Corpo" className="h-9 text-[12.5px]" />
-        </Campo>
-        <Campo rotulo="O que nunca muda (um por linha, opcional)" className="md:col-span-2">
-          <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta no queixo\ncabelo sempre solto"} aria-label="Invariantes" className="text-[12.5px]" />
-        </Campo>
-        <div className="min-w-0 md:col-span-2">
-          <ReferenciasDeEstilo refs={r.referencias} onMudar={(referencias) => setR({ ...r, referencias })} />
-        </div>
-        <div className="min-w-0 md:col-span-2">
-          <p className="mb-1 text-[11.5px] text-muted-foreground">De quem é</p>
-          <Pilulas
-            rotulo="De quem é a persona"
-            opcoes={[
-              { valor: "cliente", rotulo: "Deste cliente" },
-              { valor: "agencia", rotulo: "Da agência", dica: isAdmin ? "Serve para qualquer cliente." : "Só admin cria persona da agência." },
-            ]}
-            valor={r.daAgencia ? "agencia" : "cliente"}
-            onEscolher={(v) => setR({ ...r, daAgencia: v === "agencia" && isAdmin })}
-          />
-        </div>
       </div>
+
+      {resumo && !avancado && (
+        <p className="mt-2 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-resumo-da-ficha="">
+          Traços: {resumo}
+        </p>
+      )}
+      <button type="button" className="mt-2 text-[12px] font-medium text-primary hover:underline" onClick={() => setAvancado(!avancado)} aria-expanded={avancado} data-campos-avancados="">
+        {avancado ? "Esconder os detalhes" : "Mais detalhes: pele, cabelo, rosto, marcas, corpo, referências"}
+      </button>
+      {avancado && (
+        <div className="mt-2 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          <Campo rotulo="Tom de pele">
+            <Input value={r.ficha.tom_de_pele} onChange={(e) => ficha("tom_de_pele", e.target.value)} placeholder="Ex.: pele morena clara, subtom quente" aria-label="Tom de pele" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="Cabelo">
+            <Input value={r.ficha.cabelo} onChange={(e) => ficha("cabelo", e.target.value)} placeholder="Ex.: castanho escuro, ondulado, na altura do ombro" aria-label="Cabelo" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="Rosto">
+            <Input value={r.ficha.rosto} onChange={(e) => ficha("rosto", e.target.value)} placeholder="Ex.: rosto oval, maçãs altas" aria-label="Rosto e olhos" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="Olhos (opcional)">
+            <Input value={r.ficha.olhos} onChange={(e) => ficha("olhos", e.target.value)} placeholder="Ex.: castanhos amendoados" aria-label="Olhos" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="Marcas (opcional)">
+            <Input value={r.ficha.marcas} onChange={(e) => ficha("marcas", e.target.value)} placeholder="Ex.: sardas leves, pinta no queixo" aria-label="Marcas" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="Corpo (opcional)">
+            <Input value={r.ficha.corpo} onChange={(e) => ficha("corpo", e.target.value)} placeholder="Ex.: altura média, porte atlético" aria-label="Corpo" className="h-9 text-[12.5px]" />
+          </Campo>
+          <Campo rotulo="O que nunca muda (um por linha, opcional)" className="md:col-span-2">
+            <Textarea value={r.invariantes} onChange={(e) => setR({ ...r, invariantes: e.target.value })} rows={2} placeholder={"Ex.: pinta no queixo\ncabelo sempre solto"} aria-label="Invariantes" className="text-[12.5px]" />
+          </Campo>
+          <div className="min-w-0 md:col-span-2">
+            <ReferenciasDeEstilo refs={r.referencias} onMudar={(referencias) => setR({ ...r, referencias })} />
+          </div>
+          <div className="min-w-0 md:col-span-2">
+            <p className="mb-1 text-[11.5px] text-muted-foreground">De quem é</p>
+            <Pilulas
+              rotulo="De quem é a persona"
+              opcoes={[
+                { valor: "cliente", rotulo: "Deste cliente" },
+                { valor: "agencia", rotulo: "Da agência", dica: isAdmin ? "Serve para qualquer cliente." : "Só admin cria persona da agência." },
+              ]}
+              valor={r.daAgencia ? "agencia" : "cliente"}
+              onEscolher={(v) => setR({ ...r, daAgencia: v === "agencia" && isAdmin })}
+            />
+          </div>
+        </div>
+      )}
       <label className="mt-3 flex min-w-0 items-start rounded-lg border border-border bg-background p-2.5 text-[12px] leading-snug" data-etica="">
         <input type="checkbox" className="mr-2 mt-0.5 h-4 w-4 shrink-0" checked={r.etica} onChange={(e) => setR({ ...r, etica: e.target.checked })} aria-label="Declaração ética" />
         <span className="min-w-0">

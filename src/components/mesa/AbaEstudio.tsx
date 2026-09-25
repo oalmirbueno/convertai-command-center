@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   Bookmark,
   CalendarCheck,
@@ -56,6 +57,7 @@ import DiretorDoEstudio from "./DiretorDoEstudio";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { emColunas, encaixarNaJanela, rolarAte, useAlturaDaEsteira, useFaixa } from "./EstudioAltura";
 import EstudioArteDaAgenda, { InspetorDaArte } from "./EstudioArteDaAgenda";
+import EstudioBaseDaLamina from "./EstudioBaseDaLamina";
 import EstudioEntrega from "./EstudioEntrega";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
@@ -79,14 +81,20 @@ import {
   copiarTexto,
   corpoDoPreparar,
   enviarUmParaAprovacao,
+  AVISO_CONTINUO_SEM_MODELO,
+  gravarTrabalhoNoCache,
   legendaParaCopiar,
+  limiteDePreparos,
+  modeloFazContinuo,
   normalizarHashtags,
   NOTA_DO_FUNDO_CONTINUO,
   partesDoPanorama,
   useEstadoGuardado,
   usaFundoContinuo,
+  versaoForaDoFundo,
   type Area,
   type EscolhasDoPreparo,
+  type TrabalhoGravado,
 } from "./estudioUtil";
 import {
   FORMATOS_POST_UNICO,
@@ -131,6 +139,10 @@ import {
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
 const CODIGOS_QUE_PARAM_TUDO = ["saldo_insuficiente", "cota_da_chave_esgotada", "cliente_sem_chave", "provedor_sem_chave"];
 const EM_PARALELO = 3;
+/** Outra geração fazendo o mesmo trecho do fundo contínuo: espera até ~6 min (18 x 20 s), sem pagar de novo. */
+const ESPERAS_DO_FUNDO = 18;
+const INTERVALO_DA_ESPERA_MS = 20_000;
+const esperar = (ms: number) => new Promise<void>((pronto) => window.setTimeout(pronto, ms));
 /** Largura das lâminas na prancheta (px); a altura é 1,25 vez. */
 const LARGURA_NA_PRANCHETA = 112;
 const LARGURA_NA_PRANCHETA_PILHA = 104;
@@ -360,7 +372,7 @@ function DetalheDoItem({
   const [selecionado, setSelecionado] = useEstadoGuardado<number | null>(`${chave}:lamina`, null);
   const [painel, setPainel] = useEstadoGuardado<PainelDaLamina>(`${chave}:painel`, "direcao");
   const [ferramentaGuardada, setFerramenta] = useEstadoGuardado<Ferramenta | "">(`${chave}:ferramenta`, "lamina");
-  const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "conjunto");
+  const [refsAlvo, setRefsAlvo] = useEstadoGuardado<AlvoDasReferencias>(`${chave}:refs-alvo`, "lamina");
   const [refsAba, setRefsAba] = useEstadoGuardado<"cliente" | "banco">(`${chave}:refs-aba`, "cliente");
   // "Corrigir sozinho": desligado por padrão (24/09/2026: a correção automática triplicava o custo); guardado por trabalho na sessão.
   const [corrigirSozinho, setCorrigirSozinho] = useEstadoGuardado<boolean>(chaveDoCorrigirSozinho(trabalho ? trabalho.id : `item:${item.id}`), false);
@@ -479,20 +491,53 @@ function DetalheDoItem({
   /** Gera uma lâmina. Com erro a lâmina fica livre; com sucesso segue para a conferência. */
   const gerarUma = async (trabalhoId: string, ordem: number): Promise<number> => {
     marcar(ordem, "gerando");
-    try {
-      // Contínuo: o fundo panorâmico do trecho nasce antes, numa chamada própria
-      // (cabe no tempo da função); a lâmina depois só recebe o texto por cima.
-      let custoFundo = 0;
-      if (infinito) {
-        // Um panorama por chamada: com trecho anterior faltando, o servidor faz ele
-        // primeiro e devolve pendente; a tela chama de novo (no máximo 4 vezes).
-        for (let vez = 0; vez < 4; vez++) {
+    let custoFundo = 0;
+    /**
+     * Contínuo: o fundo panorâmico nasce antes, numa chamada própria por
+     * trecho (gerar_card nunca faz o trecho). Com trecho anterior faltando, o
+     * servidor faz ele primeiro e devolve pendente: a tela repete até não
+     * haver pendência, com limite pelo número de trechos. Outra geração
+     * fazendo o mesmo trecho (409 fundo_em_andamento): espera, sem pagar de novo.
+     */
+    const prepararOFundo = async () => {
+      const limite = limiteDePreparos(cardsDaDirecao.length);
+      let esperas = 0;
+      for (let vez = 0; vez < limite;) {
+        marcar(ordem, "gerando", vez ? "Fundo contínuo: próximo trecho" : "Fundo contínuo");
+        try {
           const f = await chamarFuncao<any>("estudio-arte", { acao: "preparar_fundo", trabalho_id: trabalhoId, ordem });
           custoFundo += custoDaResposta(f) || 0;
-          if (!f || !f.pendente) break;
+          vez++;
+          if (!f || !f.pendente) {
+            if (f && f.fundo) atualizar();
+            return;
+          }
+          atualizar();
+        } catch (e) {
+          if (e instanceof ErroDaMesa && e.codigo === "fundo_em_andamento" && esperas < ESPERAS_DO_FUNDO) {
+            esperas++;
+            marcar(ordem, "gerando", "Esperando o fundo contínuo que outra geração está fazendo");
+            await esperar(INTERVALO_DA_ESPERA_MS);
+            continue;
+          }
+          throw e;
         }
       }
-      const g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
+      throw new ErroDaMesa("fundo_pendente", "O fundo contínuo ainda não ficou pronto depois de várias tentativas. Gere a lâmina de novo.");
+    };
+    try {
+      if (infinito) await prepararOFundo();
+      marcar(ordem, "gerando");
+      let g: any;
+      try {
+        g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
+      } catch (e) {
+        // O fundo foi refeito entre o preparo e a geração: prepara de novo, uma vez só.
+        if (!(infinito && e instanceof ErroDaMesa && e.codigo === "fundo_pendente")) throw e;
+        await prepararOFundo();
+        marcar(ordem, "gerando");
+        g = await chamarFuncao<any>("estudio-arte", { acao: "gerar_card", trabalho_id: trabalhoId, ordem });
+      }
       atualizar();
       return (custoDaResposta(g) || 0) + custoFundo;
     } catch (e) {
@@ -545,9 +590,13 @@ function DetalheDoItem({
   const ordemTravada = infinito && cardsDaDirecao.length > 1;
 
   // Estimativa do contínuo: o panorama que falta entra no preço (mesma regra de
-  // trechos do servidor; só com o editor da OpenAI e lâmina sem foto própria).
+  // trechos do servidor; só com modelo que faz o panorama, GPT Image direto ou
+  // pelo OpenRouter, e lâmina sem foto própria). Até 25/09 exigia provedor
+  // openai e o padrão pelo OpenRouter desligava o contínuo sem aviso.
   const modeloDoFundo = catalogo.find((m) => m.id === modeloImagem);
-  const comFundoContinuo = ordemTravada && !!modeloDoFundo && modeloDoFundo.provedor === "openai";
+  const comFundoContinuo = ordemTravada && modeloFazContinuo(modeloDoFundo);
+  // Contínuo ligado com um modelo que não faz o panorama: a tela avisa (as lâminas saem uma a uma).
+  const continuoSemModelo = ordemTravada && !!modeloDoFundo && !comFundoContinuo;
   const fundosProntos = (((trabalho?.direcao as any)?.panorama?.fundos ?? null) as Record<string, string> | null);
   const partesDoFundo = (ordens: number[], q: Qualidade = qualidade): ParteDaEstimativa[] => {
     if (!comFundoContinuo) return [];
@@ -680,7 +729,9 @@ function DetalheDoItem({
   /** Grava escolhas sem custo no trabalho (referências, fotos, texto, contínuo). */
   const configurar = async (corpo: Record<string, unknown>) => {
     if (!trabalho) return;
-    await chamarFuncao("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
+    const r = await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
+    // A escolha aparece na lâmina na hora; a releitura da lista vem depois, só para confirmar.
+    gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
     atualizar();
   };
 
@@ -847,6 +898,15 @@ function DetalheDoItem({
     setFerramenta(fechar ? "" : f);
     if (!colunas && !fechar) window.setTimeout(() => rolarAte(painelRef.current, "start"), 60);
   };
+
+  // Veio da Mesa Foto ("Usar na Mesa": &fotos=<ids>): abre a ferramenta Fotos, onde elas aparecem.
+  // Antes abria na ferramenta Lâmina e as fotos ficavam escondidas (dono, 25/09: "não tem aqui").
+  const [parametros] = useSearchParams();
+  const fotosNaUrl = (parametros.get("fotos") || "").trim();
+  useEffect(() => {
+    if (fotosNaUrl && estado === "producao") abrirFerramenta("fotos", false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fotosNaUrl, estado]);
 
   const abrirPainel = (ordem: number, p: PainelDaLamina) => {
     setSelecionado(ordem);
@@ -1100,6 +1160,10 @@ function DetalheDoItem({
     </span>
   );
 
+  // Versão que a lâmina grande mostra (a vista ou a última): o aviso da foto recomposta olha para ela.
+  const versoesDaEscolhida = cardSelecionado ? (trabalho?.cards || []).filter((v) => v.ordem === cardSelecionado.ordem) : [];
+  const versaoNaTela = (versaoVista !== null ? versoesDaEscolhida.find((v) => v.versao === versaoVista) : undefined) || ultimaDaEscolhida || null;
+
   const laminaGrande = cardSelecionado ? (
     <EstudioLaminaGrande
       card={cardSelecionado}
@@ -1114,6 +1178,35 @@ function DetalheDoItem({
       andamento={andamento[cardSelecionado.ordem]}
       onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
       soPelaLargura={!colunas}
+      faixa={
+        estado === "producao" && trabalho ? (
+          <EstudioBaseDaLamina
+            card={cardSelecionado}
+            refsDoConjunto={trabalho.direcao?.referencias_ids}
+            continuo={comFundoContinuo}
+            continuoSemModelo={continuoSemModelo}
+            foraDoFundo={versaoForaDoFundo(versaoNaTela as any, (trabalho.direcao as any)?.panorama)}
+            acaoDoFundo={
+              <BotaoComCusto
+                rotulo="Gerar de novo"
+                titulo={`Gerar a lâmina ${cardSelecionado.ordem} de novo`}
+                descricao={comNotaDoFundo("A lâmina é refeita sobre o fundo contínuo atual e passa pela conferência.", [cardSelecionado.ordem])}
+                variant="outline"
+                className="h-7 shrink-0 px-2.5 text-[12px]"
+                disabled={laminaOcupada(cardSelecionado.ordem) || entregue}
+                partes={() => partesGerar(1).concat(partesDoFundo([cardSelecionado.ordem]))}
+                executar={() => gerarEConferir(cardSelecionado.ordem)}
+              />
+            }
+            versao={versaoNaTela}
+            onAbrirFotos={() => abrirFerramenta("fotos", false)}
+            onAbrirReferencias={() => {
+              setRefsAlvo("lamina");
+              abrirFerramenta("referencias", false);
+            }}
+          />
+        ) : undefined
+      }
     />
   ) : null;
 
@@ -1203,6 +1296,7 @@ function DetalheDoItem({
       partesCorrigir={() => partesAjustar().concat(partesConferir())}
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
+      semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
     />
   ) : (
     <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
@@ -1252,10 +1346,11 @@ function DetalheDoItem({
   const ferramentaReferencias = trabalho ? (
     <div className="min-w-0 space-y-3">
       <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
-        <p className="text-[12.5px] font-medium leading-snug">As escolhidas aqui são seguidas de perto</p>
+        <p className="text-[12.5px] font-medium leading-snug">Escolha 1 ou 2: o gerador replica o layout delas</p>
         <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">
-          O gerador copia o layout, a composição, a hierarquia e o tratamento das referências escolhidas e aplica a identidade visual da marca, com uma
-          diferenciação leve. As da lâmina valem no lugar das do conjunto.
+          Estrutura, posição dos blocos, escala do texto, recorte e tratamento da imagem saem da referência; as cores, as fontes e a logo são da marca, o
+          texto é o da lâmina e a foto da lâmina vira o assunto. As da lâmina valem no lugar das do conjunto.
+          {comFundoContinuo ? " No carrossel contínuo o panorama manda na cena e a referência não é replicada." : ""}
         </p>
         <p className="mt-1.5 text-[11px] tabular-nums text-muted-foreground">
           Conjunto: {referenciasDoConjunto} escolhida{referenciasDoConjunto === 1 ? "" : "s"}
@@ -1311,7 +1406,12 @@ function DetalheDoItem({
           </span>
         </label>
       )}
-      {infinito && cardsDaDirecao.length > 1 && (
+      {continuoSemModelo && (
+        <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
+          {AVISO_CONTINUO_SEM_MODELO}
+        </p>
+      )}
+      {comFundoContinuo && (
         <div className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-2">
           <span className="min-w-0 text-[11.5px] leading-snug text-muted-foreground">
             {Object.keys((trabalho.direcao as any)?.panorama?.fundos ?? {}).length

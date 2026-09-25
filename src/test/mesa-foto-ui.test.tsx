@@ -76,6 +76,7 @@ import EtapaUsar, { enderecoParaUsar } from "@/components/mesa-foto/EtapaUsar";
 import EtapaBiblioteca from "@/components/mesa-foto/EtapaBiblioteca";
 import AgenteDiretor from "@/components/mesa-foto/AgenteDiretor";
 import EtapaCampanha from "@/components/mesa-foto/EtapaCampanha";
+import EtapaModelos from "@/components/mesa-foto/EtapaModelos";
 import { esquecerTodosOsLotes } from "@/components/mesa-foto/lote";
 import { enderecoDaMesa } from "@/components/mesa-foto/TrocaDeMesas";
 import {
@@ -118,8 +119,10 @@ import {
   normalizarEncontrada,
   normalizarEnsaio,
   normalizarFoto,
+  normalizarCampanhasDaMesa,
   normalizarItemDaBiblioteca,
   normalizarLeitura,
+  periodoDaCampanha,
   normalizarPropostas,
   normalizarReceita,
   normalizarSugestoes,
@@ -369,11 +372,11 @@ describe("rota, casca e troca entre mesas", () => {
     expect(screen.getByRole("heading", { name: "Mesa Foto" }).className).toContain("sr-only");
     const nav = screen.getByRole("navigation", { name: "Etapas da Mesa Foto" });
     const botoes = within(nav).getAllByRole("button");
-    // Pedido do dono ("ainda estou confuso"): 3 passos claros e as etapas de apoio discretas ao lado.
-    // Modelos e Canvas (MODELOS-E-CANVAS.md) vêm depois, discretos, fora do caminho principal.
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Produto", "3Criar", "Revisar", "Usar", "Biblioteca", "Modelos", "Canvas"]);
+    // Pedido do dono (25/09, "não tem um processo mais simples"): 1 Fotos (o produto é identificado ali),
+    // 2 Criar, 3 Usar (com a revisão dentro); Biblioteca, Modelos e Canvas como ferramentas de apoio.
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Canvas"]);
     expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "canvas"]);
-    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo"], ["kits"], ["criar", "ensaio", "campanha", "preparar"]]);
+    expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "ensaio", "campanha", "preparar"], ["usar", "revisar"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
     expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["canvas", true]]);
     // Celular: o caminho principal em 3 colunas e as de apoio quebram a linha, sem rolagem lateral.
@@ -392,21 +395,24 @@ describe("rota, casca e troca entre mesas", () => {
     await waitFor(() => expect(barra.textContent).toContain("Mouse M720"));
     await waitFor(() => expect(barra.textContent).toContain("Catálogo fiel"));
     expect(barra.textContent).toContain("0/3 aprovadas");
-    // O próximo passo fica sempre em destaque: aqui há 1 versão esperando revisão.
+    // O próximo passo fica sempre em destaque: aqui há 1 versão esperando revisão, no passo 3 (Usar).
     const proximo = await screen.findByText(/Próximo: Revisar 1 foto/);
     expect(proximo.closest("[data-proximo-passo]")).toBeTruthy();
-    expect(within(nav).getByRole("button", { name: "Revisar" }).hasAttribute("data-proximo")).toBe(true);
+    expect(botoes[2].hasAttribute("data-proximo")).toBe(true);
     // O diretor de fotografia fica à mão em qualquer etapa.
     expect(await screen.findByRole("button", { name: "Abrir o diretor de fotografia" })).toBeTruthy();
-    fireEvent.click(botoes[5]);
-    await waitFor(() => expect(within(nav).getAllByRole("button")[5].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
-    // Variações, Campanha e Preparar ficam dentro do passo 3 (Criar).
-    fireEvent.click(within(nav).getAllByRole("button")[2]);
+    fireEvent.click(botoes[3]);
+    await waitFor(() => expect(within(nav).getAllByRole("button")[3].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
+    // Variações, Campanha e Preparar ficam dentro do passo 2 (Criar).
+    fireEvent.click(within(nav).getAllByRole("button")[1]);
     await waitFor(() => expect(document.querySelector('[data-forma-de-criar="campanha"]')).toBeTruthy(), { timeout: 5000 });
     fireEvent.click(document.querySelector('[data-forma-de-criar="ensaio"]') as HTMLElement);
     const criar = await screen.findByRole("navigation", { name: "Formas de criar" });
     expect(within(criar).getByRole("button", { name: "Variações" }).getAttribute("aria-current")).toBe("page");
-    expect(within(nav).getAllByRole("button")[2].getAttribute("aria-current")).toBe("page");
+    expect(within(nav).getAllByRole("button")[1].getAttribute("aria-current")).toBe("page");
+    // Produto (kits) e Revisar continuam por endereço, dentro dos passos 1 e 3.
+    fireEvent.click(within(nav).getAllByRole("button")[2]);
+    await waitFor(() => expect(within(nav).getAllByRole("button")[2].getAttribute("aria-current")).toBe("page"), { timeout: 5000 });
   });
 });
 
@@ -417,7 +423,7 @@ describe("etapa 1, acervo", () => {
     montar(h(EtapaAcervo));
     await screen.findByText("mouse-frente.jpg");
     expect(document.querySelectorAll('[data-selo="gerada"]').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("radio", { name: "Geradas" }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Geradas/ }));
     await waitFor(() => expect(screen.queryByText("mouse-frente.jpg")).toBeNull());
     expect(screen.getByText("mouse-tres-quartos.png")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Abrir mouse-tres-quartos.png" }));
@@ -695,7 +701,7 @@ describe("etapa 5, revisar", () => {
     montar(h(EtapaRevisar), { ensaioId: ENSAIO });
     expect(await screen.findByText("Conferência (aviso, a decisão é sua)")).toBeTruthy();
     expect(screen.getByText("Logo menor que no original")).toBeTruthy();
-    expect(screen.getByText("Fontes do kit")).toBeTruthy();
+    expect(screen.getByText("Fotos do produto")).toBeTruthy();
     expect(document.querySelectorAll('[data-selo="gerada"]').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Rejeitar" }));
     const confirmar = screen.getByRole("button", { name: "Rejeitar com motivo" });
@@ -1151,7 +1157,7 @@ describe("v2: produto pela embalagem e o kit que não some", () => {
     primeira.unmount();
     montar(h(EtapaKits), { selecionadas: [F2], escolherKit });
     expect(await screen.findByText("NTC Mouse X, preto")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Confirmar e montar o kit/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar e montar o produto/ }));
     await waitFor(() => expect(chamadasDe("kit_sugerir")).toHaveLength(1));
     const corpo = chamadasDe("kit_sugerir")[0];
     expect(corpo.imagem_ids).toEqual([F2, "web-1"]);
@@ -1176,7 +1182,7 @@ describe("v2: produto pela embalagem e o kit que não some", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Identificar produto pela embalagem ou foto/ }));
     await waitFor(() => expect(escolherKit).toHaveBeenCalledWith("kit-ntc"));
     expect(await screen.findByText(/O Jev aponta outro candidato/)).toBeTruthy();
-    expect(screen.getByText(/Kit salvo como rascunho: NTC Mouse X/)).toBeTruthy();
+    expect(screen.getByText(/Produto salvo como rascunho: NTC Mouse X/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Confirmar o produto/ }));
     await waitFor(() => expect(chamadasDe("kit_salvar")).toHaveLength(1));
     expect(chamadasDe("kit_salvar")[0].kit).toMatchObject({ id: "kit-ntc", status: "confirmado" });
@@ -1343,7 +1349,7 @@ describe("v2: campanha com modelo", () => {
     expect(screen.getByText("Mulher, 25 a 35 anos")).toBeTruthy();
     expect(document.querySelectorAll('[data-foto-da-campanha] [data-selo="gerada"]').length).toBe(1);
     expect(screen.getByRole("button", { name: /Gerar todas \(1 foto\)/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Revisar e aprovar/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Comparar com as fontes/ }));
     expect(irPara).toHaveBeenCalledWith("revisar", { ensaio: "camp-1" });
   });
 });
@@ -1433,7 +1439,7 @@ describe("v2: diretor que trabalha", () => {
     fireEvent.click(within(ident).getByRole("button", { name: /Identificar produto \(1 foto\)/ }));
     await waitFor(() => expect(chamadasDe("produto_identificar")).toEqual([{ acao: "produto_identificar", client_id: CLIENTE, imagem_ids: [F2] }]));
     expect(await within(ident).findByText("NTC Mouse X, preto")).toBeTruthy();
-    expect(within(ident).getByRole("button", { name: /Confirmar e montar o kit/ })).toBeTruthy();
+    expect(within(ident).getByRole("button", { name: /Confirmar e montar o produto/ })).toBeTruthy();
   });
 
   it("anexar print de referência de estilo sobe para o acervo e vai como estilo, não como o produto", async () => {
@@ -1562,15 +1568,265 @@ describe("v2: normalizadores e contrato", () => {
     const kits = [normalizarKit(KIT_BRUTO)!];
     const ensaio = normalizarEnsaio(ENSAIO_BRUTO)!;
     expect(proximoPasso({ fotos: 0, kits: [], kitId: null, ensaio: null, selecionadas: 0 }).etapa).toBe("acervo");
-    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 2 })).toEqual({ etapa: "kits", rotulo: "Identificar o produto (2 fotos)" });
-    expect(proximoPasso({ fotos: 3, kits, kitId: null, ensaio: null, selecionadas: 0 }).etapa).toBe("kits");
+    // 25/09: o produto se identifica e escolhe dentro de Fotos; revisar fica dentro de Usar.
+    expect(proximoPasso({ fotos: 3, kits: [], kitId: null, ensaio: null, selecionadas: 2 })).toEqual({ etapa: "acervo", rotulo: "Identificar o produto (2 fotos)" });
+    expect(proximoPasso({ fotos: 3, kits, kitId: null, ensaio: null, selecionadas: 0 }).etapa).toBe("acervo");
     expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: null, selecionadas: 0 }).etapa).toBe("criar");
-    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio, selecionadas: 0 }).rotulo).toBe("Revisar 1 foto");
+    expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio, selecionadas: 0 })).toMatchObject({ etapa: "usar", rotulo: "Revisar 1 foto" });
     const semVersao = normalizarEnsaio({ ...ENSAIO_BRUTO, receita_id: "campanha-com-modelo", tomadas: [{ id: "a", status: "pendente", versoes: [] }] })!;
     expect(proximoPasso({ fotos: 3, kits, kitId: KIT, ensaio: semVersao, selecionadas: 0 })).toMatchObject({ etapa: "campanha", rotulo: "Gerar 1 foto" });
   });
 
   it("tipos de variação da tela são os da função (receitas.ts)", () => {
     expect(TIPOS_DE_VARIACAO.map((t) => t.valor)).toEqual(TIPOS_DE_VARIACAO_DA_FUNCAO.map((t) => t.id));
+  });
+});
+
+// ------------------------------------------------------------------ ligada à Mesa (pedido do dono, 25/09)
+
+const esperarPreco = async (botao: HTMLElement) => waitFor(() => expect(botao.textContent).toContain("US$"));
+
+describe("25/09: usar de verdade (Mesa, Mesa Ads, baixar, aprovação em cada foto)", () => {
+  it("foto aprovada: o menu Usar leva ao Estúdio da Mesa com a foto e manda para aprovação", async () => {
+    montar(h(EtapaUsar));
+    await screen.findByText("mouse-tres-quartos.png");
+    const pronta = document.querySelector(`[data-pronta="${F3}"]`) as HTMLElement;
+    expect(within(pronta).getByText("aprovada")).toBeTruthy();
+    fireEvent.click(within(pronta).getByRole("button", { name: /^Usar/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Mandar para aprovação" }));
+    await waitFor(() => expect(chamadasDe("enviar")).toHaveLength(1));
+    expect(chamadasDe("enviar")[0]).toEqual({ acao: "enviar", client_id: CLIENTE, imagem_ids: [F3], destino: "aprovacao" });
+    fireEvent.click(within(pronta).getByRole("button", { name: /^Usar/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Usar na Mesa (Estúdio)" }));
+    await waitFor(() => expect(screen.getByTestId("onde").textContent).toBe(`/mesa?client=${CLIENTE}&aba=estudio&fotos=${F3}`));
+    // Aprovada não passa de novo pela aprovação da equipe.
+    expect(chamadasDe("versao_decidir")).toHaveLength(0);
+    expect(chamadasDe("acervo_decidir")).toHaveLength(0);
+  });
+
+  it("foto gerada ainda sem decisão: revisar em Usar e \"Aprovar e usar na Mesa Ads\" aprova, põe no acervo e abre o Estúdio Ads", async () => {
+    const NOVA = "aaaaaaaa-0000-4000-8000-000000000007";
+    respostas.versao_decidir = (corpo: any) => ({
+      ensaio: { ...ENSAIO_BRUTO, tomadas: ENSAIO_BRUTO.tomadas.map((t: any) => (t.id === corpo.tomada_id ? { ...t, versoes: [{ ...t.versoes[0], aprovada: true, imagem_id: NOVA }] } : t)) },
+      imagem: fotoBruta(NOVA, { nome: "Mouse M720, Três quartos v1", gerada: true, modo: "angulo", derivada_de: F1, aprovada: true, kit_id: KIT, tags: ["mesa_foto", "ensaio", "gerada"] }),
+    });
+    montar(h(EtapaUsar));
+    const pendente = (await waitFor(() => {
+      const el = document.querySelector('[data-pendente="t3"]');
+      if (!el) throw new Error("sem pendente");
+      return el;
+    })) as HTMLElement;
+    expect(within(pendente).getByText("gerada")).toBeTruthy();
+    fireEvent.click(within(pendente).getByRole("button", { name: /^Usar/ }));
+    const itens = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
+    expect(itens).toEqual(["Aprovar e usar na Mesa (Estúdio)", "Aprovar e usar na Mesa Ads", "Aprovar e mandar para aprovação"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Aprovar e usar na Mesa Ads" }));
+    await waitFor(() => expect(chamadasDe("versao_decidir")).toEqual([{ acao: "versao_decidir", ensaio_id: ENSAIO, tomada_id: "t3", versao: 1, decisao: "aprovar" }]));
+    await waitFor(() => expect(screen.getByTestId("onde").textContent).toBe(`/mesa-ads?client=${CLIENTE}&etapa=estudio&fotos=${NOVA}`));
+    expect(JSON.parse(window.sessionStorage.getItem(`mesa-foto:para-usar:${CLIENTE}`) || "{}").ids).toEqual([NOVA]);
+  });
+});
+
+describe("25/09: passo 1 mais claro (selos simples, menu por foto, produto identificado ali)", () => {
+  it("cada foto tem um selo simples e o menu com ver grande, preparar e as saídas; o produto se identifica e já vai para a barra", async () => {
+    respostas.produto_identificar = { ...IDENTIFICACAO_BRUTA, kit: { id: "kit-ntc", nome: "NTC Mouse X", tipo: "produto", status: "rascunho", refs: [{ imagem_id: F2, papel: "embalagem" }] }, kit_acao: "criado" };
+    const escolherKit = vi.fn();
+    const irPara = vi.fn();
+    montar(h(EtapaAcervo), { escolherKit, irPara });
+    await screen.findByText("mouse-frente.jpg");
+    expect(document.querySelector(`[data-foto="${F1}"] [data-selo-curto="original"]`)).toBeTruthy();
+    expect(document.querySelector(`[data-foto="${F3}"] [data-selo-curto="aprovada"]`)).toBeTruthy();
+    // Foto gerada segue marcada na própria imagem.
+    expect(document.querySelector(`[data-foto="${F3}"] [data-selo="gerada"]`)).toBeTruthy();
+    // Subir em lote bem à vista.
+    expect(screen.getByRole("button", { name: /Subir fotos em lote/ })).toBeTruthy();
+
+    // Menu da foto original: mandar ao cliente não pede aprovação da equipe.
+    fireEvent.click(screen.getByRole("button", { name: "Ações de mouse-frente.jpg" }));
+    const itens = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
+    expect(itens).toEqual(["Ver grande", "Detalhes e leitura", "Preparar (fundo, luz, cenário)", "Usar na Mesa (Estúdio)", "Usar na Mesa Ads", "Baixar", "Mandar para aprovação", "Enviar para Arquivos"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Preparar (fundo, luz, cenário)" }));
+    expect(irPara).toHaveBeenCalledWith("preparar", { imagem: F1 });
+
+    // O produto (kit) mora no passo 1: sem marcar nada, lê as originais mais recentes.
+    const produto = document.querySelector("[data-produto-das-fotos]") as HTMLElement;
+    expect(within(produto).getByRole("button", { name: "Escolher o produto Mouse M720" })).toBeTruthy();
+    const identificar = within(produto).getByRole("button", { name: /Identificar o produto \(2 fotos\)/ });
+    await esperarPreco(identificar);
+    fireEvent.click(identificar);
+    await waitFor(() => expect(chamadasDe("produto_identificar")).toEqual([{ acao: "produto_identificar", client_id: CLIENTE, imagem_ids: [F1, F2] }]));
+    await waitFor(() => expect(escolherKit).toHaveBeenCalledWith("kit-ntc"));
+    expect(await within(produto).findByText(/Produto salvo como rascunho: NTC Mouse X/)).toBeTruthy();
+  });
+});
+
+describe("25/09: campanha da Mesa reconhecida pelo calendário", () => {
+  const CAMPANHAS_DA_MESA = {
+    mes: "2026-09",
+    campanha_do_mes_id: "camp-mes",
+    campanhas: [
+      {
+        id: "camp-mes",
+        nome: "Primavera",
+        objetivo: "Vender a coleção nova",
+        status: "planejada",
+        periodo_inicio: "2026-09-20",
+        periodo_fim: "2026-10-05",
+        identidade: { tema_visual: "flores claras e luz de manhã", paleta_apoio: [{ nome: "verde", hex: "#22AA55" }] },
+        no_mes: true,
+        acontecendo_hoje: true,
+        conteudos_no_mes: 1,
+        pautas_no_mes: ["28/09 Lançamento"],
+        do_mes: true,
+        motivo: "Acontece hoje (20/09 a 05/10).",
+      },
+      { id: "camp-bf", nome: "Black Friday", status: "planejada", periodo_inicio: "2026-11-20", periodo_fim: "2026-11-30", identidade: {}, do_mes: false, motivo: "Fora deste mês (20/11 a 30/11)." },
+    ],
+    custo_usd: 0,
+  };
+
+  it("normalizador: a do mês marcada, período legível e paleta de apoio só com cor válida", () => {
+    const n = normalizarCampanhasDaMesa(CAMPANHAS_DA_MESA);
+    expect(n.campanhaDoMesId).toBe("camp-mes");
+    expect(n.campanhas.map((c) => c.nome)).toEqual(["Primavera", "Black Friday"]);
+    expect(periodoDaCampanha(n.campanhas[0])).toBe("20/09 a 05/10");
+    expect(periodoDaCampanha({ periodo_inicio: "2026-09-12", periodo_fim: "2026-09-19", periodo_pelo_calendario: true })).toBe("12/09 a 19/09 (pelo calendário)");
+    expect(normalizarCampanhasDaMesa({ campanhas: [{ id: "x", identidade: { paleta_apoio: [{ hex: "azul" }] } }] })).toEqual({
+      mes: "",
+      campanhaDoMesId: null,
+      campanhas: [expect.objectContaining({ id: "x", nome: "Campanha", paleta_apoio: [] })],
+    });
+  });
+
+  it("a campanha do mês vem escolhida; trocar de campanha ou ficar sem campanha vai no campanha_planejar", async () => {
+    respostas.campanhas_listar = CAMPANHAS_DA_MESA;
+    respostas.campanha_planejar = { ensaio: { ...ENSAIO_BRUTO, id: "camp-nova", receita_id: "campanha-com-modelo" }, estimativa_usd: 0.4, custo_usd: 0.02 };
+    mock.tabelas.foto_ensaios = [];
+    montar(h(EtapaCampanha), { kitId: KIT, escolherEnsaio: vi.fn() });
+    const grupo = await screen.findByRole("radiogroup", { name: "Campanha da Mesa" });
+    expect(within(grupo).getByRole("radio", { name: /Primavera/ }).getAttribute("aria-checked")).toBe("true");
+    expect(within(grupo).getByRole("radio", { name: /Primavera/ }).querySelector("[data-do-mes]")).toBeTruthy();
+    expect(screen.getByText(/flores claras e luz de manhã/)).toBeTruthy();
+    expect(screen.getByText("28/09 Lançamento")).toBeTruthy();
+    const planejar = screen.getByRole("button", { name: /Planejar a campanha/ });
+    await esperarPreco(planejar);
+    fireEvent.click(planejar);
+    await waitFor(() => expect(chamadasDe("campanha_planejar")).toHaveLength(1));
+    expect(chamadasDe("campanha_planejar")[0].campanha_id).toBe("camp-mes");
+    fireEvent.click(within(grupo).getByRole("radio", { name: /Black Friday/ }));
+    await waitFor(() => expect((screen.getByRole("button", { name: /Planejar a campanha/ }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: /Planejar a campanha/ }));
+    await waitFor(() => expect(chamadasDe("campanha_planejar")).toHaveLength(2));
+    expect(chamadasDe("campanha_planejar")[1].campanha_id).toBe("camp-bf");
+    fireEvent.click(within(grupo).getByRole("radio", { name: "Sem campanha" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: /Planejar a campanha/ }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: /Planejar a campanha/ }));
+    await waitFor(() => expect(chamadasDe("campanha_planejar")).toHaveLength(3));
+    expect(chamadasDe("campanha_planejar")[2].campanha_id).toBe("nenhuma");
+    // A escolha vale para Variações também (sessão do navegador).
+    expect(JSON.parse(window.sessionStorage.getItem(`mesa-foto:campanha:${CLIENTE}`) || "null")).toBe("nenhuma");
+  });
+
+  it("variações também levam a campanha da Mesa (a do mês, sem escolha)", async () => {
+    respostas.campanhas_listar = CAMPANHAS_DA_MESA;
+    respostas.variacoes_planejar = { ensaio: { ...ENSAIO_BRUTO, id: "var-9", receita_id: "variacoes" }, estimativa_usd: 1, custo_usd: 0.03 };
+    mock.tabelas.foto_ensaios = [];
+    montar(h(EtapaEnsaio), { kitId: KIT, escolherEnsaio: vi.fn() });
+    await screen.findByRole("radiogroup", { name: "Campanha da Mesa" });
+    const planejar = screen.getByRole("button", { name: /Planejar 8 variações/ });
+    await esperarPreco(planejar);
+    fireEvent.click(planejar);
+    await waitFor(() => expect(chamadasDe("variacoes_planejar")).toHaveLength(1));
+    expect(chamadasDe("variacoes_planejar")[0].campanha_id).toBe("camp-mes");
+  });
+});
+
+describe("25/09: variações organizadas, com rolagem própria e revisar no resultado", () => {
+  it("resultado por tipo numa caixa com rolagem própria; aprovar e filtrar ali mesmo", async () => {
+    mock.tabelas.foto_ensaios = [
+      {
+        ...ENSAIO_BRUTO,
+        receita_id: "variacoes",
+        tomadas: [
+          { id: "h1", nome: "Herói verde", tipo_variacao: "heroi_fundo_cor", status: "gerada", formato: "4:5", versoes: [{ versao: 1, storage_path: "h1.png", custo_usd: 0.17 }] },
+          { id: "m1", nome: "Na mão", tipo_variacao: "na_mao", status: "pendente", versoes: [] },
+          { id: "h2", nome: "Herói azul", tipo_variacao: "heroi_fundo_cor", status: "pendente", versoes: [] },
+        ],
+      },
+    ];
+    respostas.versao_decidir = { ensaio: null };
+    montar(h(EtapaEnsaio), { kitId: KIT, ensaioId: ENSAIO });
+    await screen.findByText("Herói verde");
+    const caixa = document.querySelector("[data-resultado-do-lote]") as HTMLElement;
+    expect(caixa.className).toContain("overflow-y-auto");
+    expect(caixa.className).toContain("max-h-[75vh]");
+    expect(caixa.className).toContain("min-w-0");
+    expect(Array.from(caixa.querySelectorAll("[data-grupo-do-tipo]")).map((g) => g.getAttribute("data-grupo-do-tipo"))).toEqual(["heroi_fundo_cor", "na_mao"]);
+    const h1 = screen.getByText("Herói verde").closest("[data-tomada]") as HTMLElement;
+    fireEvent.click(within(h1).getByRole("button", { name: /^Aprovar/ }));
+    await waitFor(() => expect(chamadasDe("versao_decidir")).toEqual([{ acao: "versao_decidir", ensaio_id: ENSAIO, tomada_id: "h1", versao: 1, decisao: "aprovar" }]));
+    fireEvent.click(screen.getByRole("radio", { name: /^Para revisar/ }));
+    await waitFor(() => expect(screen.queryByText("Na mão")).toBeNull());
+    expect(screen.getByText("Herói verde")).toBeTruthy();
+    // Sem laço: aprovar não gerou nem conferiu nada sozinho.
+    expect(chamadasDe("tomada_gerar")).toHaveLength(0);
+    expect(chamadasDe("versao_conferir")).toHaveLength(0);
+  });
+});
+
+describe("25/09: biblioteca reconhecível e persona pelo brief", () => {
+  it("o exemplo do prompt e as referências ficaram maiores, com ver grande", async () => {
+    mock.tabelas.foto_biblioteca = [
+      { id: "p1", tipo: "prompt", categoria: "luz", titulo: "Luz de janela", prompt_pt: "luz lateral", imagem_url: "https://img.test/cheia.jpg", licenca: "CC0", autor: "Ana" },
+      { id: "r1", tipo: "referencia", categoria: "cenario", titulo: "Bancada clara", imagem_url: "https://img.test/r1.jpg", licenca: "CC BY 4.0", autor: "Maria" },
+    ];
+    montar(h(EtapaBiblioteca));
+    await screen.findByText("Luz de janela");
+    const exemplo = screen.getByRole("button", { name: "Ver grande o exemplo de Luz de janela" });
+    expect(exemplo.className).toContain("w-full");
+    expect(exemplo.className).toContain("sm:w-40");
+  });
+
+  it("Sugerir pelo brief preenche a ficha com o contexto da Mesa, sem criar nada; detalhes ficam recolhidos", async () => {
+    respostas.modelo_sugerir = {
+      sugestao: {
+        nome: "Lia",
+        ficha: {
+          idade_aparente: 29,
+          genero_apresentado: "Feminino",
+          tom_de_pele: "morena clara, subtom quente",
+          rosto: "oval",
+          olhos: "castanhos",
+          cabelo: { cor: "castanho", comprimento: "longo", textura: "liso" },
+          marcas: ["sardas leves"],
+          corpo: "porte médio",
+          estilo: "casual urbano",
+          notas: "",
+        },
+        invariantes: ["sardas no nariz", "cabelo sempre solto"],
+        porque: "Conversa com mulheres de 25 a 35 anos que compram óculos na loja.",
+      },
+      avisos: [],
+      campanha_mesa: { id: "camp-mes", nome: "Primavera", papel: "do_mes" },
+      custo_usd: 0.01,
+    };
+    montar(h(EtapaModelos));
+    fireEvent.click((await screen.findAllByRole("button", { name: /Nova persona/ }))[0]);
+    expect(screen.queryByLabelText("Cabelo")).toBeNull();
+    const sugerir = screen.getByRole("button", { name: /Sugerir pelo brief/ });
+    await esperarPreco(sugerir);
+    fireEvent.click(sugerir);
+    await waitFor(() => expect(chamadasDe("modelo_sugerir")).toEqual([{ acao: "modelo_sugerir", client_id: CLIENTE }]));
+    await waitFor(() => expect((screen.getByLabelText("Nome da persona") as HTMLInputElement).value).toBe("Lia"));
+    expect((screen.getByLabelText("Idade aparente") as HTMLInputElement).value).toBe("29");
+    expect((screen.getByLabelText("Estilo") as HTMLInputElement).value).toBe("casual urbano");
+    expect(screen.getByRole("radio", { name: "Feminino" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText(/Conversa com mulheres de 25 a 35 anos/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Mais detalhes/ }));
+    expect((screen.getByLabelText("Cabelo") as HTMLInputElement).value).toBe("castanho, longo, liso");
+    expect((screen.getByLabelText("Invariantes") as HTMLTextAreaElement).value).toBe("sardas no nariz\ncabelo sempre solto");
+    // A declaração ética é sempre da equipe: a sugestão não marca, e nada foi criado.
+    expect((screen.getByLabelText("Declaração ética") as HTMLInputElement).checked).toBe(false);
+    expect(chamadasDe("modelo_criar")).toHaveLength(0);
   });
 });

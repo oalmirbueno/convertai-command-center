@@ -46,6 +46,13 @@
  *   modelo_ancora_escolher, modelo_vista_gerar, modelo_imagem_decidir, modelo_detalhar, modelo_conferir
  * - canvas_listar, canvas_ler, canvas_salvar, canvas_montar, canvas_gerar, canvas_conferir
  * - estimar aceita também acao_alvo modelo_candidata, modelo_rodada, modelo_vista, modelo_detalhar e canvas_gerar
+ * Ligada à Mesa (pedido do dono, 25/09; campanhas.ts):
+ * - campanhas_listar { client_id } -> { mes, hoje, campanha_do_mes_id, campanhas } (sem IA; a do mês sai do calendário)
+ * - ensaio_planejar, variacoes_planejar, campanha_planejar e agente_conversar aceitam campanha_id (mesa_campanhas;
+ *   "nenhuma" = só a marca): o contexto do diretor leva a campanha escolhida (ou, sem ela, a do mês) e o ensaio
+ *   grava direcao.campanha_mesa
+ * - modelo_sugerir { client_id, pedido?, campanha_id? } -> { sugestao, avisos } (ficha da persona pelo brief; não grava)
+ * - versao_decidir aprovando grava a foto no acervo com as tags mesa_foto, gerada e ensaio:<id> (o Estúdio acha por elas)
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
  * identidade separada de estilo (referência de estilo vai depois das fontes,
@@ -74,6 +81,7 @@ import {
 import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
 import {
   AVISO_REFERENCIA_WEB,
   blocosDaResposta,
@@ -810,6 +818,7 @@ const REGRAS_DA_CASA = `REGRAS DA CASA (Mesa Foto):
 - Pessoa real: só a do kit, com autorização; retoque não muda anatomia, idade nem rosto. Pessoa sintética (campanha): gerada, adulta, sem parecer pessoa real conhecida, sem sexualização, sempre marcada como gerada.
 - Alimento: não aumentar porção nem inventar ingrediente.
 - Nunca escurecer a foto para dar destaque; as regras da capa das artes não valem para fotografia.
+- A Mesa é a principal e a Mesa Foto é ferramenta dela: use o brief, a marca, a história, o porquê e o público do cliente, e a campanha que vem em cliente.campanha_escolhida (ou, sem ela, cliente.campanha_do_mes, do calendário editorial). Tema, período, oferta e identidade da campanha orientam cenário, props, paleta de apoio e clima, sempre dentro da marca; a campanha nunca muda o produto.
 - Português do Brasil, sem travessão.`;
 
 /** Linguagem de direção de arte publicitária usada pelo diretor em todo plano. */
@@ -929,7 +938,13 @@ Responda só com o JSON pedido.`;
 
 // ------------------------------------------------------------------ contexto do cliente
 
-type ContextoFoto = { cliente: string; marca: Awaited<ReturnType<typeof lerMarcaParaDirecao>>; dados: Record<string, unknown> };
+type ContextoFoto = {
+  cliente: string;
+  marca: Awaited<ReturnType<typeof lerMarcaParaDirecao>>;
+  dados: Record<string, unknown>;
+  /** A campanha da Mesa que orienta este plano (a escolhida ou a do mês), para gravar no ensaio. */
+  campanha: { id: string; nome: string; papel: "escolhida" | "do_mes" } | null;
+};
 
 /**
  * Contexto real do cliente para o diretor de fotografia: marca (paleta,
@@ -938,8 +953,11 @@ type ContextoFoto = { cliente: string; marca: Awaited<ReturnType<typeof lerMarca
  * marca, briefing de ads atual (oferta, público, objeções), nicho do último
  * plano da Mesa Ads e a memória do diretor. Sem dado, fica null.
  */
-async function contextoDoCliente(clientId: string): Promise<ContextoFoto> {
-  const [marca, consolidado, dossie, documentos, briefing, plano, memoria] = await Promise.all([
+async function contextoDoCliente(clientId: string, campanhaId?: unknown): Promise<ContextoFoto> {
+  // "nenhuma": a equipe escolheu seguir só a marca (nem a campanha do mês entra).
+  const semCampanha = campanhaId === "nenhuma";
+  const pedida = campanhaId != null && campanhaId !== "" && !semCampanha ? idDe(campanhaId, "campanha_id") : null;
+  const [marca, consolidado, dossie, documentos, briefing, plano, memoria, campanhas] = await Promise.all([
     lerMarcaParaDirecao(servico(), clientId),
     lerContextoConsolidado(servico(), clientId),
     servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
@@ -949,7 +967,12 @@ async function contextoDoCliente(clientId: string): Promise<ContextoFoto> {
     servico().from("ads_planos").select("estrutura").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(1),
     servico().from("agente_memoria").select("tipo, texto").eq("client_id", clientId).eq("agente", AGENTE_DIRETOR).eq("ativa", true)
       .order("criado_em", { ascending: false }).limit(20),
+    lerCampanhasParaFoto(servico(), clientId).catch(() => null),
   ]);
+  const listaDeCampanhas: CampanhaParaFoto[] = campanhas ? campanhas.campanhas : [];
+  const escolhida = pedida ? listaDeCampanhas.find((c) => c.id === pedida) || null : null;
+  if (pedida && !escolhida) throw new ErroHttp(404, "campanha_inexistente", "Esta campanha não é deste cliente (ou foi apagada na Mesa).");
+  const doMes = !escolhida && !semCampanha ? listaDeCampanhas.find((c) => c.do_mes) || null : null;
   const dossies = (dossie.data as { content: string | null; summary: string | null; dossier_type: string | null }[] | null) ?? [];
   const estrutura = ((plano.data as { estrutura: Record<string, unknown> | null }[] | null) ?? [])[0]?.estrutura ?? null;
   return {
@@ -966,7 +989,12 @@ async function contextoDoCliente(clientId: string): Promise<ContextoFoto> {
       briefing_de_ads: briefing.data ?? null,
       nicho: typeof estrutura?.nicho === "string" ? estrutura.nicho : null,
       memoria_do_diretor: memoria.data ?? [],
+      // A Mesa é a principal: a campanha que ela usa (escolhida ou a do mês no calendário) orienta a foto.
+      campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,
+      campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,
+      outras_campanhas_ativas: listaDeCampanhas.filter((c) => c.status !== "encerrada" && c !== escolhida && c !== doMes).slice(0, 5).map((c) => c.nome),
     },
+    campanha: escolhida ? { id: escolhida.id, nome: escolhida.nome, papel: "escolhida" } : doMes ? { id: doMes.id, nome: doMes.nome, papel: "do_mes" } : null,
   };
 }
 
@@ -1801,7 +1829,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     if (desconhecidas.length) throw new ErroHttp(400, "tomada_desconhecida", "Há tomada que não existe nesta receita.", { tomada_ids: desconhecidas });
   }
   const receita = pedidas && pedidas.size ? { ...receitaBase, tomadas: receitaBase.tomadas.filter((t) => pedidas.has(t.id)) } : receitaBase;
-  const [contexto, diretor] = await Promise.all([contextoDoCliente(clientId), modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+  const [contexto, diretor] = await Promise.all([contextoDoCliente(clientId, corpo.campanha_id), modeloDeTexto("diretor_arte", corpo.modelo_id)]);
 
   const tomadasDaReceita = receita.tomadas.map((t) => ({
     id: t.id,
@@ -1868,6 +1896,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
       perguntas: listaDeTextos(r.perguntas, 10, 300),
       modelo_id: saida.modeloId,
       estimativa,
+      campanha_mesa: contexto.campanha,
     },
     pedido,
     custo_usd: arred6(saida.custoUsd),
@@ -2065,7 +2094,7 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencia_ids) ? corpo.referencia_ids.map(String) : [];
   const [contexto, diretor, estilos] = await Promise.all([
-    contextoDoCliente(clientId),
+    contextoDoCliente(clientId, corpo.campanha_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, MAX_ESTILOS_NO_GERADOR),
   ]);
@@ -2149,12 +2178,14 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
       perguntas: [],
       modelo_id: saida.modeloId,
       estimativa,
+      campanha_mesa: contexto.campanha,
     },
     pedido,
     custoUsd: saida.custoUsd,
   });
   return json({
     ensaio,
+    campanha_mesa: contexto.campanha,
     estimativa_usd: estimativa.total_usd,
     estimativa,
     lacunas,
@@ -2241,7 +2272,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencias_estilo_ids) ? corpo.referencias_estilo_ids.map(String) : [];
   const [contexto, diretor, estilos] = await Promise.all([
-    contextoDoCliente(clientId),
+    contextoDoCliente(clientId, corpo.campanha_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, 4),
   ]);
@@ -2312,8 +2343,9 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     modeloTextoId: saida.modeloId,
     qualidade: lerQualidade(corpo.qualidade),
     modeloImagemId: corpo.modelo_imagem_id,
+    campanhaMesa: contexto.campanha,
   });
-  return json({ ...resultado, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
+  return json({ ...resultado, campanha_mesa: contexto.campanha, custo_usd: saida.custoUsd, saldo_usd: saida.saldoUsd, reserva_usada: saida.reservaUsada ?? null });
 }
 
 /** Monta e grava o ensaio de campanha (campanha_planejar e a sugestão do diretor). */
@@ -2334,6 +2366,7 @@ async function criarEnsaioDeCampanha(ch: Chamador, d: {
   modeloTextoId: string | null;
   qualidade?: Qualidade;
   modeloImagemId?: unknown;
+  campanhaMesa?: ContextoFoto["campanha"];
 }) {
   const tomadas = tomadasDaCampanha(d.fotos, { kit: d.kit, refs: d.refs, formatos: d.formatos });
   const estilos = d.estilos.slice(0, MAX_ESTILOS_NO_GERADOR);
@@ -2357,6 +2390,7 @@ async function criarEnsaioDeCampanha(ch: Chamador, d: {
       modelo_id: d.modeloTextoId,
       estimativa,
       promessa: PROMESSA_CAMPANHA,
+      campanha_mesa: d.campanhaMesa ?? null,
     },
     pedido: d.pedido,
     custoUsd: d.custoUsd,
@@ -2679,7 +2713,7 @@ async function versaoDecidir(ch: Chamador, corpo: Record<string, unknown>) {
           pasta: "Mesa Foto / Ensaios",
           categoria: categoriaDoAcervo(kit.tipo),
           tags: [
-            "mesa_foto", "ensaio", `tomada:${tomada.id}`,
+            "mesa_foto", "ensaio", "gerada", `tomada:${tomada.id}`, `ensaio:${ensaio.id}`,
             ...(tomada.angulo_novo ? ["novo_angulo"] : []),
             ...(tomada.campanha ? ["campanha"] : []),
             ...(tomada.campanha?.com_pessoa || tipoDeVariacaoPorId(tomada.tipo_variacao)?.com_maos ? ["pessoa_sintetica"] : []),
@@ -3299,7 +3333,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     .map((x) => String((x as Record<string, unknown>).imagem_id ?? "")));
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, ensaio?.id ?? kit?.id ?? null, corpo.nova_conversa === true);
   const [contexto, diretor, historico, anexos, biblioteca, kitsDoCli] = await Promise.all([
-    contextoDoCliente(clientId),
+    contextoDoCliente(clientId, corpo.campanha_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO_CONVERSA),
     anexosDaConversa(clientId, corpo.anexos),
@@ -3785,9 +3819,11 @@ const FERRAMENTAS: FerramentasDaMesa = {
   modeloDeTexto,
   camposImagem: CAMPOS_IMAGEM,
   timeoutTextoMs: TIMEOUT_TEXTO_FOTO_MS,
+  contextoDoCliente,
 };
 const MODELOS = acoesDeModelos(FERRAMENTAS);
 const CANVAS = acoesDoCanvas(FERRAMENTAS);
+const CAMPANHAS = acoesDeCampanhas(FERRAMENTAS);
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
@@ -3820,6 +3856,8 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // Modelos e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md)
   ...MODELOS.acoes,
   ...CANVAS.acoes,
+  // Ligada à Mesa (25/09): campanhas do cliente e a do mês pelo calendário (sem IA; campanhas.ts).
+  campanhas_listar: CAMPANHAS.campanhas_listar,
 };
 
 /**

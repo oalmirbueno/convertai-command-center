@@ -626,7 +626,7 @@ describe("estúdio: gerar, conferir e corrigir antes de mostrar", () => {
     expect(fonte).toContain('chamarFuncao("estudio-arte", { acao: "entregar", trabalho_id: c.trabalho_id');
     expect(fonte).toContain('"O cliente vê em Documentos > Criativos de anúncio."');
     // ArteDoCriativo continua com as mesmas props.
-    expect(fonte).toContain("<ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} />");
+    expect(fonte).toContain("<ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />");
     expect(chamadasDoEstudio("entregar")).toHaveLength(0);
   });
 });

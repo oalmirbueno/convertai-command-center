@@ -919,3 +919,88 @@ export function lerPedidoAoCanvas(clientId: string): string | null {
     return null;
   }
 }
+
+// ------------------------------------------------------------------ sugerir pelo brief (modelo_sugerir)
+
+/** O que a função sugere para a ficha a partir do contexto do cliente (não grava). */
+export interface SugestaoDePersona {
+  nome: string;
+  ficha: FichaDaPersona;
+  /** Invariantes, um por linha (como o campo da tela). */
+  invariantes: string;
+  porque: string;
+  avisos: string[];
+  /** A campanha da Mesa que entrou no contexto (a escolhida ou a do mês). */
+  campanha: string;
+}
+
+/** Texto de gênero da função para as pílulas da tela (feminino, masculino ou neutro). */
+export function generoDaTela(v: unknown): string {
+  const t = texto(v).toLowerCase();
+  if (!t) return "";
+  if (t.indexOf("fem") >= 0 || t.indexOf("mulher") >= 0) return "feminino";
+  if (t.indexOf("masc") >= 0 || t.indexOf("homem") >= 0) return "masculino";
+  return "neutro";
+}
+
+export function normalizarSugestaoDePersona(data: any): SugestaoDePersona | null {
+  const d = data && typeof data === "object" ? data : {};
+  const s = d.sugestao && typeof d.sugestao === "object" ? d.sugestao : null;
+  if (!s) return null;
+  const ficha = normalizarFicha(s.ficha);
+  ficha.genero_apresentado = generoDaTela(ficha.genero_apresentado);
+  const campanha = d.campanha_mesa && typeof d.campanha_mesa === "object" ? texto(d.campanha_mesa.nome) : "";
+  return {
+    nome: texto(s.nome).trim(),
+    ficha,
+    invariantes: listaDeTextos(s.invariantes).join("\n"),
+    porque: texto(s.porque),
+    avisos: listaDeTextos(d.avisos),
+    campanha,
+  };
+}
+
+/** Uma chamada de texto: o contexto do cliente entra, a ficha sai. */
+export const TAMANHO_DA_SUGESTAO_DE_PERSONA = { entrada: 9000, saida: 1500 };
+
+export function partesDaSugestaoDePersona(diretor: ModeloIa | null): ParteDaEstimativa[] {
+  return [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: TAMANHO_DA_SUGESTAO_DE_PERSONA.entrada, tokensSaida: TAMANHO_DA_SUGESTAO_DE_PERSONA.saida }];
+}
+
+export async function sugerirPersona(clientId: string, pedido: string, campanhaId?: string | null): Promise<SugestaoDePersona & { custo_usd?: number }> {
+  const corpo: Record<string, unknown> = { acao: "modelo_sugerir", client_id: clientId };
+  if (pedido.trim()) corpo.pedido = pedido.trim();
+  if (campanhaId) corpo.campanha_id = campanhaId;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const s = normalizarSugestaoDePersona(data);
+  if (!s) throw new Error("A função não devolveu a sugestão da persona.");
+  return { ...s, custo_usd: data && data.custo_usd };
+}
+
+/**
+ * Põe a sugestão no rascunho: campo sugerido vazio não apaga o que a equipe
+ * já escreveu; referências, "de quem é" e a declaração ética ficam como estão
+ * (a declaração é sempre da equipe).
+ */
+export function aplicarSugestaoNaPersona(r: RascunhoDaPersona, s: SugestaoDePersona): RascunhoDaPersona {
+  const f = r.ficha;
+  const n = s.ficha;
+  const ou = (novo: string, velho: string) => (novo && novo.trim() ? novo.trim() : velho);
+  return {
+    ...r,
+    nome: ou(s.nome, r.nome),
+    ficha: {
+      idade_aparente: n.idade_aparente !== null && isFinite(n.idade_aparente) ? Math.max(IDADE_MINIMA, Math.round(n.idade_aparente)) : f.idade_aparente,
+      genero_apresentado: ou(n.genero_apresentado, f.genero_apresentado),
+      tom_de_pele: ou(n.tom_de_pele, f.tom_de_pele),
+      rosto: ou(n.rosto, f.rosto),
+      olhos: ou(n.olhos, f.olhos),
+      cabelo: ou(n.cabelo, f.cabelo),
+      marcas: ou(n.marcas, f.marcas),
+      corpo: ou(n.corpo, f.corpo),
+      estilo: ou(n.estilo, f.estilo),
+      notas: ou(n.notas, f.notas),
+    },
+    invariantes: ou(s.invariantes, r.invariantes),
+  };
+}

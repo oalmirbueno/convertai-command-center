@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, ExternalLink, FolderTree, ImageOff, Info, Landmark, Link2, Loader2, Plus, Search, Star, UserRound } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, FolderTree, ImageOff, Info, Landmark, Link2, Loader2, Plus, Search, Star, Upload, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
   precisaDaExterna,
   PREFIXO_GLOBAL,
   rotuloDoPapel,
+  subirReferencia,
   useAtraso,
   useBancoDaAgencia,
   useGlobaisPorIds,
@@ -47,7 +48,11 @@ import { ExploradorDePastas } from "./NavegadorDePastas";
  * - Pastas do workspace: a mesma árvore do Workspace do cliente; a imagem
  *   escolhida entra como referência de composição.
  * - Banco da agência: referencias_globais com busca, tags e páginas.
- * - Pinterest: abre o Pinterest numa aba nova e cola o link do pin.
+ * - Pinterest: abre o Pinterest numa aba nova e cola o link do pin, ou sobe
+ *   uma imagem do computador (entra como referência de composição).
+ *
+ * As abas quebram linha no painel estreito do Estúdio: com rolagem lateral a
+ * aba Pinterest ficava fora da vista ("tem que colocar o Pinterest", 25/09).
  *
  * Ids escolhidos: o id da referência do cliente ou "g:" + id do banco da
  * agência. Clicar na imagem abre grande (Ampliar).
@@ -364,7 +369,8 @@ export default function SeletorDeReferencias({
   abas,
   aba: abaControlada,
   onAba,
-  alturaMax = "min(62vh, 560px)",
+  // Altura fixa, sem a função min do CSS: o Chrome 64 e o Safari 11 ignoravam a altura e a lista não rolava.
+  alturaMax = "560px",
   colunas = 4,
   porPagina = 24,
   mostrarInativas = false,
@@ -421,7 +427,7 @@ export default function SeletorDeReferencias({
   return (
     <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 items-end border-b border-border">
-        <div role="tablist" aria-label="Onde escolher as referências" className="-mb-px flex min-w-0 flex-1 overflow-x-auto">
+        <div role="tablist" aria-label="Onde escolher as referências" className="-mb-px flex min-w-0 flex-1 flex-wrap">
           {ABAS.filter((a) => visiveis.indexOf(a.valor) >= 0).map((a) => {
             const Icone = a.icone;
             const n = a.valor === "cliente" ? doCliente.length : null;
@@ -500,7 +506,7 @@ export default function SeletorDeReferencias({
         {aba === "pinterest" && (
           <AbaDoPinterest
             clientId={clientId}
-            pins={doCliente.filter((r) => r.origem === "pinterest")}
+            pins={doCliente.filter((r) => r.origem === "pinterest" || r.origem === "upload")}
             grade={grade}
             alturaMax={alturaMax}
             escolher={escolher}
@@ -840,6 +846,9 @@ function AbaDoBanco({
 
   return (
     <div className="min-w-0 space-y-2.5">
+      <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+        As referências do quadro do Pinterest da agência, já lidas pela IA. Busque pela técnica (ex.: tipografia, recorte, colagem).
+      </p>
       <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar no título, na leitura ou nas tags" aria-label="Buscar no banco da agência" className="h-9 pl-8 text-[12.5px]" />
@@ -939,6 +948,26 @@ function AbaDoPinterest({
 }) {
   const [link, setLink] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [subindo, setSubindo] = useState(false);
+  const arquivo = useRef<HTMLInputElement>(null);
+
+  const subir = async (lista: FileList | null) => {
+    const arquivos: File[] = [];
+    if (lista) for (let i = 0; i < lista.length; i++) arquivos.push(lista[i]);
+    if (!arquivos.length) return;
+    setSubindo(true);
+    try {
+      // Uma por vez: a escolha que segue usa a lista de escolhidas desta tela.
+      const id = await subirReferencia(clientId, arquivos[0]);
+      onMudou();
+      if (escolher) onIncluir(id);
+      toast.success("Imagem guardada como referência de composição", { description: "A leitura por IA acontece no \"Ler as pendentes\" do Contexto." });
+    } catch (erro) {
+      toast.error("Imagem não enviada", { description: textoDoErro(erro) });
+    } finally {
+      setSubindo(false);
+    }
+  };
   const paraAmpliar = pins.map((r) => ({ fonte: fonteDaReferencia(r), titulo: `${r.nome} · ${PAPEIS[r.papel].curto}`, legenda: r.leitura }));
 
   const adicionar = async (e: FormEvent) => {
@@ -987,11 +1016,31 @@ function AbaDoPinterest({
             </Button>
           </form>
         </div>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center border-t border-border pt-2.5">
+          <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-9 shrink-0" disabled={subindo} onClick={() => arquivo.current && arquivo.current.click()}>
+            {subindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+            Subir imagem
+          </Button>
+          <span className="mb-1 min-w-0 text-[11.5px] text-muted-foreground">Print ou arquivo do computador (JPG, PNG ou WEBP).</span>
+          <input
+            ref={arquivo}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            aria-label="Subir imagem de referência"
+            onChange={(e) => {
+              const lista = e.target.files;
+              void subir(lista).then(() => {
+                if (arquivo.current) arquivo.current.value = "";
+              });
+            }}
+          />
+        </div>
       </div>
 
       {pins.length > 0 && (
         <div className="min-w-0 space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pins do cliente ({pins.length})</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Pins e imagens enviadas ({pins.length})</p>
           <div className="min-w-0 overflow-y-auto pr-0.5" style={{ maxHeight: alturaMax }}>
             <ul className={`grid gap-2 ${grade}`}>
               {pins.map((r, i) => {
