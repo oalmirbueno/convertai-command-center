@@ -358,10 +358,13 @@ describe("navegação: Modelos e Canvas discretos, fora do caminho de 3 passos",
 
   it("a página carrega o Canvas só quando a aba abre (fora da pré-carga) e o React Flow só existe no arquivo do Canvas", () => {
     const pagina = ler("src/pages/MesaFoto.tsx");
-    expect(pagina).toContain('const EtapaCanvas = lazy(() => import("@/components/mesa-foto/EtapaCanvas"));');
-    const preCarga = /for \(const carregar of \[([^\]]*)\]\)/.exec(pagina);
-    expect(preCarga && preCarga[1]).toContain("carregarModelos");
-    expect(preCarga && preCarga[1]).not.toMatch(/Canvas/);
+    // Pré-carga (25/09, src/lib/mesa/preCarga.ts): o painel ocioso baixa só a
+    // primeira etapa de cada mesa; o Canvas baixa quando a aba (ou o endereço) pede.
+    expect(pagina).toContain('const EtapaCanvas = lazyComPreCarga("mesa-foto/canvas", () => import("@/components/mesa-foto/EtapaCanvas"));');
+    const preCarga = ler("src/lib/mesa/preCarga.ts");
+    const primeiras = /const PRIMEIRAS[^=]*= \[([\s\S]*?)\];/.exec(preCarga);
+    expect(primeiras && primeiras[1]).toContain('["/mesa-foto", "acervo"]');
+    expect(primeiras && primeiras[1]).not.toMatch(/canvas/i);
     const pasta = resolve(raiz, "src/components/mesa-foto");
     const comXyflow = readdirSync(pasta).filter((n) => /\.(ts|tsx)$/.test(n) && /from "@xyflow\/react"/.test(readFileSync(resolve(pasta, n), "utf8")));
     expect(comXyflow).toEqual(["EtapaCanvas.tsx"]);
