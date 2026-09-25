@@ -16,6 +16,11 @@ installChunkErrorRecovery();
 startVersionWatch();
 stripRefreshParam();
 
+// Marca da publicação. Trocar este valor muda o nome do arquivo principal e
+// tira o painel de uma cópia travada na CDN (25/09: index-aIxjy7UY.js parou de
+// ser entregue no endereço exato e o painel ficava em "demorando para abrir").
+document.documentElement.setAttribute("data-publicacao", "2026-09-25-2");
+
 // A memória de quedas fatais NÃO é zerada aqui. Zerar aos 20 segundos fazia
 // um erro que só aparece depois de um tempo de uso (abrir uma tela pesada,
 // por exemplo) recomeçar a contagem a cada recarga automática, e o painel
