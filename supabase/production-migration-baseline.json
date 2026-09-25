@@ -1081,6 +1081,46 @@
       "remote_name": "mesa_campanhas_completas",
       "remote_statements_sha256": "96e0abfc329e2893d1f53a2ef04ec26449e95a151ed4db7e52647c79dd6c5593",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925162027",
+      "path": "supabase/migrations/20260925162027_mesa_ads_contas_metricas_evolucao.sql",
+      "local_sha256": "4d09c28604248a3006046c167d3345b55332a556264e8db3273e0a90624425a7",
+      "remote_name": "mesa_ads_contas_metricas_evolucao",
+      "remote_statements_sha256": "f8d2198dd5cc76928837c6d2e2e41ab0b3b609f389f6c43d6aa6107797a389ee",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925162115",
+      "path": "supabase/migrations/20260925162115_cerebro_do_cliente_memoria.sql",
+      "local_sha256": "2f845c5091162812d538421497f8f398080cee132a2e4a84ddb8270e5c6b00ed",
+      "remote_name": "cerebro_do_cliente_memoria",
+      "remote_statements_sha256": "d4fd70dc26e5388387020ad63c7612e1a6f85f14492d2b5a770d4254c4248947",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925162220",
+      "path": "supabase/migrations/20260925162220_dossie_eventos_das_mesas.sql",
+      "local_sha256": "3f6c371fcf0b92566aeedcdbd20818c97b1ab9717831cd1c10657f5c7f45cfca",
+      "remote_name": "dossie_eventos_das_mesas",
+      "remote_statements_sha256": "695b8ae90dd48d19df7e9fda89748032e9cffd0e237095aa202652c962386328",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925162246",
+      "path": "supabase/migrations/20260925162246_mesa_modelo_rapido.sql",
+      "local_sha256": "6917592d0cb123221c99de90e5afc1df47bd4dfbb851622c6c7acfdcc9dacfeb",
+      "remote_name": "mesa_modelo_rapido",
+      "remote_statements_sha256": "49570c4ac5da2bdb6409c6d024043fe02335df7f9d6b0647185f3abec17a95c7",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925162259",
+      "path": "supabase/migrations/20260925162259_mesa_foto_clones.sql",
+      "local_sha256": "43a0912cfe2ea21c607c506d528ca11df84bb31557e251133767029aaf224ed9",
+      "remote_name": "mesa_foto_clones",
+      "remote_statements_sha256": "417f355368bca8892d3ed73b14abaa56d7fa2019b97993a02079d6501f7cd96b",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
