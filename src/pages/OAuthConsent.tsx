@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Loader2, ShieldCheck, X, AlertTriangle } from "lucide-react";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import { describeScope } from "@/lib/mcp-scopes";
 
 type OAuthClient = {

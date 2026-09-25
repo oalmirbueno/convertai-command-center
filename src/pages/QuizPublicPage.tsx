@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import { supportWhatsAppUrl } from "@/lib/supportContact";
 
 // ============== Constants ==============

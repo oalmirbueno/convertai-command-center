@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Cartao, Pilulas } from "../Comuns";
-import { entradasDoGerar, mudarDados, removerNo, resumoDoResultado, TIPOS_DE_NO, type Canvas, type ResultadoDoCanvas, type TipoDeNo } from "../canvasApi";
+import { desligar, entradasDoGerar, mudarDados, mudarLigacao, nomeDoResultado, removerNo, resumoDoResultado, rotuloDoPapel, TIPOS_DE_NO, type Canvas, type PersonagemCriada, type ResultadoDoCanvas, type TipoDeNo } from "../canvasApi";
+import { EditorDaLigacaoDeResultado } from "./Cena";
 import { ChatDoAgente } from "./Agente";
 import { descrever, ICONES, type Fontes } from "./comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao } from "./Editores";
@@ -21,6 +22,7 @@ export function ModoLista({
   onPor,
   onEscolher,
   onAgenteDoAmbiente,
+  onPersonagemCriada,
 }: {
   canvas: Canvas;
   fontes: Fontes;
@@ -31,6 +33,7 @@ export function ModoLista({
   onPor: (t: TipoDeNo, gerarId: string | null) => void;
   onEscolher: (t: TipoDeNo, trocarId: string | null, gerarId: string | null) => void;
   onAgenteDoAmbiente: (noId: string, gerarId: string | null) => Promise<unknown>;
+  onPersonagemCriada?: (p: PersonagemCriada, r: ResultadoDoCanvas) => void;
 }) {
   const resultados = canvas.nos.filter((n) => n.tipo === "gerar");
   const [resultadoId, setResultadoId] = useState<string | null>(resultados.length ? resultados[0].id : null);
@@ -51,7 +54,7 @@ export function ModoLista({
 
   return (
     <div className="min-w-0 space-y-3" data-modo-lista="">
-      {resultados.length > 1 && <Pilulas rotulo="Resultado aberto" opcoes={resultados.map((s, i) => ({ valor: s.id, rotulo: `Resultado ${i + 1}` }))} valor={resultado.id} onEscolher={setResultadoId} />}
+      {resultados.length > 1 && <Pilulas rotulo="Resultado aberto" opcoes={resultados.map((s) => ({ valor: s.id, rotulo: nomeDoResultado(canvas, s) }))} valor={resultado.id} onEscolher={setResultadoId} />}
       <Cartao titulo="O que vai na foto" dica="Na ordem em que vai ao gerador: produto, pessoa, ambiente, estilo, pedido e agente." className="!border-white/10 !bg-zinc-950 text-zinc-100">
         {entradas.length === 0 && <p className="mb-2 text-[12px] text-zinc-400">Nada ainda. Toque num botão abaixo.</p>}
         <ol className="min-w-0 space-y-3">
@@ -59,12 +62,21 @@ export function ModoLista({
             <li key={e.ligacao.id} className="min-w-0 rounded-xl border border-white/10 p-2.5" data-entrada-da-lista={e.no.id}>
               <div className="mb-2 flex min-w-0 items-center">
                 <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10.5px] font-semibold">{e.numero}</span>
-                <span className={`min-w-0 flex-1 truncate text-[12.5px] font-semibold ${TIPOS_DE_NO[e.no.tipo].texto}`}>{TIPOS_DE_NO[e.no.tipo].rotulo}</span>
-                <button type="button" aria-label="Tirar o cartão" onClick={() => onMudarCanvas((c) => removerNo(c, e.no.id))} className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10">
+                <span className={`min-w-0 flex-1 truncate text-[12.5px] font-semibold ${e.no.tipo === "gerar" ? "text-emerald-300" : TIPOS_DE_NO[e.no.tipo].texto}`}>{e.no.tipo === "gerar" ? `${rotuloDoPapel(e.ligacao.papel)} de outra cena` : TIPOS_DE_NO[e.no.tipo].rotulo}</span>
+                {/* Outra cena: tirar só desliga (o Resultado de origem continua no quadro). */}
+                <button type="button" aria-label={e.no.tipo === "gerar" ? "Desligar a outra cena" : "Tirar o cartão"} onClick={() => onMudarCanvas((c) => (e.no.tipo === "gerar" ? desligar(c, e.ligacao.id) : removerNo(c, e.no.id)))} className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-white/10">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
-              {e.no.tipo === "agente" ? (
+              {e.no.tipo === "gerar" ? (
+                <EditorDaLigacaoDeResultado
+                  canvas={canvas}
+                  ligacao={e.ligacao}
+                  fontes={fontes}
+                  onPapel={(p) => onMudarCanvas((c) => mudarLigacao(c, e.ligacao.id, { papel: p }))}
+                  onFoto={(id) => onMudarCanvas((c) => mudarLigacao(c, e.ligacao.id, { imagem_id: id }))}
+                />
+              ) : e.no.tipo === "agente" ? (
                 <ChatDoAgente canvas={canvas} no={e.no} fontes={fontes} onMudarCanvas={onMudarCanvas} garantirSalvo={garantirSalvo} onGerar={onGerar} />
               ) : (
                 <EditorDoCartao
@@ -100,9 +112,9 @@ export function ModoLista({
         }
       >
         <p className="mb-3 text-[12px] leading-snug [overflow-wrap:anywhere]" data-junta="">
-          {resumoDoResultado(entradas, (x) => descrever(x, fontes).titulo) || "Junta o que você puser acima. Comece por um produto ou uma pessoa."}
+          {resumoDoResultado(entradas, (x) => (x.tipo === "gerar" ? nomeDoResultado(canvas, x) : descrever(x, fontes).titulo)) || "Junta o que você puser acima. Comece por um produto ou uma pessoa."}
         </p>
-        <AjustesDoResultado canvas={canvas} no={resultado} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, resultado.id, dados))} garantirSalvo={garantirSalvo} comGerar onGerar={onGerar} onVariacoes={onVariacoes} />
+        <AjustesDoResultado canvas={canvas} no={resultado} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, resultado.id, dados))} garantirSalvo={garantirSalvo} comGerar onGerar={onGerar} onVariacoes={onVariacoes} onPersonagemCriada={onPersonagemCriada} />
       </Cartao>
     </div>
   );

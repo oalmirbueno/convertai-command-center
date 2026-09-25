@@ -8,7 +8,8 @@ import { useAuth } from "@/contexts/AuthContext";
  * Cache das consultas guardado no navegador (pedido do dono em 23/09: "quando
  * eu entro na mesa, já tem que aparecer").
  *
- * Só a Mesa e a lista de clientes vão para o navegador, e só dado JSON puro:
+ * Só a Mesa, a primeira tela da Mesa Foto e a lista de clientes vão para o
+ * navegador, e só dado JSON puro:
  * URL assinada vence em 1 hora e estimativa é conta de tela, então ficam de
  * fora. O que volta do navegador aparece na hora e é relido em seguida quando
  * já passou do prazo (staleTime), então nada fica velho por muito tempo.
@@ -30,7 +31,15 @@ export const PRAZO_DA_MESA_MS = 2 * 60_000;
 const VERSAO = typeof __APP_BUILD_ID__ !== "undefined" && __APP_BUILD_ID__ ? __APP_BUILD_ID__ : "dev";
 
 /** Raízes de chave que vão para o navegador. */
-const RAIZES = ["mesa", "clients"];
+const RAIZES = ["mesa", "clients", "mesa-foto"];
+/**
+ * Da Mesa Foto, só o que a primeira tela mostra (25/09: a Mesa Foto abria
+ * sempre carregando): fotos, kits e ensaios. Só caminhos no storage, nada de
+ * URL assinada. Acervo grande (mais de 600 fotos) fica só na memória, para não
+ * encher o armazenamento do navegador.
+ */
+const DA_MESA_FOTO = ["acervo", "kits", "ensaios"];
+const MAXIMO_DE_LINHAS_DA_MESA_FOTO = 600;
 /**
  * Dentro da Mesa, nunca: URL assinada (vence), em uma ("url") ou em lote
  * ("urls", useUrlsAssinadas), e estimativa (conta de tela).
@@ -68,13 +77,16 @@ export function dadoSimples(valor: unknown, nivel = 0): boolean {
 export function chavePersistivel(chave: readonly unknown[]): boolean {
   if (!Array.isArray(chave) || RAIZES.indexOf(String(chave[0])) < 0) return false;
   if (chave[0] === "mesa" && NUNCA_NA_MESA.indexOf(String(chave[1])) >= 0) return false;
+  if (chave[0] === "mesa-foto" && DA_MESA_FOTO.indexOf(String(chave[1])) < 0) return false;
   return true;
 }
 
 export function devePersistir(query: Query): boolean {
   if (query.state.status !== "success") return false;
   if (!chavePersistivel(query.queryKey)) return false;
-  return dadoSimples(query.state.data);
+  const dado = query.state.data;
+  if (query.queryKey[0] === "mesa-foto" && Array.isArray(dado) && dado.length > MAXIMO_DE_LINHAS_DA_MESA_FOTO) return false;
+  return dadoSimples(dado);
 }
 
 /** localStorage que funciona de verdade; senão, nada (segue sem guardar). */
@@ -166,6 +178,7 @@ export function criarQueryClient(): QueryClient {
   // consulta recolhida antes some do que foi guardado.
   client.setQueryDefaults(["mesa"], { gcTime: IDADE_MAXIMA_MS, staleTime: PRAZO_DA_MESA_MS });
   client.setQueryDefaults(["clients"], { gcTime: IDADE_MAXIMA_MS });
+  for (const parte of DA_MESA_FOTO) client.setQueryDefaults(["mesa-foto", parte], { gcTime: IDADE_MAXIMA_MS });
   return client;
 }
 

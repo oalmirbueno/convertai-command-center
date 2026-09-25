@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
 type State =
   | { kind: "loading" }

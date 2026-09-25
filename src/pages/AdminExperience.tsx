@@ -21,15 +21,18 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import CentralReviewQueue from "@/components/central/CentralReviewQueue";
+import AgenteDaCentral from "@/components/central/AgenteDaCentral";
+import { avisosDoRitual, extrasDoRitual } from "@/components/central/ritualAvisos";
 import { applyCentralAiDraft, assertCentralReviewSource, captureCentralGenerationContext, centralGenerationFacts, centralCachedPlanFacts, centralFactsProvenance, persistCentralReviewDraft, readCentralReportPage, type CentralGenerationContext, type CentralGenerationProject } from "@/lib/centralReviewSource";
 import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { lerDossiesDaCarteira, rotuloDoDossie, type DossieDoCliente as DossieGeralDoCliente } from "@/lib/dossieGeral";
 import { lerMovimentos, movimentosComoFatos } from "@/lib/movimentos";
+import { ehEntregue } from "@/lib/contextoDaCentral";
 import FotoDoCliente from "@/components/clients/FotoDoCliente";
 import { useFotosDosClientes } from "@/hooks/useFotosDosClientes";
 import { useCentralReviewPendentes } from "@/hooks/useCentralReviewPendentes";
 import { buscarTodas } from "@/lib/buscaCompleta";
-import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
+import { AO_VIVO, AO_VIVO_CALMO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import {
   porqueDaSemana as porqueDaSemana_,
   rotinaEmLinguagemDeCliente,
@@ -57,6 +60,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
+/** Quanto para trás a Central lê material liberado (a maior conta olha 45 dias). */
+const JANELA_DE_ENTREGAS_DIAS = 60;
+
+/**
+ * O que a mensagem do grupo precisa da memória: avulsos da semana, plano da
+ * esteira e, sem dossiê, o registro de contexto. O resto (ciclo, rituais,
+ * checklists) era 80% das linhas e quase 1 MB de texto relido a cada 20 s.
+ */
+const KINDS_DA_MEMORIA_DA_CENTRAL = ["avulso", "esteira_plano", ...Array.from(CONTEXTO_KINDS)];
 
 const daysSince = (value?: string | null): number | null => {
   if (!value) return null;
@@ -190,9 +203,19 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // curto, ela revalida ao voltar para a aba e ao reconectar. O padrao global
   // do painel desliga a revalidacao por foco, e era por isso que a tela ficava
   // mostrando numeros de horas atras.
+  // Sob demanda (frente R, 25/09): a Central abria disparando umas 27 leituras
+  // de uma vez, a cada 20 s, e dez delas só servem para ESCREVER mensagem
+  // (perfil, fila, histórico e o gerador). Na Carteira elas ficam paradas e
+  // abrem quando a tela que usa aparece. O gerador só libera o botão quando
+  // elas chegaram (contextoPronto), para nenhuma mensagem sair com meio dado.
+  const precisaContexto = generatorOpen || expandedHealth !== null || activeTab === "perfis" || activeTab === "fila" || activeTab === "historico";
+  const precisaHistorico = activeTab === "historico";
+  // Trocar de cliente no Perfil fecha a prévia aberta do anterior.
+  useEffect(() => { setGroupMsgPreview(null); }, [profileClientId]);
+
   // Estado das campanhas e o objetivo declarado pelo cliente: sem isso o
   // ritual só sabia falar de conteúdo, e tráfego é metade do trabalho.
-  const { data: adsWallets = [] } = useQuery({
+  const { data: adsWallets = [], isFetched: adsWalletsProntos } = useQuery({
     queryKey: ["exp-ads-wallets"],
     queryFn: async () => {
       const { data } = await supabase
@@ -200,10 +223,11 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         .select("client_id, balance, platform, last_recharge_date");
       return data || [];
     },
+    enabled: precisaContexto,
     staleTime: 120_000,
   });
 
-  const { data: briefings = [] } = useQuery({
+  const { data: briefings = [], isFetched: briefingsProntos } = useQuery({
     queryKey: ["exp-briefings"],
     queryFn: async () => {
       const { data } = await supabase
@@ -212,6 +236,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         .eq("submitted", true);
       return data || [];
     },
+    enabled: precisaContexto,
     staleTime: 300_000,
   });
 
@@ -237,12 +262,49 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     ...AO_VIVO,
   });
 
+  // A leitura mais cara da Central (média de 708 ms no banco, 1,1 s medido):
+  // a regra de acesso de files roda por linha, e ela trazia TODO material
+  // liberado desde sempre. Toda conta que usa esta lista olha no máximo 45
+  // dias (saúde: 14 e 45 dias; radar: 30; mensagem: 7), então a janela de 60
+  // dias não muda nenhuma nota e corta metade das linhas.
   const { data: releasedFiles = [] } = useQuery({
     queryKey: ["exp-released-files"],
     queryFn: async () => {
+      const desde = new Date(Date.now() - JANELA_DE_ENTREGAS_DIAS * 86_400_000).toISOString();
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
         supabase.from("files")
-          .select("id, client_id, file_name, created_at")
+          .select("id, client_id, file_name, created_at, visibility, approval_status")
+          .in("visibility", ["client_shared", "approval"])
+          .eq("status", "ready")
+          .is("archived_at", null)
+          .is("parent_file_id", null)
+          .gte("created_at", desde)
+          .order("created_at", { ascending: false })
+          .range(de, ate),
+      );
+      cortes.current.arquivos = truncado;
+      return linhas;
+    },
+    staleTime: 60_000,
+    ...AO_VIVO_CALMO,
+  });
+  // Entregue de verdade: compartilhado com o cliente ou aprovado por ele. O que
+  // está só "enviado para aprovação" é pendência, não entrega: a Prova da Stop
+  // de 25/09 dizia "2 entregas concluídas e liberadas" e, três linhas abaixo,
+  // "2 materiais aguardando sua aprovação" (os mesmos dois).
+  const entreguesFiles = useMemo(
+    () => (releasedFiles as any[]).filter(ehEntregue),
+    [releasedFiles],
+  );
+  // O Marco 90 é o único que conta a história inteira ("N entregas no total,
+  // M neste trimestre"): a lista sem janela só é lida quando ele vai ser gerado.
+  const precisaHistoriaDeEntregas = generatorOpen && genRitual === "marco_90";
+  const { data: liberadosDesdeSempre = [], isFetched: historiaDeEntregasPronta } = useQuery({
+    queryKey: ["exp-released-files-todos"],
+    queryFn: async () => {
+      const { linhas } = await buscarTodas<any>((de, ate) =>
+        supabase.from("files")
+          .select("id, client_id, created_at")
           .in("visibility", ["client_shared", "approval"])
           .eq("status", "ready")
           .is("archived_at", null)
@@ -250,13 +312,13 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .order("created_at", { ascending: false })
           .range(de, ate),
       );
-      cortes.current.arquivos = truncado;
       return linhas;
     },
-    ...AO_VIVO,
+    enabled: precisaHistoriaDeEntregas,
+    staleTime: 300_000,
   });
 
-  const { data: allMilestones = [] } = useQuery({
+  const { data: allMilestones = [], isFetched: marcosProntos } = useQuery({
     queryKey: ["exp-milestones"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -269,7 +331,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       cortes.current.marcos = truncado;
       return linhas;
     },
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 60_000,
+    ...AO_VIVO_CALMO,
   });
 
   // Metricas REAIS do Instagram para os rituais falarem de numeros, nao so
@@ -289,7 +353,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     () => localIso(addDays(new Date(`${cycleWeekKey}T00:00:00`), -14)),
     [cycleWeekKey],
   );
-  const { data: cycleRowsAll } = useQuery({
+  const { data: cycleRowsAll, isFetched: cicloPronto } = useQuery({
     queryKey: ["weekly-cycle-ritual", cycleWeekKey],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -301,6 +365,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       if (error) throw error;
       return (data || []) as Array<{ client_id: string; area: string; step: number; week_start: string }>;
     },
+    enabled: precisaContexto,
     staleTime: 30_000,
     ...AO_VIVO,
   });
@@ -336,12 +401,16 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // Regra do dono: a leitura e SEMPRE do dossie GERAL final (nunca o de um
   // projeto por ser mais recente), comparado com a versao anterior para a
   // progressao. lerDossiesDaCarteira faz isso em duas consultas.
-  const { data: expDossieMap } = useQuery({
+  // O texto inteiro dos dossiês da carteira (centenas de KB): só quando a tela
+  // fala com o cliente. A caixa do dossiê no perfil tem leitura própria.
+  const { data: expDossieMap, isFetched: dossiesProntos } = useQuery({
     queryKey: ["exp-dossies"],
     // Sem try/catch: falha na leitura sobe para o React Query, que preserva o
     // mapa anterior em vez de trocar todos os dossies por "sem dossie".
     queryFn: () => lerDossiesDaCarteira(),
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
   const dossieDe = (clientId: string): DossieGeralDoCliente | null => expDossieMap?.get(clientId) ?? null;
 
@@ -361,11 +430,15 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       );
       return linhas;
     },
-    ...AO_VIVO,
+    // ~850 versões em 60 dias (a reescrita automática gera uma por movimento):
+    // só a aba Histórico usa.
+    enabled: precisaHistorico,
+    staleTime: 60_000,
+    ...AO_VIVO_CALMO,
   });
 
   // O plano desta semana pela esteira (foco, feito, proximos), um por cliente.
-  const { data: expPlanos = [] } = useQuery({
+  const { data: expPlanos = [], isFetched: planosProntos } = useQuery({
     queryKey: ["exp-planos", cycleWeekKey],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -377,7 +450,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       if (error) throw error;
       return (data || []) as any[];
     },
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
   const planoDe = (clientId: string): { foco: string; feito: string[]; proximos: Array<{ titulo: string; passo: string; motivo?: string }> } | null => {
     const p = (expPlanos as any[]).find((x) => x.client_id === clientId);
@@ -388,7 +463,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Vendas registradas nos ultimos 30 dias: o numero que paga o anuncio
   // (a mensagem le 7; o historico e o perfil leem 30).
-  const { data: expVendas = [] } = useQuery({
+  const { data: expVendas = [], isFetched: vendasProntas } = useQuery({
     queryKey: ["exp-vendas"],
     queryFn: async () => {
       const desde = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
@@ -399,7 +474,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       if (error) throw error;
       return (data || []) as any[];
     },
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
   const vendasDe = (clientId: string, dias = 7): { total: number; receita: number; porCampanha: string[] } => {
     const corte = new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10);
@@ -412,7 +489,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
 
   // Tarefas concluídas nos últimos 7 dias: o trabalho real da semana, com nome.
   // Sem isto a mensagem só sabia de arquivo liberado e etapa de checklist.
-  const { data: expTasksDone = [] } = useQuery({
+  const { data: expTasksDone = [], isFetched: tarefasProntas } = useQuery({
     queryKey: ["exp-tasks-done", cycleWeekKey],
     queryFn: async () => {
       const desde = new Date();
@@ -429,7 +506,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       );
       return linhas;
     },
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
   const igByClient = useMemo(() => {
     const bruto = new Map<string, SocialMetricsWeek[]>();
@@ -456,7 +535,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     () => ((clients ?? []) as any[]).map((c) => String(c.id)).sort(),
     [clients],
   );
-  const { data: expMemory = [] } = useQuery({
+  const { data: expMemory = [], isFetched: memoriaPronta } = useQuery({
     queryKey: ["exp-memory"],
     queryFn: async () => {
       const desde = new Date(Date.now() - 60 * 86_400_000).toISOString();
@@ -466,6 +545,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           .select("client_id, kind, title, content, metadata, created_at")
           .gte("created_at", desde)
           .in("client_id", idsDosClientes)
+          .in("kind", KINDS_DA_MEMORIA_DA_CENTRAL)
           .order("created_at", { ascending: false })
           .range(de, ate),
       );
@@ -473,8 +553,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       return linhas;
     },
     // Sem clientes carregados nao ha o que recortar: espera a lista chegar.
-    enabled: idsDosClientes.length > 0,
-    ...AO_VIVO,
+    enabled: precisaContexto && idsDosClientes.length > 0,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
 
   // Campanhas reais: a mensagem fala de anúncio com número, não com promessa.
@@ -484,7 +565,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // O calendário editorial de todos os clientes: peça pronta com nome. Sem
   // isto a mensagem dependia só de arquivo liberado nos últimos 7 dias, e
   // caía no genérico quando o material tinha sido aprovado antes disso.
-  const { data: expPautas = [] } = useQuery({
+  const { data: expPautas = [], isFetched: pautasProntas } = useQuery({
     queryKey: ["exp-pautas"],
     queryFn: async () => {
       const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
@@ -498,7 +579,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       cortes.current.pautas = truncado;
       return linhas;
     },
-    ...AO_VIVO,
+    enabled: precisaContexto,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
 
   const { data: allPublications = [] } = useQuery({
@@ -516,7 +599,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       cortes.current.publicacoes = truncado;
       return linhas;
     },
-    ...AO_VIVO,
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
 
   // Ponte com o Ciclo: rituais marcados na esteira nesta semana (por
@@ -545,8 +629,19 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       cortes.current.relatorios = truncado;
       return linhas;
     },
-    ...AO_VIVO,
+    // Toda ação da Central sobre relatório invalida esta chave na hora; o
+    // intervalo só cobre o que é escrito por fora (Hermes, MCP).
+    staleTime: 30_000,
+    ...AO_VIVO_CALMO,
   });
+
+  // Tudo o que a escrita de mensagem lê já chegou? O gerador, "Escrever com
+  // IA" e "Aprimorar" esperam por isto: sem a trava, um clique logo depois de
+  // abrir a tela escrevia com a memória vazia.
+  const contextoPronto = adsWalletsProntos && briefingsProntos && marcosProntos && cicloPronto && dossiesProntos
+    && planosProntos && vendasProntas && tarefasProntas && (memoriaPronta || idsDosClientes.length === 0) && pautasProntas
+    && (!precisaHistoriaDeEntregas || historiaDeEntregasPronta);
+  const avisarContextoCarregando = () => toast.info("Carregando os dados dos clientes. Tente de novo em alguns segundos.");
 
   // Carteira recorrente completa: ativos E em onboarding entram nos rituais.
   const clientesParaFoto = useMemo(() => ((clients ?? []) as any[]).map((c) => ({ id: String(c.id), nome: c.company_name || c.full_name, avatar_url: c.avatar_url })), [clients]);
@@ -634,7 +729,9 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         note: onboarding
           ? `Cliente novo: ${daysInHouse}d de casa, primeira entrega ainda não liberada`
           : lastRelease === null
-            ? `Nenhuma entrega liberada em ${daysWithoutProgress ?? "?"}d de casa`
+            ? (daysInHouse ?? 0) > JANELA_DE_ENTREGAS_DIAS
+              ? `Nenhuma entrega liberada nos últimos ${JANELA_DE_ENTREGAS_DIAS} dias`
+              : `Nenhuma entrega liberada em ${daysWithoutProgress ?? "?"}d de casa`
             : `Última entrega há ${releaseDays}d`,
       });
       if (onboarding) {
@@ -869,7 +966,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     const clientProjects = generationProjects ?? (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
     const activeProjects = clientProjects.filter((p: any) => p.status !== "done");
     const activeProject = activeProjects[0] || clientProjects[0] || null;
-    const releasedWeek = (releasedFiles || []).filter(
+    const releasedWeek = entreguesFiles.filter(
       (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekAgo
     );
     const released7d = releasedWeek.length;
@@ -914,7 +1011,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     const weekEnd = new Date(weekStart.getTime() + 5 * 86400000);
     const weekRangeLabel = `${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} a ${weekEnd.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
 
-    const releasedSinceMonday = (releasedFiles || []).filter(
+    const releasedSinceMonday = entreguesFiles.filter(
       (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekStart,
     );
     const releasedMondayNames = releasedSinceMonday.slice(0, 6).map((f: any) => f.file_name).join(", ");
@@ -1150,7 +1247,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       };
     }
     if (ritual === "marco_90") {
-      const clientFiles = (releasedFiles || []).filter((f: any) => f.client_id === client.id);
+      // O Marco 90 conta a história inteira: lê a lista sem janela (carregada só para ele).
+      const clientFiles = (liberadosDesdeSempre || []).filter((f: any) => f.client_id === client.id);
       const d90 = new Date(now.getTime() - 90 * 86400000);
       const released90 = clientFiles.filter((f: any) => new Date(f.created_at) >= d90).length;
       const before90 = clientFiles.length - released90;
@@ -1291,7 +1389,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       (p: any) => p.client_id === client.id && !p.deleted_at,
     );
     const ativos = clientProjects.filter((p: any) => p.status !== "done");
-    const liberadas = (releasedFiles || []).filter(
+    const liberadas = entreguesFiles.filter(
       (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekAgo,
     );
     const pendentes = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
@@ -1544,6 +1642,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // O resultado ja e salvo no rascunho; nao precisa de mais um passo.
   const aprimorarRascunho = async (report: any) => {
     if (aprimorando) return;
+    if (!contextoPronto) { avisarContextoCarregando(); return; }
     const client = portfolioClients.find((c: any) => c.id === report.client_id) || (clients || []).find((c: any) => c.id === report.client_id);
     if (!client) { toast.error("Cliente deste rascunho não está na carteira carregada."); return; }
     setAprimorando(report.id);
@@ -1554,7 +1653,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       const provenance = await centralFactsProvenance(facts);
       const ritual = String((report.metrics as any)?.ritual_type || "meio_semana");
       const { data, error } = await supabase.functions.invoke("ritual-writer", {
-        body: { ritual, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, improve: atual },
+        // client_id e report_id: o servidor monta a memória dos rituais e não compara o rascunho com ele mesmo.
+        body: { ritual, client_id: report.client_id, report_id: report.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts, improve: atual },
       });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto atual foi mantido."); return; }
       const novo = { summary: String(data.body), next_steps: completarProximoPasso(typeof data.next_steps === "string" ? data.next_steps : "", String(data.body)) };
@@ -1564,7 +1664,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         title: typeof data.title === "string" && data.title.trim() ? data.title.slice(0, 80) : report.title,
         metrics: {
           ...((report.metrics as any) || {}), written_by: "ai", model: data.model ?? null, improved_at: new Date().toISOString(),
-          alertas: Array.isArray(data.alertas) ? data.alertas.slice(0, 4) : [],
+          ...extrasDoRitual(data),
         },
       }).eq("id", report.id);
       if (saveError) throw saveError;
@@ -1579,14 +1679,15 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   const escreverMomentoComIA = async (client: any, moment: "abertura" | "meio" | "fechamento") => {
     const chave = `${client.id}:${moment}`;
     if (aiMomentLoading) return;
+    if (!contextoPronto) { avisarContextoCarregando(); return; }
     setAiMomentLoading(chave);
     try {
       const { facts, context } = await fatosCompletos(client);
       const provenance = await centralFactsProvenance(facts);
-      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts } });
+      const { data, error } = await supabase.functions.invoke("ritual-writer", { body: { moment, client_id: client.id, client_name: context.client.company_name || context.client.full_name, contact_name: nomeDoContato(context.client), facts: provenance.facts } });
       if (error || !data?.body) { toast.error("A IA não respondeu agora. O texto do painel continua disponível."); return; }
       await assertCentralReviewSource(client.id, context.source);
-      setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: Array.isArray(data.alertas) ? data.alertas : [], model: data.model ?? null } }));
+      setAiMoment((prev) => ({ ...prev, [chave]: { title: data.title ?? null, body: String(data.body), alertas: avisosDoRitual(data), model: data.model ?? null } }));
       setGroupMsgPreview(moment);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Não foi possível conferir o contexto da mensagem.");
@@ -1604,6 +1705,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
   // Passo 1: pré-visualizar. Nada é criado antes de você ver.
   const previewDrafts = async () => {
     if (generatingDrafts.current || confirmingDrafts.current) return;
+    if (!contextoPronto) { avisarContextoCarregando(); return; }
     // O avulso também merece acompanhamento: enquanto o projeto dele está em
     // andamento, a experiência é a mesma da carteira. "Todos" continua
     // significando a carteira recorrente; o avulso entra quando escolhido.
@@ -1646,9 +1748,13 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
           const provenance = await centralFactsProvenance(fatos);
           try {
             const { data, error } = await supabase.functions.invoke("ritual-writer", {
-              body: { ritual: genRitual, client_name: captured.client.company_name || captured.client.full_name, contact_name: nomeDoContato(captured.client), facts: provenance.facts },
+              body: { ritual: genRitual, client_id: c.id, client_name: captured.client.company_name || captured.client.full_name, contact_name: nomeDoContato(captured.client), facts: provenance.facts },
             });
-            if (!error && data?.body) draft = applyCentralAiDraft(draft, data);
+            if (!error && data?.body) {
+              draft = applyCentralAiDraft(draft, data);
+              // Aviso de repetição, tarefas sugeridas e fase do método vão junto no rascunho.
+              draft.metrics = { ...(draft.metrics || {}), ...extrasDoRitual(data) };
+            }
           } catch {
             // Falha da IA mantém o texto de reserva; falha da fonte nunca é ignorada.
           }
@@ -1777,6 +1883,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
       });
       // O dossie geral recebe a secao de avancos com a mensagem enviada.
       await atualizarAvancosDoDossie(report.client_id);
+      // O combinado do ritual enviado entra no cérebro do cliente (melhor esforço).
+      void supabase.functions.invoke("ritual-writer", { body: { action: "memorizar", report_id: report.id } }).catch(() => undefined);
 
       // Ponte com o Ciclo: o ritual publicado aqui marca a caixinha da
       // semana la, com origem "central". O diario ja recebeu o texto acima.
@@ -1887,7 +1995,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
     const proximaSegunda = new Date(segunda);
     proximaSegunda.setDate(proximaSegunda.getDate() + 7);
 
-    const entregas = (releasedFiles || []).filter(
+    const entregas = entreguesFiles.filter(
       (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7,
     );
     const entregasDesdeSegunda = entregas.filter(
@@ -2110,6 +2218,8 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
         </button>
       </div>
 
+      {!cycleReview && <AgenteDaCentral />}
+
       {/* Missões de hoje: a Central puxa você para a ação certa do dia */}
       {!cycleReview && (() => {
         const todayRitual = ritualMeta(ritualForToday())!;
@@ -2282,7 +2392,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                         )}
                         <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 pt-2">
                           <button
-                            onClick={() => copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada! É só colar no WhatsApp.")}
+                            onClick={() => (contextoPronto ? copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada! É só colar no WhatsApp.") : avisarContextoCarregando())}
                             className="inline-flex items-center justify-center gap-1.5 text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
                           >
                             <Send className="w-3 h-3 shrink-0" /> Copiar mensagem do grupo
@@ -2541,7 +2651,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               </button>
                               <button
                                 type="button"
-                                onClick={() => copyText(textoParaCopiar, `Mensagem de ${m.label.toLowerCase()} copiada!`)}
+                                onClick={() => (escrita || contextoPronto ? copyText(textoParaCopiar, `Mensagem de ${m.label.toLowerCase()} copiada!`) : avisarContextoCarregando())}
                                 className="flex min-h-9 items-center gap-1 rounded-lg border border-primary/30 px-2.5 text-[11px] text-primary cursor-pointer sm:min-h-0 sm:border-0 sm:px-0 sm:text-[10px]"
                               >
                                 <Send className="w-3 h-3" /> Copiar{escrita ? " (IA)" : ""}
@@ -2572,7 +2682,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                               )}
                               <button
                                 type="button"
-                                onClick={() => copyText(buildGroupMessage(client, m.moment), "Mensagem copiada! É só colar no WhatsApp.")}
+                                onClick={() => (contextoPronto ? copyText(buildGroupMessage(client, m.moment), "Mensagem copiada! É só colar no WhatsApp.") : avisarContextoCarregando())}
                                 className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-[11px] text-primary hover:bg-primary/20 transition-colors cursor-pointer"
                               >
                                 <Send className="w-3 h-3" /> Copiar esta mensagem
@@ -2609,13 +2719,17 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                       );
                     })()}
 
+                    {/* key por cliente: trocar de cliente no seletor zera o que
+                        estava aberto ou digitado. Sem ela, uma nota escrita no
+                        diário de um cliente podia ser salva no seguinte. */}
                     <DossieDoCliente
+                      key={`dossie-${client.id}`}
                       clientId={client.id}
                       clientName={client.company_name || client.full_name}
                     />
 
                     <div className="bg-card border border-border rounded-xl p-5">
-                      <ProjectJournal clientId={client.id} canWrite />
+                      <ProjectJournal key={`diario-${client.id}`} clientId={client.id} canWrite />
                     </div>
 
                     <div className="bg-card border border-border rounded-xl p-5 space-y-1.5">
@@ -3050,7 +3164,7 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
                 text: `Enviado para aprovação: ${f.file_name}`,
                 clientId: f.client_id,
               })),
-              ...releasedFiles.map((f: any) => ({
+              ...entreguesFiles.map((f: any) => ({
                 at: f.created_at,
                 icon: "file" as const,
                 text: `Material liberado: ${f.file_name}`,
@@ -3193,9 +3307,10 @@ export default function AdminExperience({ cycleReview = false }: { cycleReview?:
               </div>
               <button
                 onClick={previewDrafts}
-                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+                disabled={!contextoPronto}
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-60 disabled:cursor-wait"
               >
-                Ver antes de criar
+                {contextoPronto ? "Ver antes de criar" : "Carregando os dados dos clientes..."}
               </button>
               <p className="text-[11px] text-muted-foreground">
                 Nada é criado nesta etapa. Você verá a mensagem de cada cliente antes de confirmar, e mesmo depois tudo fica na fila de revisão até você publicar.

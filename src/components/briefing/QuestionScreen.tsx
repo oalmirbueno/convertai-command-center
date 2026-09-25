@@ -3,7 +3,7 @@ import { ChevronLeft, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QUESTIONS, type Question } from "./questions";
 import { safeStorage } from "@/lib/safeStorage";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
 interface Props {
   answers: Record<string, any>;

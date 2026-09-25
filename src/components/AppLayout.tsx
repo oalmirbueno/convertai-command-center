@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useCallback } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,9 +19,14 @@ import {
   HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
-import VoiceAssistant from "@/components/admin/VoiceAssistant";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import { usePreCargaOciosaDasMesas } from "@/lib/mesa/preCarga";
+import { quandoOcioso } from "@/lib/lazyComPreCarga";
+
+// O assistente de voz traz o leitor de PDF e as animações (mais de 1 MB de
+// código): fora da abertura do painel, baixa logo depois, sem segurar a tela.
+const VoiceAssistant = lazy(() => import("@/components/admin/VoiceAssistant"));
 
 
 interface NavItem {
@@ -164,6 +169,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     ? gruposDoMenu.flatMap((grupo) => grupo.items)
     : clientMoreNav;
   const { data: notifData } = useNotifications();
+  // Quem usa as mesas já tem o código delas antes do clique (src/lib/mesa/preCarga.ts).
+  usePreCargaOciosaDasMesas(["admin", "manager", "design"].includes(role));
+  // O botão do assistente entra depois da primeira pintura, com o navegador ocioso.
+  const [vozNaTela, setVozNaTela] = useState(false);
+  useEffect(() => quandoOcioso(() => setVozNaTela(true), 3000), []);
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
   // Aviso do navegador para a equipe: o sino so e visto por quem olha para
@@ -472,7 +482,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <MobileBottomNav unreadCount={unreadCount} onOpenNotifications={() => setNotifOpen(true)} />
+      <div data-casca="rodape">
+        <MobileBottomNav unreadCount={unreadCount} onOpenNotifications={() => setNotifOpen(true)} />
+      </div>
 
 
       <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />
@@ -495,7 +507,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           />
         )}
 
-        <VoiceAssistant />
+        {vozNaTela && (
+          <Suspense fallback={null}>
+            <VoiceAssistant />
+          </Suspense>
+        )}
       </div>
     </div>
   );

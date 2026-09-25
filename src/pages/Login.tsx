@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import consultantHero from "@/assets/consultant-hero-flipped.jpg";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-640.png";
 
 type Mode = "login" | "signup";
 

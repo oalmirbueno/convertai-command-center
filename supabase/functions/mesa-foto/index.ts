@@ -871,6 +871,13 @@ ${ESTETICA_ATUAL}`;
  */
 const CONHECIMENTO_DA_FOTO = conhecimentoMesaFoto().texto;
 
+/**
+ * Frente W (25/09): técnica de foto de produto das coleções CC0 (JeremyGDM,
+ * EvoLinkAI) e dos guias dos geradores, para o diretor e as variações. Só
+ * técnica, sem marketing: vai depois das regras da casa, que mandam.
+ */
+const TECNICA_DA_FOTO = conhecimentoMesaFoto("diretor").texto;
+
 const SISTEMA_LEITOR = `Você é o assistente de estúdio fotográfico da agência Aceleriq. Olhe a foto real do cliente e descreva só o que se vê.
 - descricao: até 3 frases objetivas sobre o assunto e a foto.
 - observado: fatos visíveis curtos (cor, material, forma, quantidade de botões ou peças, texto, estado), sem opinião.
@@ -911,6 +918,7 @@ COMO PLANEJAR:
 - Nunca invente atributo do produto; cenário e props não sugerem função, acessório, sabor ou ingrediente que o kit não tem.
 ${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
+${TECNICA_DA_FOTO}
 Responda só com o JSON pedido.`;
 
 const SISTEMA_CONFERENCIA = `Você é o conferente de fotografia do estúdio. A PRIMEIRA imagem é a foto gerada; as outras são as fontes reais do kit (a verdade sobre o assunto).
@@ -967,6 +975,7 @@ Para cada vaga (use exatamente o vaga_id recebido), escreva: nome curto e vended
 - Vaga fora da embalagem: o produto sozinho, sem a caixa.
 ${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
+${TECNICA_DA_FOTO}
 Responda só com o JSON pedido.`;
 
 const SISTEMA_CAMPANHA = `Você é o diretor de arte de campanhas publicitárias da agência Aceleriq. Recebe o contexto real do cliente, o kit do produto, o perfil pedido da pessoa sintética e imagens: primeiro as fotos do produto (identidade), depois as REFERÊNCIAS DE ESTILO (print de perfil, moodboard).

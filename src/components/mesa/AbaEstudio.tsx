@@ -82,6 +82,7 @@ import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
 import { useModoFoco } from "@/lib/modoFoco";
+import { temJanelaAberta } from "./TelaCheiaDaMesa";
 import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
@@ -2102,11 +2103,3 @@ function useAlturaDaJanela(ativo: boolean): number {
   return altura;
 }
 
-/** Há uma janela (diálogo) aberta por cima: o Esc é dela. */
-function temJanelaAberta(): boolean {
-  try {
-    return !!document.querySelector('[role="dialog"], [role="alertdialog"]');
-  } catch {
-    return false;
-  }
-}

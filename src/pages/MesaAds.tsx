@@ -7,10 +7,14 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCusto";
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
-import { CustoCompacto, SeletorDeCliente } from "@/pages/MesaDoCliente";
+import { CustoCompacto } from "@/components/mesa/CustoCompacto";
+import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
+import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import type { PedidoDePlano } from "@/components/mesa-ads/adsApi";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
+import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
+import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 
 /**
  * Mesa Ads (/mesa-ads, só equipe: admin, gestor e design): criativos de
@@ -35,12 +39,13 @@ const carregarPlano = () => import("@/components/mesa-ads/AbaPlano");
 const carregarEstudio = () => import("@/components/mesa-ads/AbaEstudioAds");
 const carregarConta = () => import("@/components/mesa-ads/AbaConta");
 const carregarResultados = () => import("@/components/mesa-ads/AbaResultados");
-const AbaOferta = lazy(carregarOferta);
-const AbaReferencias = lazy(carregarReferencias);
-const AbaPlano = lazy(carregarPlano);
-const AbaEstudioAds = lazy(carregarEstudio);
-const AbaConta = lazy(carregarConta);
-const AbaResultados = lazy(carregarResultados);
+// Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts).
+const AbaOferta = lazyComPreCarga("mesa-ads/oferta", carregarOferta);
+const AbaReferencias = lazyComPreCarga("mesa-ads/referencias", carregarReferencias);
+const AbaPlano = lazyComPreCarga("mesa-ads/plano", carregarPlano);
+const AbaEstudioAds = lazyComPreCarga("mesa-ads/estudio", carregarEstudio);
+const AbaConta = lazyComPreCarga("mesa-ads/conta", carregarConta);
+const AbaResultados = lazyComPreCarga("mesa-ads/resultados", carregarResultados);
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
@@ -123,6 +128,7 @@ export default function MesaAds() {
   const [modelosUsados, setModelosUsados] = useState(false);
   const [versaoCarteira, setVersaoCarteira] = useState(0);
   const [pedidoDePlano, setPedidoDePlano] = useState<PedidoDePlano | null>(null);
+  const telaCheia = useTelaCheiaDaMesa();
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -180,8 +186,8 @@ export default function MesaAds() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarOferta, carregarReferencias, carregarPlano, carregarEstudio, carregarConta, carregarResultados]) {
-          carregar().catch(() => {
+        for (const aba of [AbaOferta, AbaReferencias, AbaPlano, AbaEstudioAds, AbaConta, AbaResultados]) {
+          aba.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
         }
@@ -243,13 +249,13 @@ export default function MesaAds() {
     : null;
 
   return (
-    <div className="relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6">
-      <header className="sticky top-0 z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
+    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
+      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
         <h1 className="sr-only">Mesa Ads</h1>
         <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
           <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
             <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Ads</span>
-            <SeletorDeCliente clientes={clientes} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
+            <SeletorDeClientesDaMesa mesa="ads" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
           </div>
           {/* Troca rápida de marca: só no cliente com 2 ou mais marcas; fecha o plano e o criativo abertos. */}
           {clientId && marca && (
@@ -266,11 +272,11 @@ export default function MesaAds() {
                   type="button"
                   onClick={() => mudar({ etapa: e.valor })}
                   aria-current={etapa === e.valor ? "page" : undefined}
-                  className={`min-w-0 truncate rounded-md px-1 py-1.5 text-[12px] font-medium transition-colors lg:flex-1 lg:px-2 ${
+                  className={`min-w-0 truncate rounded-md px-1 py-1.5 text-[12px] font-medium transition-colors lg:flex-auto lg:px-1.5 ${
                     etapa === e.valor ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline">{i + 1}</span>
+                  <span className="mr-1 hidden text-[10.5px] text-muted-foreground sm:inline lg:hidden 2xl:inline">{i + 1}</span>
                   {e.rotulo}
                 </button>
               ))}
@@ -290,6 +296,7 @@ export default function MesaAds() {
               onModelos={abrirModelos}
             />
           )}
+          <BotaoDeTelaCheia tela={telaCheia} />
         </div>
       </header>
 

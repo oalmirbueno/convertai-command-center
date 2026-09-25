@@ -342,8 +342,19 @@ export default function AbaEstudioAds({
         )}
       </section>
 
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_400px]">
-        <aside className="min-w-0 lg:sticky lg:top-[140px] lg:max-h-[calc(100vh-170px)] lg:overflow-y-auto lg:overscroll-contain" aria-label="Criativos">
+      {/* Notebook (até 1799 px): lista ao lado e, na coluna larga, a arte, a copy e
+          os posicionamentos um embaixo do outro. Tela grande (1800 px ou mais): a
+          copy vira terceira coluna, presa ao rolar, e os posicionamentos ficam logo
+          abaixo da arte. Antes a copy ia para a lateral já em 1536 px (o notebook
+          com zoom de 125%) e sobrava um buraco enorme embaixo da arte (dono, 25/09). */}
+      <div
+        className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:grid-rows-[auto_auto_1fr] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_400px] min-[1800px]:grid-rows-[auto_1fr]"
+        data-estudio-ads-grade=""
+      >
+        <aside
+          className="min-w-0 lg:sticky lg:top-[140px] lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:max-h-[calc(100vh-170px)] lg:self-start lg:overflow-y-auto lg:overscroll-contain min-[1800px]:row-span-2"
+          aria-label="Criativos"
+        >
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => (
             <div key={g.chave} className="mb-3">
@@ -383,7 +394,7 @@ export default function AbaEstudioAds({
         </aside>
 
         {aberto && (
-          <div className="min-w-0 space-y-3">
+          <div className="min-w-0 space-y-3 lg:col-start-2 lg:row-start-1">
             <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card px-4 py-3">
               <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
                 <div className="flex min-w-0 items-center">
@@ -464,23 +475,23 @@ export default function AbaEstudioAds({
         )}
 
         {aberto && (
-          <div className="min-w-0 lg:col-start-2 2xl:col-start-auto">
+          <div className="min-w-0 lg:col-start-2 lg:row-start-2 min-[1800px]:sticky min-[1800px]:top-[140px] min-[1800px]:col-start-3 min-[1800px]:row-span-2 min-[1800px]:row-start-1 min-[1800px]:max-h-[calc(100vh-170px)] min-[1800px]:self-start min-[1800px]:overflow-y-auto min-[1800px]:overscroll-contain" data-coluna-da-copy="">
             <PainelDaCopy key={aberto.id} criativo={aberto} caminhoDaArte={capaDoTrabalho(trabalho)} nome={nomeDoCriativo(aberto, listaDePlanos)} aoMudarCopy={(c) => setCopyAoVivo({ id: aberto.id, copy: c })} />
           </div>
         )}
-      </div>
 
-      {aberto && (
-        // Posicionamentos numa faixa larga embaixo, lado a lado, em tamanho de celular.
-        <div className="min-w-0 rounded-xl border border-border bg-card p-3 lg:ml-[266px] 2xl:ml-[276px]">
-          <PosicionamentosDoAnuncio
-            copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
-            caminho={capaDoTrabalho(trabalho)}
-            formato={aberto.formato}
-            nome={clientName}
-          />
-        </div>
-      )}
+        {aberto && (
+          // Posicionamentos na coluna da arte, lado a lado, em tamanho de celular.
+          <div className="min-w-0 rounded-xl border border-border bg-card p-3 lg:col-start-2 lg:row-start-3 min-[1800px]:row-start-2" data-posicionamentos="">
+            <PosicionamentosDoAnuncio
+              copy={copyAoVivo && copyAoVivo.id === aberto.id ? copyAoVivo.copy : aberto.copy}
+              caminho={capaDoTrabalho(trabalho)}
+              formato={aberto.formato}
+              nome={clientName}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

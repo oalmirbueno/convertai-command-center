@@ -24,6 +24,11 @@ export function noteBelongsToClient(content: string, id: string): boolean {
   return !!binding && (binding[1] || binding[2] || binding[3]).toLowerCase() === id.toLowerCase();
 }
 
+/** Lowercase without diacritics, for name matching across notes and profiles. */
+export function semAcento(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase();
+}
+
 function safeMarkdownPath(path: string): boolean {
   return /\.md$/i.test(path) && !path.startsWith('/') && !path.includes('\\')
     && !path.split('/').some(p => p === '..' || p === '.' || p === '')
@@ -61,20 +66,28 @@ export function makeBrainContextHandler(deps: BrainContextDependencies, headers:
       const files = await deps.search(query, 10);
       const blocks: string[] = [];
       const sources: string[] = [];
-      for (const file of files.filter(f => safeMarkdownPath(f.path)).slice(0, 8)) {
-        try {
-          const content = (await deps.read(file.path)).content ?? '';
-          if (!actor.admin && !noteBelongsToClient(content, client.id)) continue;
-          const lines = content.split(/\r?\n/);
-          const snippets = actor.admin
-            ? lines.filter(line => line.toLocaleLowerCase().includes(client.name.toLocaleLowerCase())).slice(0, 3)
-            : [content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').slice(0, 1500)];
-          const text = snippets.join('\n').trim().slice(0, 1500);
-          if (!text) continue;
-          blocks.push(`[${file.path}]\n${text}`);
-          sources.push(file.path);
-          if (sources.length === 4) break;
-        } catch { /* A failed note does not erase other authorized sources. */ }
+      // Reads in parallel (they were one after another: 8 GitHub calls in a row
+      // held every ritual generation for seconds), kept in search order.
+      const candidates = files.filter(f => safeMarkdownPath(f.path)).slice(0, 8);
+      const contents = await Promise.all(candidates.map(file =>
+        deps.read(file.path).then(r => r.content ?? '', () => null)));
+      // Accent-insensitive: the profile says "Stop Informatica" and the notes say
+      // "Stop Informática"; the exact match found nothing and the context came back empty.
+      const nameKey = semAcento(client.name);
+      for (let i = 0; i < candidates.length; i++) {
+        const file = candidates[i];
+        const content = contents[i];
+        if (content === null) continue; /* A failed note does not erase other authorized sources. */
+        if (!actor.admin && !noteBelongsToClient(content, client.id)) continue;
+        const lines = content.split(/\r?\n/);
+        const snippets = actor.admin
+          ? lines.filter(line => semAcento(line).includes(nameKey) || line.includes(client.id)).slice(0, 3)
+          : [content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').slice(0, 1500)];
+        const text = snippets.join('\n').trim().slice(0, 1500);
+        if (!text) continue;
+        blocks.push(`[${file.path}]\n${text}`);
+        sources.push(file.path);
+        if (sources.length === 4) break;
       }
       return json({ configured: true, context: blocks.join('\n\n').slice(0, 4000), sources,
         ...(sources.length ? {} : { note: 'Sem notas disponíveis no escopo deste cliente.' }) });

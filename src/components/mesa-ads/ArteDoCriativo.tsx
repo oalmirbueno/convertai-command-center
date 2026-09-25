@@ -631,7 +631,9 @@ export default function ArteDoCriativo({
         />
       )}
 
-      <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      {/* Ferramentas ao lado da arte a partir de 1280 px: a arte não passa de
+          520 px de largura, e embaixo dela sobrava um vazio grande. */}
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           {card && noQuatroPorCinco ? (
             <EstudioLaminaGrande

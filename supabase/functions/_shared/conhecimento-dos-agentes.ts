@@ -9,7 +9,10 @@
  *
  * Este arquivo só escolhe e corta blocos que já existem:
  * - conhecimento-especialistas-ads.ts (Pedro Sobral e Natália Torres);
- * - conhecimento-marketing.ts (skills de marketing, vendas e design destiladas).
+ * - conhecimento-marketing.ts (skills de marketing, vendas e design destiladas);
+ * - conhecimento-social.ts (social media) e, desde a Frente W,
+ *   conhecimento-repositorios.ts (repositórios do GitHub destilados).
+ * O índice de quem recebe o quê, com skills e repositórios, é motores.ts.
  * A base principal de cada agente (conhecimento-ads.ts, conhecimento-design.ts,
  * prompt do banco, regras da casa) continua onde está e vem ANTES deste bloco.
  *
@@ -45,6 +48,7 @@ import {
   CHECKLIST_CRIATIVO_POR_OBJETIVO,
   CRIATIVO_NATALIA,
   ERROS_COMUNS_TRAFEGO,
+  ESTRATEGIA_SENIOR_DE_CONTA,
   ESTRUTURA_DE_CONTA,
   GANCHOS_DOS_ESPECIALISTAS,
   type ObjetivoAds,
@@ -64,12 +68,28 @@ import {
   SINAIS_PARA_MEDIR,
   VERSAO_CONHECIMENTO_SOCIAL,
 } from "./conhecimento-social.ts";
+import {
+  BRIEFING_ANTES_DE_CRIAR,
+  CONTEXTO_DE_MARKETING,
+  ESTRATEGIA_DE_CONTEUDO,
+  FONTES_DO_CRIATIVO,
+  FOTO_DE_PRODUTO_COM_VERDADE,
+  IMAGEM_E_TITULO,
+  LANCAMENTO_E_ISCA,
+  MATRIZ_DE_GANCHOS,
+  META_NA_PRATICA,
+  PESQUISA_DE_CLIENTE,
+  PORTFOLIO_DE_ESTATICOS,
+  PSICOLOGIA_DO_COMPRADOR,
+  REVISAO_EM_SETE_PASSADAS,
+  VERSAO_CONHECIMENTO_REPOSITORIOS,
+} from "./conhecimento-repositorios.ts";
 
 /** Versão do conjunto (vai no texto do prompt e no log de quem quiser registrar). */
-export const VERSAO_CONHECIMENTO_DOS_AGENTES = `especialistas ${VERSAO_ESPECIALISTAS_ADS}, marketing ${VERSAO_CONHECIMENTO_MARKETING}, social ${VERSAO_CONHECIMENTO_SOCIAL}`;
+export const VERSAO_CONHECIMENTO_DOS_AGENTES = `especialistas ${VERSAO_ESPECIALISTAS_ADS}, marketing ${VERSAO_CONHECIMENTO_MARKETING}, social ${VERSAO_CONHECIMENTO_SOCIAL}, repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS}`;
 
 /** A frase de prioridade entre as bases (regra de ouro 1 do COMO-INTEGRAR). */
-export const PRIORIDADE_DAS_BASES = `PRIORIDADE ENTRE AS BASES (versões: ${VERSAO_CONHECIMENTO_DOS_AGENTES}). Quando discordarem, vale nesta ordem: 1) dado real do cliente e régua do briefing ou do kit da marca (custo tolerável, paleta, logo, regras aprendidas com o cliente); 2) a base principal deste agente, que vem antes deste bloco; 3) o método dos especialistas de tráfego (Pedro Sobral e Natália Torres); 4) a base de marketing. Os blocos abaixo complementam: nenhuma regra anterior sai.`;
+export const PRIORIDADE_DAS_BASES = `PRIORIDADE ENTRE AS BASES (versões: ${VERSAO_CONHECIMENTO_DOS_AGENTES}). Quando discordarem, vale nesta ordem: 1) dado real do cliente e régua do briefing ou do kit da marca (custo tolerável, paleta, logo, regras aprendidas com o cliente); 2) a base principal deste agente, que vem antes deste bloco; 3) o método dos especialistas de tráfego (Pedro Sobral e Natália Torres); 4) a base de marketing (skills e repositórios). Os blocos abaixo complementam: nenhuma regra anterior sai.`;
 
 export type BlocoDeConhecimento = { id: string; texto: string; corte: number };
 
@@ -131,6 +151,17 @@ const CORTE_ESCALA = b("regras_de_corte_e_escala", REGRAS_DE_CORTE_E_ESCALA, 10)
 const TESTE = b("plano_de_teste", PLANO_DE_TESTE, 11);
 const ESTRUTURA = b("estrutura_de_conta", ESTRUTURA_DE_CONTA, 12);
 
+// Frente W (25/09): blocos destilados dos repositórios (conhecimento-repositorios.ts).
+// Entram entre os de marketing e os dos especialistas na ordem de corte:
+// complementam a base e os especialistas, nunca passam na frente deles.
+const SETE_PASSADAS = b("revisao_em_sete_passadas", REVISAO_EM_SETE_PASSADAS, 3.5);
+const PSICOLOGIA = b("psicologia_do_comprador", PSICOLOGIA_DO_COMPRADOR, 4.5);
+const BRIEFING = b("briefing_antes_de_criar", BRIEFING_ANTES_DE_CRIAR, 5.5);
+const FONTES = b("fontes_do_criativo", FONTES_DO_CRIATIVO, 6.5);
+const META = b("meta_na_pratica", META_NA_PRATICA, 7.2);
+const PORTFOLIO = b("portfolio_de_estaticos", PORTFOLIO_DE_ESTATICOS, 7.5);
+const MATRIZ = b("matriz_de_ganchos", MATRIZ_DE_GANCHOS, 8.5);
+
 // ------------------------------------------------------------------ Mesa Ads
 
 /**
@@ -144,26 +175,36 @@ const ESTRUTURA = b("estrutura_de_conta", ESTRUTURA_DE_CONTA, 12);
 export type TarefaAds = "angulos" | "copy" | "pacote" | "oferta" | "conta";
 export const TAREFAS_ADS: readonly TarefaAds[] = ["angulos", "copy", "pacote", "oferta", "conta"];
 
-/** Teto dos blocos por tarefa (caracteres), do COMO-INTEGRAR. */
+/**
+ * Teto dos blocos por tarefa (caracteres), do COMO-INTEGRAR. Frente W (25/09):
+ * ângulos e pacote ganharam a matriz de ganchos e o portfólio de estáticos
+ * (+2.400), oferta ganhou briefing e psicologia (+2.600) e conta ganhou a
+ * Meta na prática (+1.500). Copy cabia no teto antigo.
+ */
 export const TETO_ADS: Record<TarefaAds, number> = {
-  angulos: 12_500,
+  angulos: 14_900,
   copy: 12_500,
-  pacote: 12_500,
-  oferta: 5_000,
-  conta: 5_000,
+  pacote: 14_900,
+  oferta: 7_700,
+  conta: 6_000,
 };
 
 /**
  * Blocos de cada tarefa, na ordem do texto. ROTEIRO_DE_VIDEO não entra: a
  * Mesa Ads produz peça estática (feed, quadrado, stories, carrossel) e ele é
  * o primeiro da ordem de corte do COMO-INTEGRAR.
+ * Frente W: cada tarefa carrega a skill pertinente (motores.ts):
+ * ângulos, matriz de ganchos e portfólio (ad-creative); copy, fontes,
+ * psicologia e revisão em sete passadas (ad-creative, marketing-psychology,
+ * copy-editing); pacote, portfólio e Meta na prática (ads); oferta, briefing e
+ * psicologia (offers, advertising-ops); conta, Meta na prática (ads).
  */
 const BLOCOS_ADS: Record<TarefaAds, readonly BlocoDeConhecimento[]> = {
-  angulos: [GANCHOS, NATALIA, ESTRUTURA, TESTE, ORCAMENTO, CORTE_ESCALA, OBJECOES, POSICIONAMENTO, CTA, ANTI],
-  copy: [GANCHOS, NATALIA, OBJECOES, CTA, ANTI, REVISAO],
-  pacote: [GANCHOS, NATALIA, ESTRUTURA, TESTE, ORCAMENTO, CORTE_ESCALA, OBJECOES, CTA, ANTI, REVISAO],
-  oferta: [OBJECOES, POSICIONAMENTO, CTA, ANTI],
-  conta: [ESTRUTURA, CORTE_ESCALA, ERROS],
+  angulos: [GANCHOS, MATRIZ, NATALIA, PORTFOLIO, ESTRUTURA, TESTE, ORCAMENTO, CORTE_ESCALA, OBJECOES, POSICIONAMENTO, CTA, ANTI],
+  copy: [GANCHOS, MATRIZ, NATALIA, FONTES, OBJECOES, PSICOLOGIA, CTA, ANTI, REVISAO, SETE_PASSADAS],
+  pacote: [GANCHOS, NATALIA, PORTFOLIO, ESTRUTURA, TESTE, ORCAMENTO, CORTE_ESCALA, META, OBJECOES, CTA, ANTI, REVISAO],
+  oferta: [BRIEFING, OBJECOES, POSICIONAMENTO, PSICOLOGIA, CTA, ANTI],
+  conta: [ESTRUTURA, CORTE_ESCALA, ERROS, META],
 };
 
 const OBJETIVOS_COM_CHECKLIST = Object.keys(CHECKLIST_CRIATIVO_POR_OBJETIVO) as ObjetivoAds[];
@@ -191,6 +232,35 @@ export function conhecimentoAdsPara(tarefa: TarefaAds, opcoes: { objetivo?: unkn
   return montarComTeto(blocos, TETO_ADS[tarefa]);
 }
 
+// ------------------------------------------------------------------ agente sênior de tráfego
+
+/**
+ * Agente sênior da Mesa Ads (conversa de estratégia de conta). Antes a lista
+ * vivia dentro de mesa-ads/index.ts; veio para cá (Frente W) para o índice
+ * único (motores.ts) e o teste verem a mesma montagem que o agente recebe.
+ * Mesmos blocos e mesma ordem de antes, mais a Meta na prática e o portfólio
+ * de estáticos (skill ads e ad-creative do marketingskills).
+ */
+export const TETO_AGENTE_SENIOR = 15_900;
+
+export function conhecimentoAgenteSenior(objetivo?: unknown): ConhecimentoMontado {
+  const blocos: BlocoDeConhecimento[] = [
+    b("estrategia_senior_de_conta", ESTRATEGIA_SENIOR_DE_CONTA, 13),
+    ESTRUTURA,
+    TESTE,
+    CORTE_ESCALA,
+    GANCHOS,
+    ERROS,
+    META,
+    ORCAMENTO,
+    PORTFOLIO,
+    NATALIA,
+  ];
+  const obj = objetivoDoChecklist(objetivo);
+  if (obj) blocos.push(b(`checklist_${obj}`, CHECKLIST_CRIATIVO_POR_OBJETIVO[obj], 14));
+  return montarComTeto(blocos, TETO_AGENTE_SENIOR);
+}
+
 // ------------------------------------------------------------------ calendário e campanhas
 
 /**
@@ -208,12 +278,16 @@ export function conhecimentoAdsPara(tarefa: TarefaAds, opcoes: { objetivo?: unkn
  * ao diagnóstico.
  */
 export type MomentoDoCalendario = "mes" | "campanha" | "temas" | "diagnostico";
-/** Teto da campanha (e o antigo teto único do calendário). */
-export const TETO_CALENDARIO = 7_500;
-/** Teto por momento (Frente O): o mês e os temas ganharam os blocos de social media. */
+/** Teto da campanha (e o antigo teto único do calendário). Frente W: +1.400 do lançamento e isca. */
+export const TETO_CALENDARIO = 8_900;
+/**
+ * Teto por momento (Frente O): o mês e os temas ganharam os blocos de social media.
+ * Frente W: o mês ganhou a revisão em sete passadas (copy-editing) e os temas a
+ * estratégia de conteúdo (content-strategy e social), do marketingskills.
+ */
 export const TETO_CALENDARIO_POR_MOMENTO: Record<MomentoDoCalendario, number> = {
-  mes: 11_000,
-  temas: 12_500,
+  mes: 12_100,
+  temas: 13_900,
   diagnostico: 11_000,
   campanha: TETO_CALENDARIO,
 };
@@ -228,6 +302,7 @@ const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConheciment
     b("ganchos_por_tipo", GANCHOS_POR_TIPO, 7),
     b("carrossel_de_retencao", CARROSSEL_DE_RETENCAO, 7.5),
     b("checklist_salva_e_envia", CHECKLIST_SALVA_E_ENVIA, 6.5),
+    b("revisao_em_sete_passadas", REVISAO_EM_SETE_PASSADAS, 6.2),
     b("estruturas_de_conteudo", ESTRUTURAS_DE_CONTEUDO, 1),
   ],
   temas: [
@@ -236,6 +311,7 @@ const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConheciment
     b("datas_e_oportunidades", DATAS_E_OPORTUNIDADES, 8),
     b("ganchos_por_tipo", GANCHOS_POR_TIPO, 7.5),
     b("alcance_e_conversao", ALCANCE_E_CONVERSAO, 7),
+    b("estrategia_de_conteudo", ESTRATEGIA_DE_CONTEUDO, 6.5),
     b("formulas_de_titulo", FORMULAS_DE_TITULO, 6),
     b("cta_principios", CTA_PRINCIPIOS, 5),
     b("voz_de_marca", VOZ_DE_MARCA, 4),
@@ -254,6 +330,7 @@ const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConheciment
   ],
   campanha: [
     b("plano_de_campanha", PLANO_DE_CAMPANHA, 9),
+    b("lancamento_e_isca", LANCAMENTO_E_ISCA, 7.5),
     b("voz_de_marca", VOZ_DE_MARCA, 7),
     b("formulas_de_titulo", FORMULAS_DE_TITULO, 5),
     b("cta_principios", CTA_PRINCIPIOS, 6),
@@ -275,7 +352,13 @@ export function conhecimentoCalendarioPara(momento: MomentoDoCalendario): Conhec
  * PADRAO_NA_IMAGEM (texto ao gerador de imagem) não recebe nada.
  */
 export type MomentoDoEstudio = "direcao" | "legenda";
-export const TETO_ESTUDIO: Record<MomentoDoEstudio, number> = { direcao: 6_000, legenda: 3_500 };
+/**
+ * Frente W (25/09): acréscimo mínimo e aditivo. A direção ganhou "imagem e
+ * título se completam" (+700) e a legenda a revisão em sete passadas
+ * (copy-editing, +1.200). promptDaLamina e promptDoReplicar (texto ao
+ * gerador) não recebem nada: continuam como o dono aprovou.
+ */
+export const TETO_ESTUDIO: Record<MomentoDoEstudio, number> = { direcao: 6_700, legenda: 4_700 };
 
 const BLOCOS_ESTUDIO: Record<MomentoDoEstudio, readonly BlocoDeConhecimento[]> = {
   direcao: [
@@ -283,12 +366,14 @@ const BLOCOS_ESTUDIO: Record<MomentoDoEstudio, readonly BlocoDeConhecimento[]> =
     b("voz_de_marca", VOZ_DE_MARCA, 4),
     b("revisao_de_marca", REVISAO_DE_MARCA, 3),
     b("cta_principios", CTA_PRINCIPIOS, 2),
+    b("imagem_e_titulo", IMAGEM_E_TITULO, 4.5),
     b("identidade_de_marca", IDENTIDADE_DE_MARCA, 1),
   ],
   legenda: [
     b("formulas_de_titulo", FORMULAS_DE_TITULO, 3),
     b("cta_principios", CTA_PRINCIPIOS, 2),
     b("anti_generico", ANTI_GENERICO, 1),
+    b("revisao_em_sete_passadas", REVISAO_EM_SETE_PASSADAS, 2.5),
   ],
 };
 
@@ -298,27 +383,47 @@ export function conhecimentoEstudioPara(momento: MomentoDoEstudio): Conhecimento
 
 // ------------------------------------------------------------------ Mesa Foto
 
-/** SISTEMA_CAMPANHA e SISTEMA_AGENTE. Leitor, kits, conferência e identificação não recebem nada. */
-export const TETO_MESA_FOTO = 5_000;
+/**
+ * - agente: SISTEMA_CAMPANHA e SISTEMA_AGENTE (marca, criativo e, desde a
+ *   Frente W, a foto de produto com verdade das coleções CC0).
+ * - diretor: SISTEMA_DIRETOR e SISTEMA_VARIACOES recebem só a técnica de foto
+ *   de produto, sem marketing e sem a frase de prioridade (as regras da casa
+ *   vêm antes e mandam).
+ * Leitor, kits, conferência e identificação não recebem nada.
+ */
+export type MomentoDaMesaFoto = "agente" | "diretor";
+export const TETO_MESA_FOTO = 6_300;
+export const TETO_MESA_FOTO_DIRETOR = 1_800;
 
-export function conhecimentoMesaFoto(): ConhecimentoMontado {
+export function conhecimentoMesaFoto(momento: MomentoDaMesaFoto = "agente"): ConhecimentoMontado {
+  if (momento === "diretor") {
+    return montarComTeto([b("foto_de_produto_com_verdade", FOTO_DE_PRODUTO_COM_VERDADE, 1)], TETO_MESA_FOTO_DIRETOR, "");
+  }
   return montarComTeto([
     b("anti_generico", ANTI_GENERICO, 3),
     b("identidade_de_marca", IDENTIDADE_DE_MARCA, 2),
     b("criativo_natalia", CRIATIVO_NATALIA, 1),
+    b("foto_de_produto_com_verdade", FOTO_DE_PRODUTO_COM_VERDADE, 2.5),
   ], TETO_MESA_FOTO);
 }
 
 // ------------------------------------------------------------------ agente de contexto
 
-/** SISTEMA_CONTEXTO e SISTEMA_CONVERSA. Leitura e acervo não recebem nada. */
-export const TETO_CONTEXTO = 6_500;
+/**
+ * SISTEMA_CONTEXTO e SISTEMA_CONVERSA. Leitura e acervo não recebem nada.
+ * Frente W: o contexto de marketing (skill product-marketing: concorrência em
+ * três níveis, forças da troca, antipúblico) e a pesquisa de cliente
+ * (customer-research e product-swipefile: confiança e estado de cada fato).
+ */
+export const TETO_CONTEXTO = 9_700;
 
 export function conhecimentoContexto(): ConhecimentoMontado {
   return montarComTeto([
     b("voz_de_marca", VOZ_DE_MARCA, 4),
+    b("contexto_de_marketing", CONTEXTO_DE_MARKETING, 5),
     b("posicionamento_e_concorrencia", POSICIONAMENTO_E_CONCORRENCIA, 3),
     b("objecoes_e_voz_do_cliente", OBJECOES_E_VOZ_DO_CLIENTE, 2),
+    b("pesquisa_de_cliente", PESQUISA_DE_CLIENTE, 3.5),
     b("identidade_de_marca", IDENTIDADE_DE_MARCA, 1),
   ], TETO_CONTEXTO);
 }

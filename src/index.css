@@ -533,7 +533,40 @@ body[data-modo-foco] [data-casca="flutuante"] {
     padding-top: 12px !important;
     max-width: none !important;
   }
-  body[data-modo-foco] [data-casca="conteudo"] header.sticky {
+  body[data-modo-foco] [data-casca="conteudo"] header.sticky,
+  body[data-modo-foco] [data-casca="conteudo"] header[data-cabecalho-da-mesa] {
     top: 0 !important;
   }
+}
+/* ── Tela cheia da Mesa (Mesa, Mesa Ads, Mesa Foto e as próximas) ──
+   src/components/mesa/TelaCheiaDaMesa.tsx liga data-tela-cheia-da-mesa no
+   body e põe .mesa-tela-cheia na raiz da página. Em qualquer largura some a
+   barra do painel, a barra de baixo do celular e o que flutua; a mesa vira
+   uma sobreposição fixa com rolagem própria. Abaixo do z-50 dos popovers e
+   janelas, que continuam abrindo por cima. */
+body[data-tela-cheia-da-mesa] {
+  overflow: hidden;
+}
+body[data-tela-cheia-da-mesa] [data-casca="topo"],
+body[data-tela-cheia-da-mesa] [data-casca="rodape"],
+body[data-tela-cheia-da-mesa] [data-casca="flutuante"] {
+  display: none !important;
+}
+.mesa-tela-cheia {
+  position: fixed !important;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  margin: 0 !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+}
+.mesa-tela-cheia > header[data-cabecalho-da-mesa] {
+  top: 0 !important;
 }

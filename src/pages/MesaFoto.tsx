@@ -7,7 +7,9 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { DialogoDeRecarga, type ConsumoDoMes } from "@/components/mesa/BarraDeCusto";
 import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/MesaContexto";
 import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
-import { CustoCompacto, SeletorDeCliente } from "@/pages/MesaDoCliente";
+import { CustoCompacto } from "@/components/mesa/CustoCompacto";
+import SeletorDeClientesDaMesa from "@/components/mesa/SeletorDeClientesDaMesa";
+import type { ClienteBruto } from "@/components/mesa/clientesDaMesa";
 import {
   ABAS_FUTURAS,
   ETAPAS_DA_MESA_FOTO,
@@ -22,6 +24,8 @@ import {
 import { proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
 import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
+import { lazyComPreCarga } from "@/lib/lazyComPreCarga";
+import { BotaoDeTelaCheia, classeDaRaiz, useTelaCheiaDaMesa } from "@/components/mesa/TelaCheiaDaMesa";
 
 /**
  * Mesa Foto (/mesa-foto, só equipe: admin, gestor e design): o estúdio
@@ -61,21 +65,23 @@ const carregarModelos = () => import("@/components/mesa-foto/EtapaModelos");
 const carregarClones = () => import("@/components/mesa-foto/EtapaClones");
 const carregarBook = () => import("@/components/mesa-foto/EtapaBook");
 // O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
-const EtapaModelos = lazy(carregarModelos);
-const EtapaClones = lazy(carregarClones);
-const EtapaBook = lazy(carregarBook);
-const EtapaCanvas = lazy(() => import("@/components/mesa-foto/EtapaCanvas"));
-const EtapaCampanha = lazy(carregarCampanha);
-const EtapaCriar = lazy(carregarCriar);
-const EtapaAcervo = lazy(carregarAcervo);
-const EtapaKits = lazy(carregarKits);
-const EtapaPreparar = lazy(carregarPreparar);
-const EtapaEnsaio = lazy(carregarEnsaio);
-const EtapaRevisar = lazy(carregarRevisar);
-const EtapaUsar = lazy(carregarUsar);
-const EtapaBiblioteca = lazy(carregarBiblioteca);
-const BarraDoEnsaio = lazy(() => import("@/components/mesa-foto/BarraDoEnsaio"));
-const AgenteDiretor = lazy(() => import("@/components/mesa-foto/AgenteDiretor"));
+// Mesmas chaves da pré-carga do painel (src/lib/mesa/preCarga.ts): o que já
+// baixou antes do clique aparece direto, sem esqueleto.
+const EtapaModelos = lazyComPreCarga("mesa-foto/modelos", carregarModelos);
+const EtapaClones = lazyComPreCarga("mesa-foto/clones", carregarClones);
+const EtapaBook = lazyComPreCarga("mesa-foto/book", carregarBook);
+const EtapaCanvas = lazyComPreCarga("mesa-foto/canvas", () => import("@/components/mesa-foto/EtapaCanvas"));
+const EtapaCampanha = lazyComPreCarga("mesa-foto/campanha", carregarCampanha);
+const EtapaCriar = lazyComPreCarga("mesa-foto/criar", carregarCriar);
+const EtapaAcervo = lazyComPreCarga("mesa-foto/acervo", carregarAcervo);
+const EtapaKits = lazyComPreCarga("mesa-foto/kits", carregarKits);
+const EtapaPreparar = lazyComPreCarga("mesa-foto/preparar", carregarPreparar);
+const EtapaEnsaio = lazyComPreCarga("mesa-foto/ensaio", carregarEnsaio);
+const EtapaRevisar = lazyComPreCarga("mesa-foto/revisar", carregarRevisar);
+const EtapaUsar = lazyComPreCarga("mesa-foto/usar", carregarUsar);
+const EtapaBiblioteca = lazyComPreCarga("mesa-foto/biblioteca", carregarBiblioteca);
+const BarraDoEnsaio = lazyComPreCarga("mesa-foto/barra-do-ensaio", () => import("@/components/mesa-foto/BarraDoEnsaio"));
+const AgenteDiretor = lazyComPreCarga("mesa-foto/agente-diretor", () => import("@/components/mesa-foto/AgenteDiretor"));
 const ChavesECotas = lazy(() => import("@/components/mesa/ChavesECotas"));
 const ModelosDeIa = lazy(() => import("@/components/mesa/ModelosDeIa"));
 
@@ -161,6 +167,7 @@ export default function MesaFoto() {
   const [selecionadas, setSelecionadas] = useState<string[]>([]);
   const [agenteAberto, setAgenteAberto] = useState(false);
   const [pedidoAoDiretor, setPedidoAoDiretor] = useState<{ mensagem: string; em: number } | null>(null);
+  const telaCheia = useTelaCheiaDaMesa();
 
   const role = profile?.role || "";
   const isAdmin = role === "admin";
@@ -244,8 +251,8 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos, carregarClones, carregarBook]) {
-          carregar().catch(() => {
+        for (const etapa of [EtapaAcervo, EtapaKits, EtapaCriar, EtapaEnsaio, EtapaCampanha, EtapaPreparar, EtapaRevisar, EtapaUsar, EtapaBiblioteca, EtapaModelos, EtapaClones, EtapaBook]) {
+          etapa.preCarregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
         }
@@ -335,13 +342,13 @@ export default function MesaFoto() {
   const apoios = ETAPAS_DE_APOIO.filter((e) => ABAS_FUTURAS.every((a) => a.etapa !== e.etapa || a.disponivel));
 
   return (
-    <div className="relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6">
-      <header className="sticky top-0 z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
+    <div className={`relative isolate -mx-4 space-y-5 bg-background px-4 pb-10 md:-mx-6 md:px-6 ${classeDaRaiz(telaCheia.cheia)}`}>
+      <header data-cabecalho-da-mesa="" className="relative z-20 -mx-4 border-b border-border bg-background px-4 py-2 md:sticky md:-mx-6 md:top-[calc(env(safe-area-inset-top)+80px)] md:px-6">
         <h1 className="sr-only">Mesa Foto</h1>
         <div className="flex min-w-0 flex-wrap items-center lg:flex-nowrap">
           <div className="mr-2 flex min-w-0 flex-1 items-center lg:flex-none">
             <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Foto</span>
-            <SeletorDeCliente clientes={clientes} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
+            <SeletorDeClientesDaMesa mesa="foto" clientesBrutos={clientesQuery.data as ClienteBruto[] | undefined} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
           </div>
           {/* Troca rápida de marca: só no cliente com 2 ou mais marcas. */}
           {clientId && marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} className="mr-2" />}
@@ -409,6 +416,7 @@ export default function MesaFoto() {
               onModelos={abrirModelos}
             />
           )}
+          <BotaoDeTelaCheia tela={telaCheia} />
         </div>
         {valor && (
           <MesaProvider valor={valor}>

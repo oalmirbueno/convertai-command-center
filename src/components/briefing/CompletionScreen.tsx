@@ -1,5 +1,5 @@
 import { CheckCircle } from "lucide-react";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-640.png";
 
 const timelineSteps = [
   { title: "Análise do diagnóstico", desc: "Nossa equipe analisa suas respostas detalhadamente. Prazo: até 24h.", active: true },

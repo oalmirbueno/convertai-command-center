@@ -12,7 +12,9 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { PaletaDaMarca } from "./ContextoPaleta";
 import { Campo, TituloDeSecao } from "./Seletores";
 import { useFontesDoCliente, useInvalidarContexto, useReferenciasDoCliente } from "./contextoDoCliente";
-import { reduzirArquivoDeLogo } from "./ContextoLogos";
+import { gravarTomDaLogo, reduzirArquivoDeLogo } from "./ContextoLogos";
+import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
+import { estiloDoFundoDaLogo, fundoDeConferencia, useTomDaLogo } from "./logoAnalise";
 
 /**
  * Kit de uma marca que não é a principal (ex.: CME dentro da Acerbi; pedido
@@ -60,6 +62,17 @@ export function caminhoDaLogoDaMarca(clientId: string, marcaId: string, alternat
   return `${clientId}/marcas/${marcaId}/${alternativa ? "logo-alternativa" : "logo"}-${agora}.${ext === "jpeg" ? "jpg" : ext}`;
 }
 
+/** Prévia da logo da marca sobre um fundo que contrasta com ela (logo branca em cinza-escuro, escura em claro). */
+function PreviaDaLogoDaMarca({ caminho, alt }: { caminho: string; alt: string }) {
+  const lida = useTomDaLogo({ bucket: "mesa", caminho }, null);
+  const fundo = fundoDeConferencia(lida.data ? lida.data.tom : null);
+  return (
+    <div className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-md border border-border p-1.5" style={estiloDoFundoDaLogo(fundo)} data-fundo-da-logo={fundo}>
+      <ImagemDaMesa caminho={caminho} alt={alt} className="h-full w-full !object-contain" />
+    </div>
+  );
+}
+
 export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente }) {
   const { clientId, userId } = useMesa();
   const queryClient = useQueryClient();
@@ -74,6 +87,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
   const [mudando, setMudando] = useState<string | null>(null);
   const entradaLogo = useRef<HTMLInputElement>(null);
   const entradaAlt = useRef<HTMLInputElement>(null);
+  const { conferir, dialogo: conferencia } = useConferenciaDaLogo();
   const sujo = useRef(false);
 
   const vinculos = useVinculosDaMarca(clientId);
@@ -150,8 +164,17 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
     }
     setEnviando(alternativa ? "alt" : "logo");
     try {
+      // Lida antes de subir (25/09): fundo liso vira pergunta; branco sobre branco pede a versão certa.
+      const conferida = await conferir(arquivo, arquivo.name);
+      if (conferida.acao === "cancelar") return;
+      if (conferida.acao === "outra") {
+        toast.message("Envie a logo em PNG transparente ou a versão para fundo escuro.");
+        return;
+      }
       // Logo gigante (26/09: 7813 px derrubou o Estúdio por memória): reduz para 2048 px antes de subir.
-      const pronta = await reduzirArquivoDeLogo(arquivo).catch(() => ({ blob: arquivo as Blob, reduziu: false }));
+      const pronta = conferida.semFundo
+        ? { blob: conferida.blob, reduziu: true }
+        : await reduzirArquivoDeLogo(arquivo).catch(() => ({ blob: arquivo as Blob, reduziu: false }));
       const extFinal = pronta.reduziu ? "png" : ext;
       const caminho = caminhoDaLogoDaMarca(clientId, marca.id, alternativa, extFinal);
       const tipo = extFinal === "jpg" || extFinal === "jpeg" ? "image/jpeg" : `image/${extFinal}`;
@@ -167,7 +190,8 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
         await supabase.storage.from("mesa").remove([caminho]).catch(() => undefined);
         throw error;
       }
-      toast.success(alternativa ? `Logo alternativa da ${marca.nome} salva` : `Logo da ${marca.nome} salva`);
+      await gravarTomDaLogo("cliente_marcas", { client_id: clientId, id: marca.id }, alternativa, conferida.tom);
+      toast.success(alternativa ? `Logo alternativa da ${marca.nome} salva` : `Logo da ${marca.nome} salva`, conferida.semFundo ? { description: "Sem o fundo." } : undefined);
       reler();
     } catch (e) {
       toast.error("Logo não salva", { description: textoDoErro(e) });
@@ -184,6 +208,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
       const campos = alternativa ? { logo_alt_path: null, logo_alt_file_id: null } : { logo_path: null, logo_file_id: null };
       const { error } = await (supabase as any).from("cliente_marcas").update(campos).eq("id", marca.id).eq("client_id", clientId);
       if (error) throw error;
+      await gravarTomDaLogo("cliente_marcas", { client_id: clientId, id: marca.id }, alternativa, null);
       reler();
     } catch (e) {
       toast.error("Não foi possível tirar a logo", { description: textoDoErro(e) });
@@ -223,13 +248,13 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
     return (
       <div className="min-w-0 rounded-lg border border-border bg-card p-2.5">
         <p className="text-[11.5px] font-medium text-foreground">{alternativa ? "Logo alternativa (fundo oposto)" : `Logo da ${marca.nome}`}</p>
-        <div className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-md bg-secondary/60">
-          {caminho ? (
-            <ImagemDaMesa caminho={caminho} alt={alternativa ? "Logo alternativa" : "Logo"} className="h-24 w-full !object-contain" />
-          ) : (
+        {caminho ? (
+          <PreviaDaLogoDaMarca caminho={caminho} alt={alternativa ? "Logo alternativa" : "Logo"} />
+        ) : (
+          <div className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-md bg-secondary/60">
             <span className="px-2 text-center text-[11.5px] text-muted-foreground">Sem logo. A arte sai sem logo até enviar (nunca usa a do cliente).</span>
-          )}
-        </div>
+          </div>
+        )}
         <input
           ref={entrada}
           type="file"
@@ -255,6 +280,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
 
   return (
     <div className="space-y-6" data-kit-da-marca={marca.id}>
+      {conferencia}
       <p className="rounded-lg bg-muted px-3 py-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">
         Kit próprio da marca <strong className="text-foreground">{marca.nome}</strong>. Logo e cores vêm só daqui; estilo, regras e tom vazios usam os do cliente.
         As artes, o mês e os agentes usam este kit enquanto a {marca.nome} estiver escolhida no topo.

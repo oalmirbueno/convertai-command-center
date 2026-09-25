@@ -1,13 +1,27 @@
 // Extract textual context from an attached file so the Voice Assistant can
 // reason over the document together with the user's spoken/typed command.
 
-import * as pdfjs from "pdfjs-dist";
-// Vite handles the ?url import so the worker is bundled correctly.
+// Vite handles the ?url import so the worker is bundled correctly (é só o
+// endereço do arquivo, uma linha; o worker em si só baixa ao ler um PDF).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-(pdfjs as any).GlobalWorkerOptions.workerSrc = pdfWorker;
+// O leitor de PDF (quase 1 MB) só baixa quando um PDF é anexado: antes ele
+// vinha na abertura do painel, junto com o assistente de voz.
+let pdfjsPronto: Promise<any> | null = null;
+function carregarPdfjs(): Promise<any> {
+  if (!pdfjsPronto) {
+    pdfjsPronto = import("pdfjs-dist").then((pdfjs: any) => {
+      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+      return pdfjs;
+    });
+    pdfjsPronto.catch(() => {
+      pdfjsPronto = null;
+    });
+  }
+  return pdfjsPronto;
+}
 
 export type FileKind = "text" | "pdf" | "image" | "binary";
 
@@ -43,8 +57,8 @@ async function readAsText(file: File): Promise<string> {
 }
 
 async function readPdf(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const doc = await (pdfjs as any).getDocument({ data: buf }).promise;
+  const [buf, pdfjs] = await Promise.all([file.arrayBuffer(), carregarPdfjs()]);
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
   const pages: string[] = [];
   const maxPages = Math.min(doc.numPages, 30);
   for (let i = 1; i <= maxPages; i++) {

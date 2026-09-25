@@ -831,7 +831,8 @@ function BookAbertoNaTela({ id }: { id: string }) {
   const aberto = q.data;
   const a = aberto.assunto;
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_300px]" data-book-aberto={aberto.book.id}>
+    // Terceira coluna (o book final) só na tela grande: no notebook (até 1799 px) ele desce para baixo do estúdio.
+    <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] min-[1800px]:grid-cols-[260px_minmax(0,1fr)_300px]" data-book-aberto={aberto.book.id}>
       <div className="order-2 min-w-0 lg:order-none">
         <ArsenalDePrompts aberto={aberto} paraODiretor={paraODiretor} onParaODiretor={setParaODiretor} />
       </div>
@@ -858,11 +859,11 @@ function BookAbertoNaTela({ id }: { id: string }) {
             <ReferenciasDoBook aberto={aberto} />
           </div>
         </Cartao>
-        <div className="2xl:hidden">
+        <div className="min-[1800px]:hidden">
           <BookFinal aberto={aberto} />
         </div>
       </div>
-      <div className="hidden min-w-0 2xl:block">
+      <div className="hidden min-w-0 min-[1800px]:block">
         <BookFinal aberto={aberto} />
       </div>
     </div>

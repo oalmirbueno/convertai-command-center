@@ -11,6 +11,8 @@ import { MiniaturaDoStorage } from "./ContextoMiniatura";
 import { useMesa } from "./MesaContexto";
 import NavegadorDePastas, { type ImagemEscolhida } from "./NavegadorDePastas";
 import { useInvalidarContexto, type CandidatoALogo, type KitDoContexto } from "./contextoDoCliente";
+import { useConferenciaDaLogo } from "./ConferenciaDaLogo";
+import { estiloDoFundoDaLogo, fundoDeConferencia, tomGravado, useTomDaLogo, type FundoDaLogo, type TomDaLogo } from "./logoAnalise";
 
 /**
  * Logo principal e alternativa lado a lado: miniatura que abre maior, e
@@ -118,24 +120,72 @@ export async function gravarLogoReduzida(clientId: string, userId: string | null
   if (erroKit) throw erroKit;
 }
 
-/** Fundo de conferência da logo: xadrez (transparência), claro ou escuro. */
-export type FundoDaLogo = "xadrez" | "claro" | "escuro";
+/** Grava uma logo já pronta no navegador (PNG sem fundo ou reduzida) em mesa/<cliente>/marca/ e aponta o kit para ela. */
+export async function gravarBlobDaLogo(clientId: string, userId: string | null | undefined, alternativa: boolean, png: Blob, sufixo: string) {
+  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-${sufixo}.png`;
+  const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
+  if (envio.error) throw envio.error;
+  const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
+  const { error: erroKit } = await (supabase as any)
+    .from("cliente_kit_marca")
+    .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
+  if (erroKit) throw erroKit;
+}
+
+/**
+ * Guarda no kit se a logo é clara ou escura (logo_tom, logo_alt_tom), para as
+ * mesas saberem sem ler a imagem de novo. Em separado e sem travar: sem a
+ * coluna no banco (T-logo-tom.sql ainda não aplicado), só não guarda.
+ */
+export async function gravarTomDaLogo(tabela: "cliente_kit_marca" | "cliente_marcas", filtro: { client_id: string; id?: string }, alternativa: boolean, tom: TomDaLogo | null) {
+  try {
+    let q = (supabase as any).from(tabela).update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: tom }).eq("client_id", filtro.client_id);
+    if (filtro.id) q = q.eq("id", filtro.id);
+    await q;
+  } catch {
+    /* coluna ainda não existe: a tela lê a imagem */
+  }
+}
+
+/** Tons já guardados no kit do cliente; vazio quando a coluna ainda não existe. */
+function useTonsGravados(clientId: string) {
+  return useQuery({
+    queryKey: ["mesa", "kit-tons", clientId],
+    enabled: !!clientId,
+    staleTime: 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    queryFn: async (): Promise<{ logo: TomDaLogo | null; alt: TomDaLogo | null } | null> => {
+      const { data, error } = await (supabase as any).from("cliente_kit_marca").select("logo_tom, logo_alt_tom").eq("client_id", clientId).maybeSingle();
+      if (error) return null;
+      return { logo: tomGravado(data && data.logo_tom), alt: tomGravado(data && data.logo_alt_tom) };
+    },
+  });
+}
+
+/** Onde está, no Storage, a imagem escolhida no navegador de pastas (para ler antes de gravar). */
+async function baixarEscolhida(clientId: string, origem: string, id: string): Promise<Blob | null> {
+  const db = supabase as any;
+  let onde: { bucket: string; caminho: string } | null = null;
+  if (origem === "arquivo") {
+    const { data } = await db.from("files").select("id, file_name, file_url, storage_bucket, storage_path, client_id").eq("id", id).maybeSingle();
+    if (data && data.client_id === clientId) onde = imagemDoArquivo(data as ArquivoDoPainel);
+  } else if (origem === "workspace") {
+    const { data } = await db.from("workspace_nodes").select("client_id, storage_path").eq("id", id).maybeSingle();
+    if (data && data.client_id === clientId && data.storage_path) onde = { bucket: "workspace", caminho: String(data.storage_path) };
+  } else if (origem === "acervo") {
+    const { data } = await db.from("cliente_imagens").select("client_id, storage_bucket, storage_path").eq("id", id).maybeSingle();
+    if (data && data.client_id === clientId && data.storage_path) onde = { bucket: String(data.storage_bucket || "mesa"), caminho: String(data.storage_path) };
+  }
+  if (!onde) return null;
+  const { data, error } = await supabase.storage.from(onde.bucket).download(onde.caminho);
+  return error || !data ? null : data;
+}
+
+export type { FundoDaLogo };
 const PROXIMO_FUNDO: Record<FundoDaLogo, FundoDaLogo> = { xadrez: "claro", claro: "escuro", escuro: "xadrez" };
 const NOME_DO_FUNDO: Record<FundoDaLogo, string> = { xadrez: "xadrez", claro: "claro", escuro: "escuro" };
-
-const XADREZ = {
-  backgroundColor: "#ffffff",
-  backgroundImage:
-    "linear-gradient(45deg, #ececec 25%, transparent 25%), linear-gradient(-45deg, #ececec 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ececec 75%), linear-gradient(-45deg, transparent 75%, #ececec 75%)",
-  backgroundSize: "16px 16px",
-  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
-};
-
-function estiloDoFundo(fundo: FundoDaLogo) {
-  if (fundo === "claro") return { backgroundColor: "#ffffff" };
-  if (fundo === "escuro") return { backgroundColor: "#141414" };
-  return XADREZ;
-}
+const estiloDoFundo = estiloDoFundoDaLogo;
 
 function QuadroDaLogo({
   imagem,
@@ -195,7 +245,9 @@ export default function LogosDaMarca({
   const [gravando, setGravando] = useState<string | null>(null);
   const [tirando, setTirando] = useState<QualLogo | null>(null);
   const [ampliada, setAmpliada] = useState<number | null>(null);
-  const [fundos, setFundos] = useState<Record<QualLogo, FundoDaLogo>>({ logo: "xadrez", alt: "xadrez" });
+  // Fundo de cada miniatura: null é automático (contraste com a logo); o botão ao lado troca à mão.
+  const [fundos, setFundos] = useState<Record<QualLogo, FundoDaLogo | null>>({ logo: null, alt: null });
+  const { conferir, dialogo: conferencia } = useConferenciaDaLogo();
 
   const principalPath = kit?.logo_path || null;
   const altPath = kit?.logo_alt_path || null;
@@ -205,6 +257,18 @@ export default function LogosDaMarca({
   const principal = principalPath ? { bucket: "mesa", caminho: principalPath } : imagemDoArquivo(principalArquivo.data);
   const alternativa = altPath ? { bucket: "mesa", caminho: altPath } : imagemDoArquivo(altArquivo.data);
 
+  // Clara ou escura: o que está guardado no kit; sem isso, lido da própria imagem no navegador.
+  const tons = useTonsGravados(clientId);
+  const tomPrincipalGravado = principal && tons.data ? tons.data.logo : null;
+  const tomAltGravado = alternativa && tons.data ? tons.data.alt : null;
+  const lidaPrincipal = useTomDaLogo(tons.isLoading ? null : principal, tomPrincipalGravado);
+  const lidaAlt = useTomDaLogo(tons.isLoading ? null : alternativa, tomAltGravado);
+  const tomDe: Record<QualLogo, TomDaLogo | null> = {
+    logo: tomPrincipalGravado || (lidaPrincipal.data ? lidaPrincipal.data.tom : null),
+    alt: tomAltGravado || (lidaAlt.data ? lidaAlt.data.tom : null),
+  };
+  const fundoDe = (q: QualLogo): FundoDaLogo => fundos[q] || fundoDeConferencia(tomDe[q]);
+
   const ampliaveis: ImagemAmpliavel[] = [];
   if (principal) ampliaveis.push({ caminho: principal.caminho, bucket: principal.bucket, titulo: "Logo principal" });
   if (alternativa) ampliaveis.push({ caminho: alternativa.caminho, bucket: alternativa.bucket, titulo: "Logo alternativa" });
@@ -213,6 +277,29 @@ export default function LogosDaMarca({
     const alternativaFlag = qual === "alt";
     setGravando(id);
     try {
+      // Antes de gravar, a logo é lida aqui: fundo liso vira pergunta (tirar o fundo?)
+      // e letra branca sobre branco pede a versão certa. Sem conseguir ler, grava como antes.
+      const original = await baixarEscolhida(clientId, origem, id).catch(() => null);
+      let tom: TomDaLogo | null = null;
+      if (original) {
+        const r = await conferir(original, nome);
+        if (r.acao === "cancelar") return;
+        if (r.acao === "outra") {
+          toast.message("Escolha a logo em PNG transparente ou a versão para fundo escuro.");
+          return;
+        }
+        tom = r.tom;
+        if (r.semFundo) {
+          await gravarBlobDaLogo(clientId, userId, alternativaFlag, r.blob, "sem-fundo");
+          await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
+          toast.success(alternativaFlag ? "Logo alternativa definida sem o fundo" : "Logo definida sem o fundo", nome ? { description: nome } : undefined);
+          setEscolhendo(null);
+          invalidar(clientId);
+          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+          void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
+          return;
+        }
+      }
       try {
         await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem, id, alternativa: alternativaFlag });
       } catch (e) {
@@ -225,10 +312,12 @@ export default function LogosDaMarca({
           throw e;
         }
       }
+      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, alternativaFlag, tom);
       toast.success(alternativaFlag ? "Logo alternativa definida" : "Logo definida", nome ? { description: nome } : undefined);
       setEscolhendo(null);
       invalidar(clientId);
       void queryClient.invalidateQueries({ queryKey: ["mesa", "kit", clientId] });
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
     } catch (e) {
       avisarErro(e, "Logo não definida");
     } finally {
@@ -244,7 +333,9 @@ export default function LogosDaMarca({
         .from("cliente_kit_marca")
         .upsert({ client_id: clientId, ...patch, atualizado_por: userId }, { onConflict: "client_id" });
       if (error) throw error;
+      await gravarTomDaLogo("cliente_kit_marca", { client_id: clientId }, qual === "alt", null);
       invalidar(clientId);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "kit-tons", clientId] });
     } catch (e) {
       toast.error("Não foi possível tirar a logo", { description: textoDoErro(e) });
     } finally {
@@ -270,7 +361,7 @@ export default function LogosDaMarca({
                 carregando={t.carregando}
                 onAmpliar={() => setAmpliada(indice >= 0 ? indice : 0)}
                 compacto={compacto}
-                fundo={fundos[t.qual]}
+                fundo={fundoDe(t.qual)}
               />
               <div className="mt-1.5 flex min-w-0 items-center justify-between">
                 <span className="min-w-0 truncate text-[12px] font-medium text-foreground">{t.rotulo}</span>
@@ -278,14 +369,14 @@ export default function LogosDaMarca({
                   {t.imagem && (
                     <button
                       type="button"
-                      onClick={() => setFundos((f) => ({ ...f, [t.qual]: PROXIMO_FUNDO[f[t.qual]] }))}
-                      title={`Fundo ${NOME_DO_FUNDO[fundos[t.qual]]}: trocar para ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundos[t.qual]]]}`}
-                      aria-label={`Conferir a ${t.rotulo.toLowerCase()} em fundo ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundos[t.qual]]]}`}
+                      onClick={() => setFundos((f) => ({ ...f, [t.qual]: PROXIMO_FUNDO[f[t.qual] || fundoDe(t.qual)] }))}
+                      title={`Fundo ${NOME_DO_FUNDO[fundoDe(t.qual)]}${fundos[t.qual] ? "" : " (automático, pela cor da logo)"}: trocar para ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundoDe(t.qual)]]}`}
+                      aria-label={`Conferir a ${t.rotulo.toLowerCase()} em fundo ${NOME_DO_FUNDO[PROXIMO_FUNDO[fundoDe(t.qual)]]}`}
                       className="mr-0.5 flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted"
                     >
                       <span
                         className="h-3.5 w-3.5 rounded-full border border-border"
-                        style={fundos[t.qual] === "escuro" ? { backgroundColor: "#141414" } : fundos[t.qual] === "claro" ? { backgroundColor: "#ffffff" } : { backgroundImage: "linear-gradient(90deg, #ffffff 50%, #141414 50%)" }}
+                        style={fundoDe(t.qual) === "xadrez" ? { backgroundImage: "linear-gradient(90deg, #ffffff 50%, #141414 50%)" } : estiloDoFundo(fundoDe(t.qual))}
                       />
                     </button>
                   )}
@@ -347,6 +438,7 @@ export default function LogosDaMarca({
         ocupado={!!gravando}
       />
       <Ampliar imagens={ampliaveis} indice={ampliada} onFechar={() => setAmpliada(null)} />
+      {conferencia}
     </div>
   );
 }

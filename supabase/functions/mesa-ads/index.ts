@@ -167,18 +167,8 @@ import {
   type FormatoAds,
   type Nicho,
 } from "../_shared/conhecimento-ads.ts";
-import { conhecimentoAdsPara, montarComTeto, objetivoDoChecklist, type BlocoDeConhecimento, type TarefaAds } from "../_shared/conhecimento-dos-agentes.ts";
-import {
-  CHECKLIST_CRIATIVO_POR_OBJETIVO,
-  CRIATIVO_NATALIA,
-  ERROS_COMUNS_TRAFEGO,
-  ESTRATEGIA_SENIOR_DE_CONTA,
-  ESTRUTURA_DE_CONTA,
-  GANCHOS_DOS_ESPECIALISTAS,
-  ORCAMENTO_INICIAL,
-  PLANO_DE_TESTE,
-  REGRAS_DE_CORTE_E_ESCALA,
-} from "../_shared/conhecimento-especialistas-ads.ts";
+import { conhecimentoAdsPara, conhecimentoAgenteSenior, type TarefaAds } from "../_shared/conhecimento-dos-agentes.ts";
+import { ESTRATEGIA_SENIOR_DE_CONTA, REGRAS_DE_CORTE_E_ESCALA } from "../_shared/conhecimento-especialistas-ads.ts";
 import {
   type AnuncioParaVinculo,
   type CriativoParaVinculo,
@@ -5088,7 +5078,6 @@ const TEMPO_DAS_IMPRESSOES_MS = 90_000;
 /** Confiança mínima da escolha do Jev (Choice) para ligar sozinho ou recusar com "nenhum". */
 const CONFIANCA_DO_JEV_NO_VINCULO = 0.6;
 const MAX_INCERTOS_NO_JEV = 20;
-const TETO_AGENTE_SENIOR = 13_000;
 const HISTORICO_DO_AGENTE_SENIOR = 10;
 
 type CriativoDoVinculo = {
@@ -5506,20 +5495,11 @@ async function vinculoDesfazer(servico: SupabaseClient, chamador: Chamador, corp
 
 /** Sistema do agente sênior: a base da Mesa Ads inteira e os blocos de conta e estratégia dos especialistas, com teto. */
 function sistemaDoAgenteSenior(objetivo?: unknown): string {
-  const b = (id: string, texto: string, corte: number): BlocoDeConhecimento => ({ id, texto, corte });
-  const blocos: BlocoDeConhecimento[] = [
-    b("estrategia_senior_de_conta", ESTRATEGIA_SENIOR_DE_CONTA, 13),
-    b("estrutura_de_conta", ESTRUTURA_DE_CONTA, 12),
-    b("plano_de_teste", PLANO_DE_TESTE, 11),
-    b("regras_de_corte_e_escala", REGRAS_DE_CORTE_E_ESCALA, 10),
-    b("ganchos_dos_especialistas", GANCHOS_DOS_ESPECIALISTAS, 9),
-    b("erros_comuns_trafego", ERROS_COMUNS_TRAFEGO, 8),
-    b("orcamento_inicial", ORCAMENTO_INICIAL, 7),
-    b("criativo_natalia", CRIATIVO_NATALIA, 6),
-  ];
-  const obj = objetivoDoChecklist(objetivo);
-  if (obj) blocos.push(b(`checklist_${obj}`, CHECKLIST_CRIATIVO_POR_OBJETIVO[obj], 14));
-  const extra = montarComTeto(blocos, TETO_AGENTE_SENIOR).texto;
+  // Frente W (25/09): a lista de blocos (ESTRATEGIA_SENIOR_DE_CONTA, conta,
+  // teste, corte e escala, ganchos, erros, orçamento, Natália, checklist do
+  // objetivo e agora a Meta na prática e o portfólio de estáticos) mora em
+  // _shared/conhecimento-dos-agentes.ts, onde o índice motores.ts e o teste a veem.
+  const extra = conhecimentoAgenteSenior(objetivo).texto;
   return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}`;
 }
 

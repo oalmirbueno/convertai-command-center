@@ -9,124 +9,34 @@
 // do tipo de ritual pedido. O molde continua existindo no painel como reserva:
 // se a IA não responder, o cliente recebe o texto de sempre, nunca um erro.
 //
-// Segurança: só equipe autenticada, e os fatos vêm do próprio chamador (o
-// painel já os leu com o JWT dele, sob RLS). Esta função não lê o banco.
+// Memória e continuidade (25/09/2026): com `client_id`, o servidor lê com o
+// JWT de quem pediu (RLS) as últimas semanas de rituais enviados e gerados,
+// o que mudou desde o último, as pendências, os números, o cérebro do
+// cliente e a fase do método Acelera, e manda tudo ao escritor. Depois de
+// escrever, confere a repetição contra os anteriores (n-gramas; o Jev só
+// como aviso). Nada de laço de correção: o texto volta como saiu, com o aviso.
+// Os fatos do painel continuam vindo do chamador, como antes.
+//
+// Ação "memorizar" ({ action: "memorizar", report_id }): depois do envio, o
+// combinado no ritual entra no cérebro do cliente (agente_memoria, área
+// geral, vale 21 dias) para a próxima semana retomar.
+//
+// Segurança: só equipe autenticada; leitura e escrita com o JWT dela.
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  DEFAULT_LOVABLE_MODEL_CHAIN,
-  requestAiChatCompletion,
-  resolveAiProviderChain,
-} from "../_shared/ai-provider.ts";
+import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { conferirRepeticao, escreverRitual, MOMENTO, RITUAL_BRIEF } from "./escritor.ts";
+import { lerContextoDoRitual } from "./contexto.ts";
+import { extrairMemoriaDoRitual } from "./memoria.ts";
 
-// O modelo forte escreve; o mini fica de reserva. O custo por mensagem com o
-// gpt-4.1 fica na casa de centavos (ver a estimativa na Central).
-const PRIMARY_MODEL_CHAIN = ["gpt-4.1", "gpt-4o", "gpt-4o-mini"];
-
-// O que cada ritual precisa entregar. É a diferença entre um recado semanal
-// e um relatório: cada um tem um trabalho distinto na relação com o cliente.
-const RITUAL_BRIEF: Record<string, string> = {
-  rota_semana:
-    "ROTA DA SEMANA (segunda). Abre a semana apresentando o PLANO e a lógica dele: o que a gente vai fazer, por que nessa ordem, e que resultado essa sequência persegue. Cubra conteúdo e campanhas. Fecha com o que depende do cliente para o plano acontecer.",
-  meio_semana:
-    "CHECAGEM DE MEIO DE SEMANA (quarta). Direto: o que já saiu do papel e o que ainda entra até sexta. Se algo depende do cliente, apresente como a peça que falta para fechar a semana redonda, com prazo e ganho.",
-  prova_movimento:
-    "PROVA DE MOVIMENTO (sexta). Fecha a semana com o trabalho que existiu e o que ele significa: cada entrega ligada ao objetivo que ela serve. Prova, não promessa. Encerre apontando o que a semana que vem constrói em cima disso.",
-  radar_aceleriq:
-    "RADAR (mensal). Antecipação estratégica: o que a gente enxerga chegando para o negócio dele, por que isso importa agora, e o movimento que propomos antes de ele precisar pedir.",
-  marco_90:
-    "MARCO DE 90 DIAS. Balanço do trimestre com leitura de estratégia: o que mudou de verdade no negócio, o que os números ensinaram, os ajustes que o aprendizado trouxe, e a tese para o próximo ciclo.",
-};
-
-const SYSTEM_PROMPT = `Você é o gestor de contas sênior de uma agência de growth marketing brasileira (Aceleriq) e escreve as mensagens que vão para o dono do negócio. Ele é ocupado, leigo em marketing, e paga para ter clareza do que está sendo construído.
-
-O QUE SEPARA UMA MENSAGEM BOA DE UMA GENÉRICA:
-Uma mensagem fraca lista tarefas ("criamos 4 artes, agendamos 3 posts"). Uma mensagem forte explica a ESTRATÉGIA: por que aquilo foi feito, que objetivo do negócio dele aquilo serve, e o que vem depois. O cliente precisa terminar de ler entendendo o raciocínio, não só o inventário.
-
-O TOM, QUE É INEGOCIÁVEL:
-Você escreve sobre o trabalho que ESTÁ ACONTECENDO. Nunca sobre o que não aconteceu.
-
-É PROIBIDO escrever frases de ausência: "não há publicações agendadas", "nenhuma entrega esta semana", "ainda não temos", "nada foi feito", "sem novidades", "a semana foi parada". Se algo não aconteceu, esse assunto simplesmente NÃO ENTRA na mensagem. Fato ausente não é notícia.
-
-Toda semana tem trabalho para contar. Quando não houve publicação, houve construção: material sendo produzido, base sendo montada, estratégia sendo ajustada. Conte ISSO, e diga o que essa construção prepara.
-
-Quando algo depender do cliente (aprovar, mandar material, liberar verba), escreva pelo GANHO, nunca pela falta: "assim que você aprovar, essas peças entram no ar na data certa" em vez de "você não aprovou". Sem cobrança, sem tom de reclamação, sem passar a impressão de que ele está atrasando a agência.
-
-A pessoa que lê precisa terminar a mensagem sentindo que o dinheiro dela está trabalhando e que tem gente cuidando do negócio dela. Isso não significa mentir nem inflar: significa contar a verdade pelo lado do que está sendo construído.
-
-REGRAS ABSOLUTAS:
-1. Use SOMENTE os fatos fornecidos. Nunca invente entrega, número, data ou resultado. Fato que não está na lista não existe.
-1B. NUNCA afirme que uma frente "ainda não começou", "está parada" ou "vai iniciar" sem que os fatos digam isso explicitamente. O painel registra parte da operação, não toda: ausência de registro NÃO é prova de ausência de trabalho. Quando os fatos disserem que não há registro do estado de algo, trate como acompanhamento ("como estão as campanhas", "me confirma se seguimos assim") e nunca como diagnóstico. Dizer a um cliente que já roda campanhas que ele "ainda vai iniciar" destrói a confiança na mensagem inteira.
-1C. Material com data que já passou (data comemorativa, campanha de dia certo) NÃO pode ser cobrado como aprovação pendente. Não lamente e não culpe ninguém: apenas leve o assunto para frente, propondo a próxima data ou o replanejamento daquele conteúdo.
-2. Toda ação citada precisa vir com o PORQUÊ e o OBJETIVO. Nunca escreva o que foi feito sem dizer para que serve. Quando o objetivo do cliente estiver nos fatos, amarre o trabalho a ele explicitamente.
-3. Fale do trabalho em TODAS as frentes contratadas, não só na que teve movimento. Toda frente paga tem algo em andamento: diga o que é.
-4. TRÁFEGO E CAMPANHAS: quando os fatos indicarem que a verba acabou ou que falta algo para começar, apresente como o próximo passo que libera resultado ("com a verba reposta, as campanhas voltam a rodar já nesta semana"), nunca como falta ou atraso dele.
-5. CONTINUIDADE: quando os fatos trouxerem o que foi dito na mensagem anterior, retome mostrando o avanço. Cada mensagem é capítulo de uma história, não um recomeço.
-6. O QUE DEPENDE DELE: escreva sempre pelo destravamento, com prazo claro e ganho concreto ("aprovando até quarta, as peças entram no ar na data planejada"). Nunca escreva o que ele deixou de fazer, nunca use "pendente", "parado", "atrasado", "aguardando você" nem "não recebemos".
-7. Quando houver material esperando o aval dele, esse é o ponto mais importante da mensagem, e ele é apresentado como algo PRONTO que só precisa do sinal verde.
-8. Português claro do Brasil. SEM TRAVESSÃO (use vírgula ou ponto). Sem jargão ("sinergia", "otimização", "estratégia robusta", "engajamento"). Sem elogio vazio ("grande semana!", "estamos animados").
-9. Trate por "você" e chame a agência de "a gente".
-10. FORMATO DE WHATSAPP, pronto para colar no grupo: blocos curtos separados por linha em branco, cada bloco com um título curto em negrito de WhatsApp (asteriscos: *Onde estamos*) e de 1 a 4 linhas embaixo; use "•" para listar quando houver mais de um item. Sem markdown de cabeçalho (#), sem emoji, sem tabela. Entre 10 e 18 linhas de texto no total. A pessoa lê no celular em 40 segundos e entende tudo.
-11. O título tem no máximo 60 caracteres e nomeia o movimento da semana daquele cliente. Nunca genérico.
-12. NÚMEROS E VENDAS: quando os fatos trouxerem números (seguidores, alcance, leads, gasto, vendas, receita), eles entram em um bloco próprio, com o número exato e a comparação que os fatos deram, seguido de UMA frase do que faremos por causa disso. Venda registrada é o resultado mais importante da mensagem: nunca fica de fora.
-13. PROGRESSÃO: quando os fatos trouxerem "o que mudou no dossiê" ou "o que a esteira provou como feito", isso vira o coração do bloco de avanço, com nome, nunca como lista de tarefas.
-14. FRENTES SEPARADAS: conteúdo (Instagram, posts, artes) e tráfego pago (campanhas, leads, verba) são frentes diferentes; cada uma tem seu próprio bloco ou frase, e nunca repita a mesma ação nas duas.
-15. NOME E PESSOA: a mensagem é para uma pessoa com nome. Abra com o primeiro nome da pessoa de contato ("Boa tarde, Priscila.") e cite o nome do negócio uma vez, de forma natural, no corpo. Nunca escreva "cliente", "prezado" ou "olá, tudo bem?" genérico.
-16. LINGUAGEM SIMPLES, SEM TERMO TÉCNICO: escreva como se explicasse para um dono de negócio que não é do marketing. Troque sempre: "tráfego pago" por "anúncios"; "leads" por "pessoas interessadas" ou "contatos"; "conversão" por "pedidos", "orçamentos" ou "mensagens"; "alcance" por "pessoas que viram"; "impressões" por "vezes que o anúncio apareceu"; "criativos" por "artes" ou "vídeos dos anúncios"; "copy" por "texto"; "CPC/CTR/CPM/ROAS/CPA/KPI" por o que o número significa em reais ou em pessoas; "funil" por "caminho até a compra"; "landing page" por "página"; "briefing" por "orientação"; "otimizar" por "ajustar". Todo número vem com o que ele significa na prática ("R$ 55 investidos trouxeram 2 conversas no WhatsApp: cada conversa custou cerca de R$ 28").
-17. AVANÇO SEMPRE VISÍVEL: toda mensagem precisa deixar claro o que andou desde a última vez. Quando os fatos trouxerem a ÚLTIMA MENSAGEM ENVIADA, o bloco *O que avançou* começa retomando o que foi prometido nela e mostrando o que virou realidade ("Na última mensagem a gente combinou X; X já está no ar"). Sem mensagem anterior, mostre o avanço em relação ao começo da semana. Avanço é sempre concreto e com nome; nunca "seguimos trabalhando".
-
-ESTRUTURA (com os títulos em negrito de WhatsApp, nesta ordem, pulando o bloco que não tiver fato):
-Linha de abertura: cumprimento com o nome e uma frase que diga o momento (segunda abre a semana, quarta mostra o meio, sexta fecha).
-*Onde estamos*: o retrato do negócio hoje, vindo do dossiê, em 1 a 3 linhas.
-*O que avançou*: o que a gente construiu ou entregou, com nome e com o porquê (que objetivo serve).
-*O que os números dizem*: só se houver número; número exato + o que faremos por causa dele.
-*O que vem agora*: o próximo passo em cada frente contratada, ligado ao foco da semana.
-*Precisamos de você*: só se houver algo que depende dele, escrito pelo ganho, com prazo.
-Linha final: uma frase de fechamento e "Tudo detalhado no painel: aceleriq.online".
-
-ANTES DE RESPONDER, releia o texto e remova qualquer frase que fale do que não existe, não foi feito ou não aconteceu. Se sobrar pouca coisa, aprofunde o que foi construído em vez de preencher com ausências.
-
-ALERTAS INTERNOS (nunca vão para o cliente): liste em "alertas" o que você precisou e NÃO encontrou nos fatos, ou afirmou com pouca firmeza (ex.: "sem registro do estado das campanhas", "dossiê com mais de 20 dias", "nenhum número de Instagram", "objetivo do cliente não consta"). Máximo 4, frases curtas, para a equipe completar o painel. Se não houver, lista vazia.
-
-PRÓXIMO PASSO SEPARADO: além do texto, devolva em "next_steps" UMA frase objetiva (até 240 caracteres) com a próxima ação combinada e o que se espera dela, tirada do que você escreveu em *O que vem agora* e *Precisamos de você*. Nunca vazio.
-
-QUANDO HOUVER "TEXTO ATUAL": a tarefa é APRIMORAR E COMPLEMENTAR, não recomeçar. Mantenha o que está certo e no tom, corrija o que os fatos contradizem, complete com os fatos que faltaram (números, vendas, frentes sem menção), separe o que estiver misturado entre conteúdo e tráfego, e devolva o texto inteiro já pronto.
-
-Responda SOMENTE com JSON válido: {"title":"...","body":"...","next_steps":"...","alertas":["..."]}`;
-
-/** O proximo passo tambem pode ser lido do proprio texto, quando a IA esquecer o campo. */
-function proximoPassoDoTexto(body: string): string {
-  const linhas = body.split(/\r?\n/);
-  const escolhidas: string[] = [];
-  let dentro = false;
-  for (const bruta of linhas) {
-    const linha = bruta.trim();
-    const titulo = linha.match(/^\*([^*]{2,60})\*:?\s*(.*)$/);
-    if (titulo) {
-      dentro = /o que vem agora|precisamos de voc|pr[oó]ximos? passos?/i.test(titulo[1]);
-      if (dentro && titulo[2]) escolhidas.push(titulo[2].trim());
-      continue;
-    }
-    if (!linha) { dentro = false; continue; }
-    if (dentro) escolhidas.push(linha.replace(/^[•\-–]\s*/, ""));
-  }
-  return escolhidas.join(" ").replace(/\s+/g, " ").trim().slice(0, 600);
-}
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function extractJson(raw: string): { title?: string; body?: string; next_steps?: unknown; alertas?: unknown } {
-  const trimmed = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("resposta sem JSON");
-  return JSON.parse(trimmed.slice(start, end + 1));
 }
 
 Deno.serve(async (req) => {
@@ -147,9 +57,39 @@ Deno.serve(async (req) => {
     const { data: isStaff } = await admin.rpc("is_staff", { _user_id: userData.user.id });
     if (!isStaff) return jsonResponse({ error: "Somente equipe." }, 403);
 
+    // O banco com o JWT de quem pediu: a RLS decide o que ele vê e grava.
+    const db = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false } },
+    );
+
     const body = await req.json().catch(() => ({}));
-    // A Central manda o ritual; a gaveta de Perfis manda o momento do grupo.
-    const MOMENTO: Record<string, string> = { abertura: "rota_semana", meio: "meio_semana", fechamento: "prova_movimento" };
+
+    if (body?.action === "memorizar") {
+      const reportId = String(body?.report_id || "");
+      if (!UUID.test(reportId)) return jsonResponse({ error: "report_id inválido." }, 400);
+      const { data: rep } = await db.from("reports").select("id, client_id, status, summary, next_steps, created_at, metrics").eq("id", reportId).maybeSingle();
+      if (!rep || rep.status !== "published") return jsonResponse({ ok: false, motivo: "ritual não enviado" });
+      const mem = extrairMemoriaDoRitual(String(rep.summary || ""), String(rep.next_steps || ""));
+      if (!mem.promessas.length) return jsonResponse({ ok: true, gravado: false, motivo: "sem combinado no texto" });
+      const quando = new Date(String((rep.metrics as Record<string, unknown> | null)?.sent_at || rep.created_at))
+        .toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" });
+      const g = await gravarNoCerebro(db, {
+        client_id: String(rep.client_id),
+        area: "geral",
+        categoria: "aprendizado",
+        texto: `Combinado com o cliente no ritual de ${quando}: ${mem.promessas.slice(0, 3).join(" | ")}`.slice(0, 590),
+        motivo: "Retomar na próxima mensagem dizendo o que andou.",
+        evidencia: `reports:${reportId}`,
+        fonte: "central_ritual",
+        criado_por: userData.user.id,
+        referencia_id: reportId,
+        valido_dias: 21,
+      });
+      return jsonResponse({ ok: g.gravada, situacao: g.situacao, memoria: mem, erro: g.erro });
+    }
+
     const ritual = MOMENTO[String(body?.moment || "")] || String(body?.ritual || "");
     const facts = String(body?.facts || "").slice(0, 12000);
     const clientName = String(body?.client_name || "Cliente").slice(0, 120);
@@ -164,45 +104,48 @@ Deno.serve(async (req) => {
     const textoAtual = atual ? String(atual.summary || "").slice(0, 8000).trim() : "";
     const passoAtual = atual ? String(atual.next_steps || "").slice(0, 1000).trim() : "";
 
-    const providers = resolveAiProviderChain({
-      primaryModels: PRIMARY_MODEL_CHAIN,
-      lovableModels: DEFAULT_LOVABLE_MODEL_CHAIN,
-    });
-
-    const { response, provider } = await requestAiChatCompletion(providers, {
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content:
-            `TIPO DE MENSAGEM: ${RITUAL_BRIEF[ritual]}\n\n` +
-            `NEGÓCIO: ${clientName}\n` +
-            `PESSOA DE CONTATO (abra a mensagem com este primeiro nome): ${contactName || "não informado; use o nome do negócio"}\n\n` +
-            `FATOS REAIS DESTA SEMANA (do painel):\n${facts}` +
-            (textoAtual
-              ? `\n\nTEXTO ATUAL (aprimorar e complementar com os fatos acima; manter o que esta certo):\n${textoAtual}` +
-                (passoAtual ? `\n\nPROXIMO PASSO ATUAL: ${passoAtual}` : "")
-              : ""),
-        },
-      ],
-      temperature: textoAtual ? 0.35 : 0.5,
-    });
-
-    if (!response.ok) {
-      console.warn(`[ritual] cadeia esgotada, último: ${provider.label} HTTP ${response.status}`);
-      return jsonResponse({ title: null, body: null, source: "fallback" });
+    // Memória montada no servidor. Falha aqui nunca derruba o ritual.
+    const clientId = typeof body?.client_id === "string" && UUID.test(body.client_id) ? body.client_id : "";
+    const reportId = typeof body?.report_id === "string" && UUID.test(body.report_id) ? body.report_id : null;
+    let contexto: Awaited<ReturnType<typeof lerContextoDoRitual>> | null = null;
+    if (clientId) {
+      const { data: pode } = await db.rpc("can_access_client", { _client_id: clientId });
+      if (pode !== true) return jsonResponse({ error: "Sem acesso a este cliente." }, 403);
+      contexto = await lerContextoDoRitual(db, clientId, { ritual, excluirReportId: reportId }).catch((e) => {
+        console.warn(`[ritual] contexto falhou: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      });
     }
 
-    const completion = await response.json();
-    const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
-    const title = String(parsed?.title || "").trim();
-    const text = String(parsed?.body || "").trim();
-    if (!text) return jsonResponse({ title: null, body: null, source: "fallback" });
-    const alertas = Array.isArray(parsed?.alertas) ? (parsed.alertas as unknown[]).map((a) => String(a).slice(0, 160)).filter(Boolean).slice(0, 4) : [];
-    const nextSteps = (String(parsed?.next_steps || "").trim() || proximoPassoDoTexto(text) || passoAtual).slice(0, 600);
-    const usage = completion?.usage ?? null;
+    const escrito = await escreverRitual({
+      ritual, clientName, contactName, facts,
+      continuidade: contexto?.texto,
+      textoAtual, passoAtual,
+    });
+    if (!escrito) return jsonResponse({ title: null, body: null, source: "fallback" });
+    const nextSteps = escrito.next_steps;
 
-    return jsonResponse({ title: title || null, body: text, next_steps: nextSteps, alertas, source: "ai", model: provider.model, usage, improved: !!textoAtual });
+    // Conferência de repetição contra o que já foi dito (aviso, nunca correção).
+    const repeticao = contexto
+      ? await conferirRepeticao(escrito.body, contexto.anteriores.map((a) => ({ quando: a.quando, titulo: a.titulo, texto: a.texto })))
+      : null;
+
+    return jsonResponse({
+      title: escrito.title,
+      body: escrito.body,
+      next_steps: nextSteps,
+      alertas: escrito.alertas,
+      tarefas_sugeridas: escrito.tarefas_sugeridas,
+      repeticao,
+      memoria: extrairMemoriaDoRitual(escrito.body, nextSteps),
+      contexto: contexto
+        ? { fase: contexto.fase, motivo_da_fase: contexto.motivoDaFase, desde: contexto.desde, contagem: contexto.contagem, avisos: contexto.avisos }
+        : null,
+      source: "ai",
+      model: escrito.model,
+      usage: escrito.usage,
+      improved: !!textoAtual,
+    });
   } catch (error) {
     // Falha aqui nunca pode travar o ritual: o painel usa o texto de reserva.
     console.warn(`[ritual] falha: ${error instanceof Error ? error.message : String(error)}`);

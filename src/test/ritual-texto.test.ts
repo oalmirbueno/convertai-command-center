@@ -94,7 +94,8 @@ describe("o portal do cliente mostra o ritual organizado, não o texto do WhatsA
 
 describe("a Central encurta o caminho e o Hermes fica com a revisão formal", () => {
   const central = ler("src/pages/AdminExperience.tsx");
-  const escritor = ler("supabase/functions/ritual-writer/index.ts");
+  // O prompt mora em escritor.ts; o handler (improve, next_steps) em index.ts.
+  const escritor = ler("supabase/functions/ritual-writer/index.ts") + "\n" + ler("supabase/functions/ritual-writer/escritor.ts");
   const migracao = ler("supabase/migrations/20260916150000_acoes_feitas_entram_no_dossie.sql");
 
   it("a fila da Central lista todos os rascunhos e oferece aprimorar, copiar, registrar envio e publicar", () => {

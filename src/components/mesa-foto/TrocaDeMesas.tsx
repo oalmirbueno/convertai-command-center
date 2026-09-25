@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
+import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
  * Troca rápida entre as três mesas do mesmo cliente: Mesa (orgânico),
  * Mesa Ads (tráfego pago) e Mesa Foto (estúdio fotográfico). A mesa aberta
  * aparece marcada e sem link. Some no celular, onde a barra é curta.
+ * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
 export type QualMesa = "mesa" | "ads" | "foto";
@@ -48,6 +50,7 @@ export default function TrocaDeMesas({
           ) : (
             <Link
               to={enderecoDaMesa(m.valor, clientId, marcaId)}
+              {...propsDePreCarga(enderecoDaMesa(m.valor, clientId, marcaId))}
               title={m.titulo}
               className="inline-flex h-8 items-center rounded-lg px-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { conhecimentoAgenteSenior } from "../../supabase/functions/_shared/conhecimento-dos-agentes";
 import {
   diagnosticar,
   direcaoDoResultado,
@@ -127,7 +128,9 @@ describe("honestidade", () => {
     const senior = corpoDe(fonte, "sistemaDoAgenteSenior");
     expect(senior).toContain("${CONHECIMENTO_ESTRATEGISTA_ADS}");
     expect(senior).toContain("${REGRAS_DA_EXECUCAO}");
-    expect(senior).toContain("ESTRATEGIA_SENIOR_DE_CONTA");
+    // Frente W: os blocos do sênior moram em _shared (conhecimentoAgenteSenior), vistos pelo índice motores.ts.
+    expect(senior).toContain("conhecimentoAgenteSenior(objetivo)");
+    expect(conhecimentoAgenteSenior("vendas").ids).toEqual(expect.arrayContaining(["estrategia_senior_de_conta", "checklist_vendas"]));
   });
   it("o leitor separa observado de inferido e nunca inventa métrica", () => {
     expect(fonte).toContain("REGRAS_DE_HONESTIDADE,\n  METODO_DA_REFERENCIA,");

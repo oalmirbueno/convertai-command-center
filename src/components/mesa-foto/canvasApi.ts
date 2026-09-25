@@ -25,6 +25,13 @@ import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona
  * em supabase/functions/mesa-foto/canvas-regras.ts (cabeçalho): cartão
  * "video" ligado a um Resultado, dados { imagem_id, motor_video, duracao_s,
  * movimento, formato }, ações canvas_video_gerar e canvas_video_status.
+ *
+ * Cenas e história (dono, 25/09 à noite; docs/mesa-foto/cenas/PESQUISA.md):
+ * um Resultado alimenta outro Resultado com um papel (personagem, produto,
+ * cenário, estilo); o Resultado pode ser "cena" (dados.cena) e a História do
+ * canvas é a lista das cenas pela ordem (./canvas/historia.ts). A pessoa
+ * gerada vira personagem (criarPersonagem). A Mesa Vídeos lê o mesmo canvas
+ * (docs/mesa-videos/CONTRATO.md); animacao fica reservada.
  */
 
 // ------------------------------------------------------------------ tipos
@@ -50,6 +57,39 @@ export interface ResultadoDoCanvas {
   grupo: string | null;
   quadro: number | null;
   tipo: "foto" | "variacao" | "carrossel";
+}
+
+/** O que a foto de um Resultado vira ao entrar noutro Resultado. */
+export type PapelDaLigacao = "personagem" | "produto" | "cenario" | "estilo";
+
+/** Animação da cena: reservado para a Mesa Vídeos (nada gera vídeo ainda). */
+export interface AnimacaoDaCena {
+  duracao_s: number | null;
+  movimento: string | null;
+  ultimo_quadro_id: string | null;
+  audio: { fala: string | null; trilha: string | null; efeitos: string | null } | null;
+  motor_video: string | null;
+  status: "em_breve";
+}
+
+/** Resultado marcado como cena da história. */
+export interface CenaDoResultado {
+  ordem: number;
+  titulo: string;
+  acao: string;
+  enquadramento: string;
+  cenario: string;
+  narrativa: string;
+  seed: number | null;
+  /** A foto da cena na história (na Mesa Vídeos, o 1º quadro). */
+  imagem_id: string | null;
+  animacao: AnimacaoDaCena | null;
+}
+
+/** Metadados da história do canvas (coluna foto_canvas.historia, SQL V-01). */
+export interface HistoriaDoCanvas {
+  sinopse: string;
+  formato: string | null;
 }
 
 export interface MensagemDoAgente {
@@ -83,6 +123,8 @@ export interface DadosDoNo {
   /** Agente: o pedido que ele escreveu (vai ao gerador) e a conversa curta. */
   pedido?: string;
   mensagens?: MensagemDoAgente[];
+  /** Resultado: marcado como cena da história (null = fora da história). */
+  cena?: CenaDoResultado | null;
 }
 
 export interface NoDoCanvas {
@@ -99,6 +141,9 @@ export interface Ligacao {
   para: string;
   entrada: Entrada;
   ordem: number;
+  /** Só na ligação de Resultado para Resultado: o papel da foto e a foto escolhida (null = a da cena ou a mais nova). */
+  papel?: PapelDaLigacao;
+  imagem_id?: string | null;
 }
 
 export interface Viewport {
@@ -116,6 +161,7 @@ export interface Canvas {
   viewport: Viewport;
   versao: number;
   atualizado_em: string;
+  historia?: HistoriaDoCanvas | null;
 }
 
 export interface ReferenciaMontada {
@@ -219,6 +265,79 @@ export const ANGULOS_DE_VARIACAO = [
 ];
 
 export const OPCOES_DE_CARROSSEL = [0, 3, 4, 5, 6];
+
+// ------------------------------------------------------------------ cenas (espelho de canvas-regras.ts)
+
+/** Papel da foto de um Resultado quando ela entra noutro; a entrada é a alça onde a linha chega. */
+export const PAPEIS_DA_LIGACAO: { valor: PapelDaLigacao; rotulo: string; dica: string; entrada: Entrada }[] = [
+  { valor: "personagem", rotulo: "Personagem", dica: "A mesma pessoa desta foto, com a mesma roupa, em outra cena.", entrada: "pessoa" },
+  { valor: "produto", rotulo: "Produto", dica: "O produto como aparece nesta foto.", entrada: "produto" },
+  { valor: "cenario", rotulo: "Cenário", dica: "O mesmo lugar desta foto, com outra câmera.", entrada: "ambiente" },
+  { valor: "estilo", rotulo: "Estilo", dica: "Só a paleta, a luz e o clima desta foto.", entrada: "estilo" },
+];
+
+export const rotuloDoPapel = (v?: string | null) => (PAPEIS_DA_LIGACAO.find((p) => p.valor === v) || PAPEIS_DA_LIGACAO[0]).rotulo;
+export const lerPapelDaLigacao = (v: unknown): PapelDaLigacao => (PAPEIS_DA_LIGACAO.find((p) => p.valor === v) || PAPEIS_DA_LIGACAO[0]).valor;
+const entradaDoPapel = (p: PapelDaLigacao): Entrada => (PAPEIS_DA_LIGACAO.find((x) => x.valor === p) || PAPEIS_DA_LIGACAO[0]).entrada;
+/** A alça do Resultado onde a linha chegou diz o papel (pessoa = personagem, ambiente = cenário). */
+export const papelDaAlca = (alca?: string | null): PapelDaLigacao => (PAPEIS_DA_LIGACAO.find((p) => p.entrada === alca) || PAPEIS_DA_LIGACAO[0]).valor;
+
+/** Enquadramentos da cena (mesmas chaves da função). */
+export const ENQUADRAMENTOS_DA_CENA: { valor: string; rotulo: string; dica: string }[] = [
+  { valor: "livre", rotulo: "Livre", dica: "Sai do pedido." },
+  { valor: "plano_geral", rotulo: "Plano geral", dica: "Corpo inteiro e o lugar. O rosto fica pequeno." },
+  { valor: "plano_americano", rotulo: "Americano", dica: "Dos joelhos para cima." },
+  { valor: "plano_medio", rotulo: "Plano médio", dica: "Da cintura para cima. Bom para a personagem." },
+  { valor: "close", rotulo: "Close", dica: "Rosto e ombros." },
+  { valor: "detalhe", rotulo: "Detalhe", dica: "Mãos e produto de perto." },
+  { valor: "sobre_o_ombro", rotulo: "Sobre o ombro", dica: "Por cima do ombro da pessoa." },
+  { valor: "pov", rotulo: "POV", dica: "O que a pessoa vê." },
+];
+
+/** Nós da Mesa Vídeos (em breve): o mesmo Canvas com estas opções a mais (docs/mesa-videos/CONTRATO.md). */
+export const NOS_DE_VIDEO_EM_BREVE: { chave: string; rotulo: string; dica: string }[] = [
+  { chave: "animar", rotulo: "Animar cena", dica: "A foto da cena vira o 1º quadro do vídeo." },
+  { chave: "duracao", rotulo: "Duração", dica: "De 4 a 15 s por cena, conforme o motor de vídeo." },
+  { chave: "camera", rotulo: "Câmera", dica: "Movimento: travelling, pan, órbita, zoom, câmera na mão." },
+  { chave: "audio", rotulo: "Áudio", dica: "Fala, trilha e efeitos da cena." },
+];
+
+function normalizarAnimacao(v: any): AnimacaoDaCena | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const a = v.audio && typeof v.audio === "object" ? v.audio : null;
+  const dur = Number(v.duracao_s);
+  return {
+    duracao_s: isFinite(dur) && dur > 0 ? dur : null,
+    movimento: textoOuNulo(v.movimento),
+    ultimo_quadro_id: textoOuNulo(v.ultimo_quadro_id),
+    audio: a ? { fala: textoOuNulo(a.fala), trilha: textoOuNulo(a.trilha), efeitos: textoOuNulo(a.efeitos) } : null,
+    motor_video: textoOuNulo(v.motor_video),
+    status: "em_breve",
+  };
+}
+
+export function normalizarCena(v: any): CenaDoResultado | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const ordem = Math.floor(Number(v.ordem));
+  const seed = Number(v.seed);
+  const enq = texto(v.enquadramento);
+  return {
+    ordem: isFinite(ordem) && ordem > 0 ? ordem : 1,
+    titulo: texto(v.titulo),
+    acao: texto(v.acao),
+    enquadramento: ENQUADRAMENTOS_DA_CENA.some((e) => e.valor === enq) ? enq : "livre",
+    cenario: texto(v.cenario),
+    narrativa: texto(v.narrativa),
+    seed: v.seed === null || v.seed === undefined || v.seed === "" || !isFinite(seed) || seed < 0 ? null : Math.floor(seed),
+    imagem_id: textoOuNulo(v.imagem_id),
+    animacao: normalizarAnimacao(v.animacao),
+  };
+}
+
+export function normalizarHistoria(v: any): HistoriaDoCanvas | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  return { sinopse: texto(v.sinopse), formato: textoOuNulo(v.formato) };
+}
 export const VARIACOES_POR_VEZ = 3;
 
 export const rotuloDaAcao = (v?: string | null) => (ACOES_DO_RESULTADO.find((a) => a.valor === v) || ACOES_DO_RESULTADO[0]).rotulo;
@@ -325,6 +444,7 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
       });
     }
     saida.resultados = resultados;
+    saida.cena = normalizarCena(d.cena);
   }
   return saida;
 }
@@ -344,9 +464,15 @@ export function normalizarLigacao(v: any, nos: NoDoCanvas[]): Ligacao | null {
   const para = texto(v.para || v.target);
   const origem = nos.find((n) => n.id === de);
   const destino = nos.find((n) => n.id === para);
-  if (!origem || !destino || destino.tipo !== "gerar" || origem.tipo === "gerar") return null;
+  if (!origem || !destino || destino.tipo !== "gerar" || de === para) return null;
+  const id = texto(v.id) || `lig-${de}-${para}`;
+  if (origem.tipo === "gerar") {
+    // Resultado alimentando Resultado (cena anterior): o papel escolhe a alça.
+    const papel = lerPapelDaLigacao(v.papel);
+    return { id, de, para, entrada: entradaDoPapel(papel), ordem: numero(v.ordem), papel, imagem_id: textoOuNulo(v.imagem_id) };
+  }
   const entrada = entradaDoTipo(origem.tipo) as Entrada;
-  return { id: texto(v.id) || `lig-${de}-${para}`, de, para, entrada, ordem: numero(v.ordem) };
+  return { id, de, para, entrada, ordem: numero(v.ordem) };
 }
 
 export function normalizarCanvas(v: any, clientId = ""): Canvas | null {
@@ -371,6 +497,7 @@ export function normalizarCanvas(v: any, clientId = ""): Canvas | null {
     viewport: { x: numero(vp.x), y: numero(vp.y), zoom: numero(vp.zoom, 1) || 1 },
     versao: numero(v.versao, 0),
     atualizado_em: texto(v.atualizado_em || v.criado_em),
+    historia: normalizarHistoria(v.historia),
   };
 }
 
@@ -398,22 +525,63 @@ export const canvasVazio = (clientId: string, nome = "Canvas novo"): Canvas => (
   atualizado_em: "",
 });
 
-/** A entrada da ligação se ela é possível (origem que não é Resultado, destino que é Resultado, sem repetir); senão null. */
-export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para: string): Entrada | null {
+/** Algum caminho de Resultado para Resultado leva de `de` até `ate`? (para não fechar laço) */
+export function alcancaPorResultados(c: Pick<Canvas, "nos" | "ligacoes">, de: string, ate: string): boolean {
+  const resultados = c.nos.filter((n) => n.tipo === "gerar").map((n) => n.id);
+  const vistos: string[] = [];
+  const pilha = [de];
+  while (pilha.length) {
+    const atual = pilha.pop() as string;
+    if (atual === ate) return true;
+    if (vistos.indexOf(atual) >= 0) continue;
+    vistos.push(atual);
+    c.ligacoes.forEach((l) => {
+      if (l.de === atual && resultados.indexOf(l.para) >= 0) pilha.push(l.para);
+    });
+  }
+  return false;
+}
+
+/**
+ * A entrada da ligação se ela é possível (destino que é Resultado, sem
+ * repetir); senão null. Resultado com Resultado vale (cena anterior), com o
+ * papel escolhido e sem laço.
+ */
+export function podeLigar(c: Pick<Canvas, "nos" | "ligacoes">, de: string, para: string, papel?: PapelDaLigacao | null): Entrada | null {
   if (!de || !para || de === para) return null;
   const origem = c.nos.find((n) => n.id === de);
   const destino = c.nos.find((n) => n.id === para);
-  if (!origem || !destino || destino.tipo !== "gerar" || origem.tipo === "gerar") return null;
+  if (!origem || !destino || destino.tipo !== "gerar") return null;
   if (c.ligacoes.some((l) => l.de === de && l.para === para)) return null;
+  if (origem.tipo === "gerar") return alcancaPorResultados(c, para, de) ? null : entradaDoPapel(papel || "personagem");
   return entradaDoTipo(origem.tipo);
 }
 
-/** Liga (a ordem na mesma entrada é a ordem de chegada: prioridade). A entrada sai do tipo do cartão, nunca da alça tocada. */
-export function ligar<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, de: string, para: string): T {
-  const entrada = podeLigar(c, de, para);
+/**
+ * Liga (a ordem na mesma entrada é a ordem de chegada: prioridade). A entrada
+ * sai do tipo do cartão, nunca da alça tocada; de Resultado para Resultado,
+ * sai do papel (que a tela tira da alça onde a linha chegou).
+ */
+export function ligar<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, de: string, para: string, papel?: PapelDaLigacao | null): T {
+  const entrada = podeLigar(c, de, para, papel);
   if (!entrada) return c;
   const ordem = c.ligacoes.filter((l) => l.para === para && l.entrada === entrada).length;
-  return { ...c, ligacoes: c.ligacoes.concat([{ id: novoId("lig"), de, para, entrada, ordem }]) };
+  const origem = c.nos.find((n) => n.id === de);
+  const extra: Partial<Ligacao> = origem && origem.tipo === "gerar" ? { papel: papel || "personagem", imagem_id: null } : {};
+  return { ...c, ligacoes: c.ligacoes.concat([{ id: novoId("lig"), de, para, entrada, ordem, ...extra }]) };
+}
+
+/** Troca o papel ou a foto de uma ligação entre Resultados (a entrada acompanha o papel; a ordem é refeita). */
+export function mudarLigacao<T extends Pick<Canvas, "nos" | "ligacoes">>(c: T, ligacaoId: string, mudanca: { papel?: PapelDaLigacao; imagem_id?: string | null }): T {
+  const ligacoes = c.ligacoes.map((l) => {
+    if (l.id !== ligacaoId || !l.papel) return l;
+    const papel = mudanca.papel || l.papel;
+    const novo: Ligacao = { ...l, papel, entrada: entradaDoPapel(papel) };
+    if (mudanca.imagem_id !== undefined) novo.imagem_id = mudanca.imagem_id;
+    if (mudanca.papel && mudanca.papel !== l.papel) novo.ordem = 10_000;
+    return novo;
+  });
+  return { ...c, ligacoes: renumerar(ligacoes) };
 }
 
 /** Reescreve a ordem 0, 1, 2... dentro de cada entrada de cada Resultado (depois de tirar uma ligação). */
@@ -478,6 +646,28 @@ export function faltaNoCartao(no: NoDoCanvas): string {
   return "";
 }
 
+/**
+ * Foto de um Resultado para entrar noutro (mesma regra da função): a
+ * escolhida na ligação; senão a foto da cena; senão a mais nova aprovada;
+ * senão a mais nova.
+ */
+export function fotoDaLigacao(no: Pick<NoDoCanvas, "dados">, escolhida?: string | null, aprovadas: string[] = []): ResultadoDoCanvas | null {
+  const prontas = (no.dados.resultados || []).filter((r) => r.status === "gerada" && !!r.imagem_id);
+  const porId = (id?: string | null) => (id ? prontas.find((r) => r.imagem_id === id) || null : null);
+  const cena = no.dados.cena || null;
+  const novas = prontas.slice().reverse();
+  return porId(escolhida) || porId(cena && cena.imagem_id) || novas.find((r) => aprovadas.indexOf(String(r.imagem_id)) >= 0) || novas[0] || null;
+}
+
+/** Nome de um Resultado na tela: o título da cena, senão "Cena N" ou "Resultado N". */
+export function nomeDoResultado(c: Pick<Canvas, "nos">, no: Pick<NoDoCanvas, "id" | "dados">): string {
+  const cena = no.dados.cena || null;
+  if (cena && cena.titulo.trim()) return cena.titulo.trim();
+  const resultados = c.nos.filter((n) => n.tipo === "gerar");
+  const i = resultados.findIndex((n) => n.id === no.id);
+  return cena ? `Cena ${cena.ordem}` : `Resultado ${i >= 0 ? i + 1 : ""}`.trim();
+}
+
 /** Junta resultados novos no Resultado (sem repetir a mesma geração; guarda os 24 mais novos). */
 export function juntarResultados(c: Canvas, porGerar: Record<string, ResultadoDoCanvas[]>): Canvas {
   let novo = c;
@@ -503,6 +693,10 @@ export function bloqueiosDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: s
   const b: string[] = [];
   if (!entradas.some((e) => e.entrada === "produto" || e.entrada === "pessoa")) b.push("Adicione um produto ou uma pessoa.");
   entradas.forEach((e) => {
+    if (e.no.tipo === "gerar") {
+      if (!fotoDaLigacao(e.no, e.ligacao.imagem_id)) b.push(`${e.numero}. ${rotuloDoPapel(e.ligacao.papel)} de ${nomeDoResultado(c, e.no)}: gere a foto dele antes.`);
+      return;
+    }
     const falta = faltaNoCartao(e.no);
     if (falta) b.push(`${e.numero}. ${TIPOS_DE_NO[e.no.tipo].rotulo}: ${falta.toLowerCase()}.`);
     if (e.no.tipo === "modelo" && e.no.dados.modelo_id) {
@@ -533,6 +727,7 @@ export function avisosDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: stri
 export function resumoDoResultado(entradas: EntradaDoGerar[], nome: (no: NoDoCanvas) => string): string {
   if (!entradas.length) return "";
   const partes = entradas.map((e) => {
+    if (e.no.tipo === "gerar") return `${rotuloDoPapel(e.ligacao.papel).toLowerCase()} de ${(nome(e.no) || "outra cena").trim()}`;
     const rotulo = TIPOS_DE_NO[e.no.tipo].rotulo.toLowerCase();
     const n = (nome(e.no) || "").trim();
     return n && n.toLowerCase() !== rotulo ? `${rotulo} ${n}` : `${rotulo} (a escolher)`;
@@ -1059,6 +1254,7 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
     acao: d.acao || "livre",
     pose: d.pose || "nenhuma",
     carrossel: d.carrossel || 0,
+    cena: d.cena ? cenaParaAFuncao(d.cena) : null,
     resultados: (d.resultados || []).map((r) => ({
       geracao_id: r.geracao_id,
       imagem_id: r.imagem_id,
@@ -1077,16 +1273,32 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
   };
 }
 
+/** Cena na forma da função (canvas-regras.ts, lerCena); a animação vai só quando existe (reservado). */
+export function cenaParaAFuncao(c: CenaDoResultado): Record<string, unknown> {
+  return {
+    ordem: c.ordem,
+    titulo: c.titulo.trim() || null,
+    acao: c.acao.trim() || null,
+    enquadramento: c.enquadramento || "livre",
+    cenario: c.cenario.trim() || null,
+    narrativa: c.narrativa.trim() || null,
+    seed: c.seed,
+    imagem_id: c.imagem_id,
+    animacao: c.animacao,
+  };
+}
+
 /** O corpo que vai para canvas_salvar (JSON puro, nomes e forma da função). */
 export function corpoDoCanvas(c: Canvas) {
   const corpo: Record<string, unknown> = {
     nome: c.nome.trim() || "Canvas sem nome",
     nos: c.nos.map((n) => ({ id: n.id, tipo: TIPO_NA_FUNCAO[n.tipo], x: Math.round(n.x), y: Math.round(n.y), dados: dadosParaAFuncao(n.tipo, n.dados) })),
-    // A entrada (produto, pessoa...) sai do tipo do cartão de origem: a função não guarda.
-    ligacoes: c.ligacoes.map((l) => ({ id: l.id, de: l.de, para: l.para, ordem: l.ordem })),
+    // A entrada (produto, pessoa...) sai do tipo do cartão de origem: a função não guarda. Entre Resultados vão o papel e a foto.
+    ligacoes: c.ligacoes.map((l) => (l.papel ? { id: l.id, de: l.de, para: l.para, ordem: l.ordem, papel: l.papel, imagem_id: l.imagem_id || null } : { id: l.id, de: l.de, para: l.para, ordem: l.ordem })),
     viewport: { x: Math.round(c.viewport.x), y: Math.round(c.viewport.y), zoom: Math.round(c.viewport.zoom * 1000) / 1000 },
   };
   if (c.id) corpo.id = c.id;
+  if (c.historia && (c.historia.sinopse.trim() || c.historia.formato)) corpo.historia = { sinopse: c.historia.sinopse.trim() || null, formato: c.historia.formato || null };
   return corpo;
 }
 
@@ -1097,6 +1309,8 @@ export async function salvarCanvas(c: Canvas): Promise<Canvas> {
   const data = await chamarFuncao<any>("mesa-foto", corpo);
   const salvo = normalizarCanvas(data && (data.canvas || data), c.client_id);
   if (!salvo || !salvo.id) return { ...c };
+  // Sem a coluna da história no banco (SQL V-01), a sinopse fica só na tela e no rascunho local.
+  if (!salvo.historia && c.historia) salvo.historia = c.historia;
   // A função devolve o grafo gravado; os resultados que chegaram enquanto salvava ficam (a tela é quem os tem).
   return { ...salvo, nos: salvo.nos.length || !c.nos.length ? salvo.nos : c.nos };
 }
@@ -1222,6 +1436,64 @@ export async function conferirGeracao(geracaoId: string): Promise<{ conferencia:
   const data = await chamarFuncao<any>("mesa-foto", { acao: "canvas_conferir", geracao_id: geracaoId });
   return { conferencia: normalizarConferenciaDaPersona(data), custo_usd: data && data.custo_usd };
 }
+
+// ------------------------------------------------------------------ personagem persistente
+
+export interface PedidoDePersonagem {
+  clientId: string;
+  imagemId: string;
+  nome: string;
+  idade: number;
+  descricao?: string;
+  invariantes?: string[];
+}
+
+/** Corpo de canvas_personagem_criar (a ética é confirmada pela equipe no formulário). */
+export function corpoDoPersonagem(p: PedidoDePersonagem): Record<string, unknown> {
+  const corpo: Record<string, unknown> = {
+    acao: "canvas_personagem_criar",
+    client_id: p.clientId,
+    imagem_id: p.imagemId,
+    nome: p.nome.trim(),
+    idade_aparente: Math.round(p.idade),
+    etica_confirmada: true,
+  };
+  if (p.descricao && p.descricao.trim()) corpo.descricao = p.descricao.trim();
+  const inv = (p.invariantes || []).map((x) => x.trim()).filter(Boolean);
+  if (inv.length) corpo.invariantes = inv.slice(0, 12);
+  return corpo;
+}
+
+export interface PersonagemCriada {
+  modelo_id: string;
+  nome: string;
+  motor_id: string | null;
+  folha_sugerida: string[];
+  estimativa_vista_usd: number | null;
+  avisos: string[];
+}
+
+/**
+ * A pessoa gerada vira personagem (persona com a foto como âncora). Sem IA e
+ * sem custo; a folha sai depois, uma vista por vez, com o custo à vista.
+ */
+export async function criarPersonagem(p: PedidoDePersonagem): Promise<PersonagemCriada> {
+  const data = await chamarFuncao<any>("mesa-foto", corpoDoPersonagem(p));
+  const pers = data && data.personagem && typeof data.personagem === "object" ? data.personagem : {};
+  const est = data ? data.estimativa_vista_usd : null;
+  return {
+    modelo_id: texto(pers.id),
+    nome: texto(pers.nome) || p.nome.trim(),
+    motor_id: textoOuNulo(pers.motor_preferido_id),
+    folha_sugerida: Array.isArray(data && data.folha_sugerida) ? data.folha_sugerida.map(String) : ["frente", "tres_quartos_esq", "perfil_esq", "meio_corpo"],
+    estimativa_vista_usd: est === null || est === undefined || !isFinite(Number(est)) ? null : Number(est),
+    avisos: Array.isArray(data && data.avisos) ? data.avisos.map((x: unknown) => texto(x)).filter(Boolean) : [],
+  };
+}
+
+/** Personagem nascida no Canvas (origem 'personagem', ou a marca nas notas da ficha sem o SQL V-01). */
+export const MARCA_DO_PERSONAGEM = "Personagem do Canvas";
+export const ehPersonagem = (p: Pick<Persona, "ficha">) => !!p.ficha && (p.ficha.notas || "").indexOf(MARCA_DO_PERSONAGEM) === 0;
 
 // ------------------------------------------------------------------ estimativas
 

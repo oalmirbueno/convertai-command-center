@@ -106,13 +106,13 @@ describe("Mesa Ads: especialistas e marketing por tarefa, com teto", () => {
   const REGRAS_DA_EXECUCAO = constante(ads, "REGRAS_DA_EXECUCAO");
   const antes = `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${REGRAS_DA_EXECUCAO}`;
 
-  it("cada tarefa, com e sem objetivo, cabe no teto e o sistema inteiro fica perto dos 55.000 caracteres", () => {
+  it("cada tarefa, com e sem objetivo, cabe no teto e o sistema inteiro fica perto dos 57.500 caracteres (Frente W)", () => {
     for (const tarefa of TAREFAS_ADS) {
       for (const objetivo of OBJETIVOS) {
         const k = conhecimentoAdsPara(tarefa, { objetivo });
         expect(k.tamanho, `${tarefa}/${objetivo}`).toBeLessThanOrEqual(TETO_ADS[tarefa]);
         const sistema = `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${k.texto}\n\n${REGRAS_DA_EXECUCAO}`;
-        expect(sistema.length, `${tarefa}/${objetivo}`).toBeLessThanOrEqual(56_000);
+        expect(sistema.length, `${tarefa}/${objetivo}`).toBeLessThanOrEqual(58_000);
         // Regras antigas: a base inteira primeiro, as regras da execução por último.
         expect(sistema.startsWith(CONHECIMENTO_ESTRATEGISTA_ADS)).toBe(true);
         expect(sistema.endsWith(REGRAS_DA_EXECUCAO)).toBe(true);
@@ -208,9 +208,10 @@ describe("Estúdio: marketing do diretor, legenda, cérebro e dossiê", () => {
     expect(d.tamanho).toBeLessThanOrEqual(TETO_ESTUDIO.direcao);
     expect(l.tamanho).toBeLessThanOrEqual(TETO_ESTUDIO.legenda);
     const INSTRUCOES_DIRECAO = constante(estudio, "INSTRUCOES_DIRECAO");
-    // Antes: base de design (39.760) + instruções (cerca de 5.950). Depois: mais o marketing (até 6.000) e a frase de prioridade.
-    expect(CONHECIMENTO_DIRETOR.length + d.texto.length + INSTRUCOES_DIRECAO.length).toBeLessThanOrEqual(52_500);
-    expect(l.texto.length + constante(estudio, "INSTRUCOES_LEGENDA").length).toBeLessThanOrEqual(5_500);
+    // Antes: base de design (39.760) + instruções (cerca de 6.150). Depois: mais o marketing (até 6.700 com a imagem e título da Frente W) e a frase de prioridade.
+    expect(CONHECIMENTO_DIRETOR.length + d.texto.length + INSTRUCOES_DIRECAO.length).toBeLessThanOrEqual(53_300);
+    // Frente W: a legenda ganhou a revisão em sete passadas (copy-editing).
+    expect(l.texto.length + constante(estudio, "INSTRUCOES_LEGENDA").length).toBeLessThanOrEqual(6_400);
   });
 
   it("a base de design continua primeiro; marketing logo depois; cérebro e dossiê no fim", () => {

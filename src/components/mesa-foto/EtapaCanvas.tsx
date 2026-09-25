@@ -26,6 +26,7 @@ import {
   Check,
   CheckCheck,
   ChevronRight,
+  Clapperboard,
   ClipboardList,
   Copy,
   Download,
@@ -77,8 +78,12 @@ import {
   MODELOS_PRONTOS,
   montarPelaResposta,
   mudarDados,
+  mudarLigacao,
+  nomeDoResultado,
+  novoId,
   novoNo,
   ORDEM_DAS_ENTRADAS,
+  papelDaAlca,
   partesDaSerie,
   partesDoResultado,
   podeLigar,
@@ -88,6 +93,7 @@ import {
   resumoDoResultado,
   rotuloDaAcao,
   rotuloDaPose,
+  rotuloDoPapel,
   ROTULOS_DAS_ENTRADAS,
   salvarCanvas,
   TAMANHO_DA_SAIDA,
@@ -102,11 +108,15 @@ import {
   type Canvas,
   type DadosDoNo,
   type NoDoCanvas,
+  type PersonagemCriada,
   type ProdutoDaEsteira,
   type ResultadoDoCanvas,
   type TipoDeNo,
 } from "./canvasApi";
 import { ChatDoAgente } from "./canvas/Agente";
+import { EditorDaLigacaoDeResultado } from "./canvas/Cena";
+import { HistoriaDoCanvas, type AcoesDaHistoria } from "./canvas/FaixaDaHistoria";
+import { cenaNova, cenasDaHistoria, duplicarCena, marcarComoCena, proximaCena } from "./canvas/historia";
 import { BOTAO, descrever, FLUTUANTE, Gaveta, ICONE_DO_VIDEO, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao, useUsoDoResultado } from "./canvas/Editores";
 import { EscolherCartao, type AbaDaEscolha, type PedidoDeEscolha } from "./canvas/Escolher";
@@ -146,6 +156,13 @@ import { ModoLista } from "./canvas/ModoLista";
  * tela pequena, folha no pé do quadro). Rolar no fundo do quadro move o
  * quadro; Ctrl (ou Cmd) + rolar e a pinça dão zoom. Rolar num painel rola só
  * o painel: classes nowheel/nopan/nodrag e a roda presa (./canvas/comum).
+ *
+ * Cenas (dono, 25/09 à noite): o Resultado tem uma alça de saída à direita; a
+ * linha que sai dele e chega noutro Resultado leva a foto como personagem,
+ * produto, cenário ou estilo (a alça onde chega escolhe o papel; troca no
+ * painel da ligação). Resultado marcado como cena entra na História (faixa
+ * no pé do quadro, ./canvas/Historia.tsx). A pessoa da foto vira personagem
+ * nos ajustes do Resultado (./canvas/Personagem.tsx).
  */
 
 const ALCA = 12;
@@ -190,6 +207,8 @@ interface DadosDoResultado extends Record<string, unknown> {
   junta: string;
   bloqueios: string[];
   entradas: number;
+  /** Posição na história (null = não é cena) e o título da cena. */
+  cena: { numero: number; titulo: string } | null;
 }
 
 type NoDeCartao = Node<DadosDoCartao>;
@@ -314,7 +333,7 @@ const ICONE = "nodrag inline-flex h-7 items-center justify-center rounded-lg bor
 
 function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   const ctx = useContext(ContextoDoQuadro);
-  const { no, junta, bloqueios, entradas } = data;
+  const { no, junta, bloqueios, entradas, cena } = data;
   const { catalogo } = useMesa();
   const andamentos = useAndamentos();
   const avisarErro = useAvisarErro();
@@ -360,7 +379,14 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         <span className="mr-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20">
           <Sparkles className="h-3 w-3 text-emerald-300" />
         </span>
-        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
+        {cena ? (
+          <span className="min-w-0 flex-1 truncate text-[11px] font-semibold" data-cena-no-quadro={cena.numero} title="Cena da história">
+            <span className="mr-1 rounded-full bg-emerald-400 px-1.5 text-[10px] font-bold text-black">Cena {cena.numero}</span>
+            {cena.titulo}
+          </span>
+        ) : (
+          <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
+        )}
         {gerando.length > 0 ? (
           <Loader2 className="h-4 w-4 animate-spin text-emerald-300" aria-label="Gerando" />
         ) : (
@@ -512,6 +538,8 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
         />
       </div>
       {selected && <FerramentasDoNo noId={no.id} tipo="gerar" />}
+      {/* Saída do Resultado: a foto entra noutro Resultado (personagem, produto, cenário ou estilo). */}
+      <Handle type="source" position={Position.Right} id="saida" title="Ligar esta foto noutro Resultado" style={{ width: ALCA, height: ALCA, background: COR_DA_CENA, border: "2px solid #09090b" }} />
       {ORDEM_DAS_ENTRADAS.map((e, i) => (
         <Handle
           key={e}
@@ -535,10 +563,17 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
 
 const TIPOS_NO_QUADRO = { produto: NoCartao, modelo: NoCartao, ambiente: NoCartao, estilo: NoCartao, texto: NoCartao, agente: NoAgente, gerar: NoResultado };
 
+/** Cor da linha e da alça de Resultado para Resultado (cena anterior). */
+const COR_DA_CENA = "#34d399";
+
 /** Alças declaradas no próprio nó: as linhas não dependem de medir o cartão depois de montar. */
 function alcasDoNo(tipo: TipoDeNo) {
   if (tipo === "gerar") {
-    return ORDEM_DAS_ENTRADAS.map((e, i) => ({ id: e, type: "target" as const, position: Position.Left, x: -ALCA / 2, y: TOPO_DAS_ENTRADAS + i * PASSO_DAS_ENTRADAS - ALCA / 2, width: ALCA, height: ALCA }));
+    const entradas = ORDEM_DAS_ENTRADAS.map((e, i) => ({ id: e, type: "target" as const, position: Position.Left, x: -ALCA / 2, y: TOPO_DAS_ENTRADAS + i * PASSO_DAS_ENTRADAS - ALCA / 2, width: ALCA, height: ALCA }));
+    return [
+      ...entradas,
+      { id: "saida", type: "source" as const, position: Position.Right, x: TAMANHO_DA_SAIDA.largura - ALCA / 2, y: TAMANHO_DA_SAIDA.altura / 2 - ALCA / 2, width: ALCA, height: ALCA },
+    ];
   }
   const t = tamanhoDoNo(tipo);
   const y = tipo === "agente" ? 30 : t.altura / 2;
@@ -726,6 +761,8 @@ function Quadro({
   }, [canvas.nos.length, rf]);
 
   const nodes = useMemo((): Node[] => {
+    const historia = cenasDaHistoria(canvas);
+    const nome = (x: NoDoCanvas) => (x.tipo === "gerar" ? nomeDoResultado(canvas, x) : descrever(x, fontes).titulo);
     return canvas.nos.map((n) => {
       const tamanho = tamanhoDoNo(n.tipo);
       const base = {
@@ -740,13 +777,15 @@ function Quadro({
       };
       if (n.tipo === "gerar") {
         const entradas = entradasDoGerar(canvas, n.id);
+        const h = historia.find((x) => x.no.id === n.id);
         return {
           ...base,
           data: {
             no: n,
-            junta: resumoDoResultado(entradas, (x) => descrever(x, fontes).titulo),
+            junta: resumoDoResultado(entradas, nome),
             bloqueios: bloqueiosDoGerar(canvas, n.id, fontes.personas),
             entradas: entradas.length,
+            cena: h ? { numero: h.numero, titulo: h.cena.titulo.trim() } : null,
           } as DadosDoResultado,
         };
       }
@@ -760,10 +799,10 @@ function Quadro({
     (): Edge[] =>
       canvas.ligacoes.map((l) => {
         const origem = canvas.nos.find((n) => n.id === l.de);
-        const cor = origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a";
+        const cor = l.papel ? COR_DA_CENA : origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a";
         const ativa = !!selecionado && selecionado.tipo === "ligacao" && selecionado.id === l.id;
         const gerando = andamentoDoResultado(andamentos, l.para).gerando.length > 0;
-        return {
+        const aresta: Edge = {
           id: l.id,
           source: l.de,
           target: l.para,
@@ -771,9 +810,18 @@ function Quadro({
           targetHandle: l.entrada,
           selected: ativa,
           reconnectable: true,
-          style: { stroke: cor, strokeWidth: ativa ? 3.5 : 2.5 },
+          style: { stroke: cor, strokeWidth: ativa ? 3.5 : 2.5, strokeDasharray: l.papel ? "6 4" : undefined },
           animated: gerando || recentes.indexOf(l.id) >= 0,
         };
+        // Resultado para Resultado: a linha diz o papel (personagem, produto, cenário, estilo).
+        if (l.papel) {
+          aresta.label = rotuloDoPapel(l.papel);
+          aresta.labelStyle = { fill: "#f4f4f5", fontSize: 11, fontWeight: 600 };
+          aresta.labelBgStyle = { fill: "#09090b" };
+          aresta.labelBgPadding = [6, 3];
+          aresta.labelBgBorderRadius = 8;
+        }
+        return aresta;
       }),
     [canvas, selecionado, andamentos, recentes],
   );
@@ -874,9 +922,10 @@ function Quadro({
           onAbrir(n.id);
         }}
         onConnect={(c: Connection) => {
-          if (c.source && c.target) onMudarCanvas((atual) => ligar(atual, c.source, c.target));
+          // De Resultado para Resultado, a alça onde a linha chega escolhe o papel (pessoa = personagem).
+          if (c.source && c.target) onMudarCanvas((atual) => ligar(atual, c.source, c.target, papelDaAlca(c.targetHandle)));
         }}
-        isValidConnection={(c) => !!podeLigar(canvas, String(c.source), String(c.target))}
+        isValidConnection={(c) => !!podeLigar(canvas, String(c.source), String(c.target), papelDaAlca(c.targetHandle))}
         edgesReconnectable
         onReconnectStart={() => {
           religou.current = false;
@@ -886,7 +935,8 @@ function Quadro({
           if (!nova.source || !nova.target) return;
           onMudarCanvas((c) => {
             const sem = desligar(c, velha.id);
-            return podeLigar(sem, nova.source, nova.target) ? ligar(sem, nova.source, nova.target) : c;
+            const papel = papelDaAlca(nova.targetHandle);
+            return podeLigar(sem, nova.source, nova.target, papel) ? ligar(sem, nova.source, nova.target, papel) : c;
           });
         }}
         onReconnectEnd={(_e, velha) => {
@@ -979,6 +1029,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const [cheia, setCheia] = useState(false);
   const [foco, setFoco] = useState<boolean>(() => !lerMarca(CHAVE_DO_FOCO));
   const [resultadoAtivo, setResultadoAtivo] = useState<string | null>(null);
+  const [historiaAberta, setHistoriaAberta] = useState(false);
   const mexeu = useRef(false);
   const salvando = useRef<Promise<Canvas | null> | null>(null);
   const atual = useRef(canvas);
@@ -1225,6 +1276,65 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     return { custo_usd: r.custo_usd };
   };
 
+  // ---------------------------------------------------------------- cenas e história
+
+  /** A pessoa virou personagem: o cartão Pessoa dela entra no quadro, perto do Resultado (solto, para ligar nas cenas). */
+  const aoPersonagem = (p: PersonagemCriada, r: ResultadoDoCanvas) => {
+    if (!p.modelo_id) return;
+    const g = atual.current.nos.find((n) => n.tipo === "gerar" && (n.dados.resultados || []).some((x) => x.geracao_id === r.geracao_id)) || null;
+    const no = novoNo("modelo", 0, 0, { modelo_id: p.modelo_id, titulo: p.nome });
+    const x = g ? g.x - TAMANHO_DO_CARTAO.largura - 70 : 0;
+    const y = g ? g.y + TAMANHO_DA_SAIDA.altura + 40 : 0;
+    mudar((c) => ({ ...c, nos: c.nos.concat([{ ...no, x: Math.round(x), y: Math.round(y) }]) }));
+    toast.info("O cartão da personagem está no quadro", { description: "Ligue ele nas próximas cenas: o rosto vem da âncora e da folha." });
+  };
+
+  const abrirCena = (id: string) => {
+    abrirNo(id);
+    if (typeof window !== "undefined" && window.innerWidth < 640) setHistoriaAberta(false);
+  };
+
+  const acoesDaHistoria: AcoesDaHistoria = {
+    onAbrir: abrirCena,
+    onGerar: gerar,
+    onVariacoes: variacoes,
+    onDuplicar: (gerarId) => {
+      const id = novoId("gerar");
+      mudar((c) => duplicarCena(c, gerarId, id));
+      setResultadoAtivo(id);
+      setSelecionado({ tipo: "no", id });
+      toast.success("Cena duplicada", { description: "Mesmas entradas, sem as fotos. Mude a ação ou o lugar e gere." });
+    },
+    onProxima: (gerarId) => {
+      const id = novoId("gerar");
+      mudar((c) => proximaCena(c, gerarId, id));
+      setResultadoAtivo(id);
+      setSelecionado({ tipo: "no", id });
+      setRecolhida(false);
+      toast.success("Próxima cena no quadro", { description: "A pessoa desta foto já entra como personagem. Escreva a ação e gere." });
+    },
+    onNovaCena: () => {
+      const alvo = resultadoAlvo(atual.current, resultadoAtivo);
+      const n = atual.current.nos.find((x) => x.id === alvo) || null;
+      if (n && !n.dados.cena) {
+        mudar((c) => marcarComoCena(c, n.id));
+        abrirNo(n.id);
+        return;
+      }
+      porNoQuadro("gerar", { cena: cenaNova(cenasDaHistoria(atual.current).length + 1) });
+    },
+  };
+
+  const alternarHistoria = () => {
+    const abrir = !historiaAberta;
+    setHistoriaAberta(abrir);
+    if (abrir) {
+      setEscolha(null);
+      setProntosAbertos(false);
+      if (typeof window !== "undefined" && window.innerWidth < 640) setRecolhida(true);
+    }
+  };
+
   const fecharComoFunciona = () => {
     gravarMarca(CHAVE_DO_COMO_FUNCIONA, true);
     setComoFunciona(false);
@@ -1264,6 +1374,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const cartaoDoPainel = noAberto && noAberto.tipo !== "gerar" ? noAberto : null;
   const semEntradas = !canvas.ligacoes.length && canvas.nos.every((n) => n.tipo === "gerar");
 
+  const totalDeCenas = cenasDaHistoria(canvas).length;
+
   const rotuloDoSalvar =
     salvar.estado === "salvo" ? "Salvo" : salvar.estado === "salvando" ? "Salvando" : salvar.estado === "pendente" ? "Alterações não salvas" : salvar.estado === "conflito" ? "Mudou em outra aba" : "Não salvou";
 
@@ -1279,7 +1391,22 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
   let conteudoDoPainel: ReactNode = null;
   let tituloDoPainel: ReactNode = "Ajustes";
-  if (ligacaoAberta) {
+  if (ligacaoAberta && ligacaoAberta.papel) {
+    tituloDoPainel = "Foto de outra cena";
+    conteudoDoPainel = (
+      <EditorDaLigacaoDeResultado
+        canvas={canvas}
+        ligacao={ligacaoAberta}
+        fontes={fontes}
+        onPapel={(p) => mudar((c) => mudarLigacao(c, ligacaoAberta.id, { papel: p }))}
+        onFoto={(id) => mudar((c) => mudarLigacao(c, ligacaoAberta.id, { imagem_id: id }))}
+        onDesligar={() => {
+          mudar((c) => desligar(c, ligacaoAberta.id));
+          setSelecionado(null);
+        }}
+      />
+    );
+  } else if (ligacaoAberta) {
     tituloDoPainel = "Ligação";
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
@@ -1341,7 +1468,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     );
   } else if (resultadoDoPainel) {
     const resultados = canvas.nos.filter((n) => n.tipo === "gerar");
-    tituloDoPainel = resultados.length > 1 ? `Ajustes do Resultado ${resultados.indexOf(resultadoDoPainel) + 1}` : "Ajustes do Resultado";
+    tituloDoPainel = resultadoDoPainel.dados.cena ? `Ajustes: ${nomeDoResultado(canvas, resultadoDoPainel)}` : resultados.length > 1 ? `Ajustes do Resultado ${resultados.indexOf(resultadoDoPainel) + 1}` : "Ajustes do Resultado";
     conteudoDoPainel = (
       <div className="min-w-0 space-y-3">
         <AjustesDoResultado
@@ -1353,6 +1480,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           comGerar={false}
           onGerar={gerar}
           onVariacoes={variacoes}
+          onPersonagemCriada={aoPersonagem}
         />
         {resultados.length > 1 && (
           <button type="button" className={`${BOTAO} text-red-300`} onClick={() => tirar(resultadoDoPainel.id)}>
@@ -1413,6 +1541,9 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         </Button>
       )}
       <span className="hidden flex-1 sm:block" />
+      <Button type="button" size="sm" variant={historiaAberta ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={historiaAberta} onClick={alternarHistoria} data-botao-historia="">
+        <Clapperboard className="mr-1.5 h-3.5 w-3.5" /> História{totalDeCenas ? ` (${totalDeCenas})` : ""}
+      </Button>
       <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={alternarProntos}>
         <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Modelos prontos
       </Button>
@@ -1491,6 +1622,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           </Gaveta>
         )}
         <EscolherCartao lugar="quadro" pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />
+        {historiaAberta && !gavetaAberta && <HistoriaDoCanvas canvas={canvas} fontes={fontes} onMudarCanvas={mudar} acoes={acoesDaHistoria} lugar="quadro" onFechar={() => setHistoriaAberta(false)} />}
       </div>
     </div>
   );
@@ -1504,6 +1636,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         <div className="min-w-0 space-y-3">
           {comoFunciona && <ComoFunciona onFechar={fecharComoFunciona} noQuadro={false} />}
           {(prontosAbertos || semEntradas) && <GaleriaDeModelos onAplicar={aplicarModelo} onFechar={prontosAbertos ? () => setProntosAbertos(false) : undefined} onMontarPeloContexto={montarPeloContexto} />}
+          {(historiaAberta || totalDeCenas > 0) && <HistoriaDoCanvas canvas={canvas} fontes={fontes} onMudarCanvas={mudar} acoes={acoesDaHistoria} lugar="pagina" onFechar={historiaAberta ? () => setHistoriaAberta(false) : undefined} />}
           <ModoLista
             canvas={canvas}
             fontes={fontes}
@@ -1516,6 +1649,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             }}
             onEscolher={(t, trocarId, gerarId) => abrirEscolha(t, trocarId, gerarId)}
             onAgenteDoAmbiente={(noId, gerarId) => ambienteComAgente(noId, gerarId)}
+            onPersonagemCriada={aoPersonagem}
           />
         </div>
       ) : cheia ? (

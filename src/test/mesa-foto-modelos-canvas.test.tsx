@@ -506,7 +506,8 @@ describe("aba Modelos", () => {
       return { imagem: { ...img, url: "https://arquivo.test/c.png" }, url: "https://arquivo.test/c.png", custo_usd: 0.1 };
     };
     montar(h(EtapaModelos));
-    // Motores: cartões com liga/desliga e preço; os 3 padrões do catálogo vêm ligados.
+    // Motores (25/09): seletor compacto; ao abrir, cada motor com liga/desliga e preço. Os 3 padrões do catálogo vêm ligados.
+    fireEvent.click(await screen.findByRole("button", { name: "Motores da rodada: 3 ligados" }));
     const motores = await screen.findByRole("list", { name: "Motores da rodada" });
     expect(within(motores).getAllByRole("switch").filter((s) => s.getAttribute("aria-checked") === "true")).toHaveLength(3);
     expect(screen.getByText(/Ainda não ativos no catálogo: MAI-Image-2.6/)).toBeTruthy();

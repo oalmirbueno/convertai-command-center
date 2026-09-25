@@ -1,6 +1,6 @@
 import { Clock, Lock, BarChart3, ClipboardList, Brain, Rocket } from "lucide-react";
 import consultantImg from "@/assets/consultant-avatar.jpg";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-640.png";
 
 interface Props {
   onStart: () => void;

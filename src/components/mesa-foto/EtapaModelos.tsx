@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, Crown, Images, Loader2, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
+import { AlertTriangle, Check, ChevronsUpDown, Crown, Images, Loader2, Plus, RefreshCw, ScanSearch, ShieldCheck, Sparkles, UserRound, Wand2, Workflow, X, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -578,11 +579,16 @@ function NovaPersona({ onCriada, onCancelar }: { onCriada: (p: Persona) => void;
 
 // ------------------------------------------------------------------ rodada lado a lado
 
-function CartaoDoMotor({ motor, ligado, qualidade, onAlternar }: { motor: OpcaoDeMotor; ligado: boolean; qualidade: Qualidade; onAlternar: () => void }) {
+/**
+ * Uma linha do seletor de motores: liga e desliga, com o preço por imagem ao
+ * lado (o da função quando chega, senão o do catálogo). Pedido do dono, 25/09:
+ * "não precisa ocupar tudo; um seletor: esse aqui custa tanto".
+ */
+function LinhaDoMotor({ motor, ligado, qualidade, onAlternar }: { motor: OpcaoDeMotor; ligado: boolean; qualidade: Qualidade; onAlternar: () => void }) {
   const { clientId, catalogo } = useMesa();
   const m = catalogo.find((x) => x.id === motor.id) || null;
   const servidor = usePrecoNoServidor(clientId, "modelo_candidata", extrasDaEstimativaDaCandidata(motor.id, motor.resolucao, qualidade), ligado);
-  const preco = typeof servidor.data === "number" ? `~${usd(servidor.data)}` : m ? precoDoModelo(m, qualidade) : "preço a conferir";
+  const preco = typeof servidor.data === "number" ? `~${usd(servidor.data)} por imagem` : m ? precoDoModelo(m, qualidade) : "preço a conferir";
   return (
     <li className="min-w-0">
       <button
@@ -592,18 +598,65 @@ function CartaoDoMotor({ motor, ligado, qualidade, onAlternar }: { motor: OpcaoD
         aria-label={`${motor.rotulo}: ${ligado ? "ligado" : "desligado"}`}
         onClick={onAlternar}
         data-motor={motor.id}
-        className={`flex h-full w-full min-w-0 flex-col rounded-xl border p-2.5 text-left transition-colors ${ligado ? "border-primary bg-primary/5" : "border-border bg-card opacity-70 hover:opacity-100"}`}
+        className={`flex w-full min-w-0 items-center rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted ${ligado ? "text-foreground" : "text-foreground/80"}`}
       >
-        <span className="flex min-w-0 items-center">
-          <span className={`mr-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${ligado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{ligado && <Check className="h-2.5 w-2.5" />}</span>
-          <span className="min-w-0 truncate text-[12.5px] font-semibold">{motor.rotulo}</span>
+        <span className={`mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${ligado ? "border-primary bg-primary text-primary-foreground" : "border-border"}`}>{ligado && <Check className="h-2.5 w-2.5" />}</span>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">
+          {motor.rotulo}
+          {motor.resolucao ? <span className="ml-1 text-[11px] font-normal text-muted-foreground">{motor.resolucao}</span> : null}
         </span>
-        <span className="mt-1 truncate text-[11px] text-muted-foreground">
-          {motor.resolucao ? `${motor.resolucao} · ` : ""}
-          {preco}
-        </span>
+        <span className="ml-2 shrink-0 text-[11px] tabular-nums text-muted-foreground">{preco}</span>
       </button>
     </li>
+  );
+}
+
+/** Seletor compacto dos motores da rodada: um botão com os ligados e, ao abrir, a lista com o preço de cada um. */
+function SeletorDeMotores({
+  opcoes,
+  visiveis,
+  escolhidos,
+  qualidade,
+  onAlternar,
+  onVerTodos,
+}: {
+  opcoes: OpcaoDeMotor[];
+  visiveis: OpcaoDeMotor[];
+  escolhidos: string[];
+  qualidade: Qualidade;
+  onAlternar: (id: string) => void;
+  onVerTodos: () => void;
+}) {
+  const ligados = opcoes.filter((o) => escolhidos.indexOf(o.id) >= 0);
+  const resumo = ligados.length ? ligados.map((o) => o.rotulo).join(", ") : "Nenhum motor ligado";
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Motores da rodada: ${ligados.length} ${ligados.length === 1 ? "ligado" : "ligados"}`}
+          className="flex h-9 w-full min-w-0 items-center rounded-lg border border-border bg-card px-2.5 text-left text-[12.5px] transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-seletor-de-motores=""
+        >
+          <span className="mr-2 shrink-0 rounded bg-primary/10 px-1.5 py-px text-[11px] font-semibold tabular-nums text-primary">{ligados.length}</span>
+          <span className={`min-w-0 flex-1 truncate ${ligados.length ? "" : "text-muted-foreground"}`}>{resumo}</span>
+          <ChevronsUpDown className="ml-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={6} className="w-[calc(100vw-24px)] max-w-[380px] p-1">
+        <p className="px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">Ligue os motores da rodada. Preço estimado por imagem.</p>
+        <ul className="max-h-[50vh] min-w-0 overflow-y-auto overscroll-contain" aria-label="Motores da rodada">
+          {visiveis.map((o) => (
+            <LinhaDoMotor key={o.id} motor={o} ligado={escolhidos.indexOf(o.id) >= 0} qualidade={qualidade} onAlternar={() => onAlternar(o.id)} />
+          ))}
+        </ul>
+        {opcoes.length > visiveis.length && (
+          <button type="button" className="mt-0.5 w-full rounded-md px-2 py-1.5 text-left text-[11.5px] font-medium text-primary hover:bg-muted" onClick={onVerTodos}>
+            Ver todos os geradores ({opcoes.length})
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -782,26 +835,18 @@ function Rodada({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerso
       titulo="1. Rodada lado a lado"
       dica="Cada motor gera uma candidata com a mesma ficha. Compare pele, olhos, mãos e cabelo e escolha a mais real como âncora."
     >
-      <ul className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-4" aria-label="Motores da rodada">
-        {visiveis.map((o) => (
-          <CartaoDoMotor key={o.id} motor={o} ligado={escolhidos.indexOf(o.id) >= 0} qualidade={qualidade} onAlternar={() => alternar(o.id)} />
-        ))}
-      </ul>
-      <div className="mt-1.5 flex min-w-0 flex-wrap items-center text-[11px] text-muted-foreground">
-        {opcoes.length > visiveis.length && (
-          <button type="button" className="mb-1 mr-3 font-medium text-primary hover:underline" onClick={() => setMostrarTodos(true)}>
-            Ver todos os geradores ({opcoes.length})
-          </button>
-        )}
-        {faltando.length > 0 && <span className="mb-1">Ainda não ativos no catálogo: {faltando.join(", ")}.</span>}
-      </div>
-      <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
-        <label className="block min-w-0 md:col-span-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="min-w-0 md:col-span-2">
+          <span className="mb-1 block text-[11.5px] text-muted-foreground">Motores</span>
+          <SeletorDeMotores opcoes={opcoes} visiveis={visiveis} escolhidos={escolhidos} qualidade={qualidade} onAlternar={alternar} onVerTodos={() => setMostrarTodos(true)} />
+        </div>
+        <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
+        <label className="block min-w-0 md:col-span-3">
           <span className="mb-1 block text-[11.5px] text-muted-foreground">Pedido extra (opcional)</span>
           <Input value={pedido} onChange={(e) => setPedido(e.target.value)} placeholder="Ex.: meio corpo, luz de janela, camiseta branca" aria-label="Pedido extra da rodada" className="h-9 text-[12.5px]" />
         </label>
-        <SeletorDeQualidade valor={qualidade} onChange={setQualidade} />
       </div>
+      {faltando.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Ainda não ativos no catálogo: {faltando.join(", ")}.</p>}
       <div className="mt-3 flex min-w-0 flex-wrap items-center">
         <BotaoComCusto
           rotulo={
@@ -1107,21 +1152,23 @@ function PersonaLateral({ persona }: { persona: Persona }) {
   const [ampliada, setAmpliada] = useState<number | null>(null);
   return (
     <section className="min-w-0 rounded-xl border border-border bg-card p-2.5" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
-      {/* Compacta (26/09): âncora pequena ao lado do nome; ver grande no clique. */}
-      <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-2.5">
-        <Moldura proporcao={resumo.ancora ? proporcaoDaImagem(resumo.ancora) : 0.8} className="border border-border">
-          {resumo.ancora ? (
-            <button type="button" className="block h-full w-full cursor-zoom-in" aria-label="Ver a âncora grande" onClick={() => setAmpliada(0)}>
-              <ImagemDaPersonaNaTela imagem={resumo.ancora} alt={persona.nome} />
-            </button>
-          ) : (
-            <span className="flex h-full w-full flex-col items-center justify-center px-2 text-center text-[11px] text-muted-foreground">
-              <UserRound className="h-5 w-5" />
-            </span>
-          )}
-          {resumo.ancora && <SeloGerada />}
-        </Moldura>
-        <div className="min-w-0">
+      {/* 25/09 (dono: "a imagem ficou espremida; em cima a imagem, embaixo o texto"): âncora inteira em cima, ficha embaixo. */}
+      <div className="min-w-0" data-persona-lateral-empilhada="">
+        <div className="mx-auto w-full max-w-[260px]">
+          <Moldura proporcao={resumo.ancora ? proporcaoDaImagem(resumo.ancora) : 0.8} className="border border-border">
+            {resumo.ancora ? (
+              <button type="button" className="block h-full w-full cursor-zoom-in" aria-label="Ver a âncora grande" onClick={() => setAmpliada(0)}>
+                <ImagemDaPersonaNaTela imagem={resumo.ancora} alt={persona.nome} />
+              </button>
+            ) : (
+              <span className="flex h-full w-full flex-col items-center justify-center px-2 text-center text-[11px] text-muted-foreground">
+                <UserRound className="h-6 w-6" />
+              </span>
+            )}
+            {resumo.ancora && <SeloGerada />}
+          </Moldura>
+        </div>
+        <div className="mt-2.5 min-w-0">
           <div className="flex min-w-0 flex-wrap items-center">
             <p className="mr-2 truncate text-[14px] font-semibold">{persona.nome}</p>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>

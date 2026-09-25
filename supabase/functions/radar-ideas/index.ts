@@ -17,6 +17,8 @@ import {
   resolveAiProviderChain,
   type AiProvider,
 } from "../_shared/ai-provider.ts";
+import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import type { BancoDoCerebro } from "../_shared/cerebro-do-cliente.ts";
 
 // Modelos com busca na web embutida primeiro; sem busca como reserva.
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini-search-preview", "gpt-4o-mini"];
@@ -38,6 +40,7 @@ REGRAS ABSOLUTAS:
 5. Nunca sugira migração de plano, reajuste ou qualquer cobrança. A leitura comercial vai SÓ no campo interno.
 6. Português claro do Brasil, sem jargão de marketing e SEM TRAVESSÃO (use vírgula ou ponto).
 7. Os passos são o que a AGÊNCIA faz, concretos, executáveis em 1 a 2 semanas.
+8. Uma oferta ou campanha pontual (um produto em promoção neste mês) não é o negócio do cliente. Use como contexto, nunca como o centro das três ideias.
 
 Responda SOMENTE com JSON válido, sem markdown, neste formato exato:
 {"ideas":[{"titulo":"...","descricao":"...","por_que_agora":"...","passos":["...","...","..."],"sinal":"...","interno_oferta":"...","interno_faixa_min":0,"interno_faixa_max":0,"interno_esforco":"baixo|medio|alto"}]}`;
@@ -98,11 +101,16 @@ Deno.serve(async (req) => {
         .select("name, project_type, status, created_at")
         .eq("client_id", clientId)
         .is("deleted_at", null),
+      // Só o que chegou ao cliente (compartilhado ou aprovado). Antes vinham os
+      // 8 arquivos mais novos de qualquer tipo: na Stop Informática eram 8
+      // fotos internas de um mouse geradas na Mesa Foto, e a IA tratava a
+      // oferta de R$ 9,90 como se fosse o negócio inteiro.
       db.from("files")
         .select("file_name, created_at")
         .eq("client_id", clientId)
         .is("archived_at", null)
         .is("parent_file_id", null)
+        .or("visibility.eq.client_shared,approval_status.eq.approved")
         .order("created_at", { ascending: false })
         .limit(8),
       db.from("editorial_publications")
@@ -178,6 +186,14 @@ Deno.serve(async (req) => {
     // O que o painel SABE do negócio: dossiê atual, briefing e as últimas
     // decisões. Sem isto a IA "deduzia o nicho pelo nome" e devolvia ideia
     // que servia para qualquer empresa.
+    // O cérebro do cliente (o que ele já ensinou às mesas: tom, o que evitar,
+    // o que performou) entra junto. O dossiê geral da Stop, por exemplo, abre
+    // com 1.400 caracteres sobre o envio no WhatsApp e nada sobre o negócio.
+    const cerebroP = resumoDoCerebro(db as unknown as BancoDoCerebro, clientId, ["geral", "conta", "copy", "campanha"], {
+      limite: 1500,
+      titulo: "CÉREBRO DO CLIENTE (o que o cliente e a equipe já ensinaram; vale sobre suposição sua)",
+      manter: (f) => !/^Plano do mês /.test(f.texto),
+    });
     const [dossieRes, briefingRes, memoriaRes] = await Promise.all([
       db.from("client_dossiers")
         .select("id, version, summary, content, updated_at, project_id, dossier_type, prior_version_id")
@@ -185,9 +201,12 @@ Deno.serve(async (req) => {
         .eq("is_current", true)
         .order("updated_at", { ascending: false })
         .limit(4),
+      // A coluna é "responses": "answers" nunca existiu, a leitura dava erro e
+      // o briefing do cliente nunca chegava ao Radar.
       db.from("briefings")
-        .select("answers, created_at")
+        .select("responses, created_at")
         .eq("client_id", clientId)
+        .eq("submitted", true)
         .order("created_at", { ascending: false })
         .limit(1),
       db.from("project_memory")
@@ -232,7 +251,7 @@ Deno.serve(async (req) => {
     const { data: planoRes } = await db.from("project_memory").select("metadata").eq("client_id", clientId).eq("kind", "esteira_plano").contains("metadata", { week_start: segunda }).order("created_at", { ascending: false }).limit(1);
     const foco = String((planoRes?.[0] as any)?.metadata?.foco || "").trim();
     const focoLine = foco ? `FOCO DESTA SEMANA (plano da esteira): ${foco}` : "";
-    const briefing = briefingRes.data?.[0]?.answers;
+    const briefing = (briefingRes.data?.[0] as { responses?: unknown } | undefined)?.responses;
     const briefingLine = briefing
       ? `BRIEFING (respostas do cliente): ${JSON.stringify(briefing).slice(0, 900)}`
       : "";
@@ -240,8 +259,10 @@ Deno.serve(async (req) => {
       (m: any) => `Registro (${m.kind}, ${String(m.created_at || "").slice(0, 10)}): ${String(m.title || "")} — ${String(m.content || "").replace(/\s+/g, " ").slice(0, 220)}`,
     );
 
+    const cerebro = await cerebroP;
     const context = [
       `Cliente: ${clientName}`,
+      cerebro.texto,
       ...dossieLines,
       mudancaLine,
       focoLine,

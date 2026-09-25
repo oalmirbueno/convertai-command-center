@@ -87,6 +87,8 @@ Detalhes de cada ponto de entrada, tetos de tamanho e ordem de prioridade: `docs
 
 ## 4. Skills úteis que não estão instaladas
 
+Atualização de 25/09/2026 (Frente W): o marketingskills foi destilado e está nos prompts (`_shared/conhecimento-repositorios.ts`), junto com os outros repositórios pedidos pelo dono. Índice único de quem recebe o quê: `_shared/motores.ts`; tabela com licença e estado: `docs/motores/REPOSITORIOS.md`. O item 1 abaixo fica como registro histórico.
+
 Nada foi instalado nesta rodada (regra da frente). Se o dono quiser trazer mais conhecimento:
 
 1. **coreyhaines31/marketingskills** (licença MIT), já apontado como melhor repositório de método no dossiê da Mesa Ads (`docs/mesa-ads/pesquisa/DOSSIE-CRIATIVOS.md`). Skills mais úteis para o painel: `copywriting`, `copy-editing`, `ad-creative`, `ads`, `offers`, `marketing-psychology`, `content-strategy`, `social`, `customer-research`, `launch`, `lead-magnets`, `cro`, `ab-testing`. Onde achar: https://github.com/coreyhaines31/marketingskills. Instalação na máquina: `npx skills add coreyhaines31/marketingskills`. Para o painel, o caminho é o mesmo desta rodada: ler e destilar em `_shared`.

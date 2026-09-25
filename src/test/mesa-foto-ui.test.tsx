@@ -341,7 +341,9 @@ beforeEach(() => {
 describe("rota, casca e troca entre mesas", () => {
   it("a rota /mesa-foto existe só para admin, gestor e design, dentro da casca, com o esqueleto da Mesa", () => {
     const app = ler("src/App.tsx");
-    expect(app).toContain('const MesaFoto = lazy(() => import("@/pages/MesaFoto"));');
+    // A rota baixa pela pré-carga das mesas (frente U, 25/09): página e etapa juntas.
+    expect(app).toContain('const MesaFoto = PaginaMesaFoto;');
+    expect(readFileSync(resolve(__dirname, "../lib/mesa/preCarga.ts"), "utf8")).toContain('pagina: () => import("@/pages/MesaFoto"),');
     const rota = app.split("\n").find((l) => l.indexOf('path="/mesa-foto"') >= 0) || "";
     expect(rota).toContain('["admin", "manager", "design"].includes(profile?.role || "")');
     expect(rota).toContain("<Suspense fallback={<EsqueletoDaMesa />}><MesaFoto /></Suspense>");
@@ -396,7 +398,8 @@ describe("rota, casca e troca entre mesas", () => {
     expect(within(troca).getAllByRole("link").map((l) => l.textContent)).toEqual(["Mesa", "Mesa Ads"]);
     expect(within(troca).getByText("Mesa Foto").getAttribute("aria-current")).toBe("page");
     // Barra do kit e do ensaio.
-    const barra = await screen.findByLabelText("Kit, ensaio e custo");
+    // A barra é carregada sob demanda (lazyComPreCarga): no teste o primeiro import pode passar de 1 s.
+    const barra = await screen.findByLabelText("Kit, ensaio e custo", {}, { timeout: 8000 });
     await waitFor(() => expect(barra.textContent).toContain("Mouse M720"));
     await waitFor(() => expect(barra.textContent).toContain("Catálogo fiel"));
     expect(barra.textContent).toContain("0/3 aprovadas");
@@ -1982,7 +1985,9 @@ describe("25/09: Modelos ocupam o espaço", () => {
     // 26/09: coluna da esquerda estreita, com o seletor compacto (antes 4 de 12 colunas com cartões grandes).
     expect(t).toContain("lg:grid-cols-[250px_minmax(0,1fr)]");
     expect(t).toContain("<SeletorLateral");
-    expect(t).toContain("grid-cols-[64px_minmax(0,1fr)]");
+    // 25/09 (dono): a âncora não fica mais espremida ao lado do texto; imagem em cima, ficha embaixo.
+    expect(t).toContain("data-persona-lateral-empilhada");
+    expect(t).not.toContain("grid-cols-[64px_minmax(0,1fr)]");
   });
 });
 

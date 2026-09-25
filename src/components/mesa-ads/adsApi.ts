@@ -11,7 +11,7 @@ import {
   type Qualidade,
 } from "@/lib/mesa/api";
 import { extensaoDoAnexo } from "@/components/mesa/mesaV4Api";
-import { novoId } from "@/components/mesa/EstudioFotos";
+import { novoId } from "@/components/mesa/estudioUtil";
 
 /**
  * Mesa Ads: a ponte da tela com a função mesa-ads e as tabelas ads_*

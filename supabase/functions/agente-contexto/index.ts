@@ -1114,6 +1114,13 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
     atualizado_por: ch.userId,
   }, { onConflict: "client_id" });
   if (error) throw new ErroContexto(503, "kit_nao_gravado", "A logo foi copiada, mas o kit não foi atualizado.");
+  // Clara ou escura era da logo anterior: zera, e a tela grava o da nova logo logo depois
+  // (ContextoLogos, lida no navegador). Sem a coluna no banco (T-logo-tom.sql), só segue.
+  await servico()
+    .from("cliente_kit_marca")
+    .update({ [alternativa ? "logo_alt_tom" : "logo_tom"]: null })
+    .eq("client_id", clientId)
+    .then(() => undefined, () => undefined);
   return json({ kit: await lerKit(clientId), caminho: destino });
 }
 

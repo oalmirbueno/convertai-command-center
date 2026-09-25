@@ -100,7 +100,9 @@ describe("rota /mesa só para a equipe que produz", () => {
     expect(linha).toContain("<MesaDoCliente />");
     expect(linha).toContain('<Navigate to="/dashboard" replace />');
     expect(linha).not.toContain("traffic");
-    expect(app).toContain('const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));');
+    // A rota baixa pela pré-carga das mesas (frente U, 25/09): página e etapa juntas.
+    expect(app).toContain('const MesaDoCliente = PaginaMesaDoCliente;');
+    expect(readFileSync(resolve(__dirname, "../lib/mesa/preCarga.ts"), "utf8")).toContain('pagina: () => import("@/pages/MesaDoCliente"),');
   });
 
   it("as entradas da Central e do Calendário só aparecem para quem entra na Mesa", () => {

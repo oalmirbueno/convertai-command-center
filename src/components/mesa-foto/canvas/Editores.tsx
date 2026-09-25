@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, CheckCheck, Copy, Eye, ImagePlus, Layers, Loader2, ScanSearch, Sparkles, Wand2, X } from "lucide-react";
+import { ArrowUpRight, Check, CheckCheck, Clapperboard, Copy, Eye, ImagePlus, Layers, Loader2, ScanSearch, Sparkles, UserRoundPlus, Wand2, X } from "lucide-react";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { BotaoComCusto, useAvisarErro, useEstimativa } from "@/components/mesa/Custo";
@@ -22,10 +22,12 @@ import {
   entradasDoGerar,
   faltaNoCartao,
   montarCanvas,
+  nomeDoResultado,
   OPCOES_DE_CARROSSEL,
   partesDaSerie,
   partesDoResultado,
   POSES_DO_RESULTADO,
+  rotuloDoPapel,
   ROTULOS_DAS_ENTRADAS,
   TIPOS_DE_NO,
   VARIACOES_POR_VEZ,
@@ -33,9 +35,12 @@ import {
   type DadosDoNo,
   type Montagem,
   type NoDoCanvas,
+  type PersonagemCriada,
   type ResultadoDoCanvas,
 } from "../canvasApi";
+import { AjustesDaCena } from "./Cena";
 import { andamentoDoResultado } from "./geracao";
+import { VirarPersonagem } from "./Personagem";
 import { BOTAO, CAMPO, descrever, Escolha, MiniaturaGrande, pilula, ROTULO, type Fontes } from "./comum";
 
 /**
@@ -246,6 +251,13 @@ export function EditorDoCartao({
 
 // ------------------------------------------------------------------ foto do Resultado
 
+/** Pessoa real ou persona na foto: não vira personagem aqui (a função confere de novo). */
+function podeVirarPersonagem(foto: FotoDoAcervo | null): boolean {
+  if (!foto) return true;
+  const tags = foto.tags || [];
+  return !(foto.modo === "clone" || tags.indexOf("pessoa_real_autorizada") >= 0 || tags.some((t) => t.indexOf("clone:") === 0 || t.indexOf("persona:") === 0 || t.indexOf("personagem:") === 0));
+}
+
 export function FotoDoResultado({
   r,
   foto,
@@ -253,6 +265,8 @@ export function FotoDoResultado({
   qualidade,
   onConferencia,
   onVariacoes,
+  cena,
+  onPersonagemCriada,
 }: {
   r: ResultadoDoCanvas;
   foto: FotoDoAcervo | null;
@@ -260,10 +274,15 @@ export function FotoDoResultado({
   qualidade: Qualidade;
   onConferencia: (c: ConferenciaDaPersona | null) => void;
   onVariacoes: (r: ResultadoDoCanvas) => Promise<unknown>;
+  /** Resultado que é cena: a foto pode virar a foto da cena na história. */
+  cena?: { escolhida: boolean; onEscolher: () => void } | null;
+  /** A pessoa da foto virou personagem (a tela põe o cartão Pessoa no quadro). */
+  onPersonagemCriada?: (p: PersonagemCriada, r: ResultadoDoCanvas) => void;
 }) {
   const { catalogo } = useMesa();
   const uso = useUsoDoResultado(foto ? [foto] : []);
   const [ampliada, setAmpliada] = useState(false);
+  const [personagem, setPersonagem] = useState(false);
   const caminho = r.storage_path || r.url;
   return (
     <div className="min-w-0 rounded-xl border border-white/10 bg-zinc-900/60 p-2" data-resultado={r.geracao_id}>
@@ -318,13 +337,24 @@ export function FotoDoResultado({
               <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.usarNaMesa(r)} title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto">
                 {uso.ocupado === "usar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ArrowUpRight className="mr-1 h-3 w-3" />} Usar na Mesa
               </button>
-              <button type="button" className={`${BOTAO} mb-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.finalizar(r)} title="Aprova (se precisar) e abre o Usar">
+              <button type="button" className={`${BOTAO} mb-1.5 mr-1.5`} disabled={!!uso.ocupado} onClick={() => void uso.finalizar(r)} title="Aprova (se precisar) e abre o Usar">
                 {uso.ocupado === "finalizar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCheck className="mr-1 h-3 w-3" />} Finalizar
               </button>
+              {cena && (
+                <button type="button" className={`${BOTAO} mb-1.5 mr-1.5 ${cena.escolhida ? "border-emerald-400/60 text-emerald-200" : ""}`} disabled={cena.escolhida} onClick={cena.onEscolher} title="Esta foto representa a cena na história (e é o 1º quadro na Mesa Vídeos)">
+                  <Clapperboard className="mr-1 h-3 w-3" /> {cena.escolhida ? "Foto da cena" : "Usar na cena"}
+                </button>
+              )}
+              {onPersonagemCriada && podeVirarPersonagem(foto) && (
+                <button type="button" className={`${BOTAO} mb-1.5`} aria-pressed={personagem} onClick={() => setPersonagem(!personagem)} title="A pessoa desta foto vira personagem fixa, para outras cenas e para a Mesa Vídeos">
+                  <UserRoundPlus className="mr-1 h-3 w-3" /> Virar personagem
+                </button>
+              )}
             </div>
           )}
         </div>
       </div>
+      {personagem && onPersonagemCriada && r.imagem_id && <VirarPersonagem r={r} qualidade={qualidade} onCriada={(p) => onPersonagemCriada(p, r)} onFechar={() => setPersonagem(false)} />}
       {foto && (
         <div className="mt-1">
           <BotoesDeUso fotos={[foto]} compacto />
@@ -420,6 +450,7 @@ export function AjustesDoResultado({
   comGerar,
   onGerar,
   onVariacoes,
+  onPersonagemCriada,
 }: {
   canvas: Canvas;
   no: NoDoCanvas;
@@ -429,6 +460,7 @@ export function AjustesDoResultado({
   comGerar: boolean;
   onGerar: (gerarId: string) => Promise<Record<string, never>>;
   onVariacoes: (gerarId: string, r: ResultadoDoCanvas) => Promise<unknown>;
+  onPersonagemCriada?: (p: PersonagemCriada, r: ResultadoDoCanvas) => void;
 }) {
   const { catalogo } = useMesa();
   const avisarErro = useAvisarErro();
@@ -466,6 +498,7 @@ export function AjustesDoResultado({
 
   return (
     <div className="min-w-0 space-y-3.5" data-ajustes-do-resultado={no.id}>
+      <AjustesDaCena canvas={canvas} no={no} onMudar={onMudar} />
       <div className="min-w-0">
         <p className={ROTULO}>Ação</p>
         <Escolha rotulo="Ação do Resultado" opcoes={ACOES_DO_RESULTADO} valor={d.acao || "livre"} onEscolher={(v) => onMudar({ acao: v })} />
@@ -539,9 +572,9 @@ export function AjustesDoResultado({
             {entradas.map((e) => (
               <li key={e.ligacao.id} className="flex min-w-0 items-center text-[11.5px]">
                 <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-semibold">{e.numero}</span>
-                <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: TIPOS_DE_NO[e.no.tipo].cor }} />
+                <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: e.no.tipo === "gerar" ? "#34d399" : TIPOS_DE_NO[e.no.tipo].cor }} />
                 <span className="min-w-0 flex-1 truncate">
-                  {ROTULOS_DAS_ENTRADAS[e.entrada]}: {descrever(e.no, fontes).titulo}
+                  {e.no.tipo === "gerar" ? `${rotuloDoPapel(e.ligacao.papel)}: foto de ${nomeDoResultado(canvas, e.no)}` : `${ROTULOS_DAS_ENTRADAS[e.entrada]}: ${descrever(e.no, fontes).titulo}`}
                 </span>
               </li>
             ))}
@@ -601,6 +634,8 @@ export function AjustesDoResultado({
                 referencias={entradas.length}
                 qualidade={qualidade}
                 onVariacoes={(x) => onVariacoes(no.id, x)}
+                cena={d.cena && r.imagem_id ? { escolhida: d.cena.imagem_id === r.imagem_id, onEscolher: () => onMudar({ cena: d.cena ? { ...d.cena, imagem_id: r.imagem_id } : null }) } : null}
+                onPersonagemCriada={onPersonagemCriada}
                 onConferencia={(c) => {
                   setConferencias({ ...conferencias, [r.geracao_id]: c });
                   onMudar({ resultados: (d.resultados || []).map((x) => (x.geracao_id === r.geracao_id ? { ...x, conferencia: c } : x)) });

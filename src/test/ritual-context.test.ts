@@ -14,10 +14,12 @@ import { resolve } from "node:path";
  */
 const raiz = process.cwd();
 const central = readFileSync(resolve(raiz, "src/pages/AdminExperience.tsx"), "utf8");
-const escritor = readFileSync(
-  resolve(raiz, "supabase/functions/ritual-writer/index.ts"),
-  "utf8",
-);
+// O prompt mora em escritor.ts desde 25/09 (a Central e o agente da Central
+// usam o mesmo escritor); o handler continua em index.ts.
+const escritor = [
+  readFileSync(resolve(raiz, "supabase/functions/ritual-writer/index.ts"), "utf8"),
+  readFileSync(resolve(raiz, "supabase/functions/ritual-writer/escritor.ts"), "utf8"),
+].join("\n");
 
 describe("contexto do ritual: não afirmar o que não se sabe", () => {
   it("não trata falta de carteira de anúncios como prova de tráfego parado", () => {

@@ -13,7 +13,7 @@ import { Ampliar } from "./Ampliar";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { extensaoDoAnexo, MAX_BYTES_ANEXO } from "./mesaV4Api";
 import SeletorDoAcervo, { FotoDoAcervo, useAcervo, type ImagemDoAcervo } from "./SeletorDoAcervo";
-import { AVISO_DO_METODO_ANTIGO, corpoDoTirarFundo, jaSemFundo, ofertaDoRecorteDoGerador } from "./estudioUtil";
+import { AVISO_DO_METODO_ANTIGO, corpoDoTirarFundo, jaSemFundo, novoId, ofertaDoRecorteDoGerador } from "./estudioUtil";
 import type { CardDaDirecao, FotoLivre as FotoLivreBase } from "./useItensDoMes";
 
 /** Foto da lâmina; `recortada`: pessoa ou produto sem fundo (Tirar fundo), que entra pelo modo recorte. */
@@ -184,19 +184,9 @@ export function decidirColar(dados: DataTransfer | null | undefined): { imagens:
 
 export const caminhoDaFoto =(clientId: string, id: string, ext: string) => `${clientId}/estudio/fotos/${id}.${ext}`;
 
-/** UUID v4 (randomUUID quando existe; senão getRandomValues, que o Safari 11 tem). */
-export function novoId(): string {
-  const c: any = typeof crypto !== "undefined" ? crypto : null;
-  if (c && typeof c.randomUUID === "function") return c.randomUUID();
-  const b = new Uint8Array(16);
-  if (c && typeof c.getRandomValues === "function") c.getRandomValues(b);
-  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  let h = "";
-  for (let i = 0; i < 16; i++) h += (b[i] < 16 ? "0" : "") + b[i].toString(16);
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
+// novoId mora em estudioUtil (arquivo leve): a Mesa Foto e a Mesa Ads usam só
+// ele e baixavam este arquivo inteiro junto. Continua exportado daqui.
+export { novoId };
 
 const TIPO_DA_EXTENSAO: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp" };
 

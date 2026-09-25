@@ -34,11 +34,23 @@
  * movimento, formato } e ação canvas_video_gerar { canvas_id, no_video_id }
  * -> { job_id } com consulta canvas_video_status. Não entra em TIPOS_DE_NO
  * até existir: canvas com esse cartão é recusado.
+ *
+ * Cenas e história (dono, 25/09 à noite; docs/mesa-foto/cenas/PESQUISA.md e
+ * docs/mesa-videos/CONTRATO.md):
+ * - Um resultado alimenta outro resultado. A ligação saida -> saida leva o
+ *   papel (personagem, produto, cenario, estilo) e, se a equipe escolheu, a
+ *   foto (imagem_id); sem foto escolhida vale a foto da cena, depois a mais
+ *   nova aprovada, depois a mais nova. Laço entre resultados é recusado.
+ * - "Cena": o resultado marcado guarda dados.cena { ordem, titulo, acao,
+ *   enquadramento, cenario, narrativa, seed, imagem_id, animacao (reservado
+ *   para a Mesa Vídeos) }. A história do canvas é a lista das cenas pela ordem.
+ * - Na cena, a pessoa vai em 1º (o gerador dá mais fidelidade à 1ª imagem) e
+ *   o pedido repete as âncoras da personagem palavra por palavra.
  */
 
 import { ErroDeRegra, limpo, listaDeTextos, semTravessao, UUID } from "./calculos.ts";
 import { FORMATOS, type Formato } from "./receitas.ts";
-import { BLOCO_HIPER_REALISMO, type FichaDaPersona, fichaEmTexto, garantirPermitido, PROIBICOES_DA_PERSONA } from "./personas.ts";
+import { BLOCO_HIPER_REALISMO, type FichaDaPersona, fichaEmTexto, garantirPermitido, normalizarFicha, PROIBICOES_DA_PERSONA } from "./personas.ts";
 
 export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida", "agente"] as const;
 export type TipoDeNo = typeof TIPOS_DE_NO[number];
@@ -167,7 +179,156 @@ export function lerPedidoDoCanvas(corpo: Record<string, unknown>): { no_saida_id
 }
 
 export type NoCanvas = { id: string; tipo: TipoDeNo; x: number; y: number; dados: Record<string, unknown> };
-export type LigacaoCanvas = { id: string; de: string; para: string; ordem: number };
+/** papel e imagem_id só existem na ligação de um resultado para outro resultado. */
+export type LigacaoCanvas = { id: string; de: string; para: string; ordem: number; papel?: PapelDaLigacao; imagem_id?: string | null };
+
+// ------------------------------------------------------------------ cenas e história
+
+/** O que a foto de um resultado vira quando entra noutro resultado. */
+export const PAPEIS_DA_LIGACAO = ["personagem", "produto", "cenario", "estilo"] as const;
+export type PapelDaLigacao = typeof PAPEIS_DA_LIGACAO[number];
+export const lerPapelDaLigacao = (v: unknown): PapelDaLigacao =>
+  (PAPEIS_DA_LIGACAO as readonly string[]).includes(String(v)) ? (v as PapelDaLigacao) : "personagem";
+/** O papel da ligação vira o papel da referência no pedido (e disputa as mesmas vagas). */
+export const PAPEL_DA_LIGACAO_NO_PEDIDO: Record<PapelDaLigacao, "pessoa" | "produto" | "ambiente" | "estilo"> = {
+  personagem: "pessoa",
+  produto: "produto",
+  cenario: "ambiente",
+  estilo: "estilo",
+};
+
+/** Enquadramentos da cena (o texto vai ao gerador; livre = sai do pedido). */
+export const ENQUADRAMENTOS_DA_CENA: Record<string, string> = {
+  livre: "",
+  plano_geral: "plano geral: a pessoa de corpo inteiro e o lugar em volta",
+  plano_americano: "plano americano: dos joelhos para cima",
+  plano_medio: "plano médio: da cintura para cima",
+  close: "close: rosto e ombros",
+  detalhe: "plano detalhe: mãos e produto de perto",
+  sobre_o_ombro: "por cima do ombro da pessoa",
+  pov: "ponto de vista da pessoa (POV), vendo o que ela vê",
+};
+
+/**
+ * Animação da cena (reservado para a Mesa Vídeos, sem código que gere ainda).
+ * Campos da pesquisa (docs/mesa-foto/cenas/PESQUISA.md, seção 4): a foto da
+ * cena é o 1º quadro; último quadro opcional; movimento de câmera; duração;
+ * áudio; motor de vídeo; status.
+ */
+export type AnimacaoDaCena = {
+  duracao_s: number | null;
+  movimento: string | null;
+  ultimo_quadro_id: string | null;
+  audio: { fala: string | null; trilha: string | null; efeitos: string | null } | null;
+  motor_video: string | null;
+  status: "em_breve";
+};
+
+export type CenaDoResultado = {
+  ordem: number;
+  titulo: string | null;
+  acao: string | null;
+  enquadramento: string;
+  cenario: string | null;
+  narrativa: string | null;
+  seed: number | null;
+  /** Foto escolhida para a história (a imagem-chave; na Mesa Vídeos, o 1º quadro). */
+  imagem_id: string | null;
+  animacao: AnimacaoDaCena | null;
+};
+
+/** Animação guardada só com os campos conhecidos (reservado; nada gera vídeo ainda). */
+export function lerAnimacao(v: unknown): AnimacaoDaCena | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const a = v as Record<string, unknown>;
+  const dur = Number(a.duracao_s);
+  const audio = a.audio && typeof a.audio === "object" && !Array.isArray(a.audio) ? (a.audio as Record<string, unknown>) : null;
+  return {
+    duracao_s: Number.isFinite(dur) && dur > 0 ? Math.min(60, Math.round(dur * 10) / 10) : null,
+    movimento: limpo(a.movimento, 200) || null,
+    ultimo_quadro_id: idOuNulo(a.ultimo_quadro_id),
+    audio: audio ? { fala: limpo(audio.fala, 600) || null, trilha: limpo(audio.trilha, 200) || null, efeitos: limpo(audio.efeitos, 200) || null } : null,
+    motor_video: limpo(a.motor_video, 160) || null,
+    status: "em_breve",
+  };
+}
+
+/** Cena do resultado (null = resultado comum, fora da história). */
+export function lerCena(v: unknown): CenaDoResultado | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const c = v as Record<string, unknown>;
+  const ordem = Math.floor(Number(c.ordem));
+  const seed = Number(c.seed);
+  const textos = [c.titulo, c.acao, c.cenario, c.narrativa].map((x) => limpo(x, 1500));
+  textos.forEach((t) => t && garantirPermitido(t));
+  return {
+    ordem: Number.isFinite(ordem) && ordem > 0 ? Math.min(ordem, 999) : 1,
+    titulo: limpo(c.titulo, 80) || null,
+    acao: limpo(c.acao, 600) || null,
+    enquadramento: String(c.enquadramento ?? "") in ENQUADRAMENTOS_DA_CENA ? String(c.enquadramento) : "livre",
+    cenario: limpo(c.cenario, 600) || null,
+    narrativa: limpo(c.narrativa, 1500) || null,
+    seed: c.seed != null && c.seed !== "" && Number.isFinite(seed) && seed >= 0 ? Math.floor(seed) : null,
+    imagem_id: idOuNulo(c.imagem_id),
+    animacao: lerAnimacao(c.animacao),
+  };
+}
+
+export type CenaNaHistoria = { no: NoCanvas; cena: CenaDoResultado; numero: number };
+
+/**
+ * A história do canvas: os resultados marcados como cena, pela ordem da cena
+ * (empate: de cima para baixo, da esquerda para a direita, id). O número é a
+ * posição (1, 2, 3...), sem buraco, mesmo que a ordem gravada tenha.
+ */
+export function historiaDoCanvas(c: Pick<CanvasNormalizado, "nos">): CenaNaHistoria[] {
+  return c.nos
+    .filter((n) => n.tipo === "saida" && !!n.dados.cena)
+    .map((n) => ({ no: n, cena: n.dados.cena as CenaDoResultado }))
+    .sort((a, b) => a.cena.ordem - b.cena.ordem || a.no.y - b.no.y || a.no.x - b.no.x || (a.no.id < b.no.id ? -1 : a.no.id > b.no.id ? 1 : 0))
+    .map((x, i) => ({ ...x, numero: i + 1 }));
+}
+
+/** Metadados da história no canvas (coluna foto_canvas.historia, SQL V-01). */
+export type HistoriaDoCanvas = { sinopse: string | null; formato: string | null; animacao: null };
+export function lerHistoria(v: unknown): HistoriaDoCanvas | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const h = v as Record<string, unknown>;
+  const sinopse = limpo(h.sinopse, 2000) || null;
+  if (sinopse) garantirPermitido(sinopse);
+  const formato = (FORMATOS as readonly string[]).includes(String(h.formato)) ? String(h.formato) : null;
+  return { sinopse, formato, animacao: null };
+}
+
+/**
+ * Foto de um resultado para entrar noutro: a escolhida na ligação; senão a
+ * foto da cena; senão a mais nova aprovada; senão a mais nova. `aprovadas`
+ * são os ids que o acervo diz que estão aprovados.
+ */
+export function fotoDoResultadoParaUso(no: NoCanvas, escolhida: string | null | undefined, aprovadas: string[] = []): string | null {
+  const ids = resultadosDaSaida(no.dados.resultados)
+    .filter((r) => r.status === "gerada" && r.imagem_id)
+    .map((r) => String(r.imagem_id));
+  if (escolhida && ids.includes(escolhida)) return escolhida;
+  const cena = no.dados.cena as CenaDoResultado | null | undefined;
+  if (cena?.imagem_id && ids.includes(cena.imagem_id)) return cena.imagem_id;
+  const novas = ids.slice().reverse();
+  return novas.find((id) => aprovadas.includes(id)) ?? novas[0] ?? null;
+}
+
+/** Algum caminho de resultado para resultado leva de `de` até `ate`? (para recusar laço) */
+function alcanca(ligacoes: LigacaoCanvas[], saidas: Set<string>, de: string, ate: string): boolean {
+  const vistos = new Set<string>();
+  const pilha = [de];
+  while (pilha.length) {
+    const atual = pilha.pop()!;
+    if (atual === ate) return true;
+    if (vistos.has(atual)) continue;
+    vistos.add(atual);
+    for (const l of ligacoes) if (l.de === atual && saidas.has(l.para)) pilha.push(l.para);
+  }
+  return false;
+}
 export type Viewport = { x: number; y: number; zoom: number };
 export type CanvasNormalizado = { nome: string; nos: NoCanvas[]; ligacoes: LigacaoCanvas[]; viewport: Viewport };
 
@@ -301,7 +462,7 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
       const motores = Array.isArray(d.motores) ? Array.from(new Set(d.motores.map((x) => limpo(x, 120)).filter(Boolean))).slice(0, 8) : [];
       const acao = String(d.acao ?? "") in ACOES_DO_RESULTADO ? String(d.acao) : "livre";
       const pose = String(d.pose ?? "") in POSES_DO_RESULTADO ? String(d.pose) : "nenhuma";
-      return { titulo, formato, qualidade, resolucao, motores, acao, pose, carrossel: lerCarrossel(d.carrossel), resultados: resultadosDaSaida(d.resultados) };
+      return { titulo, formato, qualidade, resolucao, motores, acao, pose, carrossel: lerCarrossel(d.carrossel), resultados: resultadosDaSaida(d.resultados), cena: lerCena(d.cena) };
     }
     case "agente": {
       // A conversa fica no cartão (curta); o pedido que o agente escreveu vai ao gerador.
@@ -359,13 +520,21 @@ export function normalizarCanvas(bruto: unknown): CanvasNormalizado {
     if (!origem || !destino) throw new ErroDeRegra(400, "ligacao_invalida", "Ligação com cartão que não existe no canvas.", { de, para });
     if (de === para) throw new ErroDeRegra(400, "ligacao_invalida", "Um cartão não se liga a ele mesmo.", { de });
     if (destino.tipo !== "saida") throw new ErroDeRegra(400, "ligacao_invalida", "As ligações vão sempre para um cartão de resultado.", { de, para });
-    if (origem.tipo === "saida") throw new ErroDeRegra(400, "ligacao_invalida", "Um resultado não alimenta outro resultado.", { de, para });
     const chave = `${de}>${para}`;
     if (vistas.has(chave)) return;
     vistas.add(chave);
     const id = ID_DE_NO.test(String(l.id ?? "")) ? String(l.id) : `l_${de}_${para}`.slice(0, 64);
-    ligacoes.push({ id, de, para, ordem: Math.round(numeroFinito(l.ordem, i, 0, 10_000)) });
+    const ordem = Math.round(numeroFinito(l.ordem, i, 0, 10_000));
+    // Resultado alimentando resultado (cena anterior -> esta cena): leva o papel e a foto escolhida.
+    if (origem.tipo === "saida") ligacoes.push({ id, de, para, ordem, papel: lerPapelDaLigacao(l.papel), imagem_id: idOuNulo(l.imagem_id) });
+    else ligacoes.push({ id, de, para, ordem });
   });
+  const saidas = new Set(nos.filter((n) => n.tipo === "saida").map((n) => n.id));
+  for (const l of ligacoes) {
+    if (saidas.has(l.de) && alcanca(ligacoes.filter((x) => x !== l), saidas, l.para, l.de)) {
+      throw new ErroDeRegra(400, "ligacao_em_laco", "Um resultado não pode alimentar a si mesmo pela cadeia de cenas.", { de: l.de, para: l.para });
+    }
+  }
   const v = (r.viewport && typeof r.viewport === "object" ? r.viewport : {}) as Record<string, unknown>;
   return { nome, nos, ligacoes, viewport: { x: numeroFinito(v.x), y: numeroFinito(v.y), zoom: numeroFinito(v.zoom, 1, 0.05, 8) } };
 }
@@ -393,13 +562,17 @@ export function canvasGravado(linha: { nome?: unknown; nos?: unknown; ligacoes?:
 }
 
 /** Ids de banco que o canvas cita (para a função conferir contra o banco). */
-export function idsDoCanvas(c: Pick<CanvasNormalizado, "nos">) {
+export function idsDoCanvas(c: Pick<CanvasNormalizado, "nos"> & { ligacoes?: LigacaoCanvas[] }) {
   const kits = new Set<string>();
   const modelos = new Set<string>();
   const imagens = new Set<string>();
   const biblioteca = new Set<string>();
+  // Foto escolhida na ligação entre resultados e a foto da cena: do acervo deste cliente.
+  for (const l of c.ligacoes ?? []) if (l.imagem_id) imagens.add(l.imagem_id);
   for (const n of c.nos) {
     const d = n.dados;
+    const cena = n.tipo === "saida" ? (d.cena as CenaDoResultado | null | undefined) : null;
+    if (cena?.imagem_id) imagens.add(cena.imagem_id);
     if (n.tipo === "produto" && d.kit_id) kits.add(String(d.kit_id));
     if (n.tipo === "produto") (d.imagem_ids as string[] ?? []).forEach((x) => imagens.add(x));
     if (n.tipo === "modelo" && d.modelo_id) modelos.add(String(d.modelo_id));
@@ -427,16 +600,32 @@ export function escolherSaida(c: Pick<CanvasNormalizado, "nos">, pedido?: unknow
   throw new ErroDeRegra(400, "saida_obrigatoria", "O canvas tem mais de um cartão de resultado: diga qual gerar (no_saida_id).", { saidas: saidas.map((s) => s.id) });
 }
 
-export type EntradasDaSaida = { produto: NoCanvas[]; modelo: NoCanvas[]; ambiente: NoCanvas[]; estilo: NoCanvas[]; prompt: NoCanvas[]; agente?: NoCanvas[] };
+/** Resultado ligado a outro resultado (a foto dele entra com o papel da ligação). */
+export type ResultadoDeEntrada = { no: NoCanvas; ligacao: LigacaoCanvas; papel: PapelDaLigacao };
+
+export type EntradasDaSaida = {
+  produto: NoCanvas[];
+  modelo: NoCanvas[];
+  ambiente: NoCanvas[];
+  estilo: NoCanvas[];
+  prompt: NoCanvas[];
+  agente?: NoCanvas[];
+  /** Outros resultados ligados a este (cena anterior como personagem, produto, cenário ou estilo). */
+  resultados?: ResultadoDeEntrada[];
+};
 
 /** Nós ligados ao resultado, agrupados por tipo, na ordem das ligações. */
 export function entradasDaSaida(c: Pick<CanvasNormalizado, "nos" | "ligacoes">, saidaId: string): EntradasDaSaida {
   const porId = new Map(c.nos.map((n) => [n.id, n]));
   const ligadas = c.ligacoes.filter((l) => l.para === saidaId).sort((a, b) => a.ordem - b.ordem);
-  const e: Required<EntradasDaSaida> = { produto: [], modelo: [], ambiente: [], estilo: [], prompt: [], agente: [] };
+  const e: Required<EntradasDaSaida> = { produto: [], modelo: [], ambiente: [], estilo: [], prompt: [], agente: [], resultados: [] };
   for (const l of ligadas) {
     const n = porId.get(l.de);
-    if (!n || n.tipo === "saida") continue;
+    if (!n) continue;
+    if (n.tipo === "saida") {
+      if (!e.resultados.some((x) => x.no.id === n.id)) e.resultados.push({ no: n, ligacao: l, papel: lerPapelDaLigacao(l.papel) });
+      continue;
+    }
     if (!e[n.tipo].some((x) => x.id === n.id)) e[n.tipo].push(n);
   }
   return e;
@@ -473,7 +662,8 @@ export function orcamentoPorPapel(limite: number, disponiveis: Record<PapelNoCan
   return saida;
 }
 
-export type OrigemDaReferencia = { tipo: "kit" | "persona" | "acervo" | "biblioteca"; id: string; no_id: string };
+/** "resultado": a foto de outro resultado do canvas (cena anterior), que mora no acervo do cliente. */
+export type OrigemDaReferencia = { tipo: "kit" | "persona" | "acervo" | "biblioteca" | "resultado"; id: string; no_id: string };
 export type ReferenciaCandidata = {
   /** "base": a foto base de uma variação ou do carrossel (vai sempre em 1º, fora do orçamento por papel). */
   papel: PapelNoCanvas | "base";
@@ -489,8 +679,13 @@ export type ReferenciaMontada = ReferenciaCandidata & { ordem: number };
  * Referências em ordem de papel (produto, pessoa, ambiente, estilo), dentro
  * do orçamento. O que ficou de fora volta em `cortadas` com aviso.
  */
-export function ordenarReferencias(candidatas: ReferenciaCandidata[], limite: number): { referencias: ReferenciaMontada[]; cortadas: ReferenciaCandidata[]; avisos: string[] } {
-  const ordemDosPapeis: PapelNoCanvas[] = ["produto", "pessoa", "ambiente", "estilo"];
+export function ordenarReferencias(
+  candidatas: ReferenciaCandidata[],
+  limite: number,
+  o: { pessoaPrimeiro?: boolean } = {},
+): { referencias: ReferenciaMontada[]; cortadas: ReferenciaCandidata[]; avisos: string[] } {
+  // Cena da história: a personagem vai em 1º (o gerador dá mais fidelidade à 1ª imagem; PESQUISA.md).
+  const ordemDosPapeis: PapelNoCanvas[] = o.pessoaPrimeiro ? ["pessoa", "produto", "ambiente", "estilo"] : ["produto", "pessoa", "ambiente", "estilo"];
   const porPapel = Object.fromEntries(ordemDosPapeis.map((p) => [p, candidatas.filter((c) => c.papel === p)])) as Record<PapelNoCanvas, ReferenciaCandidata[]>;
   const vagas = orcamentoPorPapel(limite, {
     produto: porPapel.produto.length,
@@ -516,9 +711,9 @@ export function ordenarReferencias(candidatas: ReferenciaCandidata[], limite: nu
  * Com foto base (variação ou carrossel): ela vai como Imagem 1 e as outras
  * dividem o que sobra do limite (limite - 1), na mesma ordem de papel.
  */
-export function ordenarComBase(base: ReferenciaCandidata | null, candidatas: ReferenciaCandidata[], limite: number) {
-  if (!base) return ordenarReferencias(candidatas, limite);
-  const resto = ordenarReferencias(candidatas.filter((c) => c.papel !== "base"), Math.max(0, limite - 1));
+export function ordenarComBase(base: ReferenciaCandidata | null, candidatas: ReferenciaCandidata[], limite: number, o: { pessoaPrimeiro?: boolean } = {}) {
+  if (!base) return ordenarReferencias(candidatas, limite, o);
+  const resto = ordenarReferencias(candidatas.filter((c) => c.papel !== "base"), Math.max(0, limite - 1), o);
   return {
     ...resto,
     referencias: [{ ...base, papel: "base" as const, ordem: 1 }, ...resto.referencias.map((r) => ({ ...r, ordem: r.ordem + 1 }))],
@@ -538,12 +733,41 @@ export type PessoaDoPedido = { no_id: string; nome: string; ficha: FichaDaPerson
 /** Pessoa real (foto do acervo do cliente, com autorização registrada no cartão). */
 export type PessoaRealDoPedido = { no_id: string; nome: string };
 
+/** Foto de outro resultado que entrou neste (a pessoa: persona da cena anterior, real com autorização ou sintética gerada). */
+export type ResultadoDoPedido = { no_id: string; papel: PapelDaLigacao; nome: string; pessoa: "persona" | "real" | "sintetica" | null };
+
+/** A cena no pedido (número na história, o que acontece, enquadramento, lugar e narrativa). */
+export type CenaDoPedido = {
+  numero: number;
+  total: number;
+  titulo: string | null;
+  acao: string | null;
+  enquadramento: string;
+  cenario: string | null;
+  narrativa: string | null;
+  sinopse?: string | null;
+};
+
+/** Bloco de continuidade das cenas (PESQUISA.md, seção 2: lista de preservação repetida a cada cena). */
+export const CONTINUIDADE_DA_CENA =
+  "CONTINUIDADE DA HISTÓRIA: a mesma pessoa, com o mesmo rosto, tom de pele, formato do corpo, cabelo e roupa das outras cenas, a mesma paleta e a mesma qualidade de luz, a menos que esta cena peça outra coisa. Mude só o que esta cena pede (ação, lugar e enquadramento); não mude a identidade de ninguém nem o produto.";
+
+/** Avisos da cena (sem IA): rosto pequeno em plano geral e gente demais perdem a identidade (PESQUISA.md, armadilhas). */
+export function avisosDaCena(c: { enquadramento?: string | null; pessoas: number }): string[] {
+  const a: string[] = [];
+  if (c.pessoas > 0 && c.enquadramento === "plano_geral") a.push("Plano geral deixa o rosto pequeno e a identidade varia mais. Para a foto-chave da personagem, prefira plano médio ou americano.");
+  if (c.pessoas > 2) a.push("Mais de 2 pessoas na mesma cena: a identidade de cada uma tende a se misturar. Se puder, divida em duas cenas.");
+  return a;
+}
+
 /**
  * Prompt do Canvas com índice das imagens por papel, as invariantes do kit e
  * da ficha repetidas, o ambiente e o estilo só como direção, o texto livre e
  * o bloco de hiper-realismo quando há pessoa. Na v3 entram a ação da
  * composição, a pose (UGC troca a lente de retrato pela de celular), a foto
- * base da série, o ângulo obrigatório e a posição no carrossel.
+ * base da série, o ângulo obrigatório e a posição no carrossel. Nas cenas
+ * (25/09 à noite): a foto de outro resultado com o papel da ligação, a pessoa
+ * antes do produto, o bloco da cena e o de continuidade.
  */
 export function promptDoCanvas(e: {
   referencias: ReferenciaMontada[];
@@ -559,36 +783,71 @@ export function promptDoCanvas(e: {
   pose?: string | null;
   angulo?: number | null;
   quadro?: { atual: number; total: number } | null;
+  deResultados?: ResultadoDoPedido[];
+  cena?: CenaDoPedido | null;
 }): string {
   const linhas: string[] = [];
   const reais = e.pessoasReais ?? [];
-  const temPessoa = e.pessoas.length > 0 || reais.length > 0;
+  const deResultados = e.deResultados ?? [];
+  const personagens = deResultados.filter((r) => r.papel === "personagem");
+  const temPessoa = e.pessoas.length > 0 || reais.length > 0 || personagens.length > 0;
   const ugc = !!e.pose && POSES_UGC.includes(e.pose);
   const tipoDaFoto = ugc ? "UGC REAL FEITA COM CELULAR" : temPessoa ? "PUBLICITÁRIA EDITORIAL REAL" : "PUBLICITÁRIA DE PRODUTO REAL";
   linhas.push(`FOTOGRAFIA ${tipoDaFoto}${e.marca?.nome ? ` para a marca ${e.marca.nome}` : ""}, formato ${e.formato}.`);
+  if (e.cena) {
+    const c = e.cena;
+    if (c.sinopse) linhas.push(`HISTÓRIA (contexto, não escreva texto na imagem): ${c.sinopse}`);
+    linhas.push(`CENA ${c.numero} DE ${c.total}${c.titulo ? `, "${c.titulo}"` : ""}${c.acao ? `: ${c.acao}` : "."}`);
+    const enq = ENQUADRAMENTOS_DA_CENA[c.enquadramento] ?? "";
+    if (enq) linhas.push(`ENQUADRAMENTO DA CENA: ${enq}.`);
+    if (c.cenario) linhas.push(`LUGAR DA CENA: ${c.cenario}.`);
+    if (c.narrativa) linhas.push(`NARRATIVA DA CENA (contexto, não escreva texto na imagem): ${c.narrativa}`);
+  }
   const pedidos = e.textos.filter((t) => t.papel === "pedido" && t.texto);
   if (pedidos.length) linhas.push(`PEDIDO: ${pedidos.map((t) => t.texto).join(" ")}`);
 
   const refsDe = (papel: PapelNoCanvas | "base") => e.referencias.filter((r) => r.papel === papel);
+  const doResultado = (papel: PapelNoCanvas, noId: string) => e.referencias.filter((r) => r.papel === papel && r.origem.tipo === "resultado" && r.origem.no_id === noId);
   if (e.referencias.length) linhas.push("IMAGENS ANEXADAS, NA ORDEM:");
   const base = refsDe("base");
   if (base.length) {
     linhas.push(`${faixa(base)}: A FOTO BASE desta série (identidade da cena): a mesma pessoa (rosto, cabelo, pele e corpo), o mesmo produto, a mesma roupa, o mesmo lugar, a mesma luz e a mesma paleta. Não copie o enquadramento nem a pose da base: mude como pedido abaixo.`);
   }
+  const blocoDoProduto: string[] = [];
   for (const p of e.produtos) {
-    const refs = refsDe("produto").filter((r) => r.origem.no_id === p.no_id);
+    const refs = refsDe("produto").filter((r) => r.origem.no_id === p.no_id && r.origem.tipo !== "resultado");
     const nome = `${p.nome}${p.variante ? ` (variante ${p.variante})` : ""}`;
-    linhas.push(`${refs.length ? `${faixa(refs)}: ` : ""}O PRODUTO "${nome}" (identidade invariante): não mude formato, silhueta, proporções, cor, acabamento, logotipo nem texto; mesma quantidade de peças; escala real.${p.invariantes.length ? ` Invariantes: ${p.invariantes.join("; ")}.` : ""}`);
+    blocoDoProduto.push(`${refs.length ? `${faixa(refs)}: ` : ""}O PRODUTO "${nome}" (identidade invariante): não mude formato, silhueta, proporções, cor, acabamento, logotipo nem texto; mesma quantidade de peças; escala real.${p.invariantes.length ? ` Invariantes: ${p.invariantes.join("; ")}.` : ""}`);
   }
+  for (const r of deResultados.filter((x) => x.papel === "produto")) {
+    const refs = doResultado("produto", r.no_id);
+    if (refs.length) blocoDoProduto.push(`${faixa(refs)}: O PRODUTO desta imagem (da cena "${r.nome}"), exatamente como aparece: não mude formato, cor, acabamento, logotipo nem texto; ignore a pessoa e o fundo desta imagem.`);
+  }
+  const blocoDaPessoa: string[] = [];
   for (const pessoa of e.pessoas) {
-    const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id);
-    linhas.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA SINTÉTICA "${pessoa.nome}" (identidade da pessoa, gerada, não existe): a mesma pessoa, com mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele, marcas e cabelo. ${fichaEmTexto(pessoa.ficha)} Invariantes: ${pessoa.invariantes.join("; ")}.`);
+    const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id && r.origem.tipo !== "resultado");
+    blocoDaPessoa.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA SINTÉTICA "${pessoa.nome}" (identidade da pessoa, gerada, não existe): a mesma pessoa, com mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele, marcas e cabelo. ${fichaEmTexto(pessoa.ficha)} Invariantes: ${pessoa.invariantes.join("; ")}.`);
   }
   for (const pessoa of reais) {
-    const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id);
-    linhas.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA DA FOTO${pessoa.nome ? ` "${pessoa.nome}"` : ""} (pessoa real, com autorização registrada pela equipe): a mesma pessoa, com o mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele e cabelo; não embeleze nem mude traços.`);
+    const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id && r.origem.tipo !== "resultado");
+    blocoDaPessoa.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA DA FOTO${pessoa.nome ? ` "${pessoa.nome}"` : ""} (pessoa real, com autorização registrada pela equipe): a mesma pessoa, com o mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele e cabelo; não embeleze nem mude traços.`);
   }
-  const ambientes = refsDe("ambiente");
+  const semFundo = "Ignore o fundo, a pose e o enquadramento desta imagem.";
+  for (const r of personagens) {
+    const refs = doResultado("pessoa", r.no_id);
+    if (!refs.length) continue;
+    if (r.pessoa === "persona") {
+      blocoDaPessoa.push(`${faixa(refs)}: A MESMA PESSOA "${r.nome}", como ela aparece na cena anterior: copie daqui a roupa, o cabelo, os acessórios e a maquiagem; o rosto vem das imagens de identidade dela acima. ${semFundo}`);
+    } else if (r.pessoa === "real") {
+      blocoDaPessoa.push(`${faixa(refs)}: A PESSOA DA CENA ANTERIOR "${r.nome}" (pessoa real, com autorização registrada pela equipe): a mesma pessoa, com o mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele e cabelo, e a mesma roupa, a menos que esta cena peça outra; não embeleze nem mude traços. ${semFundo}`);
+    } else {
+      blocoDaPessoa.push(`${faixa(refs)}: A PERSONAGEM "${r.nome}" (pessoa sintética gerada numa cena anterior desta história): a mesma pessoa, com o mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele, cabelo e corpo, e a mesma roupa e os mesmos acessórios, a menos que esta cena peça outra. ${semFundo}`);
+    }
+  }
+  // Cena: a pessoa em 1º, como nas imagens (ordenarReferencias com pessoaPrimeiro).
+  if (e.cena) linhas.push(...blocoDaPessoa, ...blocoDoProduto);
+  else linhas.push(...blocoDoProduto, ...blocoDaPessoa);
+  const ambientes = refsDe("ambiente").filter((r) => r.origem.tipo !== "resultado");
   e.ambientes.forEach((a, i) => {
     const ref = a.no_id ? ambientes.find((r) => r.origem.no_id === a.no_id) : ambientes[i];
     const texto = a.texto ? ` (${a.texto})` : "";
@@ -600,6 +859,10 @@ export function promptDoCanvas(e: {
       linhas.push(`O AMBIENTE: use o lugar, a luz e o clima${texto}; cenário crível e ambientado.`);
     }
   });
+  for (const r of deResultados.filter((x) => x.papel === "cenario")) {
+    const refs = doResultado("ambiente", r.no_id);
+    if (refs.length) linhas.push(`${faixa(refs)}: O LUGAR desta imagem (da cena "${r.nome}"): o mesmo cenário, com a mesma arquitetura, móveis, cores e luz; a câmera pode mudar; não copie pessoas, poses nem textos.`);
+  }
   const estilos = refsDe("estilo");
   if (estilos.length) linhas.push(`${faixa(estilos)}: SÓ ESTILO (paleta, luz, enquadramento e clima); não copie objetos, pessoas, marcas nem textos destas imagens.`);
   const guias = e.estilos.map((s) => s.guia).filter((g): g is string => !!g);
@@ -615,12 +878,14 @@ export function promptDoCanvas(e: {
   if (e.angulo !== null && e.angulo !== undefined) {
     linhas.push(`ÂNGULO DESTA VERSÃO (obrigatório): ${ANGULOS_DE_VARIACAO[e.angulo % ANGULOS_DE_VARIACAO.length]}. Tem que ser diferente das outras fotos da série; nada de repetir o enquadramento.`);
   }
+  if (e.cena && temPessoa) linhas.push(CONTINUIDADE_DA_CENA);
   if (temPessoa) {
-    if (!acao && !pose) linhas.push("AÇÃO: a pessoa usa o produto do jeito real de uso, com naturalidade; o produto na escala e na posição certas de uso; mãos com cinco dedos.");
+    if (!acao && !pose && !e.cena?.acao) linhas.push("AÇÃO: a pessoa usa o produto do jeito real de uso, com naturalidade; o produto na escala e na posição certas de uso; mãos com cinco dedos.");
     // UGC: pele real igual, mas lente e luz de celular no lugar do retrato de 85 mm.
     if (ugc) linhas.push(BLOCO_HIPER_REALISMO[0], LENTE_UGC, BLOCO_HIPER_REALISMO[3]);
     else linhas.push(...BLOCO_HIPER_REALISMO);
-    const regras = e.pessoas.length
+    const sintetica = e.pessoas.length > 0 || personagens.some((r) => r.pessoa !== "real");
+    const regras = sintetica
       ? PROIBICOES_DA_PERSONA
       : ["pessoa real adulta, a mesma da foto, sem mudar traços", "sem sexualização, sem nudez e sem roupa reveladora", "mãos com cinco dedos, unhas e articulações corretas"];
     linhas.push(`REGRAS DA PESSOA: ${regras.join("; ")}.`);
@@ -636,10 +901,11 @@ export function promptDoCanvas(e: {
   return semTravessao(linhas.join("\n"));
 }
 
-/** Bloqueios do Canvas (regra fixa): sem produto e sem pessoa não gera. */
+/** Bloqueios do Canvas (regra fixa): sem produto e sem pessoa não gera (a foto de outro resultado como personagem ou produto conta). */
 export function garantirQueDaParaGerar(e: EntradasDaSaida): void {
-  if (!e.produto.length && !e.modelo.length) {
-    throw new ErroDeRegra(409, "sem_produto_nem_pessoa", "Ligue ao resultado pelo menos um produto (kit) ou uma modelo (persona).");
+  const doResultado = (e.resultados ?? []).some((r) => r.papel === "personagem" || r.papel === "produto");
+  if (!e.produto.length && !e.modelo.length && !doResultado) {
+    throw new ErroDeRegra(409, "sem_produto_nem_pessoa", "Ligue ao resultado pelo menos um produto (kit), uma modelo (persona) ou a personagem de outra cena.");
   }
   for (const n of e.produto) if (!n.dados.kit_id) throw new ErroDeRegra(409, "produto_sem_kit", "Há cartão de produto sem kit escolhido.", { no_id: n.id });
   for (const n of e.modelo) {
@@ -701,3 +967,64 @@ export function respostaDoAgente(
 }
 
 export const listaCurta = (v: unknown) => listaDeTextos(v, 12, 200);
+
+// ------------------------------------------------------------------ personagem persistente
+
+/**
+ * Personagem: a pessoa gerada numa cena vira uma persona (foto_modelos) com a
+ * foto como âncora, para as próximas cenas e para a Mesa Vídeos. Com o SQL
+ * V-01 a origem é 'personagem'; sem ele, 'sintetica' com esta marca nas notas
+ * da ficha (a tela reconhece pelas duas).
+ */
+export const ORIGEM_PERSONAGEM = "personagem";
+export const MARCA_DO_PERSONAGEM = "Personagem do Canvas";
+/** Vistas sugeridas para a folha do personagem (uma por chamada, custo à vista na tela). */
+export const FOLHA_DO_PERSONAGEM = ["frente", "tres_quartos_esq", "perfil_esq", "meio_corpo"];
+
+/** De quem é a pessoa da foto do acervo, pelas etiquetas: real (com autorização ou clone), persona ou sintética sem ficha. */
+export function pessoaDaFoto(img: { tags?: string[] | null; modo?: string | null; categoria?: string | null }): { tipo: "real" | "persona" | "sintetica" | null; persona_id: string | null } {
+  const tags = img.tags ?? [];
+  if (img.modo === "clone" || tags.includes("pessoa_real_autorizada") || tags.some((t) => t.startsWith("clone:"))) return { tipo: "real", persona_id: null };
+  const persona = tags.find((t) => t.startsWith("persona:") || t.startsWith("personagem:"));
+  const id = persona ? persona.slice(persona.indexOf(":") + 1) : "";
+  if (UUID.test(id)) return { tipo: "persona", persona_id: id };
+  if (tags.includes("pessoa_sintetica") || img.categoria === "pessoa") return { tipo: "sintetica", persona_id: null };
+  return { tipo: null, persona_id: null };
+}
+
+/** Pedido de "virar personagem", validado (a ética é obrigatória, como no modelo_criar). */
+export function lerPedidoDePersonagem(corpo: Record<string, unknown>) {
+  if (corpo.etica_confirmada !== true) {
+    throw new ErroDeRegra(400, "etica_obrigatoria", "Confirme que a personagem é sintética, adulta e não imita ninguém real.");
+  }
+  const nome = limpo(corpo.nome, 80);
+  if (!nome) throw new ErroDeRegra(400, "nome_obrigatorio", "Dê um nome à personagem.");
+  const descricao = limpo(corpo.descricao, 800);
+  const invariantes = listaDeTextos(corpo.invariantes, 12, 200);
+  garantirPermitido(nome, descricao, ...invariantes);
+  const bruta = (corpo.ficha && typeof corpo.ficha === "object" && !Array.isArray(corpo.ficha) ? corpo.ficha : {}) as Record<string, unknown>;
+  const ficha = normalizarFicha({ ...bruta, idade_aparente: bruta.idade_aparente ?? corpo.idade_aparente });
+  ficha.notas = semTravessao(`${MARCA_DO_PERSONAGEM}.${descricao ? ` ${descricao}` : ""}`).slice(0, 800);
+  return { nome: semTravessao(nome), descricao: descricao ? semTravessao(descricao) : null, invariantes: invariantes.map(semTravessao), ficha };
+}
+
+// ------------------------------------------------------------------ acervo da Mesa Vídeos
+
+/**
+ * O que do acervo serve à Mesa Vídeos (docs/mesa-videos/CONTRATO.md): fotos
+ * de personagem, clones, produtos e cenas. Artes, logos, antes e depois e
+ * carrosséis ficam fora (pedido do dono). Pessoa real sem autorização também.
+ * Mesma regra de src/components/mesa-foto/canvas/historia.ts.
+ */
+export type GrupoDoAcervoDeVideo = "cena" | "clone" | "personagem" | "produto";
+export function grupoNaMesaDeVideos(img: { categoria?: string | null; tags?: string[] | null; modo?: string | null; kit_id?: string | null; ativa?: boolean | null }): GrupoDoAcervoDeVideo | null {
+  const tags = img.tags ?? [];
+  if (img.ativa === false) return null;
+  if (["arte", "logo", "antes_depois"].includes(String(img.categoria ?? ""))) return null;
+  if (tags.some((t) => t === "carrossel" || t === "arte" || t.startsWith("carrossel:") || t.startsWith("arte:"))) return null;
+  if (tags.includes("cena") || tags.some((t) => t.startsWith("cena:"))) return "cena";
+  if (img.modo === "clone" || tags.includes("pessoa_real_autorizada") || tags.some((t) => t.startsWith("clone:"))) return "clone";
+  if (tags.some((t) => t.startsWith("personagem:") || t.startsWith("persona:")) || tags.includes("pessoa_sintetica")) return "personagem";
+  if (img.kit_id || ["produto", "detalhe", "embalagem"].includes(String(img.categoria ?? ""))) return "produto";
+  return null;
+}

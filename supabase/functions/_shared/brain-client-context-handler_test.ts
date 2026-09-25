@@ -56,6 +56,25 @@ Deno.test('admin retains client context access to legacy notes without neighbori
   assert(body.sources.includes('memory/mixed.md'));
   assert(!body.context.includes('Dados de outro cliente'));
 });
+Deno.test('admin match ignores accents and reads notes in parallel, in search order', async () => {
+  let abertas = 0;
+  let maximo = 0;
+  const f = fixture({
+    authenticate: async () => ({ id: 'admin', staff: true, admin: true }),
+    resolveClient: async () => ({ id: CLIENT, name: 'Stop Informatica' }),
+    search: async () => [{ path: 'memory/a.md' }, { path: 'memory/b.md' }],
+    read: async path => {
+      abertas += 1; maximo = Math.max(maximo, abertas);
+      await new Promise(r => setTimeout(r, 5));
+      abertas -= 1;
+      return { content: path === 'memory/a.md' ? 'Stop Informática: foco em suporte.\nOutra linha.' : 'Hook Stop do Claude.' };
+    },
+  });
+  const body = await (await f.request()).json();
+  assert(body.context.includes('foco em suporte'), body.context);
+  assert(!body.context.includes('Hook Stop'));
+  assert(maximo === 2, `leituras simultaneas: ${maximo}`);
+});
 Deno.test('legacy name requires exact unique resolution and the same UUID access check', async () => {
   const f = fixture();
   assert((await f.request({ client_name: 'Cliente A' })).status === 200);

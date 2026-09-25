@@ -4,6 +4,7 @@ import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { criarQueryClient, LimpezaDoCacheAoTrocarDeUsuario, opcoesDePersistencia } from "@/lib/mesa/cachePersistido";
+import { PaginaMesaAds, PaginaMesaDoCliente, PaginaMesaFoto } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -11,7 +12,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import AppLayout from "@/components/AppLayout";
 import RouteErrorBoundary from "@/components/RouteErrorBoundary";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
 const Login = lazy(() => import("@/pages/Login"));
 const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
@@ -64,9 +65,11 @@ const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
 const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 const Novidades = lazy(() => import("@/pages/Novidades"));
-const MesaDoCliente = lazy(() => import("@/pages/MesaDoCliente"));
-const MesaAds = lazy(() => import("@/pages/MesaAds"));
-const MesaFoto = lazy(() => import("@/pages/MesaFoto"));
+// As três mesas baixam antes do clique (painel ocioso, mouse no link) e a
+// etapa que vai abrir baixa junto com a página: src/lib/mesa/preCarga.ts.
+const MesaDoCliente = PaginaMesaDoCliente;
+const MesaAds = PaginaMesaAds;
+const MesaFoto = PaginaMesaFoto;
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).

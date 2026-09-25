@@ -10,7 +10,7 @@ import {
   type Qualidade,
 } from "@/lib/mesa/api";
 import { invalidarAcervo } from "@/components/mesa/contextoDoCliente";
-import { novoId } from "@/components/mesa/EstudioFotos";
+import { novoId } from "@/components/mesa/estudioUtil";
 
 /**
  * Mesa Foto: a ponte da tela com a função mesa-foto e as tabelas

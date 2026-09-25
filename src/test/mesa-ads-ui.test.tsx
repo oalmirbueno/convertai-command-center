@@ -173,7 +173,9 @@ beforeEach(() => {
 describe("rota e casca", () => {
   it("a rota /mesa-ads existe para admin, gestor e design, com Suspense próprio, e o menu da Mesa ganha Mesa Ads", () => {
     const app = ler("src/App.tsx");
-    expect(app).toContain('const MesaAds = lazy(() => import("@/pages/MesaAds"));');
+    // A rota baixa pela pré-carga das mesas (frente U, 25/09): página e etapa juntas.
+    expect(app).toContain('const MesaAds = PaginaMesaAds;');
+    expect(readFileSync(resolve(__dirname, "../lib/mesa/preCarga.ts"), "utf8")).toContain('pagina: () => import("@/pages/MesaAds"),');
     const rota = app.split("\n").find((l) => l.indexOf('path="/mesa-ads"') >= 0) || "";
     expect(rota).toContain('["admin", "manager", "design"].includes(profile?.role || "")');
     expect(rota).toContain("<Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense>");

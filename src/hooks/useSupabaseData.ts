@@ -215,18 +215,12 @@ export function useClients() {
         if (clientIds.size === 0) return [];
 
         const idArr = Array.from(clientIds);
-        const { data, error } = await supabase
-          .from("profiles")
-          .select(PROFILE_SAFE_SELECT)
-          .in("id", idArr)
-          .is("deleted_at", null);
+        // Perfis e contagem de projetos juntos: as duas só dependem dos ids.
+        const [{ data, error }, { data: allProjects, error: allProjectsError }] = await Promise.all([
+          supabase.from("profiles").select(PROFILE_SAFE_SELECT).in("id", idArr).is("deleted_at", null),
+          supabase.from("projects").select("client_id").in("client_id", idArr).is("deleted_at", null),
+        ]);
         if (error) throw error;
-
-        const { data: allProjects, error: allProjectsError } = await supabase
-          .from("projects")
-          .select("client_id")
-          .in("client_id", idArr)
-          .is("deleted_at", null);
         if (allProjectsError) throw allProjectsError;
 
         return (data || []).map((p: any) => ({
@@ -242,12 +236,14 @@ export function useClients() {
         return profile ? [{ ...profile, projectCount: 0 }] : [];
       }
 
-      // Admin: all clients
-      const { data: clientRoles, error: rolesError } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "client");
+      // Admin: all clients. Papéis e projetos juntos (não dependem um do
+      // outro); só os perfis esperam os ids. Eram três idas em fila.
+      const [{ data: clientRoles, error: rolesError }, { data: projects, error: projectsError }] = await Promise.all([
+        supabase.from("user_roles").select("user_id").eq("role", "client"),
+        supabase.from("projects").select("client_id").is("deleted_at", null),
+      ]);
       if (rolesError) throw rolesError;
+      if (projectsError) throw projectsError;
 
       const clientIds = clientRoles?.map((r: any) => r.user_id) || [];
       if (clientIds.length === 0) return [];
@@ -258,12 +254,6 @@ export function useClients() {
         .in("id", clientIds)
         .is("deleted_at", null);
       if (error) throw error;
-
-      const { data: projects, error: projectsError } = await supabase
-        .from("projects")
-        .select("client_id")
-        .is("deleted_at", null);
-      if (projectsError) throw projectsError;
 
       return (data || []).map((profile: any) => ({
         ...profile,

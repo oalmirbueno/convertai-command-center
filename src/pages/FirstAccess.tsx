@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, Eye, EyeOff, ArrowRight, Check, ShieldCheck, AlertTriangle } from "lucide-react";
-import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import aceleriqLogo from "@/assets/logo-aceleriq-256.png";
 
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
   if (pw.length < 12) return { level: 0, label: "Muito curta", color: "#FF3B3B" };

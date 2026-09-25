@@ -38,6 +38,23 @@
  * A imagem gerada entra no acervo (cliente_imagens: gerada, modo 'canvas',
  * kit_id do produto, tags persona:<id>) e serve às três mesas; aprovar é a
  * ação acervo_decidir que já existe.
+ *
+ * Cenas e história (25/09 à noite; docs/mesa-foto/cenas/PESQUISA.md):
+ * - canvas_montar e canvas_gerar aceitam outro resultado ligado a este (papel
+ *   personagem, produto, cenario ou estilo): a foto dele vai como referência.
+ *   Personagem que veio de uma persona volta à âncora dela (e a foto da cena
+ *   anterior vale só para roupa e cabelo); pessoa real segue as regras de
+ *   pessoa real; pessoa gerada sem ficha vai pela foto e pelo texto fixo.
+ * - Resultado marcado como cena: o pedido leva o bloco da cena, a pessoa em
+ *   1º e o bloco de continuidade; a seed da cena vale quando a chamada não
+ *   manda outra. A foto ganha as etiquetas cena, cena:<no_id> e historia:<canvas_id>.
+ * - canvas_personagem_criar { client_id, imagem_id, nome, idade_aparente, descricao?,
+ *     invariantes?, ficha?, etica_confirmada: true } -> { personagem, ancora, folha_sugerida, estimativa_vista_usd, avisos }
+ *     (sem IA, sem custo): a pessoa gerada vira persona com a foto como âncora
+ *     (origem 'personagem' com o SQL V-01; sem ele, 'sintetica' marcada). A
+ *     folha sai pela ação modelo_vista_gerar que já existe.
+ * - canvas_salvar aceita canvas.historia { sinopse, formato } (coluna do SQL
+ *   V-01; sem a coluna, grava o resto e avisa).
  */
 
 import {
@@ -89,6 +106,18 @@ import {
   respostaDoAgente,
   resultadosDaSaida,
   textosDasEntradas,
+  avisosDaCena,
+  type CenaDoPedido,
+  type CenaDoResultado,
+  FOLHA_DO_PERSONAGEM,
+  fotoDoResultadoParaUso,
+  historiaDoCanvas,
+  lerHistoria,
+  lerPedidoDePersonagem,
+  ORIGEM_PERSONAGEM,
+  PAPEL_DA_LIGACAO_NO_PEDIDO,
+  pessoaDaFoto,
+  type ResultadoDoPedido,
 } from "./canvas-regras.ts";
 import type { Chamador, FerramentasDaMesa, ItemDaBibliotecaLido } from "./ferramentas.ts";
 import type { LinhaImagemPersona, LinhaPersona } from "./modelos.ts";
@@ -110,6 +139,8 @@ type LinhaCanvas = {
   viewport: CanvasNormalizado["viewport"];
   versao: number;
   status: string;
+  /** Sinopse e formato da história (coluna do SQL V-01; sem ela, undefined). */
+  historia?: unknown;
   criado_por: string | null;
   criado_em: string;
   atualizado_em: string;
@@ -237,6 +268,12 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     angulo: number | null;
     quadro: { atual: number; total: number } | null;
     grupo: string | null;
+    /** Cenas (25/09 à noite): a cena no pedido, as fotos de outros resultados e quem é a pessoa. */
+    cena: CenaDoPedido | null;
+    deResultados: ResultadoDoPedido[];
+    comSintetica: boolean;
+    comReal: boolean;
+    seed: number | null;
   };
 
   async function montar(ch: Chamador, canvas: LinhaCanvas, corpo: Record<string, unknown>): Promise<Montagem> {
@@ -302,24 +339,27 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     }
 
     // Persona: identidade da pessoa (âncora e vistas aprovadas).
-    for (const no of entradas.modelo.filter((n) => !!n.dados.modelo_id)) {
-      const { data } = await db().from("foto_modelos").select("*").eq("id", String(no.dados.modelo_id)).maybeSingle();
-      const p = data as LinhaPersona | null;
-      if (!p || (p.client_id && p.client_id !== canvas.client_id)) throw new ErroDeRegra(409, "persona_fora_do_cliente", "Esta persona não existe ou é de outro cliente.", { no_id: no.id });
+    const porPersona = async (p: LinhaPersona, noId: string, maximo: number) => {
       const uso = personaUsavel(p.status);
-      if (!uso.ok) throw new ErroDeRegra(409, "persona_sem_ancora", `A persona ${p.nome} ainda não tem âncora escolhida.`, { no_id: no.id, status: p.status });
       if (uso.aviso) avisos.push(`${p.nome}: ${uso.aviso}`);
-      personaIds.push(p.id);
+      if (!personaIds.includes(p.id)) personaIds.push(p.id);
       const { data: imgs } = await db().from("foto_modelo_imagens").select("*").eq("modelo_id", p.id).limit(500);
       const todas = (imgs as LinhaImagemPersona[] | null) ?? [];
       const ancora = todas.find((i) => i.id === p.ancora_imagem_id);
       if (ancora) {
-        for (const i of identidadesDaVista(ancora, todas, "frente", 5)) {
-          candidatas.push({ papel: "pessoa", origem: { tipo: "persona", id: p.id, no_id: no.id }, imagem_id: i.id, titulo: p.nome, legenda: i.id === ancora.id ? "âncora" : `vista ${i.vista ?? ""}`.trim() });
+        for (const i of identidadesDaVista(ancora, todas, "frente", maximo)) {
+          candidatas.push({ papel: "pessoa", origem: { tipo: "persona", id: p.id, no_id: noId }, imagem_id: i.id, titulo: p.nome, legenda: i.id === ancora.id ? "âncora" : `vista ${i.vista ?? ""}`.trim() });
           fontes.set(`persona:${i.id}`, { tipo: "persona", bucket: i.storage_bucket, caminho: i.storage_path, nome: `persona-${p.nome}` });
         }
       }
-      pessoas.push({ no_id: no.id, nome: p.nome, ficha: p.ficha, invariantes: p.invariantes ?? [] });
+      pessoas.push({ no_id: noId, nome: p.nome, ficha: p.ficha, invariantes: p.invariantes ?? [] });
+    };
+    for (const no of entradas.modelo.filter((n) => !!n.dados.modelo_id)) {
+      const { data } = await db().from("foto_modelos").select("*").eq("id", String(no.dados.modelo_id)).maybeSingle();
+      const p = data as LinhaPersona | null;
+      if (!p || (p.client_id && p.client_id !== canvas.client_id)) throw new ErroDeRegra(409, "persona_fora_do_cliente", "Esta persona não existe ou é de outro cliente.", { no_id: no.id });
+      if (!personaUsavel(p.status).ok) throw new ErroDeRegra(409, "persona_sem_ancora", `A persona ${p.nome} ainda não tem âncora escolhida.`, { no_id: no.id, status: p.status });
+      await porPersona(p, no.id, 5);
     }
 
     // Ambiente e estilo (foto do acervo ou referência da biblioteca); ambiente "contexto" sai da marca do cliente.
@@ -375,6 +415,70 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       estilos.push({ guia: guias.filter(Boolean).join(" ") || null });
     }
 
+    // Outro resultado ligado a este (cena anterior como personagem, produto, cenário ou estilo).
+    const deResultados: ResultadoDoPedido[] = [];
+    let reaisHerdadas = 0;
+    const ligadosDeResultado = entradas.resultados ?? [];
+    if (ligadosDeResultado.length) {
+      const ids = new Set<string>();
+      for (const r of ligadosDeResultado) {
+        if (r.ligacao.imagem_id) ids.add(r.ligacao.imagem_id);
+        resultadosDaSaida(r.no.dados.resultados).forEach((x) => x.imagem_id && ids.add(String(x.imagem_id)));
+      }
+      const fotos = ids.size ? await f.lerImagens(canvas.client_id, [...ids]) : [];
+      const aprovadas = fotos.filter((x) => x.aprovada === true).map((x) => x.id);
+      for (const r of ligadosDeResultado) {
+        const cenaDaFonte = r.no.dados.cena as CenaDoResultado | null | undefined;
+        const nome = limpo(cenaDaFonte?.titulo, 80) || limpo(r.no.dados.titulo, 80) || "cena anterior";
+        const id = fotoDoResultadoParaUso(r.no, r.ligacao.imagem_id, aprovadas);
+        const img = id ? fotos.find((x) => x.id === id) : undefined;
+        if (!img) {
+          throw new ErroDeRegra(409, "resultado_sem_foto", `O resultado "${nome}" ainda não tem foto no acervo. Gere a foto dele antes de usar como ${r.papel}.`, { no_id: r.no.id });
+        }
+        let pessoa: ResultadoDoPedido["pessoa"] = null;
+        if (r.papel === "personagem") {
+          const quem = pessoaDaFoto(img);
+          if (quem.tipo === "real") {
+            pessoa = "real";
+            reaisHerdadas++;
+          } else if (quem.tipo === "persona" && quem.persona_id) {
+            // Volta à âncora da persona (não ao último quadro): a foto da cena anterior só dá roupa e cabelo.
+            const { data } = await db().from("foto_modelos").select("*").eq("id", quem.persona_id).maybeSingle();
+            const p = data as LinhaPersona | null;
+            const valida = !!p && (!p.client_id || p.client_id === canvas.client_id) && p.origem !== "clone_de_foto_real" && personaUsavel(p.status).ok;
+            if (valida && p) {
+              await porPersona(p, r.no.id, 2);
+              pessoa = "persona";
+            } else pessoa = "sintetica";
+          } else pessoa = "sintetica";
+        }
+        const papel = PAPEL_DA_LIGACAO_NO_PEDIDO[r.papel];
+        candidatas.push({ papel, origem: { tipo: "resultado", id: img.id, no_id: r.no.id }, imagem_id: img.id, titulo: nome, legenda: `${r.papel} da cena ${nome}` });
+        fontes.set(`acervo:${img.id}`, { tipo: "acervo", bucket: img.storage_bucket, caminho: img.storage_path, nome: img.nome });
+        deResultados.push({ no_id: r.no.id, papel: r.papel, nome, pessoa });
+      }
+    }
+
+    // Cena da história: número na história, o que acontece, enquadramento, lugar, narrativa e sinopse.
+    const cenaDaSaida = (saida.dados.cena as CenaDoResultado | null | undefined) ?? null;
+    let cena: CenaDoPedido | null = null;
+    if (cenaDaSaida) {
+      const historia = historiaDoCanvas(canvas);
+      const minha = historia.find((h) => h.no.id === saida.id);
+      cena = {
+        numero: minha ? minha.numero : 1,
+        total: Math.max(1, historia.length),
+        titulo: cenaDaSaida.titulo,
+        acao: cenaDaSaida.acao,
+        enquadramento: cenaDaSaida.enquadramento,
+        cenario: cenaDaSaida.cenario,
+        narrativa: cenaDaSaida.narrativa,
+        sinopse: lerHistoria(canvas.historia)?.sinopse ?? null,
+      };
+      const quantasPessoas = entradas.modelo.length + deResultados.filter((r) => r.papel === "personagem").length;
+      avisos.push(...avisosDaCena({ enquadramento: cenaDaSaida.enquadramento, pessoas: quantasPessoas }));
+    }
+
     // Série (v3): foto base (identidade da cena), ângulo obrigatório e posição no carrossel.
     let base: ReferenciaCandidata | null = null;
     const baseId = corpo.base_imagem_id != null && corpo.base_imagem_id !== "" ? idDe(corpo.base_imagem_id, "base_imagem_id") : null;
@@ -389,7 +493,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     const grupo = /^[A-Za-z0-9_-]{1,64}$/.test(String(corpo.grupo ?? "")) ? String(corpo.grupo) : null;
 
     const limite = Math.max(1, Math.min(limiteDeReferencias(m), LIMITE_REFERENCIAS_DO_CANVAS));
-    const ordem = ordenarComBase(base, candidatas, limite);
+    const ordem = ordenarComBase(base, candidatas, limite, { pessoaPrimeiro: !!cena });
     avisos.push(...ordem.avisos);
     const ajuste = resolucaoParaModelo(capacidadesDoModelo(m), resolucao);
     if (ajuste.aviso) avisos.push(ajuste.aviso);
@@ -413,6 +517,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       pose: String(saida.dados.pose || "nenhuma"),
       angulo,
       quadro,
+      deResultados,
+      cena,
     });
     const tamanho = TAMANHO_DO_FORMATO[formato];
     const estimativa = estimarComModelo(m, {
@@ -440,6 +546,11 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       angulo,
       quadro,
       grupo,
+      cena,
+      deResultados,
+      comSintetica: personaIds.length > 0 || deResultados.some((r) => r.papel === "personagem" && r.pessoa !== "real"),
+      comReal: pessoasReais.length + reaisHerdadas > 0,
+      seed: cenaDaSaida?.seed ?? null,
     };
   }
 
@@ -477,6 +588,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     angulo_texto: mt.angulo === null ? null : ANGULOS_DE_VARIACAO[mt.angulo],
     quadro: mt.quadro,
     grupo: mt.grupo,
+    cena: mt.cena,
+    de_resultados: mt.deResultados,
   });
 
   // ---------------------------------------------------------------- ações
@@ -504,20 +617,39 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     return f.json({ canvas: c, geracoes: comUrl, custo_usd_total: arred6(geracoes.reduce((s, g) => s + Number(g.custo_usd || 0), 0)), custo_usd: 0 });
   }
 
+  /**
+   * Grava com a sinopse da história quando ela veio; sem a coluna (SQL V-01
+   * ainda não aplicado), grava o resto e avisa (modo degradado).
+   */
+  async function gravarComHistoria<T>(
+    historia: ReturnType<typeof lerHistoria>,
+    gravar: (extra: Record<string, unknown>) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>,
+  ): Promise<{ data: T | null; error: { code?: string; message?: string } | null; avisos: string[] }> {
+    if (!historia) return { ...(await gravar({})), avisos: [] };
+    const r = await gravar({ historia });
+    if (r.error && colunaFaltando(r.error, "historia")) {
+      const semColuna = await gravar({});
+      return { ...semColuna, avisos: ["A sinopse da história espera a publicação do banco (SQL V-01). As cenas ficaram salvas."] };
+    }
+    return { ...r, avisos: [] };
+  }
+
   async function canvasSalvar(ch: Chamador, corpo: Record<string, unknown>) {
     const clientId = idDe(corpo.client_id, "client_id");
     await f.garantirAcesso(ch, clientId);
     const bruto = (corpo.canvas && typeof corpo.canvas === "object" ? corpo.canvas : {}) as Record<string, unknown>;
     const c = normalizarCanvas(bruto);
+    const historia = lerHistoria(bruto.historia);
     const conferidos = await conferirIds(clientId, c);
     // Produto de outro cliente (esteira): a equipe precisa ter acesso ao cliente do kit.
     for (const outro of conferidos.clientesDosKits) await f.garantirAcesso(ch, outro);
     const campos = { nome: c.nome, nos: c.nos, ligacoes: c.ligacoes, viewport: c.viewport };
     const id = String(bruto.id ?? "").trim();
     if (!id) {
-      const { data, error } = await db().from("foto_canvas").insert({ ...campos, client_id: clientId, versao: 1, status: "ativo", criado_por: ch.userId }).select("*").single();
+      const { data, error, avisos } = await gravarComHistoria(historia, (extra) =>
+        db().from("foto_canvas").insert({ ...campos, ...extra, client_id: clientId, versao: 1, status: "ativo", criado_por: ch.userId }).select("*").single());
       if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível criar o canvas (a migration 03 foi aplicada?).");
-      return f.json({ canvas: data, custo_usd: 0 });
+      return f.json({ canvas: data, avisos, custo_usd: 0 });
     }
     if (!UUID.test(id)) throw new ErroDeRegra(400, "canvas_id_invalido", "canvas.id precisa ser um UUID.");
     const atual = await lerCanvas(id);
@@ -530,13 +662,119 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     const patch: Record<string, unknown> = { ...campos, versao: atual.versao + 1 };
     if (corpo.arquivar === true) patch.status = "arquivado";
     if (corpo.arquivar === false) patch.status = "ativo";
-    const { data, error } = await db().from("foto_canvas").update(patch).eq("id", id).eq("versao", atual.versao).select("*").maybeSingle();
+    const { data, error, avisos } = await gravarComHistoria(historia, (extra) =>
+      db().from("foto_canvas").update({ ...patch, ...extra }).eq("id", id).eq("versao", atual.versao).select("*").maybeSingle());
     if (error) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível gravar o canvas.");
     if (!data) {
       const agora = await lerCanvas(id);
       throw new ErroDeRegra(409, "canvas_mudou", "O canvas mudou em outra aba. Recarregue antes de salvar.", { versao_atual: agora.versao, canvas: agora });
     }
-    return f.json({ canvas: data, custo_usd: 0 });
+    return f.json({ canvas: data, avisos, custo_usd: 0 });
+  }
+
+  // ---------------------------------------------------------------- personagem persistente
+
+  /**
+   * "Virar personagem": a pessoa gerada numa foto do Canvas vira persona com
+   * a foto como âncora (cópia do arquivo, para a persona não depender do
+   * acervo). Sem IA e sem custo. Pessoa real não entra (vira clone, com a
+   * autorização, na aba Clones); pessoa que já é persona usa a persona.
+   */
+  async function canvasPersonagemCriar(ch: Chamador, corpo: Record<string, unknown>) {
+    const clientId = idDe(corpo.client_id, "client_id");
+    await f.garantirAcesso(ch, clientId);
+    const imagemId = idDe(corpo.imagem_id, "imagem_id");
+    const [img] = await f.lerImagens(clientId, [imagemId]);
+    if (!img) throw new ErroDeRegra(404, "imagem_inexistente", "A foto não está no acervo deste cliente.");
+    if (!img.gerada) throw new ErroDeRegra(409, "foto_real", "Só foto gerada vira personagem. Pessoa de foto real vira clone, com a autorização, na aba Clones.");
+    const quem = pessoaDaFoto(img);
+    if (quem.tipo === "real") throw new ErroDeRegra(409, "pessoa_real", "Esta foto tem uma pessoa real. Pessoa real vira clone, com a autorização, na aba Clones.");
+    if (quem.tipo === "persona" && quem.persona_id) {
+      const { data: ja } = await db().from("foto_modelos").select("id, nome, status").eq("id", quem.persona_id).maybeSingle();
+      const p = ja as { id: string; nome: string; status: string } | null;
+      if (p && p.status !== "arquivada") throw new ErroDeRegra(409, "ja_e_modelo", `Esta pessoa já é a modelo ${p.nome}. Use o cartão Pessoa com ela.`, { modelo_id: p.id, nome: p.nome });
+    }
+    const pedido = lerPedidoDePersonagem(corpo);
+    // O gerador da foto fica como o da personagem: a folha usa o mesmo (trocar aumenta a deriva do rosto).
+    const { data: geracao } = await db().from("foto_canvas_geracoes").select("motor_id, qualidade, resolucao").eq("imagem_id", img.id).limit(1).maybeSingle();
+    const g = geracao as { motor_id: string; qualidade: string | null; resolucao: string | null } | null;
+    const motorId = g?.motor_id || limpo(corpo.modelo_imagem_id, 160) || MOTOR_PADRAO_DO_CANVAS;
+    const avisos: string[] = [];
+    const etica = { sintetica: true, adulta: true, sem_semelhanca: true, personagem: true, imagem_de_origem: img.id, marcado_por: ch.userId, marcado_em: new Date().toISOString() };
+    const linha = {
+      client_id: clientId,
+      client_origem_id: clientId,
+      nome: pedido.nome,
+      descricao: pedido.descricao,
+      ficha: pedido.ficha,
+      invariantes: pedido.invariantes,
+      referencias: [],
+      status: "rascunho",
+      etica,
+      criado_por: ch.userId,
+    };
+    let criada = await db().from("foto_modelos").insert({ ...linha, origem: ORIGEM_PERSONAGEM }).select("*").single();
+    if (criada.error) {
+      // Sem o SQL V-01 a origem 'personagem' não passa: vira sintética, marcada nas notas da ficha.
+      criada = await db().from("foto_modelos").insert({ ...linha, origem: "sintetica" }).select("*").single();
+      if (criada.error) criada = await db().from("foto_modelos").insert(linha).select("*").single();
+      if (!criada.error) avisos.push("Personagem guardada como modelo sintética (o banco ainda não tem a origem personagem, SQL V-01).");
+    }
+    if (criada.error || !criada.data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível criar a personagem (a migration 03 foi aplicada?).");
+    const p = criada.data as LinhaPersona;
+    const desfazer = async () => {
+      await db().from("foto_modelos").delete().eq("id", p.id);
+    };
+    let ancora: LinhaImagemPersona;
+    try {
+      const bytes = await f.baixar(img.storage_bucket, img.storage_path);
+      const mime = mimeDe(bytes) ?? "image/png";
+      const dim = dimensoesDaImagem(bytes);
+      const caminho = `${clientId}/foto/modelos/${p.id}/personagem-${img.id}.${extensaoDe(mime)}`;
+      await f.salvarNoMesa(caminho, bytes, mime);
+      const { data: a, error: ea } = await db().from("foto_modelo_imagens").insert({
+        modelo_id: p.id,
+        papel: "candidata",
+        storage_bucket: "mesa",
+        storage_path: caminho,
+        mime,
+        largura: dim?.largura ?? null,
+        altura: dim?.altura ?? null,
+        sha256: await sha256Hex(bytes),
+        motor_id: motorId,
+        qualidade: g?.qualidade ?? null,
+        resolucao: g?.resolucao && ["512", "1K", "2K", "4K"].includes(g.resolucao) ? g.resolucao : null,
+        fontes: [{ tipo: "acervo", id: img.id }],
+        aprovada: true,
+        custo_usd: 0,
+        criado_por: ch.userId,
+      }).select("*").single();
+      if (ea || !a) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível guardar a âncora da personagem.");
+      ancora = a as LinhaImagemPersona;
+    } catch (e) {
+      await desfazer().catch(() => undefined);
+      throw e;
+    }
+    const { data: pronta } = await db().from("foto_modelos").update({ ancora_imagem_id: ancora.id, motor_preferido_id: motorId, status: "ancora" }).eq("id", p.id).select("*").maybeSingle();
+    // A foto de origem ganha a etiqueta da personagem (a Mesa Vídeos acha as fotos dela pelo acervo).
+    const tags = Array.from(new Set([...(img.tags ?? []), "personagem", `personagem:${p.id}`])).slice(0, 30);
+    await db().from("cliente_imagens").update({ tags }).eq("id", img.id).eq("client_id", clientId);
+    let estimativa: number | null = null;
+    try {
+      const m = await carregarModelo(motorId, "imagem");
+      const q = (QUALIDADES.includes(g?.qualidade as Qualidade) ? g?.qualidade : "alta") as Qualidade;
+      estimativa = estimarComModelo(m, { imagens: 1, qualidade: q, tokensEntrada: 1_800, imagensEntrada: 1, tamanho: TAMANHO_DO_FORMATO["4:5"] });
+    } catch {
+      avisos.push("Não deu para estimar a folha agora: o custo aparece no botão antes de gerar.");
+    }
+    return f.json({
+      personagem: pronta ?? { ...p, ancora_imagem_id: ancora.id, motor_preferido_id: motorId, status: "ancora" },
+      ancora: { ...ancora, url: await f.urlAssinada(ancora.storage_bucket, ancora.storage_path) },
+      folha_sugerida: FOLHA_DO_PERSONAGEM,
+      estimativa_vista_usd: estimativa,
+      avisos,
+      custo_usd: 0,
+    });
   }
 
   async function canvasMontar(ch: Chamador, corpo: Record<string, unknown>) {
@@ -551,7 +789,12 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     if (c.status === "arquivado") throw new ErroDeRegra(409, "canvas_arquivado", "O canvas está arquivado.");
     const mt = await montar(ch, c, corpo);
     const imagens = await f.emParalelo(mt.referencias, 4, (r) => baixarFonte(c.client_id, mt.fontes.get(chaveDaFonte(r))));
-    const montado = { referencias: mt.referencias, prompt: mt.prompt, avisos: mt.avisos, base_imagem_id: mt.base_imagem_id, angulo: mt.angulo, quadro: mt.quadro, grupo: mt.grupo };
+    const montado = {
+      referencias: mt.referencias, prompt: mt.prompt, avisos: mt.avisos, base_imagem_id: mt.base_imagem_id, angulo: mt.angulo, quadro: mt.quadro, grupo: mt.grupo,
+      cena: mt.cena ? { numero: mt.cena.numero, total: mt.cena.total } : null,
+      de_resultados: mt.deResultados,
+      pessoa_real: mt.comReal,
+    };
     const { data: criada, error: e0 } = await db().from("foto_canvas_geracoes").insert({
       canvas_id: c.id,
       client_id: c.client_id,
@@ -576,7 +819,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
         qualidade: mt.qualidade,
         tamanho: TAMANHO_DO_FORMATO[mt.formato],
         resolucao: mt.resolucao,
-        seed: Number.isFinite(Number(corpo.seed)) && corpo.seed != null && corpo.seed !== "" ? Math.max(0, Math.floor(Number(corpo.seed))) : null,
+        // A seed da cena vale quando a chamada não manda outra (PESQUISA.md: seed fixa reduz a deriva).
+        seed: Number.isFinite(Number(corpo.seed)) && corpo.seed != null && corpo.seed !== "" ? Math.max(0, Math.floor(Number(corpo.seed))) : mt.seed,
         referencia: { tipo: REF_CANVAS, id: c.id },
         criadoPor: ch.userId,
         tarefa: "estudio",
@@ -597,7 +841,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       await db().from("foto_canvas_geracoes").update({ status: "falhou", ultimo_erro: "A imagem foi gerada e cobrada, mas não foi guardada.", custo_usd: arred6(saida.custoUsd), uso_id: saida.usoId || null }).eq("id", geracao.id);
       throw e;
     }
-    const comPessoa = mt.personaIds.length > 0;
+    const comPessoa = mt.comSintetica;
+    const ehCena = !!mt.cena;
     const { data: img, error: e1 } = await db().from("cliente_imagens").insert({
       client_id: c.client_id,
       origem: "mesa_foto",
@@ -605,12 +850,15 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       storage_path: caminho,
       nome: `${c.nome}, ${limpo(mt.saida.dados.titulo, 60) || "resultado"} (${saida.modeloId.split("/").pop()})`.slice(0, 160),
       pasta: "Mesa Foto / Canvas",
-      categoria: comPessoa ? "pessoa" : "produto",
+      categoria: comPessoa || mt.comReal ? "pessoa" : "produto",
       tags: Array.from(new Set([
         "mesa_foto", "canvas", "gerada", `canvas:${c.id}`,
         ...mt.kitIds.map((k) => `kit:${k}`),
         ...mt.personaIds.map((p) => `persona:${p}`),
         ...(comPessoa ? ["pessoa_sintetica"] : []),
+        // Pessoa real com autorização (direta ou herdada da cena anterior): a próxima cena sabe que é real.
+        ...(mt.comReal ? ["pessoa_real_autorizada"] : []),
+        ...(ehCena ? ["cena", `cena:${mt.saida.id}`, `historia:${c.id}`] : []),
         ...(mt.grupo ? [`serie:${mt.grupo}`] : []),
         ...(mt.quadro ? ["carrossel"] : mt.base_imagem_id ? ["variacao"] : []),
       ])).slice(0, 30),
@@ -673,15 +921,19 @@ Não julgue beleza nem gosto. Português do Brasil, sem travessão. Responda só
     if (!imagem) throw new ErroDeRegra(404, "imagem_inexistente", "A imagem desta geração saiu do acervo.");
     const refs = Array.isArray(g.montado?.referencias) ? g.montado.referencias : [];
     const doProduto = refs.filter((r) => r.papel === "produto").slice(0, 3);
-    const daPessoa = refs.filter((r) => r.papel === "pessoa").slice(0, 1);
+    const daPessoa = refs.filter((r) => r.papel === "pessoa" && (!r.origem || r.origem.tipo === "persona")).slice(0, 1);
+    // Sem persona: a pessoa da cena anterior (ou a foto real) é a verdade do rosto.
+    const pessoaDoAcervo = daPessoa.length ? [] : refs.filter((r) => r.papel === "pessoa" && r.origem && r.origem.tipo !== "persona").slice(0, 1);
     const acervo = await f.lerImagens(g.client_id, doProduto.map((r) => r.imagem_id));
+    const rostos = pessoaDoAcervo.length ? await f.lerImagens(g.client_id, pessoaDoAcervo.map((r) => r.imagem_id)) : [];
     const { data: pimgs } = daPessoa.length ? await db().from("foto_modelo_imagens").select("*").in("id", daPessoa.map((r) => r.imagem_id)) : { data: [] };
     const personaImgs = (pimgs as LinhaImagemPersona[] | null) ?? [];
-    const temPessoa = refs.some((r) => r.papel === "pessoa") || (imagem.tags ?? []).includes("pessoa_sintetica");
+    const temPessoa = refs.some((r) => r.papel === "pessoa") || (imagem.tags ?? []).includes("pessoa_sintetica") || (imagem.tags ?? []).includes("pessoa_real_autorizada");
     const [gerada, ...fontes] = await Promise.all([
       f.baixarReduzida(imagem.storage_bucket, imagem.storage_path, 1280, "gerada"),
       ...acervo.map((a) => f.baixarReduzida(a.storage_bucket, a.storage_path, 1024, `produto-${a.nome}`)),
       ...personaImgs.map((p) => f.baixarReduzida(p.storage_bucket, p.storage_path, 1024, "persona-ancora")),
+      ...rostos.map((p) => f.baixarReduzida(p.storage_bucket, p.storage_path, 1024, "pessoa-de-referencia")),
     ]);
     const criterios = [
       ...(acervo.length ? ["formato e silhueta do produto", "cor e acabamento do produto", "logotipo e texto do produto", "proporção e escala do produto"] : []),
@@ -708,6 +960,7 @@ Não julgue beleza nem gosto. Português do Brasil, sem travessão. Responda só
       "Imagem 1 = foto gerada.",
       ...acervo.map((_, i) => `Imagem ${i + 2} = foto real do produto.`),
       ...personaImgs.map((_, i) => `Imagem ${acervo.length + i + 2} = âncora da persona sintética.`),
+      ...rostos.map((_, i) => `Imagem ${acervo.length + personaImgs.length + i + 2} = a pessoa de referência (cena anterior ou foto real): o rosto tem que ser o mesmo.`),
       `Critérios: ${criterios.join("; ")}.`,
     ].join("\n");
     const leitor = await f.modeloDeTexto("leitura", corpo.modelo_id);
@@ -911,6 +1164,7 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
       canvas_gerar: canvasGerar,
       canvas_conferir: canvasConferir,
       canvas_agente: canvasAgente,
+      canvas_personagem_criar: canvasPersonagemCriar,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarCanvas,
   };
@@ -933,7 +1187,14 @@ function lerContextoDoAmbiente(ctx: { cliente: string; dados: Record<string, unk
 }
 
 /** Ações do Canvas que chamam IA ou baixam imagens (respondem com fôlego). */
-export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar", "canvas_agente"];
+export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar", "canvas_agente", "canvas_personagem_criar"];
+
+/** Coluna que ainda não existe no banco (SQL pendente): o PostgREST devolve PGRST204 e o Postgres 42703. */
+export function colunaFaltando(erro: { code?: string; message?: string } | null | undefined, coluna: string): boolean {
+  if (!erro) return false;
+  const msg = String(erro.message ?? "");
+  return (erro.code === "PGRST204" || erro.code === "42703" || /column/i.test(msg)) && msg.indexOf(coluna) >= 0;
+}
 
 /** Alvos que a ação estimar repassa para o Canvas. */
 export const ALVOS_DE_ESTIMATIVA_DO_CANVAS = ["canvas_gerar"];

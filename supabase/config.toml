@@ -111,6 +111,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.ritual-writer]
     verify_jwt = true
+  [functions.agente-central]
+    verify_jwt = true
   [functions.brain-client-context]
     verify_jwt = true
   [functions.client-checklist]
