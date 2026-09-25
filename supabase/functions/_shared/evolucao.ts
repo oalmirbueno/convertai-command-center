@@ -1190,3 +1190,78 @@ export function variacaoDoCtr(linhas: LinhaDiariaAds[]): number | null {
   if (a.impressoes < 500 || b.impressoes < 500) return null;
   return variacaoPct(b.ctr_link, a.ctr_link);
 }
+
+// ------------------------------------------------------------------ grupos de objetivo (Mesa Ads v5)
+
+/**
+ * O objetivo em linguagem de gente, pelo resultado que o anúncio de fato
+ * busca (tipoDoResultado): campanha de "engajamento" que otimiza conversa é
+ * MENSAGEM; a que otimiza curtida e comentário é ENGAJAMENTO. É o filtro da
+ * tela e a base do diagnóstico "tudo em engajamento sem objetivo de venda".
+ */
+export type GrupoDeObjetivo = "mensagem" | "vendas" | "cadastro" | "trafego" | "engajamento" | "alcance";
+
+export const GRUPOS_DE_OBJETIVO: { grupo: GrupoDeObjetivo; rotulo: string; resultado: string; tipos: TipoDeResultado[]; perto_da_venda: boolean }[] = [
+  { grupo: "mensagem", rotulo: "Mensagem", resultado: "Conversas iniciadas", tipos: ["mensagens"], perto_da_venda: true },
+  { grupo: "vendas", rotulo: "Vendas", resultado: "Compras", tipos: ["compras"], perto_da_venda: true },
+  { grupo: "cadastro", rotulo: "Cadastro", resultado: "Cadastros", tipos: ["leads"], perto_da_venda: true },
+  { grupo: "trafego", rotulo: "Tráfego", resultado: "Visitas e cliques", tipos: ["visitas", "cliques_link"], perto_da_venda: false },
+  { grupo: "engajamento", rotulo: "Engajamento", resultado: "Engajamentos", tipos: ["engajamento", "video"], perto_da_venda: false },
+  { grupo: "alcance", rotulo: "Alcance", resultado: "Pessoas alcançadas", tipos: ["alcance"], perto_da_venda: false },
+];
+
+export function grupoDoTipo(tipo: TipoDeResultado | null | undefined): GrupoDeObjetivo | null {
+  if (!tipo) return null;
+  const g = GRUPOS_DE_OBJETIVO.find((x) => x.tipos.indexOf(tipo) >= 0);
+  return g ? g.grupo : null;
+}
+
+export type MixDeObjetivos = {
+  total: number;
+  por_grupo: { grupo: GrupoDeObjetivo; rotulo: string; gasto: number; pct: number; resultados: number; custo_por_resultado: number | null; resultado_rotulo: string }[];
+  /** Parte do investimento em mensagem, vendas ou cadastro (%). */
+  perto_da_venda_pct: number;
+  alertas: string[];
+};
+
+/**
+ * Onde o dinheiro está, por grupo de objetivo, com os alertas em código:
+ * a maior parte em engajamento ou alcance sem objetivo de venda, ou nada em
+ * mensagem, vendas ou cadastro. Números reais; a IA só explica.
+ */
+export function mixDeObjetivos(itens: { tipo: TipoDeResultado | null; gasto: number; resultados: number }[]): MixDeObjetivos {
+  const soma = new Map<GrupoDeObjetivo, { gasto: number; resultados: number; tipo: TipoDeResultado | null }>();
+  let total = 0;
+  for (const i of itens) {
+    const g = grupoDoTipo(i.tipo);
+    const gasto = num(i.gasto);
+    total += gasto;
+    if (!g) continue;
+    const atual = soma.get(g) ?? { gasto: 0, resultados: 0, tipo: i.tipo };
+    atual.gasto += gasto;
+    atual.resultados += num(i.resultados);
+    soma.set(g, atual);
+  }
+  const por_grupo = GRUPOS_DE_OBJETIVO.filter((g) => soma.has(g.grupo)).map((g) => {
+    const s = soma.get(g.grupo)!;
+    return {
+      grupo: g.grupo,
+      rotulo: g.rotulo,
+      gasto: arred(s.gasto),
+      pct: total > 0 ? arred((s.gasto / total) * 100, 1) : 0,
+      resultados: s.resultados,
+      custo_por_resultado: s.resultados > 0 ? arred(s.gasto / s.resultados, g.grupo === "alcance" ? 4 : 2) : null,
+      resultado_rotulo: g.grupo === "trafego" || g.grupo === "engajamento" ? rotuloDoTipo(s.tipo) : g.resultado,
+    };
+  }).sort((a, b) => b.gasto - a.gasto);
+  const perto = por_grupo.filter((g) => (GRUPOS_DE_OBJETIVO.find((x) => x.grupo === g.grupo) ?? { perto_da_venda: false }).perto_da_venda);
+  const perto_da_venda_pct = total > 0 ? arred((perto.reduce((s, g) => s + g.gasto, 0) / total) * 100, 1) : 0;
+  const alertas: string[] = [];
+  const topo = (grupos: GrupoDeObjetivo[]) => por_grupo.filter((g) => grupos.indexOf(g.grupo) >= 0).reduce((s, g) => s + g.pct, 0);
+  const longe = topo(["engajamento", "alcance"]);
+  if (total > 0 && longe >= 50) {
+    alertas.push(`${Math.round(longe)}% do investimento está em engajamento ou alcance, que não otimizam para conversa nem venda. Se o negócio vende por WhatsApp ou Direct, a campanha principal deveria otimizar para mensagem; se vende no site com pixel, para compra.`);
+  }
+  if (total > 0 && perto_da_venda_pct === 0) alertas.push("Nenhuma campanha do período otimiza para mensagem, venda ou cadastro.");
+  return { total: arred(total), por_grupo, perto_da_venda_pct, alertas };
+}

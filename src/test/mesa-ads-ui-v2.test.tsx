@@ -313,7 +313,8 @@ describe("conta ao vivo", () => {
     expect(within(escalar).getByText("1,8%")).toBeTruthy();
     expect(within(escalar).getByText("CTR +12%")).toBeTruthy();
     expect(within(escalar).getByText("Custo abaixo do tolerável")).toBeTruthy();
-    expect(screen.getByText("R$ 1.540,50")).toBeTruthy();
+    // v5: o investimento aparece no resumo do topo (e de novo em "Mais números do período").
+    expect(screen.getAllByText("R$ 1.540,50").length).toBeGreaterThan(0);
     expect(screen.getByText("Mensagens | Clareamento", { selector: "span" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: "30 dias" }));

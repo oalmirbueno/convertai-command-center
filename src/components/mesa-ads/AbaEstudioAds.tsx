@@ -26,6 +26,7 @@ import {
   type StatusDoCriativo,
 } from "./adsApi";
 import ArteDoCriativo, { capaDoTrabalho } from "./ArteDoCriativo";
+import { ImportarPacote } from "./PacoteDeOtimizacao";
 import ResultadoDoCriativo from "./ResultadoDoCriativo";
 import { Andamento, pilula, useAndamento } from "./Comuns";
 import { laminasSemArte, produzirLamina, situacaoDe, situacaoDoTrabalho, SITUACOES, type EtapaDoLote, type SituacaoDoCriativo } from "./loteDoEstudio";
@@ -98,12 +99,15 @@ export default function AbaEstudioAds({
   onCriativo,
   planoId,
   onVerTodos,
+  onImportado,
 }: {
   criativoId: string | null;
   onCriativo: (id: string | null) => void;
   /** Plano em foco (vindo de "Produzir criativos"): a lista mostra só ele. */
   planoId: string | null;
   onVerTodos?: () => void;
+  /** v5: plano criado pelo "Importar pacote" (retorno do agente externo). */
+  onImportado?: (planoId: string) => void;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo, clientName } = mesa;
@@ -299,6 +303,7 @@ export default function AbaEstudioAds({
             {entregando.length > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="mr-1 h-3.5 w-3.5" />}
             {armado === "lote" ? `Confirmar entrega de ${prontos.length}` : `Entregar ao cliente${prontos.length ? ` (${prontos.length})` : ""}`}
           </Button>
+          <ImportarPacote onImportado={onImportado} className="mb-1 ml-2 mt-1" />
         </div>
         {desdeLote !== null && <Andamento desde={desdeLote} rotulo="Gerando, conferindo e corrigindo as artes" />}
         <div className="mt-2 flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por situação">
@@ -338,7 +343,7 @@ export default function AbaEstudioAds({
       </section>
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)] 2xl:grid-cols-[260px_minmax(0,1fr)_400px]">
-        <aside className="min-w-0 lg:sticky lg:top-[140px] lg:max-h-[calc(100vh-170px)] lg:overflow-y-auto" aria-label="Criativos">
+        <aside className="min-w-0 lg:sticky lg:top-[140px] lg:max-h-[calc(100vh-170px)] lg:overflow-y-auto lg:overscroll-contain" aria-label="Criativos">
           {grupos.length === 0 && <p className="px-1 text-[12px] text-muted-foreground">Nenhum criativo nessa situação.</p>}
           {grupos.map((g) => (
             <div key={g.chave} className="mb-3">

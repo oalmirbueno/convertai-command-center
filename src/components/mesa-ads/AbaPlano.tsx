@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, FlaskConical, ShieldCheck, Target, Wand2 } from "lucide-react";
+import { AlertTriangle, Briefcase, Check, ChevronDown, FlaskConical, ShieldCheck, Target, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
@@ -44,6 +44,7 @@ import {
 } from "./adsApi";
 import { Andamento, BarraDeNota, BarraDePolitica, pilula, SeloDeEvidencia, useAndamento } from "./Comuns";
 import ConversaDoPlano from "./ConversaDoPlano";
+import AgenteSenior from "./AgenteSenior";
 
 /**
  * Etapa 3, Plano de teste: ângulos realmente diferentes (situação × mecanismo
@@ -356,6 +357,7 @@ export default function AbaPlano({
   const [quantidade, setQuantidade] = useState(4);
   const [ofertaId, setOfertaId] = useState("");
   const [objetivo, setObjetivo] = useState("");
+  const [agenteAberto, setAgenteAberto] = useState(false);
   const [marcados, setMarcados] = useState<string[]>([]);
   const [formatos, setFormatos] = useState<FormatoAds[]>(["feed_4x5", "stories_9x16"]);
   const [desdeGerar, rodarGerar] = useAndamento();
@@ -642,6 +644,23 @@ export default function AbaPlano({
             )}
 
             <TestarPrimeiro plano={plano} />
+
+            {/* v5: o agente sênior revisa o plano com a conta ao vivo (abre sob demanda: não lê nada antes do clique). */}
+            {agenteAberto ? (
+              <AgenteSenior planoId={plano.id} />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setAgenteAberto(true)}
+                className="flex w-full min-w-0 items-center rounded-xl border border-dashed border-border bg-card px-4 py-2.5 text-left text-[12.5px] hover:border-primary/50"
+              >
+                <Briefcase className="mr-2 h-4 w-4 shrink-0 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">Revisar com o agente sênior de tráfego</span>
+                  <span className="block text-[11.5px] text-muted-foreground">Ele lê este plano junto com a conta ao vivo, a evolução e o nicho, e diz o que ajustar.</span>
+                </span>
+              </button>
+            )}
 
             <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
               {angulosOrdenados.map((a, i) => (

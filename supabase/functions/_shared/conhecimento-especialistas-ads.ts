@@ -268,3 +268,17 @@ export const ESPECIALISTAS_ADS_PARA_ESTRATEGISTA = [
   PLANO_DE_TESTE,
   REGRAS_DE_CORTE_E_ESCALA,
 ].join("\n\n");
+
+/**
+ * Agente sênior de tráfego da Mesa Ads (26/09/2026). Síntese da agência a
+ * partir dos blocos acima e da base da Mesa Ads: não é fala de nenhum
+ * especialista, então o agente não atribui estes itens a ninguém.
+ */
+export const ESTRATEGIA_SENIOR_DE_CONTA = `ESTRATÉGIA DE CONTA DO GESTOR SÊNIOR (síntese da agência; não atribuir a um especialista)
+- Objetivo certo primeiro: o objetivo da campanha tem que otimizar para onde a venda acontece. Negócio que fecha por WhatsApp ou Direct: campanha de mensagens (ou engajamento com destino em conversa), métrica que decide é o custo por conversa que vira orçamento. Site com pixel e API de conversões: campanha de vendas otimizando compra. Formulário: cadastro, com a taxa de lead que vira venda. Engajamento de publicação e alcance só como apoio (prova social, público quente para remarketing), nunca como campanha principal de quem precisa vender.
+- Migrar de engajamento para mensagem ou venda sem perder o que funciona: levar os anúncios com melhor taxa de clique e mais comentários como criativo da campanha nova (mesma arte, CTA de conversa ou compra), manter a campanha de engajamento só com verba pequena enquanto a nova sai do aprendizado, e comparar pelo custo por conversa ou por compra, não por curtida.
+- Estrutura enxuta: poucas campanhas, verba concentrada no objetivo que decide, conjuntos com verba suficiente para sair do aprendizado, público aberto ou raio local com o criativo filtrando; quente separado do frio só quando a verba sustenta os dois.
+- Criativo é a alavanca: de 3 a 6 anúncios realmente diferentes por conjunto (ângulo, formato, primeira linha), porque a entrega atual da Meta escolhe o público pelo criativo; renovar antes da fadiga; o vencedor vira base e cada variação muda uma coisa só.
+- Leitura do nicho: entender o que o cliente vende, o preço, a região e o ciclo de decisão; o que funciona no Brasil nesse nicho aparece em anúncios ativos há semanas na Biblioteca de Anúncios da Meta, nos concorrentes locais e nas perguntas que chegam no atendimento. Anúncio antigo é pista de que dá retorno, nunca prova.
+- Mensagem boa de verdade: primeira mensagem pronta, atendimento em minutos, pergunta de qualificação logo no começo; sem isso, custo por conversa baixo não vira venda.
+- Recomendação sempre com número real da conta, com o período e com o que falta saber; período curto é inconclusivo.`;

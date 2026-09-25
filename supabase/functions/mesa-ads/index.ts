@@ -71,6 +71,21 @@
  * - plano: ordem de teste, porquê e regra de corte por ângulo (números do
  *   briefing e da conta, calculados em código).
  *
+ * Mesa Ads v5 (pedido do dono em 26/09/2026; docs/mesa-ads/v5/CONTRATO-V5.md,
+ * SQL em docs/mesa-ads/v5/01_vinculos_e_biblioteca.sql, sem aplicar):
+ * - conta_ao_vivo devolve também, por anúncio, a peça (mesma arte), o grupo do
+ *   objetivo e o criativo da Mesa Ads ligado, e o mix de objetivos da conta.
+ * - vinculos_automaticos { client_id, jev? }: casa anúncio e criativo sem clique
+ *   (imagem, utm, nome, texto, título, campanha, datas; vinculo.ts), liga o que
+ *   é certo e manda o incerto ao Jev (Choice com "nenhum"); vinculo_confirmar e
+ *   vinculo_desfazer para a equipe.
+ * - conta_conversar / conta_conversa_ler: o agente sênior de tráfego (conta,
+ *   evolução, criativos, oferta, contexto, cérebro, especialistas, pesquisa web
+ *   e a Biblioteca de Anúncios quando o token permite).
+ * - pacote_otimizacao_dados: o que o pacote do agente externo leva (grátis).
+ * - pacote_importar { pacote, confirmar? }: lê o retorno do agente externo e
+ *   cria o plano com os criativos para o Estúdio Ads.
+ *
  * Regras: só dado real; toda leitura e escrita presa ao client_id; nenhuma
  * falha responde 200; toda ação que gasta devolve custo_usd e saldo_usd;
  * números de conta vêm do código, nunca da IA; relógio de 400 s controlado
@@ -99,7 +114,9 @@ import {
   AGENTE_DO_CANAL,
   chaveDaMemoria,
   compararPeriodos,
+  grupoDoTipo,
   type LeituraDeEvolucao,
+  mixDeObjetivos,
   lerDesempenhoDoCliente,
   lerDiariasAds,
   lerEvolucao,
@@ -150,7 +167,29 @@ import {
   type FormatoAds,
   type Nicho,
 } from "../_shared/conhecimento-ads.ts";
-import { conhecimentoAdsPara, type TarefaAds } from "../_shared/conhecimento-dos-agentes.ts";
+import { conhecimentoAdsPara, montarComTeto, objetivoDoChecklist, type BlocoDeConhecimento, type TarefaAds } from "../_shared/conhecimento-dos-agentes.ts";
+import {
+  CHECKLIST_CRIATIVO_POR_OBJETIVO,
+  CRIATIVO_NATALIA,
+  ERROS_COMUNS_TRAFEGO,
+  ESTRATEGIA_SENIOR_DE_CONTA,
+  ESTRUTURA_DE_CONTA,
+  GANCHOS_DOS_ESPECIALISTAS,
+  ORCAMENTO_INICIAL,
+  PLANO_DE_TESTE,
+  REGRAS_DE_CORTE_E_ESCALA,
+} from "../_shared/conhecimento-especialistas-ads.ts";
+import {
+  type AnuncioParaVinculo,
+  type CriativoParaVinculo,
+  decidirVinculos,
+  slug as slugDoVinculo,
+  textosDoCriativo,
+  type VinculoDecidido,
+} from "./vinculo.ts";
+import { impressaoDaImagem } from "./vinculo-imagem.ts";
+import { anunciosDaBiblioteca, type AnuncioDaBiblioteca, ESQUEMA_AGENTE_SENIOR, estrategiaEmMarkdown, normalizarEstrategia, tarefaDoAgenteSenior } from "./agente-senior.ts";
+import { validarRetorno } from "./pacote-retorno.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import {
   alertaDePolitica,
@@ -164,6 +203,7 @@ import {
   ordemDeTeste,
   regraDeCorte,
   cortarNaPalavra,
+  chaveDaPeca,
   type CriativoDoPacote,
   type Diaria,
   diagnosticar,
@@ -4072,7 +4112,7 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
   const { inicio, fim } = periodo;
   const antesFim = somarDias(inicio, -1);
   const antesInicio = somarDias(inicio, -periodo.dias);
-  const [contas, campanhasQ, anuncios, diariasBrutas, anterioresBrutas, briefing, refsQ, saldos] = await Promise.all([
+  const [contas, campanhasQ, anuncios, diariasBrutas, anterioresBrutas, briefing, refsQ, saldos, ligadosQ] = await Promise.all([
     servico.from("external_accounts").select("id, status").eq("client_id", clientId).eq("platform", "meta_ads"),
     servico.from("ads_campaigns").select("campaign_id, name, effective_status, objective, daily_budget, lifetime_budget, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(300),
     lerAnunciosDoCliente(servico, clientId, false),
@@ -4081,6 +4121,8 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
     carregarBriefing(servico, clientId).catch(() => null),
     servico.from("ads_referencias").select("id, ad_id, storage_path").eq("client_id", clientId).not("ad_id", "is", null),
     lerSaldosDasContas(servico, clientId).catch(() => ({ contas: [] as SaldoDaConta[], disponivel: false })),
+    // v5: criativos da Mesa Ads já ligados a anúncio (a mesma arte em outro anúncio herda o vínculo pela peça).
+    servico.from("ads_criativos").select("id, nome, ad_id").eq("client_id", clientId).not("ad_id", "is", null).limit(500),
   ]);
   if (campanhasQ.error) throw new ErroHttp(503, "campanhas_indisponiveis", "Não foi possível ler as campanhas do cliente.");
   const diarias = diariasBrutas as unknown as Diaria[];
@@ -4145,6 +4187,15 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
     assinarCaminhos(servico, alvo.map((a) => refPorAd.get(a.ad_id)?.storage_path ?? "").filter((c) => c.startsWith(`${clientId}/`))),
     lerRawDosAnuncios(servico, clientId, alvo.map((a) => a.ad_id)),
   ]);
+  const ligados = (ligadosQ.data as { id: string; nome: string | null; ad_id: string }[] | null) ?? [];
+  const criativoPorAd = new Map(ligados.map((c) => [c.ad_id, c]));
+  const pecaPorAd = new Map(alvo.map((a) => [a.ad_id, chaveDaPeca(raws.get(a.ad_id) ?? null, a)]));
+  const criativoPorPeca = new Map<string, { id: string; nome: string | null }>();
+  for (const a of alvo) {
+    const c = criativoPorAd.get(a.ad_id);
+    const peca = pecaPorAd.get(a.ad_id);
+    if (c && peca && !criativoPorPeca.has(peca)) criativoPorPeca.set(peca, c);
+  }
   const lista = alvo.map((a) => {
     const linhas = porAd.get(a.ad_id) ?? [];
     const metricas = metricasDaConta(linhas, tipos.get(a.ad_id) ?? null, objetivos);
@@ -4172,6 +4223,15 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
       tendencia,
       sinal: sinalDoAnuncio(metricas, tendencia, custoReferencia),
       referencia_id: ref?.id ?? null,
+      // v5: peça (mesma arte em vários anúncios), grupo do objetivo e o criativo da Mesa Ads ligado.
+      peca: pecaPorAd.get(a.ad_id) ?? null,
+      grupo: grupoDoTipo(metricas.resultado_tipo),
+      criativo: (() => {
+        const direto = criativoPorAd.get(a.ad_id);
+        if (direto) return { id: direto.id, nome: direto.nome, origem: "ligado" as const };
+        const pela = pecaPorAd.get(a.ad_id) ? criativoPorPeca.get(pecaPorAd.get(a.ad_id)!) : null;
+        return pela ? { id: pela.id, nome: pela.nome, origem: "mesma_peca" as const } : null;
+      })(),
     };
   }).sort((x, y) => Number(y.status === "ACTIVE") - Number(x.status === "ACTIVE") || y.metricas.gasto - x.metricas.gasto);
   return {
@@ -4188,9 +4248,11 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
       por_tipo: mediasTipo,
     },
     contas: saldos.contas,
-    campanhas,
+    campanhas: campanhas.map((c) => ({ ...c, grupo: grupoDoTipo(c.metricas.resultado_tipo) })),
     conjuntos,
     anuncios: lista,
+    // v5: onde o dinheiro está por objetivo, com os alertas em código ("tudo em engajamento sem objetivo de venda").
+    mix_objetivos: mixDeObjetivos(lista.map((a) => ({ tipo: a.metricas.resultado_tipo, gasto: a.metricas.gasto, resultados: a.metricas.resultados }))),
   };
 }
 
@@ -5012,6 +5074,894 @@ async function pacoteEnviar(servico: SupabaseClient, chamador: Chamador, corpo: 
   });
 }
 
+// ------------------------------------------------------------ v5 (pedido do dono em 26/09/2026)
+// Vínculo automático anúncio x criativo, agente sênior de tráfego e o pacote
+// do agente externo (docs/mesa-ads/v5/CONTRATO-V5.md; SQL em docs/mesa-ads/v5).
+
+/** Conversa do agente sênior (agente_conversas.referencia_tipo sem check; referencia_id = client_id). */
+const REF_CONTA = "ads_conta";
+const MAX_ADS_NO_VINCULO = 150;
+const MAX_CRIATIVOS_NO_VINCULO = 80;
+/** Impressões digitais novas por chamada (o resto fica no cache para a próxima). */
+const MAX_IMPRESSOES_POR_CHAMADA = 90;
+const TEMPO_DAS_IMPRESSOES_MS = 90_000;
+/** Confiança mínima da escolha do Jev (Choice) para ligar sozinho ou recusar com "nenhum". */
+const CONFIANCA_DO_JEV_NO_VINCULO = 0.6;
+const MAX_INCERTOS_NO_JEV = 20;
+const TETO_AGENTE_SENIOR = 13_000;
+const HISTORICO_DO_AGENTE_SENIOR = 10;
+
+type CriativoDoVinculo = {
+  id: string;
+  nome: string | null;
+  copy: Record<string, unknown> | null;
+  criado_em: string | null;
+  ad_id: string | null;
+  plano_id: string | null;
+  angulo_id: string | null;
+  trabalho_id: string | null;
+  formato: string | null;
+  status: string | null;
+};
+
+/** Arte principal de um trabalho do Estúdio: a entregue (bucket files) ou a versão mais recente da primeira lâmina (bucket mesa). */
+function arteDoTrabalho(t: { cards?: unknown; direcao?: unknown } | null | undefined): { bucket: string; caminho: string } | null {
+  if (!t) return null;
+  const direcao = (t.direcao && typeof t.direcao === "object" ? t.direcao : {}) as Record<string, unknown>;
+  const entrega = (direcao.entrega_ads && typeof direcao.entrega_ads === "object" ? direcao.entrega_ads : {}) as Record<string, unknown>;
+  const entregues = (Array.isArray(entrega.arquivos) ? entrega.arquivos : []) as Record<string, unknown>[];
+  const primeiraEntregue = entregues.filter((a) => typeof a?.storage_path === "string" && a.storage_path).sort((a, b) => Number(a.ordem ?? 1) - Number(b.ordem ?? 1))[0];
+  if (primeiraEntregue) return { bucket: "files", caminho: String(primeiraEntregue.storage_path) };
+  const cards = (Array.isArray(t.cards) ? t.cards : []) as Record<string, unknown>[];
+  const validos = cards.filter((c) => typeof c?.storage_path === "string" && c.storage_path);
+  if (!validos.length) return null;
+  const menorOrdem = Math.min(...validos.map((c) => Number(c.ordem ?? 1)));
+  const daCapa = validos.filter((c) => Number(c.ordem ?? 1) === menorOrdem).sort((a, b) => Number(b.versao ?? 0) - Number(a.versao ?? 0))[0];
+  return { bucket: "mesa", caminho: String(daCapa.storage_path) };
+}
+
+/** Pares recusados (pela equipe ou pelo Jev com "nenhum") e peças já julgadas pelo Jev sem certeza. Sem a tabela (SQL v5), vazio. */
+async function lerDecisoesDeVinculo(servico: SupabaseClient, clientId: string): Promise<{ recusados: Set<string>; julgadas: Set<string>; disponivel: boolean }> {
+  const { data, error } = await servico.from("ads_vinculos").select("criativo_id, ad_id, estado").eq("client_id", clientId).in("estado", ["recusado", "jev_incerto"]).limit(3000);
+  if (error) return { recusados: new Set(), julgadas: new Set(), disponivel: false };
+  const recusados = new Set<string>();
+  const julgadas = new Set<string>();
+  for (const l of (data as { criativo_id: string | null; ad_id: string; estado: string }[] | null) ?? []) {
+    if (l.estado === "recusado" && l.criativo_id) recusados.add(`${l.criativo_id}|${l.ad_id}`);
+    if (l.estado === "jev_incerto") julgadas.add(l.ad_id);
+  }
+  return { recusados, julgadas, disponivel: true };
+}
+
+/** Registro da decisão (histórico e memória do "não é este"). Sem a tabela, só não grava. */
+async function gravarDecisoesDeVinculo(servico: SupabaseClient, linhas: Record<string, unknown>[]): Promise<boolean> {
+  if (!linhas.length) return true;
+  const { error } = await servico.from("ads_vinculos").insert(linhas);
+  if (error) console.error("[mesa-ads] vinculo nao registrado", { code: error.code });
+  return !error;
+}
+
+async function impressoesEmCache(servico: SupabaseClient, clientId: string, chaves: string[]): Promise<Map<string, string>> {
+  const mapa = new Map<string, string>();
+  for (let i = 0; i < chaves.length; i += 50) {
+    const { data, error } = await servico.from("ads_impressoes").select("chave, impressao").eq("client_id", clientId).in("chave", chaves.slice(i, i + 50));
+    if (error) return mapa;
+    for (const l of (data as { chave: string; impressao: string }[] | null) ?? []) mapa.set(l.chave, l.impressao);
+  }
+  return mapa;
+}
+
+async function impressaoDeUrl(url: string | null): Promise<string | null> {
+  if (!url) return null;
+  const b = await buscarSeguro(url, { maxBytes: 6 * 1024 * 1024, aceitar: "image/png,image/jpeg;q=0.9,image/*;q=0.5", timeoutMs: 10_000 });
+  return b ? await impressaoDaImagem(b.bytes) : null;
+}
+
+async function impressaoDoStorage(servico: SupabaseClient, bucket: string, caminho: string): Promise<string | null> {
+  const { data, error } = await servico.storage.from(bucket).download(caminho);
+  if (error || !data) return null;
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  return bytes.byteLength > MAX_BYTES_IMAGEM ? null : await impressaoDaImagem(bytes);
+}
+
+type ItemDoVinculo = {
+  peca: string;
+  estado: "ligado" | "automatico" | "incerto" | "sem_par";
+  origem: "ja_ligado" | "automatico" | "jev" | "confirmar" | "sem_par";
+  confianca: number;
+  sinais: { tipo: string; detalhe: string }[];
+  anuncio: { ad_id: string; ad_ids: string[]; nome: string | null; titulo: string | null; corpo: string | null; imagem_url: string | null; status: string | null; campanha: string | null; gasto_90d: number; primeiro_dia: string | null };
+  criativo: { id: string; nome: string | null; plano: string | null; angulo: string | null; formato: string | null; criado_em: string | null } | null;
+  candidatos: { criativo_id: string; nome: string | null; confianca: number; sinais: string[] }[];
+};
+
+/**
+ * Casa os anúncios da conta com os criativos da Mesa Ads (vinculo.ts) e liga
+ * sozinho o que tem confiança alta. Com `jev`, os incertos vão ao Jev
+ * (Choice com "nenhum", uma chamada para todos); o que o Jev não decidir com
+ * confiança fica para a equipe confirmar. Sem laço: uma rodada por chamada.
+ */
+async function vinculosAutomaticos(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const usarJev = corpo.jev !== false;
+  const hoje = hojeSaoPaulo();
+  const desde = somarDias(hoje, -90);
+  const [anuncios, diarias, criativosQ, planosQ, campanhasQ, decisoes, refsQ] = await Promise.all([
+    lerAnunciosDoCliente(servico, clientId, true),
+    lerDiarias(servico, clientId, { desde }),
+    servico.from("ads_criativos").select("id, nome, copy, criado_em, ad_id, plano_id, angulo_id, trabalho_id, formato, status").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(300),
+    servico.from("ads_planos").select("id, nome, angulos").eq("client_id", clientId).limit(100),
+    servico.from("ads_campaigns").select("campaign_id, name").eq("client_id", clientId).limit(300),
+    lerDecisoesDeVinculo(servico, clientId),
+    servico.from("ads_referencias").select("ad_id, storage_path").eq("client_id", clientId).not("ad_id", "is", null),
+  ]);
+  if (criativosQ.error) throw new ErroHttp(503, "criativos_indisponiveis", "Não foi possível ler os criativos da Mesa Ads.");
+  const todosCriativos = (criativosQ.data as CriativoDoVinculo[] | null) ?? [];
+  const planos = (planosQ.data as { id: string; nome: string; angulos: { id: string; nome: string }[] | null }[] | null) ?? [];
+  const nomeCampanha = new Map(((campanhasQ.data as { campaign_id: string; name: string | null }[] | null) ?? []).map((c) => [c.campaign_id, c.name]));
+  const refPorAd = new Map(((refsQ.data as { ad_id: string; storage_path: string | null }[] | null) ?? []).map((r) => [r.ad_id, r.storage_path]));
+
+  // Anúncios: com entrega nos últimos 90 dias ou ativos, os de maior gasto primeiro.
+  const porAd = porAnuncio(diarias);
+  const brutos = anuncios
+    .map((a) => {
+      const linhas = porAd.get(a.ad_id) ?? [];
+      const gasto = linhas.reduce((s, l) => s + (Number(l.spend) || 0), 0);
+      const dias = linhas.map((l) => String(l.day).slice(0, 10)).sort();
+      return { a, gasto: Math.round(gasto * 100) / 100, primeiro: dias[0] ?? null };
+    })
+    .filter((x) => x.gasto > 0 || x.a.effective_status === "ACTIVE")
+    .sort((x, y) => y.gasto - x.gasto)
+    .slice(0, MAX_ADS_NO_VINCULO);
+  const adsParaVinculo: AnuncioParaVinculo[] = brutos.map(({ a, gasto, primeiro }) => {
+    const copy = extrairCopyDoRaw(a.raw, a);
+    return {
+      ad_id: a.ad_id,
+      nome: a.ad_name,
+      titulo: copy.titulo,
+      corpo: copy.corpo,
+      destino: copy.destino,
+      campanha: a.campaign_id ? nomeCampanha.get(a.campaign_id) ?? null : null,
+      primeiro_dia: primeiro,
+      gasto,
+      status: a.effective_status,
+      peca: chaveDaPeca(a.raw, a),
+      impressao: null,
+      imagem_url: copy.imagem_url || copy.miniatura_url,
+    };
+  });
+
+  const criativos = todosCriativos.filter((c) => c.status !== "encerrado").slice(0, MAX_CRIATIVOS_NO_VINCULO);
+  const planoDe = new Map(planos.map((p) => [p.id, p]));
+  const trabalhoIds = criativos.filter((c) => !c.ad_id && c.trabalho_id).map((c) => c.trabalho_id as string);
+  const trabalhosQ = trabalhoIds.length
+    ? await servico.from("estudio_trabalhos").select("id, cards, direcao").eq("client_id", clientId).in("id", trabalhoIds)
+    : { data: [] as unknown[] };
+  const arteDe = new Map(((trabalhosQ.data as { id: string; cards: unknown; direcao: unknown }[] | null) ?? []).map((t) => [t.id, arteDoTrabalho(t)]));
+  const criativosParaVinculo: CriativoParaVinculo[] = criativos.map((c) => {
+    const p = c.plano_id ? planoDe.get(c.plano_id) : null;
+    const angulo = p && Array.isArray(p.angulos) ? p.angulos.find((x) => x && x.id === c.angulo_id) : null;
+    const { textos, titulos } = textosDoCriativo(c.copy);
+    return {
+      id: c.id,
+      nome: c.nome,
+      textos,
+      titulos,
+      criado_em: c.criado_em,
+      plano: p?.nome ?? null,
+      angulo: angulo?.nome ?? null,
+      ad_id: c.ad_id,
+      impressao: null,
+      nome_do_anuncio: c.nome ? slugDoVinculo(c.nome).slice(0, 60) : null,
+    };
+  });
+
+  // Impressões digitais: só de quem ainda pode casar (anúncio sem criativo, criativo sem anúncio), com cache.
+  const ligadosPorAd = new Set(criativos.filter((c) => c.ad_id).map((c) => c.ad_id as string));
+  const adsSoltos = adsParaVinculo.filter((a) => !ligadosPorAd.has(a.ad_id));
+  const criativosLivres = criativosParaVinculo.filter((c) => !c.ad_id);
+  const chaveDoAd = (a: AnuncioParaVinculo) => `peca:${a.peca ?? `ad:${a.ad_id}`}`;
+  const chaveDaArte = (c: CriativoParaVinculo) => {
+    const t = criativos.find((x) => x.id === c.id)?.trabalho_id;
+    const arte = t ? arteDe.get(t) : null;
+    return arte ? `arte:${arte.bucket}/${arte.caminho}` : null;
+  };
+  let cacheDisponivel = true;
+  const cache = await impressoesEmCache(servico, clientId, [
+    ...adsSoltos.map(chaveDoAd),
+    ...criativosLivres.map(chaveDaArte).filter((x): x is string => !!x),
+  ]).catch(() => {
+    cacheDisponivel = false;
+    return new Map<string, string>();
+  });
+  const tarefas: { chave: string; rodar: () => Promise<string | null>; aplicar: (h: string) => void }[] = [];
+  const pedidas = new Set<string>();
+  for (const c of criativosLivres) {
+    const k = chaveDaArte(c);
+    if (!k) continue;
+    const emCache = cache.get(k);
+    if (emCache) c.impressao = emCache;
+    else if (!pedidas.has(k)) {
+      pedidas.add(k);
+      const [bucket, ...resto] = k.slice(5).split("/");
+      const alvos = criativosLivres.filter((x) => chaveDaArte(x) === k);
+      tarefas.push({ chave: k, rodar: () => impressaoDoStorage(servico, bucket, resto.join("/")), aplicar: (h) => alvos.forEach((x) => (x.impressao = h)) });
+    }
+  }
+  for (const a of adsSoltos) {
+    const k = chaveDoAd(a);
+    const emCache = cache.get(k);
+    if (emCache) a.impressao = emCache;
+    else if (!pedidas.has(k)) {
+      pedidas.add(k);
+      const alvos = adsSoltos.filter((x) => chaveDoAd(x) === k);
+      const guardada = refPorAd.get(a.ad_id);
+      tarefas.push({
+        chave: k,
+        rodar: () => (guardada && guardada.startsWith(`${clientId}/`) ? impressaoDoStorage(servico, "mesa", guardada) : impressaoDeUrl(a.imagem_url)),
+        aplicar: (h) => alvos.forEach((x) => (x.impressao = h)),
+      });
+    }
+  }
+  const inicioDasImpressoes = Date.now();
+  const novas: { client_id: string; chave: string; impressao: string }[] = [];
+  let impressoesPendentes = Math.max(0, tarefas.length - MAX_IMPRESSOES_POR_CHAMADA);
+  await emParalelo(tarefas.slice(0, MAX_IMPRESSOES_POR_CHAMADA), 6, async (t) => {
+    if (Date.now() - inicioDasImpressoes > TEMPO_DAS_IMPRESSOES_MS || restanteMs(chamador) < 120_000) {
+      impressoesPendentes++;
+      return;
+    }
+    const h = await t.rodar().catch(() => null);
+    if (h) {
+      t.aplicar(h);
+      novas.push({ client_id: clientId, chave: t.chave, impressao: h });
+    }
+  });
+  if (novas.length && cacheDisponivel) {
+    const { error } = await servico.from("ads_impressoes").upsert(novas, { onConflict: "client_id,chave" });
+    if (error) console.error("[mesa-ads] impressoes nao guardadas", { code: error.code });
+  }
+
+  let decididos = decidirVinculos(adsParaVinculo, criativosParaVinculo, { recusados: decisoes.recusados });
+  const registros: Record<string, unknown>[] = [];
+  const origemDe = new Map<string, ItemDoVinculo["origem"]>();
+
+  // Liga sozinho o que tem confiança alta (ads_criativos.ad_id = o anúncio de maior gasto da peça).
+  const ligarNoBanco = async (criativoId: string, adId: string) => {
+    const { data, error } = await servico.from("ads_criativos").update({ ad_id: adId }).eq("id", criativoId).eq("client_id", clientId).is("ad_id", null).select("id").maybeSingle();
+    return !error && !!data;
+  };
+  for (const d of decididos) {
+    if (d.estado !== "automatico" || !d.criativo_id) continue;
+    if (await ligarNoBanco(d.criativo_id, d.ad_principal)) {
+      origemDe.set(d.peca, "automatico");
+      registros.push({ client_id: clientId, criativo_id: d.criativo_id, ad_id: d.ad_principal, estado: "ligado", origem: "automatico", confianca: d.confianca, sinais: d.sinais, criado_por: chamador.userId });
+    } else d.estado = "incerto";
+  }
+
+  // Incertos: o Jev escolhe entre os candidatos ou "nenhum" (uma chamada só).
+  let custo = 0;
+  let jevErro: string | null = null;
+  const incertos = decididos.filter((d) => d.estado === "incerto" && d.candidatos.length && !decisoes.julgadas.has(d.ad_principal)).slice(0, MAX_INCERTOS_NO_JEV);
+  if (usarJev && incertos.length) {
+    const adPorId = new Map(adsParaVinculo.map((a) => [a.ad_id, a]));
+    const crPorId = new Map(criativosParaVinculo.map((c) => [c.id, c]));
+    const casos = incertos.map((d) => {
+      const a = adPorId.get(d.ad_principal)!;
+      const candidatos: Record<string, unknown> = {};
+      d.candidatos.forEach((p, k) => {
+        const c = crPorId.get(p.criativo_id);
+        candidatos[`c${k + 1}`] = { nome: c?.nome ?? null, plano: c?.plano ?? null, angulo: c?.angulo ?? null, criado_em: c?.criado_em?.slice(0, 10) ?? null, titulos: c?.titulos.slice(0, 3) ?? [], textos: (c?.textos ?? []).slice(0, 2).map((x) => x.slice(0, 300)), sinais_do_codigo: p.sinais.map((s) => s.detalhe) };
+      });
+      return { anuncio: { nome: a.nome, titulo: a.titulo, texto: (a.corpo ?? "").slice(0, 400), campanha: a.campanha, primeiro_dia: a.primeiro_dia }, candidatos };
+    });
+    const questions: Record<string, PerguntaJev> = {};
+    casos.forEach((c, i) => {
+      const criteria: Record<string, string> = {};
+      for (const k of Object.keys(c.candidatos)) criteria[k] = `O anúncio foi feito a partir do criativo \`casos[${i}].candidatos.${k}\`.`;
+      criteria.nenhum = "Nenhum destes criativos: o anúncio foi feito fora da Mesa Ads ou a partir de outra peça.";
+      questions[`caso_${i}`] = {
+        type: "choice",
+        instructions: `O anúncio \`casos[${i}].anuncio\` da conta da Meta foi feito a partir de qual criativo da Mesa Ads em \`casos[${i}].candidatos\`? Compare o texto, o título, o nome, a campanha e as datas. Mesmo nicho ou mesmo assunto sozinhos não bastam: precisa ser a mesma peça (mesma ideia com o mesmo texto ou título, ou o nome do anúncio igual ao do criativo).`,
+        criteria,
+      };
+    });
+    try {
+      const r = await jevPerguntar({ state: { casos }, questions });
+      const cobrado = await cobrarJev(r, { clientId, tarefa: TAREFA, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId });
+      custo += cobrado?.custoUsd ?? 0;
+      const ocupados = new Set(decididos.filter((d) => d.estado === "ligado" || d.estado === "automatico").map((d) => d.criativo_id));
+      for (let i = 0; i < incertos.length; i++) {
+        const d = incertos[i];
+        const resp = r.answers[`caso_${i}`];
+        const confiante = typeof resp?.confidence === "number" && resp.confidence >= CONFIANCA_DO_JEV_NO_VINCULO;
+        if (resp?.choice === "nenhum" && confiante) {
+          for (const p of d.candidatos) registros.push({ client_id: clientId, criativo_id: p.criativo_id, ad_id: d.ad_principal, estado: "recusado", origem: "jev", confianca: resp.confidence, sinais: p.sinais, criado_por: chamador.userId });
+          d.estado = "sem_par";
+          d.criativo_id = null;
+          origemDe.set(d.peca, "sem_par");
+          continue;
+        }
+        const k = resp?.choice ? Number(String(resp.choice).slice(1)) - 1 : -1;
+        const escolhido = k >= 0 ? d.candidatos[k] : null;
+        if (escolhido && confiante && !ocupados.has(escolhido.criativo_id) && (await ligarNoBanco(escolhido.criativo_id, d.ad_principal))) {
+          ocupados.add(escolhido.criativo_id);
+          d.estado = "automatico";
+          d.criativo_id = escolhido.criativo_id;
+          d.confianca = escolhido.confianca;
+          d.sinais = escolhido.sinais;
+          origemDe.set(d.peca, "jev");
+          registros.push({ client_id: clientId, criativo_id: escolhido.criativo_id, ad_id: d.ad_principal, estado: "ligado", origem: "jev", confianca: resp?.confidence ?? null, sinais: escolhido.sinais, criado_por: chamador.userId });
+        } else {
+          // Sem certeza: fica para a equipe; o Jev não é perguntado de novo sobre esta peça.
+          registros.push({ client_id: clientId, criativo_id: null, ad_id: d.ad_principal, estado: "jev_incerto", origem: "jev", confianca: resp?.confidence ?? null, sinais: [], criado_por: chamador.userId });
+        }
+      }
+    } catch (err) {
+      jevErro = err instanceof JevErro ? err.codigo : "jev_falhou";
+      console.error("[mesa-ads] jev do vinculo falhou", { codigo: jevErro });
+    }
+  }
+  const registrado = await gravarDecisoesDeVinculo(servico, registros);
+
+  const adPorId = new Map(adsParaVinculo.map((a) => [a.ad_id, a]));
+  const crPorId = new Map(criativos.map((c) => [c.id, c]));
+  const infoDoCriativo = (id: string | null) => {
+    const c = id ? crPorId.get(id) : null;
+    if (!c) return null;
+    const cv = criativosParaVinculo.find((x) => x.id === c.id);
+    return { id: c.id, nome: c.nome, plano: cv?.plano ?? null, angulo: cv?.angulo ?? null, formato: c.formato, criado_em: c.criado_em };
+  };
+  const itens: ItemDoVinculo[] = decididos.map((d: VinculoDecidido) => {
+    const a = adPorId.get(d.ad_principal)!;
+    const origem: ItemDoVinculo["origem"] = origemDe.get(d.peca) ?? (d.estado === "ligado" ? "ja_ligado" : d.estado === "incerto" ? "confirmar" : d.estado === "automatico" ? "automatico" : "sem_par");
+    return {
+      peca: d.peca,
+      estado: d.estado,
+      origem,
+      confianca: d.confianca,
+      sinais: d.sinais.map((s) => ({ tipo: s.tipo, detalhe: s.detalhe })),
+      anuncio: {
+        ad_id: a.ad_id,
+        ad_ids: d.ad_ids,
+        nome: a.nome,
+        titulo: a.titulo,
+        corpo: a.corpo ? a.corpo.slice(0, 300) : null,
+        imagem_url: a.imagem_url,
+        status: a.status,
+        campanha: a.campanha,
+        gasto_90d: d.ad_ids.reduce((s, id) => s + (adPorId.get(id)?.gasto ?? 0), 0),
+        primeiro_dia: a.primeiro_dia,
+      },
+      criativo: d.estado === "sem_par" ? null : infoDoCriativo(d.criativo_id),
+      candidatos: d.estado === "ligado" || d.estado === "automatico" ? [] : d.candidatos.map((p) => ({ criativo_id: p.criativo_id, nome: crPorId.get(p.criativo_id)?.nome ?? null, confianca: p.confianca, sinais: p.sinais.map((s) => s.detalhe) })),
+    };
+  });
+  const conta = (o: ItemDoVinculo["origem"]) => itens.filter((i) => i.origem === o).length;
+  return json({
+    itens,
+    resumo: { ja_ligados: conta("ja_ligado"), automaticos: conta("automatico"), pelo_jev: conta("jev"), confirmar: conta("confirmar"), sem_par: conta("sem_par"), criativos_livres: criativosLivres.length - itens.filter((i) => i.origem === "automatico" || i.origem === "jev").length },
+    impressoes: { novas: novas.length, pendentes: impressoesPendentes },
+    historico_disponivel: decisoes.disponivel && registrado,
+    jev_erro: jevErro,
+    custo_usd: arred6(custo),
+  });
+}
+
+/** Criativo e anúncio do mesmo cliente (o anúncio precisa existir na conta coletada). */
+async function conferirParDoVinculo(servico: SupabaseClient, clientId: string, criativoId: unknown, adId: unknown) {
+  const cid = String(criativoId ?? "");
+  const aid = String(adId ?? "").trim();
+  if (!UUID.test(cid)) throw new ErroHttp(400, "criativo_id_invalido", "criativo_id precisa ser um UUID.");
+  if (!/^[0-9]{3,30}$/.test(aid)) throw new ErroHttp(400, "ad_id_invalido", "ad_id precisa ser o número do anúncio da Meta.");
+  const [cq, aq] = await Promise.all([
+    servico.from("ads_criativos").select("id, ad_id").eq("id", cid).eq("client_id", clientId).maybeSingle(),
+    servico.from("ads_creatives").select("ad_id").eq("client_id", clientId).eq("ad_id", aid).limit(1),
+  ]);
+  if (cq.error || !cq.data) throw new ErroHttp(404, "criativo_inexistente", "Criativo não encontrado neste cliente.");
+  if (!((aq.data as unknown[] | null) ?? []).length) throw new ErroHttp(404, "anuncio_inexistente", "Anúncio não encontrado na conta deste cliente.");
+  return { criativoId: cid, adId: aid, atual: (cq.data as { ad_id: string | null }).ad_id };
+}
+
+/** vinculo_confirmar { client_id, criativo_id, ad_id } -> { criativo_id, ad_id, custo_usd: 0 }: a equipe confirma o par incerto. */
+async function vinculoConfirmar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const par = await conferirParDoVinculo(servico, clientId, corpo.criativo_id, corpo.ad_id);
+  const { data: outro } = await servico.from("ads_criativos").select("id, nome").eq("client_id", clientId).eq("ad_id", par.adId).neq("id", par.criativoId).limit(1);
+  if (((outro as unknown[] | null) ?? []).length) throw new ErroHttp(409, "anuncio_ja_ligado", "Este anúncio já está ligado a outro criativo. Desfaça aquele vínculo antes.");
+  const { error } = await servico.from("ads_criativos").update({ ad_id: par.adId }).eq("id", par.criativoId).eq("client_id", clientId);
+  if (error) throw new ErroHttp(503, "vinculo_nao_salvo", "Não foi possível ligar o anúncio ao criativo.");
+  await gravarDecisoesDeVinculo(servico, [{ client_id: clientId, criativo_id: par.criativoId, ad_id: par.adId, estado: "ligado", origem: "equipe", confianca: 1, sinais: [], criado_por: chamador.userId }]);
+  return json({ criativo_id: par.criativoId, ad_id: par.adId, custo_usd: 0 });
+}
+
+/**
+ * vinculo_desfazer { client_id, criativo_id, ad_id, recusar? } -> { criativo_id, ad_id, recusado, custo_usd: 0 }
+ * Tira o vínculo (se for este) e, com recusar, grava que o par não é este para não voltar como sugestão.
+ */
+async function vinculoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const par = await conferirParDoVinculo(servico, clientId, corpo.criativo_id, corpo.ad_id);
+  if (par.atual === par.adId) {
+    const { error } = await servico.from("ads_criativos").update({ ad_id: null }).eq("id", par.criativoId).eq("client_id", clientId).eq("ad_id", par.adId);
+    if (error) throw new ErroHttp(503, "vinculo_nao_desfeito", "Não foi possível desfazer o vínculo.");
+  }
+  const recusar = corpo.recusar !== false;
+  const gravado = recusar
+    ? await gravarDecisoesDeVinculo(servico, [{ client_id: clientId, criativo_id: par.criativoId, ad_id: par.adId, estado: "recusado", origem: "equipe", confianca: 1, sinais: [], criado_por: chamador.userId }])
+    : true;
+  return json({
+    criativo_id: par.criativoId,
+    ad_id: par.adId,
+    recusado: recusar && gravado,
+    aviso: recusar && !gravado ? "O vínculo saiu, mas a recusa não ficou guardada (tabela ads_vinculos ainda não aplicada): o par pode voltar como sugestão." : null,
+    custo_usd: 0,
+  });
+}
+
+// ---- agente sênior de tráfego
+
+/** Sistema do agente sênior: a base da Mesa Ads inteira e os blocos de conta e estratégia dos especialistas, com teto. */
+function sistemaDoAgenteSenior(objetivo?: unknown): string {
+  const b = (id: string, texto: string, corte: number): BlocoDeConhecimento => ({ id, texto, corte });
+  const blocos: BlocoDeConhecimento[] = [
+    b("estrategia_senior_de_conta", ESTRATEGIA_SENIOR_DE_CONTA, 13),
+    b("estrutura_de_conta", ESTRUTURA_DE_CONTA, 12),
+    b("plano_de_teste", PLANO_DE_TESTE, 11),
+    b("regras_de_corte_e_escala", REGRAS_DE_CORTE_E_ESCALA, 10),
+    b("ganchos_dos_especialistas", GANCHOS_DOS_ESPECIALISTAS, 9),
+    b("erros_comuns_trafego", ERROS_COMUNS_TRAFEGO, 8),
+    b("orcamento_inicial", ORCAMENTO_INICIAL, 7),
+    b("criativo_natalia", CRIATIVO_NATALIA, 6),
+  ];
+  const obj = objetivoDoChecklist(objetivo);
+  if (obj) blocos.push(b(`checklist_${obj}`, CHECKLIST_CRIATIVO_POR_OBJETIVO[obj], 14));
+  const extra = montarComTeto(blocos, TETO_AGENTE_SENIOR).texto;
+  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}`;
+}
+
+/** Conversa do agente sênior do cliente: a pedida (se for dele) ou a mais recente; cria se não houver. */
+async function conversaDoAgenteSenior(servico: SupabaseClient, clientId: string, pedida: unknown, userId: string | null): Promise<string | null> {
+  const id = String(pedida ?? "");
+  if (UUID.test(id)) {
+    const { data } = await servico.from("agente_conversas").select("id").eq("id", id).eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).maybeSingle();
+    if (data) return id;
+  }
+  const { data: ultima } = await servico.from("agente_conversas").select("id").eq("client_id", clientId).eq("referencia_tipo", REF_CONTA).eq("referencia_id", clientId)
+    .order("criado_em", { ascending: false }).limit(1);
+  const achada = ((ultima as { id: string }[] | null) ?? [])[0];
+  if (achada) return achada.id;
+  if (!userId) return null;
+  const { data, error } = await servico.from("agente_conversas")
+    .insert({ client_id: clientId, agente: AGENTE, referencia_tipo: REF_CONTA, referencia_id: clientId, criado_por: userId }).select("id").single();
+  if (error || !data) throw new ErroHttp(503, "conversa_nao_criada", "Não foi possível abrir a conversa do agente sênior.");
+  return (data as { id: string }).id;
+}
+
+type MensagemDoAgente = { id: string; papel: string; conteudo: string; criado_em: string; estrategia: Record<string, unknown> | null };
+
+async function mensagensDoAgenteSenior(servico: SupabaseClient, conversaId: string, limite = 60): Promise<MensagemDoAgente[]> {
+  const { data } = await servico.from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em").eq("conversa_id", conversaId)
+    .order("criado_em", { ascending: false }).limit(limite);
+  return ((data as { id: string; papel: string; conteudo: string; anexos: unknown; criado_em: string }[] | null) ?? []).reverse().map((m) => {
+    const anexo = (Array.isArray(m.anexos) ? m.anexos : []).find((a) => a && typeof a === "object" && (a as Record<string, unknown>).tipo === "estrategia") as Record<string, unknown> | undefined;
+    return { id: m.id, papel: m.papel, conteudo: m.conteudo, criado_em: m.criado_em, estrategia: anexo && anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null };
+  });
+}
+
+/**
+ * Biblioteca de Anúncios da Meta (ads_archive), só leitura e só quando dá: o
+ * token vem do cofre por uma função que só a chave de serviço chama (SQL v5)
+ * e nunca sai do servidor. No Brasil a API só devolve anúncios de tema
+ * social, eleitoral ou político: comercial fica na pesquisa web.
+ */
+async function pesquisarBibliotecaMeta(servico: SupabaseClient, clientId: string, termos: string): Promise<{ consultada: boolean; motivo: string | null; anuncios: AnuncioDaBiblioteca[] }> {
+  const busca = termos.replace(/\s+/g, " ").trim().slice(0, 100);
+  if (!busca) return { consultada: false, motivo: "Sem termo de busca (nicho ou produto do briefing).", anuncios: [] };
+  const { data, error } = await servico.rpc("ads_token_para_biblioteca", { _client_id: clientId });
+  if (error) {
+    const semFuncao = error.code === "PGRST202" || error.code === "42883";
+    return { consultada: false, motivo: semFuncao ? "A leitura do token para a Biblioteca ainda não foi aplicada no banco (docs/mesa-ads/v5)." : "O token de anúncios não pôde ser lido agora.", anuncios: [] };
+  }
+  const token = typeof data === "string" && data.trim() ? data.trim() : null;
+  if (!token) return { consultada: false, motivo: "Não há token de anúncios no cofre para este cliente.", anuncios: [] };
+  const u = new URL("https://graph.facebook.com/v21.0/ads_archive");
+  u.searchParams.set("search_terms", busca);
+  u.searchParams.set("ad_reached_countries", '["BR"]');
+  u.searchParams.set("ad_type", "ALL");
+  u.searchParams.set("ad_active_status", "ACTIVE");
+  u.searchParams.set("fields", "id,page_name,ad_creative_bodies,ad_creative_link_titles,ad_delivery_start_time");
+  u.searchParams.set("limit", "25");
+  u.searchParams.set("access_token", token);
+  try {
+    const res = await fetch(u, { signal: AbortSignal.timeout(12_000) });
+    const corpo = await res.json().catch(() => null) as Record<string, unknown> | null;
+    const erro = corpo && typeof corpo.error === "object" ? corpo.error as Record<string, unknown> : null;
+    if (!res.ok || erro) {
+      const codigo = Number(erro?.code ?? 0);
+      return {
+        consultada: false,
+        motivo: codigo === 10 || codigo === 200 || codigo === 2332002 || codigo === 2332004
+          ? "O token do cofre não tem permissão para a API da Biblioteca de Anúncios (a Meta pede a confirmação de identidade no app). Fica a pesquisa web."
+          : "A Meta recusou a consulta à Biblioteca de Anúncios agora. Fica a pesquisa web.",
+        anuncios: [],
+      };
+    }
+    const anuncios = anunciosDaBiblioteca(corpo);
+    return {
+      consultada: true,
+      motivo: anuncios.length ? null : "A API da Biblioteca só devolve anúncios de tema social, eleitoral ou político no Brasil; os comerciais do nicho ficam na pesquisa web.",
+      anuncios,
+    };
+  } catch {
+    return { consultada: false, motivo: "A Biblioteca de Anúncios não respondeu a tempo. Fica a pesquisa web.", anuncios: [] };
+  }
+}
+
+/** Métricas curtas para o prompt (números do código). */
+const metricasCurtas = (x: MetricasDaConta) => ({
+  gasto: x.gasto, impressoes: x.impressoes, ctr_link_pct: x.ctr_saida_pct, cpm: x.cpm, frequencia: x.frequencia_media,
+  resultado: x.resultado_rotulo, resultados: x.resultados, custo_por_resultado: x.custo_por_resultado, roas: x.roas,
+});
+
+/**
+ * Contexto completo do agente sênior: conta ao vivo, mix de objetivos,
+ * evolução (código), criativos da Mesa Ads, oferta escolhida, briefing,
+ * contexto da Mesa e da marca, cérebro do cliente e planos recentes.
+ */
+async function contextoDoAgenteSenior(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>) {
+  const periodo = periodoDoPedido({ dias: corpo.dias ?? 30 }, DIAS_DESEMPENHO, 30, hojeSaoPaulo());
+  const [ctx, conta, briefing, ofertasQ, criativosQ, planosQ, desempenho] = await Promise.all([
+    montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
+    lerContaAoVivo(servico, clientId, periodo.dias),
+    carregarBriefing(servico, clientId).catch(() => null),
+    servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(6),
+    servico.from("ads_criativos").select("id, nome, formato, status, ad_id, plano_id, copy, criado_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(40),
+    servico.from("ads_planos").select("id, nome, status, angulos, estrutura, criado_em").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(4),
+    lerDesempenhoDoCliente(servico, clientId, periodo).catch(() => null),
+  ]);
+  const evolucaoLida = desempenho
+    ? lerEvolucao({
+      periodo: { inicio: periodo.inicio, fim: periodo.fim },
+      anuncios: desempenho._anuncios,
+      posts: desempenho._posts,
+      custoToleravel: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+      tipoToleravel: tipoDoBriefing(String((briefing?.objetivo ?? {}).acao ?? "")),
+    })
+    : null;
+  const ofertas = ((ofertasQ.data as LinhaOferta[] | null) ?? []).map(ofertaDaLinha);
+  const oferta = ofertas.find((o) => o.status === "escolhida") ?? ofertas[0] ?? null;
+  const criativos = ((criativosQ.data as { id: string; nome: string | null; formato: string; status: string; ad_id: string | null; plano_id: string | null; copy: Record<string, unknown> | null; criado_em: string }[] | null) ?? []);
+  const planos = ((planosQ.data as { id: string; nome: string; status: string; angulos: Angulo[] | null; estrutura: Record<string, unknown> | null; criado_em: string }[] | null) ?? []);
+  return { ctx, conta, briefing, oferta, criativos, planos, evolucao: evolucaoLida, periodo };
+}
+
+/** O contexto em JSON para o prompt (e para o pacote do agente externo), com teto por parte. */
+function contextoEmJson(c: Awaited<ReturnType<typeof contextoDoAgenteSenior>>, plano: Plano | null, biblioteca: { consultada: boolean; motivo: string | null; anuncios: AnuncioDaBiblioteca[] } | null) {
+  const comEntrega = c.conta.anuncios.filter((a) => a.metricas.impressoes > 0 || a.status === "ACTIVE").slice(0, 40);
+  return {
+    periodo: c.conta.periodo,
+    cliente: c.ctx.cliente,
+    contexto_do_cliente: c.ctx.dados,
+    briefing: resumoDoBriefing(c.briefing),
+    oferta_escolhida: c.oferta,
+    conta: {
+      totais: metricasCurtas(c.conta.totais),
+      comparacao_com_periodo_anterior: c.conta.comparacao,
+      custo_referencia: c.conta.custo_referencia,
+      contas: c.conta.contas.map((x) => ({ nome: x.nome, status: x.status, saldo_disponivel: x.saldo_disponivel, gasto_total: x.gasto_total })),
+    },
+    MIX_DE_OBJETIVOS: c.conta.mix_objetivos,
+    CAMPANHAS: c.conta.campanhas.slice(0, 20).map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, objetivo_na_meta: x.objetivo, grupo: x.grupo, orcamento_diario: x.orcamento_diario, metricas: metricasCurtas(x.metricas) })),
+    ANUNCIOS: comEntrega.map((a) => ({
+      ad_id: a.ad_id, nome: a.nome, status: a.status, campanha: a.campanha, conjunto: a.conjunto, formato: a.formato, grupo: a.grupo,
+      titulo: a.titulo, texto: a.corpo ? a.corpo.slice(0, 300) : null, cta: a.cta, destino: a.destino,
+      metricas: metricasCurtas(a.metricas), tendencia: a.tendencia, sinal_do_codigo: a.sinal,
+      criativo_da_mesa: a.criativo ? a.criativo.nome : null,
+    })),
+    EVOLUCAO: c.evolucao ? { vencedores: c.evolucao.vencedores, descartar: c.evolucao.descartar, proximos_testes: c.evolucao.proximos_testes, aprendizados: c.evolucao.aprendizados, limites: c.evolucao.limites } : null,
+    CRIATIVOS_DA_MESA: c.criativos.slice(0, 20).map((x) => ({
+      nome: x.nome, formato: x.formato, status: x.status, ligado_ao_anuncio: x.ad_id,
+      texto_principal: typeof x.copy?.texto_principal === "string" ? (x.copy.texto_principal as string).slice(0, 200) : null,
+      titulo: x.copy?.titulo ?? null, frase_da_arte: x.copy?.headline_arte ?? null,
+    })),
+    PLANOS_RECENTES: c.planos.map((p) => ({ nome: p.nome, status: p.status, objetivo: p.estrutura?.objetivo ?? null, angulos: (p.angulos ?? []).slice(0, 6).map((a) => ({ nome: a.nome, hipotese: String(a.hipotese ?? "").slice(0, 300) })) })),
+    PLANO_ABERTO: plano ? { nome: plano.nome, estrutura: plano.estrutura, angulos: plano.angulos.map((a) => ({ id: a.id, nome: a.nome, hipotese: a.hipotese, gancho_verbal: a.gancho_verbal, objetivo: a.objetivo, estilo_visual: a.estilo_visual })) } : null,
+    BIBLIOTECA_DE_ANUNCIOS: biblioteca && biblioteca.anuncios.length ? biblioteca.anuncios : null,
+  };
+}
+
+/**
+ * conta_conversar { client_id, mensagem, conversa_id?, plano_id?, dias? (30), pesquisar? (true), nicho?, modelo_id?, raciocinio? }
+ * -> { conversa_id, resposta, estrategia, markdown, mix_objetivos, nicho, pesquisa: { web, biblioteca }, custo_usd, saldo_usd, jev_erro }
+ * Uma chamada por mensagem (sem laço), com pesquisa web do motor e a Biblioteca
+ * da Meta quando o token permite. Números do código; a estratégia fica na
+ * conversa (agente_mensagens.anexos) para a tela e para o pacote.
+ */
+async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const mensagem = texto(corpo.mensagem, 4000);
+  if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva a mensagem para o agente sênior.");
+  const pesquisar = corpo.pesquisar !== false;
+  let plano: Plano | null = null;
+  if (corpo.plano_id) {
+    plano = await carregarPlano(servico, corpo.plano_id);
+    if (plano.client_id !== clientId) throw new ErroHttp(403, "plano_de_outro_cliente", "Este plano é de outro cliente.");
+  }
+  const conversaId = (await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, chamador.userId)) as string;
+  const [c, historico, modeloEscolhido] = await Promise.all([
+    contextoDoAgenteSenior(servico, clientId, corpo),
+    mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
+    resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+  ]);
+  const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
+  const achado = await nichoDoCliente(c.ctx, c.briefing, cobranca, corpo.nicho);
+  const termos = [achado.nicho?.nome, String((c.briefing?.oferta ?? {}).produto ?? "")].filter(Boolean).join(" ");
+  const biblioteca = pesquisar ? await pesquisarBibliotecaMeta(servico, clientId, termos) : null;
+  const objetivo = plano?.estrutura?.objetivo ?? (c.briefing?.objetivo ?? {}).acao;
+  const contexto = contextoEmJson(c, plano, biblioteca);
+  const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+    clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modeloEscolhido.modelo.id,
+    sistema: sistemaDoAgenteSenior(objetivo),
+    mensagens: [
+      ...historico.filter((m) => m.papel === "usuario" || m.papel === "agente").map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
+      {
+        papel: "usuario",
+        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano })}`,
+      },
+    ],
+    raciocinio: modeloEscolhido.raciocinio,
+    pesquisaWeb: pesquisar,
+    esquemaJson: ESQUEMA_AGENTE_SENIOR,
+    referencia: { tipo: REF_CLIENTE, id: clientId },
+    criadoPor: chamador.userId,
+  });
+  const ads = new Map(c.conta.anuncios.map((a) => [a.ad_id, { resultados: a.metricas.resultados }]));
+  const estrategia = normalizarEstrategia(s.json, ads);
+  const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
+  const markdown = estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id);
+  const custo = arred6(s.custoUsd + achado.custo);
+  await registrarMensagens(servico, conversaId, clientId, [
+    { papel: "usuario", conteudo: mensagem },
+    {
+      papel: "agente",
+      conteudo: markdown || estrategia.resposta || "Sem resposta.",
+      uso_id: s.usoId,
+      anexos: [{ tipo: "estrategia", estrategia, periodo: c.conta.periodo, plano_id: plano?.id ?? null, biblioteca: biblioteca ? { consultada: biblioteca.consultada, motivo: biblioteca.motivo, total: biblioteca.anuncios.length } : null }],
+    },
+  ]);
+  return json({
+    conversa_id: conversaId,
+    resposta: estrategia.resposta,
+    estrategia,
+    markdown,
+    mix_objetivos: c.conta.mix_objetivos,
+    nicho: achado.nicho ? { id: achado.nicho.id, nome: achado.nicho.nome } : null,
+    pesquisa: { web: pesquisar, biblioteca },
+    custo_usd: custo,
+    saldo_usd: s.saldoUsd,
+    jev_erro: achado.jev_erro,
+    reserva_usada: s.reservaUsada ?? null,
+  });
+}
+
+/** conta_conversa_ler { client_id } -> { conversa_id, mensagens: [{ id, papel, conteudo, criado_em, estrategia }], custo_usd: 0 }. Grátis. */
+async function contaConversaLer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const conversaId = await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, null);
+  return json({ conversa_id: conversaId, mensagens: conversaId ? await mensagensDoAgenteSenior(servico, conversaId) : [], custo_usd: 0 });
+}
+
+/**
+ * pacote_otimizacao_dados { client_id, dias? } -> tudo o que o pacote do agente
+ * externo leva além da conta ao vivo: contexto do cliente e da marca, oferta,
+ * briefing, evolução, criativos da Mesa Ads, a última estratégia do agente
+ * sênior e as regras (política da Meta, botões, estilos, objetivos). Grátis e sem IA.
+ */
+async function pacoteOtimizacaoDados(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const [c, conversaId] = await Promise.all([
+    contextoDoAgenteSenior(servico, clientId, corpo),
+    conversaDoAgenteSenior(servico, clientId, null, null),
+  ]);
+  const mensagens = conversaId ? await mensagensDoAgenteSenior(servico, conversaId, 30) : [];
+  const ultima = mensagens.slice().reverse().find((m) => m.estrategia);
+  return json({
+    cliente: c.ctx.cliente,
+    periodo: c.conta.periodo,
+    contexto: contextoEmJson(c, null, null),
+    estrategia: ultima?.estrategia ?? null,
+    estrategia_markdown: ultima?.conteudo ?? null,
+    estrategia_em: ultima?.criado_em ?? null,
+    regras: {
+      politicas_meta: POLITICAS_META,
+      honestidade: REGRAS_DE_HONESTIDADE,
+      ctas_meta: CTAS_META,
+      estilos_visuais: ESTILOS_VISUAIS.map((e) => ({ id: e.id, nome: e.nome, quando_usar: e.quando_usar })),
+      objetivos: OBJETIVOS_DE_CAMPANHA.map((o) => ({ id: o.id, nome: o.nome, objetivo_meta: o.objetivo_meta, evento_otimizacao: o.evento_otimizacao, metrica_que_decide: o.metrica_que_decide })),
+      estrategia_de_conta: ESTRATEGIA_SENIOR_DE_CONTA,
+      corte_e_escala: REGRAS_DE_CORTE_E_ESCALA,
+      formato_do_criativo: FORMATOS.map((f) => ({ formato: f, regras: regrasDoCriativo(f) })),
+    },
+    custo_usd: 0,
+  });
+}
+
+const ETAPAS_POR_POSICAO = (i: number, total: number) => (i === 0 ? "tensao" : i === total - 1 ? "proximo_passo" : i === 1 ? "explicacao" : i === 2 ? "demonstracao" : "objecao");
+
+/**
+ * pacote_importar { client_id, pacote, confirmar?, tom? }
+ * Sem confirmar: só valida e devolve o que entendeu ({ entendido }), grátis.
+ * Com confirmar: cria o plano (origem agente_externo) com um ângulo por
+ * criativo, confere a política pelo Jev (aviso, sem laço) e cria os criativos
+ * e os trabalhos do Estúdio Ads já dirigidos (mesma direção em código de
+ * criativos_produzir). -> { plano, criativos, entendido, avisos, custo_usd, saldo_usd, jev_erro }
+ */
+async function pacoteImportar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const { data: adsQ } = await servico.from("ads_creatives").select("ad_id").eq("client_id", clientId).limit(1000);
+  const conhecidos = new Set(((adsQ as { ad_id: string }[] | null) ?? []).map((a) => String(a.ad_id)));
+  const entendido = validarRetorno(corpo.pacote, conhecidos);
+  if (corpo.confirmar !== true) return json({ entendido, custo_usd: 0 });
+  if (!entendido.aceitos.length) throw new ErroHttp(422, "pacote_sem_criativo_valido", "Nenhum criativo do retorno passou na validação. Veja os motivos e peça ao agente externo para corrigir.", { entendido });
+
+  const marcaDosCriativos = await marcaDoPedido(servico, clientId, corpo);
+  const [briefing, marca, modeloImagem] = await Promise.all([
+    carregarBriefing(servico, clientId).catch(() => null),
+    lerMarcaParaDirecaoDaMarca(servico, clientId, marcaDosCriativos),
+    modeloPadrao("imagem"),
+  ]);
+  if (!modeloImagem) throw new ErroHttp(409, "sem_modelo_de_imagem", "O catálogo não tem gerador de imagem padrão.");
+  const tom: TomDoCriativo = tomValido(corpo.tom) ?? "direto";
+  const planoId = crypto.randomUUID();
+  const aceitos = entendido.aceitos;
+  const angulos: Angulo[] = aceitos.map((c, i) => ({
+    id: `a${i + 1}`,
+    nome: c.titulo,
+    situacao: c.angulo,
+    mecanismo: "",
+    tecnica: "",
+    referencia_ids: [],
+    prova: "",
+    gancho_visual: c.gancho_visual,
+    gancho_verbal: c.headline_arte,
+    hipotese: c.hipotese,
+    metrica: "",
+    janela_dias: 7,
+    formatos: [c.formato],
+    variacoes: 1,
+    estagio_consciencia: null,
+    estilo_visual: c.estilo_visual,
+    objetivo: c.objetivo,
+    jev: null,
+    pontuacao: null,
+    rodadas: 0,
+    aprovado: false,
+    motivos: [],
+    tom,
+  }));
+  const conferencia = await conferirCopiesComJev(
+    aceitos.map((c) => ({ texto_principal: c.texto_principal, titulo: c.titulo_anuncio, descricao: c.descricao, cta_meta: c.cta_meta, texto_na_arte: [c.headline_arte, c.apoio_arte, c.cta_arte].filter(Boolean).join(" / ") })),
+    briefing,
+    { clientId, referencia: { tipo: REF_PLANO, id: planoId }, criadoPor: chamador.userId },
+    null,
+  );
+  const custo = arred6(conferencia.custo);
+  const nomePlano = entendido.plano.nome || `Agente externo ${hojeSaoPaulo()}`;
+  const { data: plano, error: erroPlano } = await servico.from("ads_planos").insert({
+    id: planoId,
+    client_id: clientId,
+    briefing_id: briefing?.id ?? null,
+    nome: nomePlano.slice(0, 120),
+    status: "rascunho",
+    angulos,
+    estrutura: {
+      resumo: entendido.plano.resumo,
+      objetivo: entendido.plano.objetivo,
+      origem: "agente_externo",
+      importado_em: new Date().toISOString(),
+      tom,
+      qualidade: { rodadas: 0, importado: true },
+      jev_erro: conferencia.jev_erro,
+    },
+    pedido: "Importado do pacote do agente externo.",
+    custo_usd: custo,
+    criado_por: chamador.userId,
+  }).select("*").single();
+  if (erroPlano || !plano) throw new ErroHttp(503, "plano_nao_salvo", "O pacote foi lido, mas o plano não foi criado.", { entendido });
+
+  const avisos: string[] = [...entendido.avisos];
+  const trabalhos: Record<string, unknown>[] = [];
+  const criativos: Record<string, unknown>[] = [];
+  aceitos.forEach((c, i) => {
+    const a = angulos[i];
+    const nota = conferencia.notas[i];
+    if (nota?.alerta_politica) avisos.push(`${c.titulo}: o Jev viu risco de política. Revise antes de subir.`);
+    for (const x of c.avisos) avisos.push(`${c.titulo}: ${x}.`);
+    const estilo = estiloPorId(c.estilo_visual);
+    const objetivo = objetivoPorId(c.objetivo);
+    const v: Record<string, unknown> = {
+      headline_arte: c.headline_arte,
+      apoio_arte: c.apoio_arte,
+      cta_arte: c.cta_arte,
+      texto_principal: c.texto_principal,
+      cta_meta: c.cta_meta,
+      carrossel: c.carrossel ? c.carrossel.map((k, j, todos) => ({ etapa: ETAPAS_POR_POSICAO(j, todos.length), texto_exato: k.texto, ilustracao: k.ilustracao || c.gancho_visual })) : null,
+    };
+    const trabalhoId = crypto.randomUUID();
+    const criativoId = crypto.randomUUID();
+    const roteiro = roteiroDaVariacao(v, c.formato, c.gancho_visual, TONS[tom].headline_max_caracteres);
+    const direcao = direcaoDoAnuncio(roteiro, c.formato, marca, {
+      conceito: `${c.titulo}. ${c.angulo}`.slice(0, 900),
+      fioVisual: `${c.gancho_visual}${marca.estilo ? ` Estilo da marca: ${marca.estilo}` : ""}`.slice(0, 800),
+      ganchoVisual: c.gancho_visual,
+      ctaArte: c.cta_arte,
+      estilo: estilo ? { id: estilo.id, nome: estilo.nome, como_fazer: estilo.como_fazer } : null,
+      objetivo: objetivo ? { id: objetivo.id, nome: objetivo.nome, como_o_criativo_muda: objetivo.como_o_criativo_muda } : null,
+      tom,
+    });
+    direcao.ads = { criativo_id: criativoId, plano_id: planoId, angulo_id: a.id, variacao: 1, origem: "agente_externo" };
+    if (marcaDosCriativos) (direcao as Record<string, unknown>).marca_id = marcaDosCriativos.id;
+    trabalhos.push({
+      id: trabalhoId, client_id: clientId, task_id: null, tipo: "ads", status: "dirigido", direcao,
+      modelo_imagem_id: modeloImagem.id, qualidade: "media", cards: [], legenda: c.texto_principal_longo, custo_usd: 0, criado_por: chamador.userId,
+    });
+    criativos.push({
+      id: criativoId,
+      client_id: clientId,
+      plano_id: planoId,
+      angulo_id: a.id,
+      trabalho_id: trabalhoId,
+      nome: `${c.titulo} | ${c.formato}`.slice(0, 200),
+      formato: c.formato,
+      copy: {
+        texto_principal: c.texto_principal,
+        texto_principal_longo: c.texto_principal_longo,
+        titulo: c.titulo_anuncio,
+        descricao: c.descricao,
+        cta_meta: c.cta_meta,
+        headline_arte: c.headline_arte,
+        apoio_arte: c.apoio_arte,
+        cta_arte: c.cta_arte,
+        estilo_visual: c.estilo_visual,
+        jev: nota,
+        tom,
+        variacao: 1,
+        origem: "agente_externo",
+        base_ad_id: c.base_ad_id,
+        avisos_tom: c.avisos,
+      },
+      roteiro_video: null,
+      status: "rascunho",
+      evidencia: "E0",
+      criado_por: chamador.userId,
+    });
+  });
+  const { error: erroTrabalhos } = await servico.from("estudio_trabalhos").insert(trabalhos);
+  if (erroTrabalhos) {
+    await servico.from("ads_planos").delete().eq("id", planoId).eq("client_id", clientId);
+    throw new ErroHttp(503, "trabalhos_nao_criados", "O pacote foi lido, mas os trabalhos do Estúdio não foram criados.", { custo_usd: custo });
+  }
+  const { data: gravados, error: erroCriativos } = await servico.from("ads_criativos").insert(criativos).select("*");
+  if (erroCriativos || !gravados) {
+    await servico.from("estudio_trabalhos").delete().eq("client_id", clientId).in("id", trabalhos.map((t) => t.id as string));
+    await servico.from("ads_planos").delete().eq("id", planoId).eq("client_id", clientId);
+    throw new ErroHttp(503, "criativos_nao_salvos", "O pacote foi lido, mas os criativos não foram salvos.", { custo_usd: custo });
+  }
+  return json({ plano, criativos: gravados, entendido, avisos, custo_usd: custo, saldo_usd: null, jev_erro: conferencia.jev_erro });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   briefing_sugerir: briefingSugerir,
   briefing_salvar: briefingSalvar,
@@ -5041,6 +5991,14 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // v4, frente E (contas de anúncio, métricas e evolução; docs/mesa-ads/v4)
   desempenho_cliente: desempenhoCliente,
   evolucao,
+  // v5 (pedido do dono em 26/09/2026; docs/mesa-ads/v5/CONTRATO-V5.md)
+  vinculos_automaticos: vinculosAutomaticos,
+  vinculo_confirmar: vinculoConfirmar,
+  vinculo_desfazer: vinculoDesfazer,
+  conta_conversar: contaConversar,
+  conta_conversa_ler: contaConversaLer,
+  pacote_otimizacao_dados: pacoteOtimizacaoDados,
+  pacote_importar: pacoteImportar,
 };
 
 /**
@@ -5052,6 +6010,7 @@ const ACOES_LONGAS = new Set([
   "criativos_produzir", "copy_variar", "oferta_conversar", "conta_sincronizar", "conta_analisar",
   "referencia_abrir", "referencia_importar_url", "biblioteca_do_nicho", "copy_pacote", "pacote_enviar",
   "evolucao", "desempenho_cliente",
+  "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
   "referencia_para_estudio",
 ]);
 

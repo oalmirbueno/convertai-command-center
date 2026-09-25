@@ -177,7 +177,14 @@ function statusCurto(s: string): string {
 
 const objetivoCurto = (o: string) => (o ? humanizar(o.toLowerCase().replace(/^outcome_/, "")) : "");
 
-/** Tabela das campanhas: clique numa linha filtra os anúncios dela. */
+/** Campanhas visíveis antes do "Mostrar todas" (a lista não rola sozinha dentro da página). */
+export const CAMPANHAS_VISIVEIS = 8;
+
+/**
+ * Campanhas em linhas que se ajustam à largura (sem tabela larga: a rolagem
+ * de lado no fim da tabela rolava a tela inteira, bug relatado em 26/09).
+ * Clique numa linha filtra os anúncios dela.
+ */
 export function TabelaDeCampanhas({
   campanhas,
   rotuloPorId,
@@ -189,50 +196,49 @@ export function TabelaDeCampanhas({
   selecionada: string;
   onSelecionar: (id: string) => void;
 }) {
+  const [todas, setTodas] = useState(false);
   if (!campanhas.length) return null;
+  const visiveis = todas ? campanhas : campanhas.slice(0, CAMPANHAS_VISIVEIS);
   return (
     <section className="min-w-0" aria-label="Campanhas">
       <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Campanhas ({campanhas.length})</h3>
-      <div className="min-w-0 overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full min-w-[640px] text-left text-[12px]">
-          <thead>
-            <tr className="border-b border-border text-[10.5px] uppercase tracking-wider text-muted-foreground">
-              <th className="px-3 py-2 font-medium">Campanha</th>
-              <th className="px-2 py-2 text-right font-medium">Investido</th>
-              <th className="px-2 py-2 text-right font-medium">Resultados</th>
-              <th className="px-2 py-2 text-right font-medium">Custo cada</th>
-              <th className="px-2 py-2 text-right font-medium">CTR</th>
-              <th className="px-3 py-2 text-right font-medium">CPM</th>
-            </tr>
-          </thead>
-          <tbody>
-            {campanhas.map((c) => {
-              const ativa = selecionada === c.campaign_id;
-              const m = c.metricas;
-              return (
-                <tr key={c.campaign_id || c.nome} className={`border-b border-border last:border-b-0 ${ativa ? "bg-primary/5" : ""}`}>
-                  <td className="max-w-[260px] px-3 py-2">
-                    <button type="button" aria-pressed={ativa} onClick={() => onSelecionar(ativa ? "" : c.campaign_id)} className="block w-full min-w-0 text-left" title="Filtrar os anúncios desta campanha">
-                      <span className="block truncate font-semibold">{c.nome}</span>
-                      <span className="block truncate text-[10.5px] text-muted-foreground">
-                        {[statusCurto(c.status), objetivoCurto(c.objetivo), c.orcamento_diario !== null ? `${brl(c.orcamento_diario)} por dia` : ""].filter(Boolean).join(" · ")}
-                      </span>
-                    </button>
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{brl(m.gasto)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">
-                    {inteiro(m.resultados)}
-                    {rotuloPorId[c.campaign_id] ? <span className="block text-[10px] text-muted-foreground">{rotuloPorId[c.campaign_id].toLowerCase()}</span> : null}
-                  </td>
-                  <td className="px-2 py-2 text-right tabular-nums">{brl(m.custo_por_resultado)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{porcento(m.ctr_saida !== null ? m.ctr_saida : m.ctr)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{brl(m.cpm)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <ul className="min-w-0 divide-y divide-border rounded-xl border border-border bg-card">
+        {visiveis.map((c) => {
+          const ativa = selecionada === c.campaign_id;
+          const m = c.metricas;
+          const rotulo = rotuloPorId[c.campaign_id] || "Resultados";
+          return (
+            <li key={c.campaign_id || c.nome} className={`min-w-0 ${ativa ? "bg-primary/5" : ""}`}>
+              <button
+                type="button"
+                aria-pressed={ativa}
+                onClick={() => onSelecionar(ativa ? "" : c.campaign_id)}
+                className="grid w-full min-w-0 grid-cols-1 gap-x-3 gap-y-1 px-3 py-2 text-left md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+                title="Filtrar os anúncios desta campanha"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-semibold">{c.nome}</span>
+                  <span className="block truncate text-[10.5px] text-muted-foreground">
+                    {[statusCurto(c.status), objetivoCurto(c.objetivo), c.orcamento_diario !== null ? `${brl(c.orcamento_diario)} por dia` : ""].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+                <span className="grid min-w-0 grid-cols-3 gap-x-2 text-[11.5px] tabular-nums sm:grid-cols-5">
+                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground">Investido</span>{brl(m.gasto)}</span>
+                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground" title={rotulo}>{rotulo}</span>{inteiro(m.resultados)}</span>
+                  <span className="min-w-0"><span className="block truncate text-[10px] text-muted-foreground">Custo cada</span>{brl(m.custo_por_resultado)}</span>
+                  <span className="hidden min-w-0 sm:block"><span className="block truncate text-[10px] text-muted-foreground">CTR</span>{porcento(m.ctr_saida !== null ? m.ctr_saida : m.ctr)}</span>
+                  <span className="hidden min-w-0 sm:block"><span className="block truncate text-[10px] text-muted-foreground">CPM</span>{brl(m.cpm)}</span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {campanhas.length > CAMPANHAS_VISIVEIS && (
+        <button type="button" className="mt-1.5 text-[12px] text-primary hover:underline" onClick={() => setTodas(!todas)}>
+          {todas ? "Mostrar menos" : `Mostrar todas as ${campanhas.length} campanhas`}
+        </button>
+      )}
     </section>
   );
 }

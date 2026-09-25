@@ -1408,3 +1408,33 @@ export function ofertaDoContextoEmCodigo(e: EntradaDaOfertaDoContexto): { campos
     lacunas,
   };
 }
+
+// ------------------------------------------------------------- peça do anúncio (v5)
+
+/**
+ * Chave da PEÇA de um anúncio: a mesma arte rodando em vários anúncios
+ * (conjuntos diferentes, anúncio duplicado) vira uma peça só. Ordem: hash da
+ * imagem da Meta, vídeo, id do criativo da Meta e, por último, o endereço da
+ * imagem sem a assinatura (a Meta troca a assinatura, não o caminho).
+ */
+export function chaveDaPeca(
+  raw: unknown,
+  colunas: { image_url?: string | null; thumbnail_url?: string | null; video_id?: string | null; ad_id?: string | null } = {},
+): string | null {
+  const r = objeto(raw);
+  const criativo = objeto(r.creative);
+  const spec = objeto(criativo.object_story_spec);
+  const link = objeto(spec.link_data);
+  const video = objeto(spec.video_data);
+  const feed = objeto(criativo.asset_feed_spec);
+  const imagensDoFeed = Array.isArray(feed.images) ? feed.images.map((i) => str(objeto(i).hash)).filter(Boolean) : [];
+  const hash = str(link.image_hash) ?? str(video.image_hash) ?? (imagensDoFeed[0] as string | undefined) ?? null;
+  if (hash) return `hash:${hash}`;
+  const videoId = str(video.video_id) ?? str(criativo.video_id) ?? str(colunas.video_id);
+  if (videoId) return `video:${videoId}`;
+  const criativoId = str(criativo.id);
+  if (criativoId) return `criativo:${criativoId}`;
+  const url = str(criativo.image_url) ?? str(colunas.image_url) ?? str(colunas.thumbnail_url);
+  if (url) return `url:${url.split("?")[0]}`;
+  return colunas.ad_id ? `ad:${colunas.ad_id}` : null;
+}

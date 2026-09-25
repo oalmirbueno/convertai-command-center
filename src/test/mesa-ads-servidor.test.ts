@@ -121,8 +121,13 @@ describe("honestidade", () => {
     for (const c of chamadas) {
       const trecho = c.slice(0, 400);
       expect(trecho).toContain("tarefa: TAREFA,");
-      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR),/);
+      // v5: o agente sênior de tráfego tem o sistema próprio (a mesma base inteira + os blocos de conta e estratégia).
+      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR|sistemaDoAgenteSenior\(objetivo\)),/);
     }
+    const senior = corpoDe(fonte, "sistemaDoAgenteSenior");
+    expect(senior).toContain("${CONHECIMENTO_ESTRATEGISTA_ADS}");
+    expect(senior).toContain("${REGRAS_DA_EXECUCAO}");
+    expect(senior).toContain("ESTRATEGIA_SENIOR_DE_CONTA");
   });
   it("o leitor separa observado de inferido e nunca inventa métrica", () => {
     expect(fonte).toContain("REGRAS_DE_HONESTIDADE,\n  METODO_DA_REFERENCIA,");

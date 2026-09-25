@@ -32,7 +32,11 @@ import {
 import { Andamento, Diagnostico, Foto, pilula, SeloDoSinal, useAndamento } from "./Comuns";
 import JanelaDaReferencia from "./JanelaDaReferencia";
 import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TabelaDeCampanhas, TendenciaDiaria } from "./ContaPaineis";
-import { extrasDaConta, PERIODOS_DA_CONTA_V4, type ExtrasDaConta, type PeriodoDaConta } from "./contaApi";
+import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
+import AgenteSenior from "./AgenteSenior";
+import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
+import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
+import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
 
 /**
  * Conta ao vivo: tudo o que está rodando na conta de anúncios do cliente
@@ -298,13 +302,12 @@ function PainelDaAnalise({
   );
 }
 
-export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDePlano) => void } = {}) {
+export default function AbaConta({ onCriarPlano, onImportado }: { onCriarPlano?: (p: PedidoDePlano) => void; onImportado?: (planoId: string) => void } = {}) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [dias, setDias] = useState<PeriodoDaConta>(14);
-  const [mostrando, setMostrando] = useState(ANUNCIOS_POR_PAGINA);
-  const [sinal, setSinal] = useState<SinalDoAnuncio | "">("");
+  const [grupo, setGrupo] = useState<GrupoDeObjetivo | "">("");
   const [campanha, setCampanha] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
   const [analiseNova, setAnaliseNova] = useState<{ analise: AnaliseDaConta; criado_em: string } | null>(null);
@@ -315,11 +318,8 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
   const espera = useRef<number | null>(null);
 
   const conta = useQuery({
-    queryKey: chavesAds.conta(clientId, dias),
-    queryFn: async (): Promise<ContaAoVivo & { extras: ExtrasDaConta }> => {
-      const bruto = await chamarAds("conta_ao_vivo", { client_id: clientId, dias });
-      return { ...normalizarConta(bruto), extras: extrasDaConta(bruto) };
-    },
+    queryKey: chaveDosResultados(clientId, dias),
+    queryFn: () => lerContaComResultados(clientId, dias),
     staleTime: 2 * 60_000,
     placeholderData: keepPreviousData,
     refetchInterval: RELEITURA_DA_CONTA_MS,
@@ -340,14 +340,15 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
   const dados = conta.data || null;
   const anuncios = dados ? dados.anuncios : [];
   const nomeDe = (adId: string) => {
-    const a = anuncios.find((x) => x.ad_id === adId);
+    const a = anuncios.filter((x) => x.ad_id === adId)[0];
     return a ? a.nome : `Anúncio ${adId}`;
   };
   const extras = dados ? dados.extras : null;
-  const filtrados = ordenarAnuncios(anuncios.filter((a) => (!sinal || a.sinal === sinal) && (!campanha || a.campaign_id === campanha)));
-  const visiveis = filtrados.slice(0, mostrando);
-  const contagemPorSinal = (s: SinalDoAnuncio) => anuncios.filter((a) => a.sinal === s && (!campanha || a.campaign_id === campanha)).length;
   const analise = analiseNova || (analiseSalva.data ? analiseSalva.data : null);
+  // Clique numa campanha filtra os anúncios dela (as abas e o objetivo continuam valendo).
+  const dadosDaLista = dados && campanha ? { ...dados, anuncios: dados.anuncios.filter((a) => a.campaign_id === campanha) } : dados;
+  // O agente e o pacote olham pelo menos 30 dias (menos que isso é pouco volume para decidir estrutura).
+  const diasDoAgente = dias < 30 ? 30 : dias;
 
   const sincronizar = async () => {
     setSincronizando(true);
@@ -358,6 +359,7 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
       espera.current = window.setTimeout(() => {
         espera.current = null;
         void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-conta", clientId] });
+        void queryClient.invalidateQueries({ queryKey: ["mesa", "urls", "ads-resultados", clientId] });
         setSincronizando(false);
       }, ESPERA_DA_SINCRONIA_MS);
     } catch (e) {
@@ -377,7 +379,7 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
       await chamarAds("referencias_importar_proprias", { client_id: clientId });
       void queryClient.invalidateQueries({ queryKey: chavesAds.referencias(clientId) });
       const r = await conta.refetch();
-      const achado = r.data ? r.data.anuncios.find((x) => x.ad_id === a.ad_id) : null;
+      const achado = r.data ? r.data.anuncios.filter((x) => x.ad_id === a.ad_id)[0] : null;
       if (achado && achado.referencia_id) setAberta(achado.referencia_id);
       else toast.info("Ficha ainda não criada", { description: "O anúncio entra em Referências na próxima coleta." });
     } catch (e) {
@@ -411,25 +413,22 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
         <div className="mb-1 mr-3 mt-1 min-w-0 flex-1">
           <h2 className="text-[15px] font-semibold">Conta de anúncios ao vivo</h2>
           <p className="text-[12px] text-muted-foreground" aria-live="polite">
-            {dados && dados.periodo ? `De ${dataCurta(dados.periodo.inicio)} a ${dataCurta(dados.periodo.fim)} · ` : ""}
-            Atualizado {tempoDesde(dados ? dados.atualizado_em : null)}
+            {dados && dados.conta.periodo ? `De ${dataCurta(dados.conta.periodo.inicio)} a ${dataCurta(dados.conta.periodo.fim)} · ` : ""}
+            Atualizado {tempoDesde(dados ? dados.conta.atualizado_em : null)}
             {conta.isFetching && !conta.isLoading ? " · relendo" : ""}. Relê sozinha a cada 10 min enquanto esta aba está aberta.
-            {dados && dados.custo_referencia
-              ? ` O sinal compara com ${brl(dados.custo_referencia.valor)} por resultado (${dados.custo_referencia.fonte === "briefing" ? "custo tolerável do briefing" : "média da conta"}).`
+            {dados && dados.conta.custo_referencia
+              ? ` O sinal compara com ${brl(dados.conta.custo_referencia.valor)} por resultado (${dados.conta.custo_referencia.fonte === "briefing" ? "custo tolerável do briefing" : "média da conta"}).`
               : ""}
           </p>
         </div>
-        <div className="mb-1 mr-2 mt-1 flex items-center rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Período">
+        <div className="mb-1 mr-2 mt-1 flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Período">
           {PERIODOS_DA_CONTA.map((d) => (
             <button
               key={d}
               type="button"
               role="radio"
               aria-checked={dias === d}
-              onClick={() => {
-                setDias(d);
-                setMostrando(ANUNCIOS_POR_PAGINA);
-              }}
+              onClick={() => setDias(d)}
               className={`h-7 rounded-md px-2.5 text-[12px] ${dias === d ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
               {d} dias
@@ -471,7 +470,7 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
         </div>
       )}
 
-      {dados && !dados.conectada && (
+      {dados && !dados.conta.conectada && (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
           <BarChart3 className="mx-auto h-6 w-6 text-primary" />
           <p className="mt-3 text-[14px] font-medium">A conta de anúncios deste cliente não está conectada</p>
@@ -479,72 +478,56 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
         </div>
       )}
 
-      {dados && dados.conectada && (
+      {dados && dados.conta.conectada && extras && (
         <>
-          {extras ? <ResumoDaConta totais={dados.totais} extras={extras} /> : null}
-          {extras ? <SaldosDasContas contas={extras.contas} /> : null}
-          {extras ? <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} /> : null}
+          <ResumoDoTopo dados={dados} grupo={grupo} onGrupo={setGrupo} />
+          <details className="min-w-0 rounded-xl border border-border bg-card px-3 py-2">
+            <summary className="cursor-pointer text-[12px] text-muted-foreground">Mais números do período (CTR, CPM, alcance, frequência, saldo e dia a dia)</summary>
+            <div className="mt-2 min-w-0 space-y-3">
+              <ResumoDaConta totais={dados.conta.totais} extras={extras} />
+              <SaldosDasContas contas={extras.contas} />
+              <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} />
+            </div>
+          </details>
+
+          <section className="min-w-0 space-y-2" aria-label="Otimização">
+            <AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} />
+            <div className="flex min-w-0 flex-wrap items-center">
+              <BaixarPacoteDeOtimizacao dias={diasDoAgente} className="mb-1 mr-2" />
+              <ImportarPacote onImportado={onImportado} className="mb-1" />
+            </div>
+          </section>
 
           {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
 
-          <TabelaDeCampanhas
-            campanhas={dados.campanhas}
-            rotuloPorId={extras ? extras.rotuloPorId : {}}
-            selecionada={campanha}
-            onSelecionar={(id) => {
-              setCampanha(id);
-              setMostrando(ANUNCIOS_POR_PAGINA);
-            }}
-          />
+          <TabelaDeCampanhas campanhas={dados.conta.campanhas} rotuloPorId={extras.rotuloPorId} selecionada={campanha} onSelecionar={(id) => setCampanha(id)} />
 
-          <section className="min-w-0" aria-label="Anúncios">
-            <div className="mb-2 flex min-w-0 flex-wrap items-center">
-              <h3 className="mb-1.5 mr-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Anúncios ({filtrados.length})</h3>
-              <div className="flex min-w-0 flex-wrap items-center" role="group" aria-label="Filtrar por sinal">
-                <button type="button" className={pilula(sinal === "")} onClick={() => setSinal("")}>
-                  Todos
+          <section className="min-w-0 space-y-2" aria-label="Anúncios">
+            <div className="flex min-w-0 flex-wrap items-center">
+              <FiltroDeObjetivo dados={dados} valor={grupo} onMudar={setGrupo} />
+              {campanha && (
+                <button type="button" className="mb-1.5 ml-2 text-[12px] text-primary hover:underline" onClick={() => setCampanha("")}>
+                  Todas as campanhas
                 </button>
-                {SINAIS.filter((s) => contagemPorSinal(s.valor) > 0).map((s) => (
-                  <button key={s.valor} type="button" className={pilula(sinal === s.valor)} title={s.dica} onClick={() => setSinal(sinal === s.valor ? "" : s.valor)}>
-                    {s.rotulo} ({contagemPorSinal(s.valor)})
-                  </button>
-                ))}
-                {campanha && (
-                  <button type="button" className="mb-1.5 text-[12px] text-primary hover:underline" onClick={() => setCampanha("")}>
-                    Todas as campanhas
-                  </button>
-                )}
-              </div>
+              )}
             </div>
-            {filtrados.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border p-8 text-center">
-                <p className="text-[14px] font-medium">{anuncios.length ? "Nenhum anúncio com esse filtro" : "Nenhum anúncio com entrega no período"}</p>
-                <p className="mt-1 text-[12.5px] text-muted-foreground">{anuncios.length ? "Limpe o filtro para ver todos." : "Troque o período ou sincronize agora."}</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-                  {visiveis.map((a) => (
-                    <CartaoDoAnuncio
-                      key={a.ad_id}
-                      a={a}
-                      abrindo={abrindo === a.ad_id}
-                      onVariar={() => variar(a)}
-                      onFicha={() => void abrirFicha(a)}
-                      rotuloDoResultado={extras ? extras.rotuloPorId[a.ad_id] : undefined}
-                      formato={extras ? extras.formatoPorAd[a.ad_id] : undefined}
-                      conjunto={extras ? extras.conjuntoPorAd[a.ad_id] : undefined}
-                    />
-                  ))}
-                </div>
-                {filtrados.length > visiveis.length && (
-                  <div className="mt-3 text-center">
-                    <Button type="button" size="sm" variant="outline" onClick={() => setMostrando(mostrando + ANUNCIOS_POR_PAGINA)}>
-                      Mostrar mais {Math.min(ANUNCIOS_POR_PAGINA, filtrados.length - visiveis.length)} de {filtrados.length - visiveis.length}
-                    </Button>
-                  </div>
+            {dadosDaLista && (
+              <PainelDeResultados
+                key={`${grupo}|${campanha}`}
+                dados={dadosDaLista}
+                grupo={grupo}
+                renderAnuncio={(a) => (
+                  <CartaoDoAnuncio
+                    a={a}
+                    abrindo={abrindo === a.ad_id}
+                    onVariar={() => variar(a)}
+                    onFicha={() => void abrirFicha(a)}
+                    rotuloDoResultado={a.resultado_rotulo || extras.rotuloPorId[a.ad_id]}
+                    formato={a.formato || extras.formatoPorAd[a.ad_id]}
+                    conjunto={a.conjunto || extras.conjuntoPorAd[a.ad_id]}
+                  />
                 )}
-              </>
+              />
             )}
           </section>
 

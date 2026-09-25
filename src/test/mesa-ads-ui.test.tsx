@@ -429,61 +429,125 @@ describe("etapa 4, estúdio ads: copy", () => {
 
 // ------------------------------------------------------------------ resultados
 
-describe("etapa 5, resultados", () => {
-  it("resultados_ler traz a tabela com o diagnóstico; registrar aprendizado manda o criativo e o período; sem vínculo aparece para ligar", async () => {
-    mock.tabelas.ads_criativos = [
-      { id: "c-2", client_id: CLIENTE, plano_id: PLANO.id, angulo_id: "a2", formato: "feed_4x5", copy: {}, status: "pronto", ad_id: null, evidencia: "E0" },
-    ];
-    mock.tabelas.ads_planos = [PLANO];
-    mock.invoke.mockImplementation(async (_f: string, { body }: any) =>
-      body.acao === "resultados_ler"
-        ? {
-            data: {
-              periodo: { inicio: "2026-09-09", fim: "2026-09-22" },
-              criativos: [
-                {
-                  criativo_id: "c-1",
-                  ad_id: "123",
-                  nome: "A dor da espera · 4:5",
-                  formato: "feed_4x5",
-                  metricas: { gasto: 100, impressoes: 12000, ctr_saida: 0.42, cpc: 2.1, cpm: 8.33, frequencia: 2.4, resultados: 9, custo_por_resultado: 11.11 },
-                  diagnostico: { sinal: "CTR de saída baixo", leitura: "O gancho não segura o clique.", acao: "Testar outro gancho visual." },
-                },
+describe("etapa 6, resultados (v5: claros e com vínculo automático)", () => {
+  it("resumo no topo, objetivo com o rótulo certo, abas simples, aprendizado do criativo ligado e confirmação só do incerto", async () => {
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
+      if (body.acao === "conta_ao_vivo") {
+        return {
+          data: {
+            conectada: true,
+            periodo: { inicio: "2026-09-09", fim: "2026-09-22" },
+            totais: { gasto: 1000, resultados: 60, custo_por_resultado: 16.67, resultado_rotulo: "Conversas iniciadas" },
+            comparacao: { gasto_pct: 10, resultados_pct: 25, custo_por_resultado_pct: -12 },
+            campanhas: [],
+            mix_objetivos: {
+              por_grupo: [
+                { grupo: "engajamento", rotulo: "Engajamento", gasto: 700, pct: 70, resultados: 5000, custo_por_resultado: 0.14, resultado_rotulo: "Engajamentos" },
+                { grupo: "mensagem", rotulo: "Mensagem", gasto: 300, pct: 30, resultados: 60, custo_por_resultado: 5, resultado_rotulo: "Conversas iniciadas" },
               ],
-              sem_vinculo: [{ ad_id: "999", ad_name: "Anúncio solto", effective_status: "ACTIVE" }],
+              perto_da_venda_pct: 30,
+              alertas: ["70% do investimento está em engajamento ou alcance, que não otimizam para conversa nem venda."],
             },
-            error: null,
-          }
-        : { data: { ok: true, custo_usd: 0.001 }, error: null },
-    );
+            anuncios: [
+              {
+                ad_id: "111", nome: "Conversa pelo WhatsApp", status: "ACTIVE", campaign_id: "c1", campanha: "Mensagens", imagem_url: null, grupo: "mensagem", peca: "hash:a",
+                metricas: { gasto: 300, impressoes: 20000, resultados: 60, custo_por_resultado: 5, ctr_saida_pct: 1.2, resultado_tipo: "mensagens", resultado_rotulo: "Conversas iniciadas" },
+                criativo: { id: "cr-1", nome: "A dor da espera | V1 | feed_4x5", origem: "ligado" },
+                diagnostico: { situacao: "com_sinais", sinais: [{ sinal: "Custo abaixo do tolerável", hipotese: "O gancho segura.", verificar: "Subir a verba aos poucos." }] },
+                tendencia: {}, sinal: "escalar",
+              },
+              {
+                ad_id: "222", nome: "Post impulsionado", status: "PAUSED", campaign_id: "c2", campanha: "Engajamento", imagem_url: null, grupo: "engajamento", peca: "hash:b",
+                metricas: { gasto: 700, impressoes: 90000, resultados: 5000, custo_por_resultado: 0.14, resultado_tipo: "engajamento", resultado_rotulo: "Engajamentos" },
+                criativo: null, diagnostico: null, tendencia: {}, sinal: "pausar",
+              },
+            ],
+          },
+          error: null,
+        };
+      }
+      if (body.acao === "vinculos_automaticos") {
+        return {
+          data: {
+            itens: [
+              {
+                peca: "hash:b", origem: "confirmar", confianca: 0.6, sinais: [{ tipo: "texto", detalhe: "Texto principal parecido" }],
+                anuncio: { ad_id: "222", ad_ids: ["222"], nome: "Post impulsionado", corpo: "Texto do post", gasto_90d: 700 },
+                criativo: null,
+                candidatos: [{ criativo_id: "cr-2", nome: "Prova do resultado | V1 | feed_4x5", confianca: 0.6, sinais: ["Texto principal parecido"] }],
+              },
+              {
+                peca: "hash:a", origem: "automatico", confianca: 0.93, sinais: [{ tipo: "imagem", detalhe: "Mesma imagem" }],
+                anuncio: { ad_id: "111", ad_ids: ["111"], nome: "Conversa pelo WhatsApp", gasto_90d: 300 },
+                criativo: { id: "cr-1", nome: "A dor da espera | V1 | feed_4x5" }, candidatos: [],
+              },
+            ],
+            resumo: { ja_ligados: 0, automaticos: 1, pelo_jev: 0, confirmar: 1, sem_par: 0, criativos_livres: 1 },
+            impressoes: { novas: 2, pendentes: 0 },
+            historico_disponivel: true,
+            custo_usd: 0.0004,
+          },
+          error: null,
+        };
+      }
+      return { data: { ok: true, custo_usd: 0.001 }, error: null };
+    });
     montar(h(AbaResultados));
-    expect(await screen.findByText("CTR de saída baixo")).toBeTruthy();
-    // A função lê periodo_inicio e periodo_fim (mesa-ads/index.ts, resultadosLer).
-    const periodoPedido = periodoDosUltimos(14);
-    expect(chamadasDe("resultados_ler")[0]).toEqual({ acao: "resultados_ler", client_id: CLIENTE, periodo_inicio: periodoPedido.inicio, periodo_fim: periodoPedido.fim });
-    expect(screen.getByText("O gancho não segura o clique.")).toBeTruthy();
-    expect(screen.getByText(/Testar outro gancho visual/)).toBeTruthy();
-    expect(screen.getByText("R$ 100,00")).toBeTruthy();
-    expect(screen.getByText("0,42%")).toBeTruthy();
-    expect(screen.getByText("Anúncio solto")).toBeTruthy();
-    expect(await screen.findByRole("option", { name: "Prova do resultado · 4:5" })).toBeTruthy();
+    // Resumo no topo com a tendência e o alerta do mix de objetivos (código).
+    expect(await screen.findByText("R$ 1.000,00")).toBeTruthy();
+    expect(chamadasDe("conta_ao_vivo")[0]).toEqual({ acao: "conta_ao_vivo", client_id: CLIENTE, dias: 14 });
+    expect(screen.getByText("+25%")).toBeTruthy();
+    expect(screen.getByText(/70% do investimento está em engajamento/)).toBeTruthy();
+    // Abas simples: Ativos agora mostra só o ativo.
+    expect(screen.getByRole("tab", { name: "Ativos agora (1)" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("article", { name: "Anúncio Conversa pelo WhatsApp" })).toBeTruthy();
+    expect(screen.queryByRole("article", { name: "Anúncio Post impulsionado" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Para descartar (1)" }));
+    expect(screen.getByRole("article", { name: "Anúncio Post impulsionado" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Melhores criativos (2)" }));
+    expect(screen.getByRole("article", { name: "Criativo A dor da espera | V1 | feed_4x5" })).toBeTruthy();
+    // Objetivo: só mensagem, com o rótulo e o custo daquele objetivo.
+    fireEvent.click(screen.getByRole("button", { name: "Mensagem (1)" }));
+    expect(screen.getAllByText("Conversas iniciadas").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("R$ 5,00").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("tab", { name: "Ativos agora (1)" }));
 
-    fireEvent.click(screen.getByRole("button", { name: /Registrar aprendizado/ }));
+    // Aprendizado só no anúncio ligado a criativo da Mesa Ads, com o período da conta.
+    const cartao = screen.getByRole("article", { name: "Anúncio Conversa pelo WhatsApp" });
+    fireEvent.click(within(cartao).getByRole("button", { name: /Aprendizado/ }));
+    expect(screen.getByText("Custo abaixo do tolerável")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Aprendizado"), { target: { value: "Gancho de relógio perdeu para o de agenda." } });
     fireEvent.click(screen.getByRole("button", { name: /^Registrar\s*~/ }));
     await waitFor(() => expect(chamadasDe("aprendizado_registrar")).toHaveLength(1));
-    const p = periodoDosUltimos(14);
     expect(chamadasDe("aprendizado_registrar")[0]).toEqual({
       acao: "aprendizado_registrar",
-      criativo_id: "c-1",
-      periodo_inicio: p.inicio,
-      periodo_fim: p.fim,
+      criativo_id: "cr-1",
+      periodo_inicio: "2026-09-09",
+      periodo_fim: "2026-09-22",
       texto: "Gancho de relógio perdeu para o de agenda.",
     });
+
+    // Vínculo automático no lugar de "anúncios sem vínculo": o Jev entra sozinho e só o incerto pede confirmação.
+    expect(await screen.findByText("1 reconhecidos agora")).toBeTruthy();
+    expect(chamadasDe("vinculos_automaticos")[0]).toEqual({ acao: "vinculos_automaticos", client_id: CLIENTE, jev: true });
+    expect(screen.queryByText("Anúncios sem vínculo")).toBeNull();
+    expect(screen.getByText(/Conferência do Jev/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /É este/ }));
+    await waitFor(() => expect(chamadasDe("vinculo_confirmar")).toEqual([{ acao: "vinculo_confirmar", client_id: CLIENTE, criativo_id: "cr-2", ad_id: "222" }]));
   });
 
   it("período dos últimos dias termina ontem", () => {
     expect(periodoDosUltimos(7, new Date(2026, 8, 23))).toEqual({ inicio: "2026-09-16", fim: "2026-09-22" });
+  });
+
+  it("sem tabela larga nem rolagem de lado na aba (bug da rolagem que movia a tela inteira)", () => {
+    for (const arquivo of ["src/components/mesa-ads/AbaResultados.tsx", "src/components/mesa-ads/ResultadosClaros.tsx", "src/components/mesa-ads/ContaPaineis.tsx", "src/components/mesa-ads/VinculoAutomatico.tsx", "src/components/mesa-ads/AgenteSenior.tsx"]) {
+      const fonte = ler(arquivo);
+      expect(fonte).not.toMatch(/overflow-x-auto/);
+      expect(fonte).not.toMatch(/min-w-\[\d+px\]/);
+      // Caixa com rolagem própria só a partir do tablet (no celular o dedo rola a página).
+      expect(fonte).not.toMatch(/(^|[\s"`])max-h-\[[^\]]+\] [^"`]*(^|\s)overflow-y-auto/);
+    }
   });
 });
 
