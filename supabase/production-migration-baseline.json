@@ -1153,6 +1153,14 @@
       "remote_name": "mesa_foto_book",
       "remote_statements_sha256": "8a2adb78e6fada8ec25f9b09e480f4b3b90d5950dfa025a6781ffe392d3cf3e8",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925202310",
+      "path": "supabase/migrations/20260925202310_mesa_ads_vinculos_e_biblioteca.sql",
+      "local_sha256": "89dc0540317feefa29ef6df174a3c06abcd70b2512bd2c327a47330ee0bf7415",
+      "remote_name": "mesa_ads_vinculos_e_biblioteca",
+      "remote_statements_sha256": "185fbe4956cd2a8f5d455506f8ca828a8718b830a4fa5fc2d1d596108a032a95",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
