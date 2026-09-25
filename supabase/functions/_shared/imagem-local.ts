@@ -635,12 +635,16 @@ function desfocarCaixa(m: Float32Array, W: number, H: number, r: number): Float3
  * fundo azul) e o tamanho pela forma dela (tamanhoDaLogo, direcao-arte.ts).
  * Ignora pixels transparentes e, em logo sem transparência, o fundo quase branco.
  */
-export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | null; clara: boolean; aspecto: number | null }> {
+export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | null; clara: boolean; aspecto: number | null; cores?: string[] }> {
   const img = await decodificar(bytes);
   const pequena = img.width > 200 ? img.clone().resize(200, Image.RESIZE_AUTO) : img;
   const b = pequena.bitmap;
   const PW = pequena.width;
   let r = 0, g = 0, bl = 0, n = 0, opacos = 0;
+  // Cores da logo (dono, 26/09): "Aceler" branco e "iq" verde. As cores vão
+  // escritas no prompt, e a logo com parte branca é tratada como clara (a
+  // média do verde sozinha escondia o branco e ela ia parar em fundo claro).
+  const baldes = new Map<string, { n: number; r: number; g: number; b: number }>();
   // Caixa do desenho: a dos pixels opacos com tinta (sem o fundo branco) e, na logo branca, a dos opacos.
   const tinta = { x0: PW, y0: pequena.height, x1: -1, y1: -1 };
   const opaca = { x0: PW, y0: pequena.height, x1: -1, y1: -1 };
@@ -655,22 +659,56 @@ export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | n
     opacos++;
     const p = i / 4, x = p % PW, y = (p - x) / PW;
     crescer(opaca, x, y);
+    const chave = [b[i] >> 5, b[i + 1] >> 5, b[i + 2] >> 5].join(",");
+    const balde = baldes.get(chave) || { n: 0, r: 0, g: 0, b: 0 };
+    balde.n++; balde.r += b[i]; balde.g += b[i + 1]; balde.b += b[i + 2];
+    baldes.set(chave, balde);
     const claro = b[i] > 235 && b[i + 1] > 235 && b[i + 2] > 235;
     if (claro) continue;
     crescer(tinta, x, y);
     r += b[i]; g += b[i + 1]; bl += b[i + 2]; n++;
   }
   const proporcao = (c: typeof tinta) => (c.x1 >= c.x0 && c.y1 >= c.y0 ? Math.round(((c.x1 - c.x0 + 1) / (c.y1 - c.y0 + 1)) * 100) / 100 : null);
+  const hexDe = (rr: number, gg: number, bb: number) => `#${[rr, gg, bb].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  // Até 3 cores que ocupam pelo menos 6% do desenho, da maior para a menor.
+  const cores = [...baldes.values()]
+    .filter((c) => c.n >= opacos * 0.06)
+    .sort((a, c) => c.n - a.n)
+    .slice(0, 3)
+    .map((c) => hexDe(c.r / c.n, c.g / c.n, c.b / c.n));
   // Quase tudo branco: logo branca (versão para fundo escuro).
-  if (!opacos || n < opacos * 0.08) return { tom: "#FFFFFF", clara: true, aspecto: proporcao(opaca) };
+  if (!opacos || n < opacos * 0.08) return { tom: "#FFFFFF", clara: true, aspecto: proporcao(opaca), cores: cores.length ? cores : ["#FFFFFF"] };
+  // Parte branca grande (letras brancas ao lado de uma cor): também é clara, some em fundo claro.
+  const fracaoBranca = (opacos - n) / opacos;
   r = Math.round(r / n); g = Math.round(g / n); bl = Math.round(bl / n);
   const lin = (v: number) => {
     const s = v / 255;
     return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
   };
   const luminancia = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl);
-  const hex = `#${[r, g, bl].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
-  return { tom: hex, clara: luminancia > 0.45, aspecto: proporcao(tinta) };
+  return { tom: hexDe(r, g, bl), clara: luminancia > 0.45 || fracaoBranca >= 0.2, aspecto: proporcao(tinta), cores };
+}
+
+/** Fundo liso do anexo da logo: cinza-escuro para logo clara, quase branco para logo escura. */
+export const FUNDO_DA_LOGO_CLARA = "#2B2B2B";
+export const FUNDO_DA_LOGO_ESCURA = "#F2F2F2";
+
+/**
+ * Logo achatada sobre um fundo liso de contraste, com margem (dono, 26/09: "a
+ * logo não tem nada a ver"). A logo da AcelerIQ tem "Aceler" em BRANCO; em PNG
+ * transparente o gerador não via o branco e desenhava só "iq" (ou inventava
+ * "adwaiq"). Com o fundo de contraste as letras aparecem inteiras; a legenda
+ * diz que esse fundo é só para enxergar a logo. Leve: a logo já chega limpa e
+ * com no máximo 512 px (logoLimpa), e a tela tem margem de 12% do lado maior.
+ */
+export async function logoSobreContraste(bytes: Uint8Array, clara: boolean): Promise<Uint8Array> {
+  const logo = await decodificar(bytes);
+  const margem = Math.max(8, Math.round(Math.max(logo.width, logo.height) * 0.12));
+  const tela = new Image(logo.width + margem * 2, logo.height + margem * 2);
+  const hex = clara ? FUNDO_DA_LOGO_CLARA : FUNDO_DA_LOGO_ESCURA;
+  tela.fill(((parseInt(hex.slice(1), 16) << 8) | 0xff) >>> 0);
+  tela.composite(logo, margem, margem);
+  return await tela.encode(1);
 }
 
 /**

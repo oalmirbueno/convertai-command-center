@@ -82,7 +82,7 @@ import {
 import {
   blocoDaSerie,
   blocoDasPreferencias,
-  blocoReplicarReferencia,
+  promptDoReplicar,
   caixaDaLogo,
   caixaDaZona,
   formatoDoPost,
@@ -253,7 +253,7 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
     for (const clara of [true, false]) {
       const p = promptDaLamina(card(), marca(), { total: 1, carrosselInfinito: false, levaLogo: true, logo: { tom: "#0B2A4A", clara } });
       expect(p).not.toContain("claro e liso");
-      expect(p).toContain("sem caixa, cartão, faixa, retângulo ou fundo branco atrás");
+      expect(p).toContain("sem caixa, cartão, retângulo ou fundo próprio atrás");
       expect(p).toContain("Logo oficial anexada, desenhada junto com a arte e idêntica ao anexo");
     }
     // Não existe mais a logo pelo código: o gerador sempre desenha a logo anexada.
@@ -264,13 +264,15 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
     const g = corpoDe("gerarCard");
     expect(g).toContain("const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card)) : [];");
     expect(g).toContain("const logo = escolherLogoDoKit(logosKit, t, card, valorDoFundo);");
-    expect(g).toContain('if (logo) candidatos.push({ tipo: "logo", rotulo: LEGENDA_DA_LOGO, carregar: async () => logo.imagem });');
+    // 27/09: a logo vai achatada no fundo de contraste, com o texto dela na legenda.
+    expect(g).toContain("logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),");
+    expect(g).toContain('if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });');
     expect(g).not.toContain("acabar(");
     expect(g).not.toContain("logosNoCodigo");
     // Só o recorte da pessoa ou do produto volta por cima (sem logo).
     expect(g).toContain("recorte: { imagem: recorteNaLamina.recorte, posicao: recorteNaLamina.posicao, larguraDaTela: quadro.largura },");
     expect(corpoDe("escolherLogoDoKit")).toContain("{ lamina: card.logo, conjunto: t.direcao.logo_escolhida }");
-    expect(blocoReplicarReferencia({ referencias: [{ indice: 1 }], fotos: [], logo: 3 })).toContain("a marca dela pela logo oficial (imagem 3), desenhada junto com a arte");
+    expect(promptDoReplicar({ card: { ordem: 1, funcao: "capa", texto_exato: "Olá" }, marca: { nomeCliente: "X", paleta: [], estilo: null, regras: null, fontes: [], temLogo: true }, total: 1, referencias: [{ indice: 1, molde: null }], editando: true, fotos: [], logo: { leva: true, indice: 3, medida: null, descricao: null }, quadro: { largura: 1080, altura: 1350 } }).prompt).toContain("A logo é a imagem 3; a marca, o nome e o site da referência não entram.");
   });
 
   it("o ajuste mantém a logo gerada e anexa a mesma logo do kit; a versão antiga com logo colada fica protegida no contínuo", () => {

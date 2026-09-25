@@ -532,21 +532,121 @@ export function tamanhoDaLogo(quadro: { largura: number; altura: number }, aspec
   };
 }
 
-/** A logo que a lâmina usa (escolhida no kit): tom, claridade e proporção medidos em código. */
-export type LogoMedida = { tom: string | null; clara: boolean; aspecto?: number | null };
+/**
+ * A logo que a lâmina usa (escolhida no kit): tom, claridade, proporção e as
+ * cores (até 3, da maior para a menor) medidos em código.
+ */
+export type LogoMedida = { tom: string | null; clara: boolean; aspecto?: number | null; cores?: string[] | null };
 
 /**
- * Legenda do anexo da logo (a imagem que o gerador copia): forte e sem
- * ambiguidade, porque a logo agora é desenhada pelo gerador.
+ * Leitura por visão do ARQUIVO da logo (feita uma vez e guardada): o texto
+ * exatamente como está escrito na logo, as partes com a cor de cada uma e o
+ * símbolo. Dono, 26/09: "a logo não tem nada a ver". Sem o nome escrito no
+ * prompt, o gerador via só o "iq" verde da AcelerIQ (o "Aceler" é branco) e
+ * inventava o resto.
  */
-export const LEGENDA_DA_LOGO =
-  "LOGO OFICIAL da marca: reproduza exatamente esta logo, com as mesmas letras, símbolo, cores e proporção; não redesenhe, não invente símbolo, não troque por texto e não ponha caixa ou fundo atrás dela";
+export type LeituraDaLogo = {
+  texto: string;
+  partes: { texto: string; cor: string }[];
+  simbolo: string | null;
+};
+
+/** Leitura da logo lida com cuidado (JSON do cache ou do leitor): sem texto nem símbolo, null. */
+export function normalizarLeituraDaLogo(bruto: unknown): LeituraDaLogo | null {
+  const o = bruto && typeof bruto === "object" ? bruto as Record<string, unknown> : null;
+  if (!o) return null;
+  const limpo = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+  const texto = limpo(o.texto ?? o.texto_da_logo, 60);
+  const partes = (Array.isArray(o.partes) ? o.partes : [])
+    .map((p) => {
+      const x = p && typeof p === "object" ? p as Record<string, unknown> : {};
+      const cor = [limpo(x.cor_nome, 30), hexOk(x.cor_hex) || hexOk(x.cor) || ""].filter(Boolean).join(" ") || limpo(x.cor, 40);
+      return { texto: limpo(x.texto, 40), cor };
+    })
+    .filter((p) => p.texto && p.cor)
+    .slice(0, 4);
+  const simbolo = limpo(o.simbolo, 200) || null;
+  if (o.confianca === "baixa") return null;
+  if (!texto && !simbolo) return null;
+  return { texto, partes: texto ? partes : [], simbolo };
+}
+
+/**
+ * O que a logo é, por escrito, para o prompt: o texto exato (da leitura por
+ * visão do arquivo; sem ela, o nome da marca como referência de grafia), as
+ * cores de cada parte e o símbolo. Nada inventado: sem leitura, só o nome e as
+ * cores medidas em código.
+ */
+export function descricaoDaLogo(e: { nome?: string | null; leitura?: LeituraDaLogo | null; medida?: LogoMedida | null }): string | null {
+  const l = e.leitura;
+  const cores = (e.medida?.cores ?? []).filter((c) => hexOk(c)).map((c) => `${nomeDaCor(c)} ${c}`);
+  if (l && (l.texto || l.simbolo)) {
+    const partes = l.partes.length > 1 || (l.partes.length === 1 && l.partes[0].texto !== l.texto)
+      ? ` (${l.partes.map((p) => `"${p.texto}" em ${p.cor}`).join(", ")})`
+      : l.partes.length === 1 ? ` em ${l.partes[0].cor}` : "";
+    const texto = l.texto ? `As letras da logo formam exatamente "${l.texto}"${partes}, com estas maiúsculas e minúsculas.` : "A logo não tem letras: é só o símbolo.";
+    return `${texto}${l.simbolo ? ` Símbolo: ${l.simbolo}.` : ""}${cores.length ? ` Cores medidas no arquivo: ${cores.join(", ")}.` : ""}`;
+  }
+  const nome = String(e.nome || "").trim();
+  if (!nome && !cores.length) return null;
+  return `${nome ? `A logo é a da marca ${nome}: copie as letras exatamente como estão no anexo (todas elas, inclusive as brancas ou claras), sem trocar nem tirar nenhuma.` : ""}${cores.length ? ` Cores medidas no arquivo: ${cores.join(", ")}.` : ""}`.trim();
+}
+
+/** A cor mais escura da paleta (para a área da logo clara) ou a mais clara (para a logo escura). */
+export function corOpostaNaPaleta(paleta: MarcaParaDirecao["paleta"], logoClara: boolean | null): string | null {
+  if (logoClara === null) return null;
+  const cores = paleta.map((p) => hexOk(p.hex)).filter(Boolean) as string[];
+  if (!cores.length) return null;
+  return cores.reduce((m, c) => ((logoClara ? luminancia(c) < luminancia(m) : luminancia(c) > luminancia(m)) ? c : m));
+}
+
+/** Nome simples de uma cor hex (para o gerador ler "branco", "verde"...). */
+export function nomeDaCor(hex: string): string {
+  const h = hexOk(hex);
+  if (!h) return "cor";
+  const r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  if (max - min < 28) return max > 225 ? "branco" : max < 45 ? "preto" : max > 160 ? "cinza claro" : "cinza";
+  const matiz = (() => {
+    const d = max - min;
+    let m = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    m *= 60;
+    return m < 0 ? m + 360 : m;
+  })();
+  if (matiz < 15 || matiz >= 345) return "vermelho";
+  if (matiz < 40) return "laranja";
+  if (matiz < 65) return "amarelo";
+  if (matiz < 165) return "verde";
+  if (matiz < 200) return "ciano";
+  if (matiz < 255) return "azul";
+  if (matiz < 290) return "roxo";
+  return "rosa";
+}
+
+/**
+ * Legenda do anexo da logo. O anexo é a logo ACHATADA sobre um fundo liso de
+ * contraste (logoSobreContraste, imagem-local.ts): cinza-escuro para a logo
+ * clara, quase branco para a escura. A legenda avisa que esse fundo é só para
+ * enxergar as letras e repete o texto exato da logo.
+ */
+export function legendaDaLogo(e: { clara?: boolean | null; texto?: string | null; comFundo?: boolean }): string {
+  const fundo = e.comFundo === false
+    ? ""
+    : e.clara
+    ? " Ela está sobre um fundo cinza-escuro liso SÓ para você enxergar as partes claras; esse fundo não faz parte da logo e não vai para a arte."
+    : " Ela está sobre um fundo claro liso SÓ para você enxergar a logo; esse fundo não faz parte da logo e não vai para a arte.";
+  return `LOGO OFICIAL da marca${e.texto ? ` (as letras dizem "${e.texto}")` : ""}: reproduza exatamente esta logo, com todas as letras, o símbolo, as cores e a proporção; não redesenhe, não invente símbolo e não ponha caixa ou retângulo atrás dela.${fundo}`;
+}
+
+/** Mantido para quem ainda importa a constante (sem o fundo de contraste). */
+export const LEGENDA_DA_LOGO = legendaDaLogo({ comFundo: false });
 
 /**
  * Bloco LOGO do prompt. `areaFixa`: a máscara só deixa o gerador desenhar ali
- * (foto real fixa e contínuo), então a logo vai dentro dela. `replicar`: no
- * lugar em que a referência põe a marca dela, mas no tamanho da marca (a
- * referência não diminui a logo).
+ * (foto real fixa e contínuo), então a logo vai dentro dela. `lugarNoMolde`:
+ * replicando a referência, o lugar da marca dela (medido), mas no tamanho da
+ * marca deste cliente (a referência não diminui a logo). `descricao`: o texto
+ * exato e as cores da logo (descricaoDaLogo).
  */
 export function blocoDaLogo(e: {
   levaLogo: boolean;
@@ -555,8 +655,17 @@ export function blocoDaLogo(e: {
   logo?: LogoMedida | null;
   areaFixa?: Caixa | null;
   replicar?: boolean;
+  lugarNoMolde?: Caixa | null;
   anuncio?: boolean;
   foto?: boolean;
+  descricao?: string | null;
+  /**
+   * Cor dominante do fundo da lâmina (hex) e a cor da paleta para a área da
+   * logo quando o fundo tem o mesmo valor dela (logo clara em fundo claro): a
+   * composição ganha uma parte escura (ou clara) do grid para a logo pousar.
+   */
+  fundoDaLamina?: string | null;
+  corParaALogo?: string | null;
 }): string[] {
   if (!e.levaLogo) return ["- Sem logo nesta lâmina: não desenhe logo, símbolo nem marca."];
   if (!e.temLogo) return ["- A logo oficial ainda não foi enviada em imagem: NÃO desenhe nem invente logo, símbolo ou marca; deixe só um respiro no canto onde ela entraria."];
@@ -564,20 +673,30 @@ export function blocoDaLogo(e: {
   const margens = `dentro das margens${e.anuncio ? " e da zona segura" : ""}`;
   const lugar = e.areaFixa
     ? `- Lugar: dentro da área reservada para ela (${descreverPosicao(e.areaFixa)}), alinhada ao lado de fora dessa área; é a única área, além da do texto, em que a imagem muda.`
+    : e.lugarNoMolde
+    ? `- Lugar: onde a referência põe a marca dela (${descreverPosicao(e.lugarNoMolde)}), ${margens}. A referência só orienta o lugar: a logo fica no tamanho acima, nunca menor.`
     : e.replicar
-    ? `- Lugar: onde a referência põe a marca dela (sem marca na referência, alinhada ao bloco de texto), ${margens}. A referência só orienta o lugar: a logo fica no tamanho acima, nunca menor.`
+    ? `- Lugar: alinhada ao bloco de texto principal, numa área sem texto, ${margens}. A logo fica no tamanho acima, nunca menor.`
     : `- Lugar: faz parte da composição, alinhada ao mesmo eixo e à mesma margem do bloco de texto (acima da headline ou abaixo do apoio ou do CTA) ou no ponto que o layout pedir, ${margens}, com respiro em volta; nunca no canto superior direito, nunca sobre rosto, mão ou produto.`;
   const contraste = e.logo
     ? e.logo.clara
-      ? " A logo é clara: ela pousa numa parte escura da própria arte, direto sobre ela."
-      : ` A logo é escura ou colorida${e.logo.tom ? ` (tom dominante ${e.logo.tom})` : ""}: ela pousa numa parte clara da própria arte, direto sobre ela, nunca sobre a mesma cor nem o mesmo valor da logo.`
+      ? " A logo tem letras ou partes claras: ela fica sobre uma área ESCURA da própria arte (fundo escuro, sombra, parte escura da foto), inteira, com todas as letras legíveis; nunca sobre fundo claro, onde as partes claras somem."
+      : ` A logo é escura ou colorida${e.logo.tom ? ` (tom dominante ${e.logo.tom})` : ""}: ela fica sobre uma área CLARA da própria arte, inteira e legível, nunca sobre a mesma cor nem o mesmo valor da logo.`
     : " Nunca ponha a logo sobre fundo da mesma cor dela.";
+  // Logo clara em lâmina clara (ou escura em escura): a logo branca da AcelerIQ sumia no fundo claro (26/09).
+  const valorDoFundo = valorDaCor(e.fundoDaLamina ?? null);
+  const semContraste = !!e.logo && !e.areaFixa && valorDoFundo !== null && (e.logo.clara ? valorDoFundo >= 160 : valorDoFundo <= 90);
+  const areaDaLogo = semContraste
+    ? `- O fundo desta lâmina é ${e.logo!.clara ? "claro" : "escuro"} e a logo é ${e.logo!.clara ? "clara" : "escura"}: a composição tem uma parte ${e.logo!.clara ? "escura" : "clara"} para ela (uma faixa do grid de borda a borda${e.corParaALogo ? ` em ${e.corParaALogo}` : ""}, uma área de sombra ou um objeto ${e.logo!.clara ? "escuro" : "claro"} da cena) e a logo fica nessa parte, nunca direto no fundo ${e.logo!.clara ? "claro" : "escuro"}.`
+    : "";
   return [
-    "- Logo oficial anexada, desenhada junto com a arte e idêntica ao anexo (mesmas letras, símbolo, cores e proporção); não redesenhe nem troque por texto. Uma logo só.",
+    "- Logo oficial anexada, desenhada junto com a arte e idêntica ao anexo (mesmas letras, símbolo, cores e proporção); não redesenhe nem troque por outro texto. Uma logo só.",
+    e.descricao ? `- O que a logo é: ${e.descricao}` : "",
     `- Tamanho: cerca de ${t.largura} x ${t.altura} px numa arte de ${e.quadro.largura} x ${e.quadro.altura} (${t.larguraPct}% da largura), nunca menor que ${t.larguraMinima} x ${t.alturaMinima} px: legível de longe, nunca um detalhe pequenininho.`,
     lugar,
-    `-${contraste} A logo entra sem caixa, cartão, faixa, retângulo ou fundo branco atrás, exatamente como o desenho dela.`,
-  ];
+    `-${contraste} A logo entra direto sobre a arte, sem caixa, cartão, retângulo ou fundo próprio atrás, exatamente como o desenho dela.`,
+    areaDaLogo,
+  ].filter(Boolean);
 }
 
 // ------------------------------------------------------------ padrão e proibições
@@ -587,34 +706,66 @@ export function blocoDaLogo(e: {
  * (mesmas regras de PADRAO_NA_IMAGEM, conhecimento-design.ts, na forma que o
  * gerador segue melhor: frases diretas, uma regra por linha).
  */
+/**
+ * 27/09 (dono: "não usa as técnicas, está feio, não está igual ao começo"): o
+ * padrão tinha sido cortado para 3 linhas em 26/09 e perdeu as técnicas que
+ * estavam no prompt de 23 e 24/09 (PADRAO_NA_IMAGEM): planos de profundidade,
+ * recorte intencional, cores da foto puxadas para a paleta, eixo e margem
+ * comuns, agrupamento e o "rei da lâmina". Voltaram, uma regra por linha, sem
+ * a linha "nunca escreva o nome da marca" (contradizia a logo com letras).
+ */
 export const PADRAO_DA_LAMINA = [
-  "PADRÃO DE DESIGN",
-  "- No máximo 3 níveis de hierarquia e um só ponto focal; tudo no grid e nas margens; pelo menos 30% de respiro; texto só sobre área calma, painel sólido do grid ou gradiente local suave, legível até em preto e branco.",
+  "PADRÃO DE DESIGN (técnicas que valem em toda lâmina)",
+  "- Hierarquia: no máximo 3 níveis e um só ponto focal (o rei da lâmina); a headline domina, com pelo menos 3 vezes a altura do apoio, e o segundo maior elemento tem no máximo metade do primeiro.",
+  "- Grid: todos os blocos no mesmo eixo e na mesma margem; texto do mesmo assunto agrupado e blocos diferentes bem afastados; pelo menos 30% da arte em respiro ou fundo calmo.",
+  "- Profundidade: foto e texto na mesma cena, em planos (fundo, texto, sujeito), com recorte intencional, uma luz coerente e as cores da foto puxadas para a paleta; objeto recortado pousa com sombra de contato, sem halo nem caixa.",
+  "- Leitura: texto só sobre área calma e uniforme da foto, painel sólido do grid ou gradiente local suave; contraste forte, legível até em preto e branco e no tamanho da miniatura do feed.",
   "- Letras nítidas e íntegras, no máximo 2 famílias, sem esticar, sem contorno, sem sombra pesada, nada justificado nem hifenizado; acentos do português exatos (ã, õ, ç, é, ê, á, ó); nenhuma palavra sozinha na última linha.",
-  "- A cor de destaque (até 10% da área) só na palavra-chave, no número ou no CTA. Foto e texto na mesma cena, com uma luz coerente; acabamento de agência premium, com pele, mãos e rostos naturais.",
+  "- Cor: paleta da marca em 60-30-10; a cor de destaque (até 10% da área) só na palavra-chave, no número ou no CTA.",
+  "- Acabamento de agência premium: foto real do nicho, pele, mãos e rostos naturais, sombras coerentes, grão sutil só se o estilo pedir.",
 ].join("\n");
 
 /**
  * Proibições explícitas (dono, 26/09: "muitas alucinações nas demais
  * lâminas"): o gerador inventava texto, gente, objetos e marcas que ninguém
  * pediu. Valem em todos os modos.
+ *
+ * 27/09: duas linhas de 26/09 pioravam a arte. "Nenhum texto... sem nome da
+ * marca" brigava com a logo (que TEM o nome escrito) e ajudava o gerador a
+ * cortar as letras da logo; "nenhuma pessoa, mão, objeto... que a direção não
+ * pediu" esvaziava a cena (lâmina sem objetos de apoio, feia). Agora o texto
+ * da logo é a exceção declarada e a regra da cena veta o que sobra (pessoa a
+ * mais, objeto solto, outra marca, duplicado), não o cenário natural.
  */
 export function blocoDasProibicoes(e: { serie: boolean; replicar?: boolean }): string {
   return [
     "PROIBIDO",
-    "- Nenhum texto além do texto exato: sem nome da marca ou da empresa, site, telefone, @, hashtag, preço, data, marca d'água, legenda ou letras de enfeite.",
-    "- Nenhuma pessoa, rosto, mão, objeto, produto, animal, ícone ou marca que a direção não pediu; nenhuma logo de outra marca; nenhum elemento repetido ou duplicado.",
+    "- Nenhum texto além do texto exato e das letras da própria logo oficial: sem o nome da marca escrito fora da logo, site, telefone, @, hashtag, preço, data, marca d'água, legenda ou letras de enfeite.",
+    "- Nenhuma logo ou marca de outra empresa, pessoa a mais, objeto solto sem função, ícone de banco de imagens ou elemento repetido ou duplicado; os objetos de apoio são só os que a cena pede ou teria naturalmente.",
     "- Pessoas com anatomia correta e natural: cabeça alinhada ao corpo, pescoço natural, cinco dedos em cada mão, mãos segurando os objetos de um jeito possível, braços e pernas inteiros e na proporção certa.",
     e.replicar
       ? "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda. Faixas e formas gráficas só as da referência, nas cores da marca."
       : "- Sem moldura, borda, contorno ou cantos arredondados em volta da arte; o fundo vai até a borda. Faixas e formas gráficas só as do layout da marca.",
-    "- Não escureça a imagem para criar destaque. Evite: tudo centralizado e do mesmo tamanho, faixa preta genérica, gradiente roxo e azul, neon, brilho, 3D plástico, ícones de banco.",
+    e.replicar
+      ? "- Não escureça a imagem para criar destaque. Evite: neon, brilho, 3D plástico, gradiente roxo e azul que a referência não tenha."
+      : "- Não escureça a imagem para criar destaque. Evite: tudo centralizado e do mesmo tamanho, faixa preta genérica, gradiente roxo e azul, neon, brilho, 3D plástico, ícones de banco.",
     e.serie ? "- Não copie o texto das outras lâminas da série." : "",
     "- Sem travessão no texto.",
   ].filter(Boolean).join("\n");
 }
 
-/** Prompt final da lâmina, montado em código a partir da direção e da marca. */
+/**
+ * Prompt final da lâmina, montado em código a partir da direção e da marca
+ * (modos normal, série, foto real, recorte, contínuo e anúncio; o replicar
+ * referência tem prompt próprio, promptDoReplicar, sem a cena do diretor).
+ *
+ * Ordem (27/09, volta à de 23 e 24/09, quando o dono aprovou): primeiro a
+ * IMAGEM E COMPOSIÇÃO (o que a arte é), depois o TEXTO EXATO, a LOGO, a
+ * MARCA, o FORMATO, o padrão de design e as proibições. Em 26/09 a imagem
+ * tinha ido para o 4º lugar com "4) a composição" na lista de prioridade: o
+ * gerador passou a tratar a cena como detalhe e a arte ficou pobre. A regra de
+ * desempate continua (texto, logo, marca, composição), escrita por nome.
+ */
 export function promptDaLamina(
   card: Pick<CardDirecao, "ordem" | "funcao" | "texto_exato" | "blocos" | "layout" | "evitar" | "ilustracao">,
   marca: MarcaParaDirecao,
@@ -627,8 +778,10 @@ export function promptDaLamina(
     anteriores?: string[];
     /** Fio visual do conjunto (protagonista, cenário, luz, tratamento), definido uma vez pelo diretor. */
     fioVisual?: string | null;
-    /** Logo escolhida, medida em código: tom dominante, se é clara e a proporção (define tamanho e contraste). */
+    /** Logo escolhida, medida em código: tom dominante, se é clara, a proporção e as cores. */
     logo?: LogoMedida | null;
+    /** O que a logo é por escrito (texto exato e cores, descricaoDaLogo). */
+    logoDescricao?: string | null;
     /** Descrição da foto real anexada como base: o gerador não redesenha a foto. */
     fotoReal?: string | null;
     /**
@@ -638,12 +791,6 @@ export function promptDaLamina(
     areaDaLogo?: Caixa | null;
     /** Criativo de anúncio (trabalho tipo 'ads'): quadro, zona segura e regras do formato. */
     anuncio?: { formato: FormatoCriativo } | null;
-    /**
-     * Modo replicar referência (blocoReplicarReferencia vem antes deste
-     * prompt): a composição, a posição e a escala do texto vêm da referência
-     * escolhida, não do layout da direção. `comFoto`: a foto do cliente é o assunto.
-     */
-    replicar?: { comFoto: boolean } | null;
     /** Formato do post orgânico (trabalho social); sem ele ou em 4:5, o prompt de sempre. */
     post?: FormatoDoPost | null;
   },
@@ -676,16 +823,10 @@ export function promptDaLamina(
   const fonteTexto = marca.fontes.find((f) => f.papel === "texto")?.nome || marca.tipografiaCitada?.texto || fonteTitulo;
 
   const tamanhos = tamanhosDaLamina(blocos, capa);
-  // Replicando a referência, posição, escala e peso do texto vêm dela (não da conta do layout).
-  const replicar = !!opcoes.replicar;
   const linhasBlocos = blocos.map((b, i) => {
     const t = tamanhos[i];
     const fonte = b.papel === "headline" || b.papel === "numero" ? fonteTitulo : fonteTexto;
     const cor = b.papel === "cta" || b.papel === "numero" ? corDestaque || corTexto : corTexto;
-    if (replicar) {
-      return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}"` +
-        `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}; mesma posição, escala e peso do texto equivalente da referência.`;
-    }
     return `- ${b.papel.toUpperCase()}: "${b.texto.replace(/\n/g, " / ")}", letra de cerca de ${t.px} px numa arte de ${quadro.largura} x ${quadro.altura}, peso ${t.peso}` +
       `${fonte ? `, fonte ${fonte}` : ""}${cor ? `, cor ${cor}` : ""}.`;
   });
@@ -699,9 +840,6 @@ export function promptDaLamina(
     ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
     : "paleta coerente com as artes da marca anexadas";
 
-  // Ordem do prompt (26/09, "seguir o mais próximo possível do prompt"): o
-  // obrigatório primeiro (texto exato, logo, marca), depois a composição, o
-  // formato e as proibições. Cada regra aparece uma vez só.
   return [
     formato
       ? `ARTE FINAL de criativo de anúncio para tráfego pago na Meta (Facebook e Instagram), formato ${TAMANHO_DO_FORMATO[formato].rotulo}${serie ? `, carrossel de anúncio, card ${card.ordem} de ${opcoes.total}` : ""}. ` +
@@ -710,69 +848,59 @@ export function promptDaLamina(
           : "Uma peça só, com uma mensagem só: parar a rolagem da pessoa certa, fazer entender a oferta em 1 segundo e levar à ação.")
       : `ARTE FINAL de ${opcoes.total > 1 ? `carrossel, lâmina ${card.ordem} de ${opcoes.total}` : "post único"} para o Instagram da marca. Função desta lâmina: ${capa ? "capa (parar a rolagem com um gancho forte)" : card.funcao === "cta" ? "fechamento com chamada para ação" : "conteúdo (uma ideia só)"}.`,
     opcoes.conceito ? `Conceito do conjunto: ${opcoes.conceito}` : "",
-    "PRIORIDADE, nesta ordem: 1) o texto exato, letra por letra; 2) a logo oficial no tamanho pedido; 3) as cores e as fontes da marca; 4) a composição; 5) o acabamento. Em conflito, vale o item de número menor.",
+    "Em conflito entre regras, vale nesta ordem: o texto exato, a logo oficial no tamanho pedido, as cores e as fontes da marca, a composição e o acabamento.",
     "",
-    "1. TEXTO EXATO (escreva só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
+    "1. IMAGEM E COMPOSIÇÃO",
+    foto
+      ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz, cores, corte e enquadramento ficam exatamente como estão. Desenhe só o texto e a logo, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás deles.`
+      : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""}`,
+    opcoes.fioVisual && serie && !foto
+      ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").trim().slice(0, 600).replace(/([^.!?])$/, "$1.")} Mantenha a mesma protagonista, cenário e luz em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
+      : "",
+    foto && capa
+      ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, legível até no tamanho da miniatura do feed. A foto já é o elemento visual forte: não mude a foto. Nada competindo com a headline."
+      : anuncio && capa
+      ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado ligado à oferta (escala grande, recorte ousado, produto ou serviço em ação, rosto ou olhar para a câmera); contraste pela escala e pela cor de destaque, legível na tela do celular. Nada competindo com a headline."
+      : capa
+      ? "- CAPA QUE PARA A ROLAGEM: quem está rolando o feed tem que parar aqui. A maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; um elemento visual forte e inesperado (escala grande, recorte ousado, objeto cortado pela borda, rosto ou olhar para a câmera, gesto em ação); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed; mesma luz, cenário e paleta das lâminas seguintes. Nada competindo com a headline."
+      : "",
+    foto
+      ? `- O texto fica na área indicada (${layout.zona_texto.replace("-", " ")}), sobre a parte mais calma da foto; o contraste vem da cor e do peso das letras, nunca de escurecer ou cobrir a foto.`
+      : `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
+    foto ? "" : `- Ponto focal: ${layout.ponto_focal}.`,
+    foto ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
+    foto ? "" : `- Tratamento: ${layout.tratamento}.`,
+    marca.estilo && !foto ? `- Estilo visual da marca, obrigatório: ${marca.estilo}` : "",
+    "",
+    "2. TEXTO EXATO (escrito pela própria arte, integrado à composição; só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
+    `- Área do texto: ${descreverPosicao(caixa)}, alinhamento ${layout.alinhamento === "centro" ? "ao centro" : `à ${layout.alinhamento}`}, todos os blocos no mesmo eixo e com a mesma margem.`,
     ...linhasBlocos,
     temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
-    replicar
-      ? "- Posição, alinhamento e quebra do texto: os da referência, com o texto exato acima no lugar do texto dela (o título dela vira a headline, o texto menor vira o apoio)."
-      : `- Área do texto: ${descreverPosicao(caixa)}, alinhamento à ${layout.alinhamento === "centro" ? "centro" : layout.alinhamento}, todos os blocos no mesmo eixo e com a mesma margem.`,
-    replicar ? "" : `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
-    replicar
-      ? "- Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima."
-      : "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
+    `- A headline tem cerca de 3 vezes a altura do texto de apoio e cada linha dela ocupa cerca de ${linhaHeadline}% da altura do quadro. O apoio ocupa uma coluna de no máximo 66% da largura, com linhas de 25 a 38 caracteres.`,
+    "- Headline e apoio formam um grupo, a 16 a 32 px um do outro; CTA, selo e logo ficam a pelo menos 96 px desse grupo. Entrelinha da headline de 1,0 a 1,1, sem acento encostando na linha de cima; entrelinha do apoio de 1,3 a 1,5.",
     "",
-    "2. LOGO",
+    "3. LOGO",
     ...blocoDaLogo({
       levaLogo: opcoes.levaLogo,
       temLogo: marca.temLogo,
       quadro,
       logo: opcoes.logo ?? null,
       areaFixa: opcoes.areaDaLogo ?? null,
-      replicar,
       anuncio,
       foto,
+      descricao: opcoes.logoDescricao ?? null,
+      fundoDaLamina: foto ? null : corFundo,
+      corParaALogo: corOpostaNaPaleta(paleta, opcoes.logo ? opcoes.logo.clara : null),
     }),
     "",
-    "3. MARCA",
+    "4. MARCA",
     `- Paleta (use só estas cores, na proporção 60-30-10, com um destaque único): ${paletaTxt}.`,
     fonteTitulo || fonteTexto
       ? `- Tipografia: títulos em ${fonteTitulo || fonteTexto}, texto em ${fonteTexto || fonteTitulo}. Se houver amostra da fonte anexada, siga o desenho exato das letras da amostra.`
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
     marca.tipografiaCitada?.observacao ? `- Observação da marca sobre tipografia: ${marca.tipografiaCitada.observacao}` : "",
-    marca.estilo ? `- Estilo visual da marca, obrigatório: ${marca.estilo}` : "",
+    marca.estilo && foto ? `- Estilo visual da marca, no texto e nos elementos gráficos: ${marca.estilo}` : "",
     marca.regras ? `- Regras da marca: ${marca.regras.replace(/\n+/g, " ")}` : "",
-    "",
-    "4. IMAGEM E COMPOSIÇÃO",
-    replicar
-      ? opcoes.replicar!.comFoto
-        ? "- Imagem: a FOTO REAL do cliente anexada é o assunto desta lâmina, recomposta no layout da referência (veja MODO REPLICAR REFERÊNCIA), com a pessoa ou o produto idêntico."
-        : `- Imagem: ${layout.imagem}. É o assunto desta lâmina, no lugar do assunto da referência.`
-      : foto
-      ? `- Imagem: a FOTO REAL do cliente anexada como imagem 1 (${opcoes.fotoReal}) é a base desta lâmina. Não redesenhe a foto: pessoas, objetos, ambiente, luz, cores, corte e enquadramento ficam exatamente como estão. Desenhe só o texto e a logo, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás deles.`
-      : `- Imagem: ${layout.imagem}.${card.ilustracao && card.ilustracao !== layout.imagem ? ` Detalhe: ${card.ilustracao}.` : ""} Só este assunto: nada além do que está descrito.`,
-    replicar ? "- Composição, grid, recorte e tratamento da imagem: os da referência escolhida (veja MODO REPLICAR REFERÊNCIA), não um layout novo." : "",
-    opcoes.fioVisual && serie && !foto && !opcoes.replicar?.comFoto
-      ? `- CONTINUIDADE DA SÉRIE (obrigatório): ${opcoes.fioVisual.replace(/\s+/g, " ").trim().slice(0, 600).replace(/([^.!?])$/, "$1.")} Mantenha a mesma protagonista, cenário e luz em todas as lâminas; varia só a pose, o gesto e o enquadramento.`
-      : "",
-    replicar
-      ? ""
-      : foto && capa
-      ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque, legível até no tamanho da miniatura do feed. A foto já é o elemento visual forte: não mude a foto. Nada competindo com a headline."
-      : anuncio && capa
-      ? "- CRIATIVO QUE PARA A ROLAGEM: headline curta e grande, em peso black, com a palavra-chave na cor de destaque; o assunto descrito em Imagem em escala grande, ligado à oferta; contraste pela escala e pela cor de destaque, legível na tela do celular. Nada competindo com a headline."
-      : capa
-      ? "- CAPA QUE PARA A ROLAGEM: a maior headline do conjunto, em peso black, com a palavra-chave na cor de destaque; o assunto descrito em Imagem em escala grande e recorte ousado (pode sangrar pela borda); contraste pela escala e pela cor de destaque, legível até no tamanho da miniatura do feed. Nada competindo com a headline."
-      : "",
-    replicar
-      ? ""
-      : foto
-      ? `- O texto fica na área indicada (${layout.zona_texto.replace("-", " ")}), sobre a parte mais calma da foto; o contraste vem da cor e do peso das letras, nunca de escurecer ou cobrir a foto.`
-      : `- O sujeito da foto fica do lado oposto à área do texto (${layout.zona_texto.replace("-", " ")}); essa área é calma e uniforme na própria foto (parede, céu, sombra, fundo desfocado) ou recebe um painel da paleta alinhado ao grid.`,
-    foto || replicar ? "" : `- Ponto focal: ${layout.ponto_focal}.`,
-    foto || replicar ? "" : `- Fundo: ${layout.fundo}${corFundo ? ` (cor dominante ${corFundo})` : ""}.`,
-    foto || replicar ? "" : `- Tratamento: ${layout.tratamento}.`,
     "",
     "5. FORMATO",
     ...(formato
@@ -804,9 +932,9 @@ export function promptDaLamina(
           : "",
       ]),
     "",
-    blocoDasProibicoes({ serie, replicar }),
-    "",
     PADRAO_DA_LAMINA,
+    "",
+    blocoDasProibicoes({ serie }),
     card.evitar ? `\nEVITAR NESTA LÂMINA: ${card.evitar}` : "",
   ].filter((l) => l !== "").join("\n");
 }
@@ -833,61 +961,498 @@ export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCri
   return { x0: esq, x1: um(esq + largura), y0: um(base - altura), y1: base };
 }
 
-/**
- * Modo replicar referência (pedido do dono em 25/09: "escolhi a referência e
- * a imagem e gerou nada a ver"; "faz idêntico à referência com a identidade
- * visual da empresa, o conteúdo da empresa, com a foto"). Vai ANTES do prompt
- * da lâmina: a referência escolhida manda no layout; a marca manda nas cores,
- * nas fontes e na logo; o texto exato e a foto do cliente são o conteúdo.
- * Com duas referências, a 1ª dá a estrutura e a 2ª o tratamento. Os índices
- * são a posição de cada imagem anexada (1 = a primeira).
- */
-export function blocoReplicarReferencia(e: {
-  referencias: { indice: number; leitura?: string | null }[];
-  fotos: { indice: number; descricao?: string | null; papel: "fundo" | "elemento" }[];
-  logo?: number | null;
-  capa?: boolean;
-  /** A referência 1 é a imagem 1 editada (molde): quase idêntica, só trocam conteúdo e marca. */
-  editando?: boolean;
-}): string {
-  const refs = e.referencias.slice(0, 2);
-  if (!refs.length) return "";
-  const leitura = (l?: string | null) => {
-    const t = String(l || "").replace(/\s+/g, " ").trim().slice(0, 600);
-    return t ? ` O que se vê nela: ${t}` : "";
+// ------------------------------------------------------ modo replicar referência
+//
+// Dono, 25/09: "escolhi a referência e a imagem e gerou nada a ver"; "faz
+// idêntico à referência com a identidade visual da empresa, o conteúdo da
+// empresa, com a foto". Dono, 26/09: "está errando tudo, não segue nada da
+// referência, não usa as técnicas".
+//
+// Causa medida em 26/09 (trabalhos 615faaf6 e ad77eb82): o prompt do replicar
+// era o bloco da referência SEGUIDO do prompt inteiro da lâmina, com a cena do
+// diretor ("Imagem: mão segurando uma folha de checklist..."), o fio visual da
+// série, o conceito, o estilo da marca (cenas de escritório), a zona do texto,
+// o padrão ("nada centralizado", "texto sobre área calma") e as proibições
+// ("nenhuma pessoa que a direção não pediu"). A referência, sem nenhuma
+// medida (3 das 4 escolhidas nem tinham leitura), perdia para essa descrição
+// detalhada e saía a cena do diretor. Agora o replicar tem prompt PRÓPRIO:
+// nada da cena do diretor, e o layout vem do MOLDE, a leitura por visão da
+// referência como especificação (blocos com posição e tamanho em %, caixa,
+// família, peso, cor por papel, assunto e enquadramento, elementos, fundo),
+// feita uma vez e guardada. Cada bloco do molde é mapeado em código para um
+// bloco de texto desta lâmina.
+
+/** Versão do formato do molde guardado: sobe quando o esquema muda (o cache antigo é lido de novo). */
+export const VERSAO_DO_MOLDE = 1;
+
+export type PapelNoMolde = "titulo" | "subtitulo" | "texto" | "rotulo" | "cta" | "numero" | "marca" | "perfil";
+const PAPEIS_NO_MOLDE: PapelNoMolde[] = ["titulo", "subtitulo", "texto", "rotulo", "cta", "numero", "marca", "perfil"];
+
+export type BlocoDoMolde = Caixa & {
+  papel: PapelNoMolde;
+  /** Altura de uma letra maiúscula, em % da altura do quadro. */
+  altura_da_letra: number;
+  linhas: number;
+  caixa_alta: boolean;
+  familia: string;
+  largura_da_letra: string;
+  peso: string;
+  cor: string | null;
+  alinhamento: "esquerda" | "centro" | "direita";
+};
+
+export type MoldeDaReferencia = {
+  versao: number;
+  proporcao: string;
+  fundo: string;
+  cor_do_fundo: string | null;
+  grade: string;
+  assunto: (Caixa & { tipo: "pessoa" | "produto" | "objeto" | "cena" | "nenhum"; descricao: string; enquadramento: string }) | null;
+  blocos: BlocoDoMolde[];
+  elementos: (Caixa & { descricao: string; cor: string | null })[];
+  tratamento: string;
+};
+
+const caixaNoEsquema = { x0: { type: "number" }, y0: { type: "number" }, x1: { type: "number" }, y1: { type: "number" } };
+
+/** Esquema da leitura do molde (visão, modelo de leitura do catálogo). */
+export const ESQUEMA_MOLDE = {
+  nome: "molde_da_referencia",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["proporcao", "fundo", "cor_do_fundo", "grade", "assunto", "blocos", "elementos", "tratamento"],
+    properties: {
+      proporcao: { type: "string" },
+      fundo: { type: "string" },
+      cor_do_fundo: { type: "string" },
+      grade: { type: "string" },
+      assunto: {
+        type: "object",
+        additionalProperties: false,
+        required: ["tipo", "descricao", "enquadramento", "x0", "y0", "x1", "y1"],
+        properties: {
+          tipo: { type: "string", enum: ["pessoa", "produto", "objeto", "cena", "nenhum"] },
+          descricao: { type: "string" },
+          enquadramento: { type: "string" },
+          ...caixaNoEsquema,
+        },
+      },
+      blocos: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["papel", "x0", "y0", "x1", "y1", "altura_da_letra", "linhas", "caixa_alta", "familia", "largura_da_letra", "peso", "cor", "alinhamento"],
+          properties: {
+            papel: { type: "string", enum: PAPEIS_NO_MOLDE },
+            ...caixaNoEsquema,
+            altura_da_letra: { type: "number" },
+            linhas: { type: "integer" },
+            caixa_alta: { type: "boolean" },
+            familia: { type: "string", enum: ["sem serifa", "serifada", "manuscrita", "display", "monoespacada"] },
+            largura_da_letra: { type: "string", enum: ["condensada", "normal", "larga"] },
+            peso: { type: "string", enum: ["black", "negrito", "medio", "regular", "fino"] },
+            cor: { type: "string" },
+            alinhamento: { type: "string", enum: ["esquerda", "centro", "direita"] },
+          },
+        },
+      },
+      elementos: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["descricao", "cor", "x0", "y0", "x1", "y1"],
+          properties: { descricao: { type: "string" }, cor: { type: "string" }, ...caixaNoEsquema },
+        },
+      },
+      tratamento: { type: "string" },
+    },
+  },
+};
+
+export const SISTEMA_MOLDE = `Você mede o LAYOUT de uma peça de referência para um estúdio replicar a mesma estrutura com outra marca e outro texto. Meça; não copie o texto nem a marca da peça.
+Coordenadas: porcentagem do quadro da imagem, de 0 a 100, com 0 no canto superior esquerdo (x para a direita, y para baixo). Cada caixa é a menor caixa que contém o elemento.
+- blocos: CADA bloco de texto visível, do maior para o menor, inclusive textos pequenos de canto, o @perfil (papel perfil) e a marca ou logo da peça (papel marca). papel: titulo (o maior texto), subtitulo, texto (corrido), rotulo (texto pequeno de canto, selo, data), cta (chamada para ação ou botão), numero (número protagonista). altura_da_letra: altura de uma letra maiúscula em % da altura do quadro. linhas: quantas linhas o bloco tem. caixa_alta: se está todo em maiúsculas. familia, largura_da_letra (condensada, normal, larga) e peso como se veem. cor: hex aproximado da letra. alinhamento do bloco.
+- assunto: o elemento visual principal (pessoa, produto, objeto, cena; nenhum quando a peça é só tipografia), com a caixa dele, uma descrição curta SEM marcas nem nomes e o enquadramento (plano, ângulo, recorte pela borda, olhar).
+- elementos: formas, faixas, fios, setas, telas de celular, molduras, ícones, texturas e fotos secundárias, até 8, com caixa e cor em hex.
+- fundo: como é o fundo (cor lisa, foto, gradiente, textura); cor_do_fundo: hex da cor dominante do fundo.
+- grade: em até 2 frases, a divisão do quadro (ex.: título ocupa a faixa de cima inteira; pessoa centralizada da metade para baixo; textos pequenos nos quatro cantos).
+- tratamento: em até 2 frases, luz, contraste, textura e acabamento.
+Na grade, no fundo, no tratamento e nas descrições não cite cores por nome nem em hex: as cores vão só nos campos de cor, porque serão trocadas pelas da outra marca.
+- proporcao: largura:altura aproximada do quadro (ex.: 4:5).
+Escreva em português, sem travessão.`;
+
+const numeroPct = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n * 10) / 10)) : 0;
+};
+const caixaPct = (o: Record<string, unknown>): Caixa => {
+  const xa = numeroPct(o.x0), xb = numeroPct(o.x1), ya = numeroPct(o.y0), yb = numeroPct(o.y1);
+  return { x0: Math.min(xa, xb), x1: Math.max(xa, xb), y0: Math.min(ya, yb), y1: Math.max(ya, yb) };
+};
+const textoCurto = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").split(String.fromCharCode(8212)).join(",").split(String.fromCharCode(8211)).join(",").trim().slice(0, max) : "");
+const umDe = <T extends string>(v: unknown, lista: readonly T[], padrao: T): T => (lista.indexOf(v as T) >= 0 ? v as T : padrao);
+
+/** Molde lido com cuidado (JSON do leitor ou do cache): números no quadro, textos curtos, listas com teto. Null quando não há bloco de texto nenhum. */
+export function normalizarMolde(bruto: unknown): MoldeDaReferencia | null {
+  const o = bruto && typeof bruto === "object" ? bruto as Record<string, unknown> : null;
+  if (!o) return null;
+  const blocos: BlocoDoMolde[] = (Array.isArray(o.blocos) ? o.blocos : [])
+    .filter((b) => b && typeof b === "object")
+    .map((b) => {
+      const x = b as Record<string, unknown>;
+      const c = caixaPct(x);
+      return {
+        ...c,
+        papel: umDe(x.papel, PAPEIS_NO_MOLDE, "texto"),
+        altura_da_letra: Math.max(0.5, Math.min(40, Number(x.altura_da_letra) || 2)),
+        linhas: Math.max(1, Math.min(12, Math.round(Number(x.linhas) || 1))),
+        caixa_alta: x.caixa_alta === true,
+        familia: umDe(x.familia, ["sem serifa", "serifada", "manuscrita", "display", "monoespacada"] as const, "sem serifa"),
+        largura_da_letra: umDe(x.largura_da_letra, ["condensada", "normal", "larga"] as const, "normal"),
+        peso: umDe(x.peso, ["black", "negrito", "medio", "regular", "fino"] as const, "regular"),
+        cor: hexOk(x.cor),
+        alinhamento: umDe(x.alinhamento, ["esquerda", "centro", "direita"] as const, "esquerda"),
+      };
+    })
+    .filter((b) => b.x1 - b.x0 >= 0.5 && b.y1 - b.y0 >= 0.3)
+    .slice(0, 12);
+  if (!blocos.some((b) => b.papel !== "marca" && b.papel !== "perfil")) return null;
+  const a = o.assunto && typeof o.assunto === "object" ? o.assunto as Record<string, unknown> : null;
+  const tipo = a ? umDe(a.tipo, ["pessoa", "produto", "objeto", "cena", "nenhum"] as const, "nenhum") : "nenhum";
+  const elementos = (Array.isArray(o.elementos) ? o.elementos : [])
+    .filter((e) => e && typeof e === "object")
+    .map((e) => {
+      const x = e as Record<string, unknown>;
+      return { ...caixaPct(x), descricao: textoCurto(x.descricao, 120), cor: hexOk(x.cor) };
+    })
+    .filter((e) => e.descricao)
+    .slice(0, 8);
+  return {
+    versao: VERSAO_DO_MOLDE,
+    proporcao: textoCurto(o.proporcao, 10),
+    fundo: textoCurto(o.fundo, 200),
+    cor_do_fundo: hexOk(o.cor_do_fundo),
+    grade: textoCurto(o.grade, 300),
+    assunto: a && tipo !== "nenhum"
+      ? { ...caixaPct(a), tipo, descricao: textoCurto(a.descricao, 200), enquadramento: textoCurto(a.enquadramento, 160) }
+      : null,
+    blocos,
+    elementos,
+    tratamento: textoCurto(o.tratamento, 300),
   };
-  const linhasDasRefs = refs.length === 1
+}
+
+/**
+ * O molde no quadro desta lâmina: a imagem 1 (o molde editado) é a referência
+ * recortada em "cover" pelo centro no quadro da lâmina (cobrir), então as
+ * posições medidas no quadro da referência são convertidas para o recorte.
+ * Blocos que caem inteiros fora do recorte saem.
+ */
+export function moldeNoQuadro(m: MoldeDaReferencia, origem: { largura: number; altura: number } | null, quadro: { largura: number; altura: number }): MoldeDaReferencia {
+  if (!origem || !origem.largura || !origem.altura) return m;
+  const ro = origem.largura / origem.altura, rq = quadro.largura / quadro.altura;
+  if (Math.abs(ro - rq) / rq < 0.02) return m;
+  const fx = ro > rq ? rq / ro : 1;
+  const fy = ro > rq ? 1 : ro / rq;
+  const cx = (v: number) => numeroPct((v - (1 - fx) * 50) / fx);
+  const cy = (v: number) => numeroPct((v - (1 - fy) * 50) / fy);
+  const conv = <T extends Caixa>(c: T): T => ({ ...c, x0: cx(c.x0), x1: cx(c.x1), y0: cy(c.y0), y1: cy(c.y1) });
+  const visivel = (c: Caixa) => c.x1 - c.x0 >= 0.5 && c.y1 - c.y0 >= 0.3;
+  return {
+    ...m,
+    blocos: m.blocos.map((b) => ({ ...conv(b), altura_da_letra: Math.round((b.altura_da_letra / fy) * 10) / 10 })).filter(visivel),
+    elementos: m.elementos.map(conv).filter(visivel),
+    assunto: m.assunto ? conv(m.assunto) : null,
+  };
+}
+
+/** O lugar de cada bloco de texto desta lâmina no molde, os blocos do molde que ficam sem texto e o lugar da marca. */
+export type MapaNoMolde = {
+  lugares: { bloco: BlocoTexto; alvo: BlocoDoMolde | null }[];
+  vagos: BlocoDoMolde[];
+  marca: BlocoDoMolde | null;
+};
+
+/**
+ * Mapeia o texto desta lâmina nos blocos do molde, em código: a headline (ou
+ * o número) vai no maior título; o CTA no CTA (senão no menor que sobrar); o
+ * subtítulo no subtítulo; apoio no texto corrido; selo no rótulo; o resto
+ * pelo tamanho. Blocos do molde sem texto correspondente ficam vagos (sem
+ * texto: nunca se inventa texto para preencher). Marca ou @perfil do molde é
+ * o lugar da logo.
+ */
+export function mapearNoMolde(blocos: BlocoTexto[], m: MoldeDaReferencia): MapaNoMolde {
+  const area = (b: Caixa) => (b.x1 - b.x0) * (b.y1 - b.y0);
+  const livres = m.blocos
+    .filter((b) => b.papel !== "marca" && b.papel !== "perfil")
+    .sort((a, b) => b.altura_da_letra - a.altura_da_letra || area(b) - area(a));
+  const tirar = (...testes: ((b: BlocoDoMolde) => boolean)[]) => {
+    for (const t of testes) {
+      const i = livres.findIndex(t);
+      if (i >= 0) return livres.splice(i, 1)[0];
+    }
+    return null;
+  };
+  const qualquer = () => true;
+  const ordem: PapelBloco[] = ["headline", "numero", "subtitulo", "apoio", "cta", "selo"];
+  const alvos = new Map<number, BlocoDoMolde | null>();
+  blocos
+    .map((b, i) => ({ b, i }))
+    .sort((x, y) => ordem.indexOf(x.b.papel) - ordem.indexOf(y.b.papel) || x.i - y.i)
+    .forEach(({ b, i }) => {
+      let alvo: BlocoDoMolde | null = null;
+      if (b.papel === "headline" || b.papel === "numero") alvo = tirar((x) => x.papel === "titulo" || x.papel === "numero", qualquer);
+      else if (b.papel === "cta") alvo = tirar((x) => x.papel === "cta", (x) => x.papel === "rotulo", (x) => x.papel === "texto", (x) => x.papel !== "titulo" && x.papel !== "numero");
+      else if (b.papel === "subtitulo") alvo = tirar((x) => x.papel === "subtitulo", (x) => x.papel === "texto", (x) => x.papel !== "cta");
+      else if (b.papel === "selo") alvo = tirar((x) => x.papel === "rotulo", (x) => x.papel !== "cta" && x.papel !== "titulo");
+      else alvo = tirar((x) => x.papel === "texto", (x) => x.papel === "subtitulo", (x) => x.papel === "rotulo", (x) => x.papel !== "cta");
+      alvos.set(i, alvo);
+    });
+  return {
+    lugares: blocos.map((b, i) => ({ bloco: b, alvo: alvos.get(i) ?? null })),
+    vagos: livres,
+    marca: m.blocos.find((b) => b.papel === "marca") || m.blocos.find((b) => b.papel === "perfil") || null,
+  };
+}
+
+/** Saturação (0 a 1) de um hex, para saber se a cor é neutra (preto, branco, cinza) ou colorida. */
+function saturacao(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
+/**
+ * A cor da marca que faz o papel da cor da referência: neutra (preto, branco,
+ * cinza) vira a neutra da paleta de claridade mais próxima; colorida vira o
+ * destaque da marca (ou a colorida da paleta). Sem paleta, null.
+ */
+export function corDaMarcaNoPapel(corDaReferencia: string | null, paleta: MarcaParaDirecao["paleta"]): string | null {
+  const h = hexOk(corDaReferencia);
+  const cores = paleta.map((p) => hexOk(p.hex)).filter(Boolean) as string[];
+  if (!h || !cores.length) return null;
+  const neutras = cores.filter((c) => saturacao(c) < 0.25);
+  const coloridas = cores.filter((c) => saturacao(c) >= 0.25);
+  const maisPerto = (lista: string[]) => lista.reduce((m, c) => (Math.abs(luminancia(c) - luminancia(h)) < Math.abs(luminancia(m) - luminancia(h)) ? c : m));
+  if (saturacao(h) < 0.25) return maisPerto(neutras.length ? neutras : cores);
+  return papelDaCor(paleta, "destaque", "acento") || (coloridas.length ? coloridas[0] : maisPerto(cores));
+}
+
+/** Cor de texto legível (contraste de 3:1 para letra grande) sobre o fundo; senão, a neutra da paleta de maior contraste. */
+function corLegivelNoFundo(cor: string | null, fundo: string | null, paleta: MarcaParaDirecao["paleta"]): string | null {
+  if (!cor || !fundo) return cor;
+  if (contraste(cor, fundo) >= 3) return cor;
+  const cores = (paleta.map((p) => hexOk(p.hex)).filter(Boolean) as string[]).concat([NEUTRO_CLARO, NEUTRO_ESCURO]);
+  return cores.reduce((m, c) => (contraste(c, fundo) > contraste(m, fundo) ? c : m));
+}
+
+const ROTULO_DO_PAPEL_NO_MOLDE: Record<PapelNoMolde, string> = {
+  titulo: "TÍTULO", subtitulo: "SUBTÍTULO", texto: "TEXTO", rotulo: "TEXTO PEQUENO", cta: "CTA", numero: "NÚMERO", marca: "MARCA", perfil: "@PERFIL",
+};
+
+/** Texto do bloco no molde: em caixa alta quando o bloco da referência é todo em maiúsculas. */
+const textoNoMolde = (b: BlocoTexto, alvo: BlocoDoMolde | null) => (alvo && alvo.caixa_alta ? b.texto.toLocaleUpperCase("pt-BR") : b.texto);
+
+/** Texto exato da lâmina com a caixa alta do molde aplicada (a conferência compara sem caixa). */
+export function textoExatoNoMolde(textoExato: string, mapa: MapaNoMolde | null): string {
+  if (!mapa) return textoExato;
+  let saida = textoExato;
+  for (const { bloco, alvo } of mapa.lugares) {
+    if (!alvo || !alvo.caixa_alta) continue;
+    const alto = bloco.texto.toLocaleUpperCase("pt-BR");
+    for (const forma of [bloco.texto, bloco.texto.replace(/\n/g, " ")]) {
+      if (forma && saida.indexOf(forma) >= 0) {
+        saida = saida.split(forma).join(alto.replace(/\n/g, forma === bloco.texto ? "\n" : " "));
+        break;
+      }
+    }
+  }
+  return saida;
+}
+
+export type EntradaDoReplicar = {
+  card: Pick<CardDirecao, "ordem" | "funcao" | "texto_exato" | "blocos">;
+  marca: MarcaParaDirecao;
+  total: number;
+  /** Referências anexadas (1 ou 2), com o índice da imagem e o molde medido (null quando a leitura falhou). */
+  referencias: { indice: number; molde: MoldeDaReferencia | null }[];
+  /** A referência 1 é a imagem 1, a base editada. */
+  editando: boolean;
+  /** Fotos do cliente anexadas: o assunto desta lâmina. */
+  fotos: { indice: number; descricao?: string | null; papel: "fundo" | "elemento" }[];
+  logo: { leva: boolean; indice: number | null; medida: LogoMedida | null; descricao: string | null };
+  quadro: { largura: number; altura: number };
+  anuncio?: { formato: FormatoCriativo } | null;
+  post?: FormatoDoPost | null;
+};
+
+/**
+ * Prompt do modo replicar referência, completo e sem a cena do diretor (nada
+ * de layout.imagem, ilustração, ponto focal, fundo, tratamento, zona do texto,
+ * tamanhos de bloco, fio visual, conceito, estilo de cena nem série). Entra só:
+ * o molde (a regra de layout), o texto exato por papel mapeado no molde, a
+ * marca (paleta, fontes, logo com o texto dela) e o assunto (a foto do
+ * cliente, quando há). `textoExato` volta com a caixa alta do molde aplicada,
+ * para as regras finais repetirem o mesmo texto.
+ */
+export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoExato: string; mapa: MapaNoMolde | null } {
+  const refs = e.referencias.slice(0, 2);
+  const r1 = refs[0];
+  const r2 = refs.length > 1 ? refs[1] : null;
+  const m = r1 ? r1.molde : null;
+  const capa = e.card.funcao === "capa" || e.card.ordem === 1;
+  const serie = e.total > 1;
+  const formato = e.anuncio && FORMATOS_CRIATIVO.includes(e.anuncio.formato) ? e.anuncio.formato : null;
+  const post = !formato && e.post && e.post !== "feed_4x5" && FORMATOS_DO_POST.indexOf(e.post) >= 0 ? e.post : null;
+  const margens = margensDoQuadro(formato, post);
+  const Q = e.quadro;
+  const px = (pct: number, lado: number) => Math.round((pct / 100) * lado);
+  const blocos = (e.card.blocos && e.card.blocos.length ? e.card.blocos : blocosDoTexto(e.card.texto_exato, e.card.funcao))
+    .filter((b) => PAPEIS.includes(b.papel) && b.texto.trim());
+  const paleta = e.marca.paleta.filter((p) => hexOk(p.hex));
+  const fonteTitulo = e.marca.fontes.find((f) => f.papel === "titulo")?.nome || e.marca.tipografiaCitada?.titulo || null;
+  const fonteTexto = e.marca.fontes.find((f) => f.papel === "texto")?.nome || e.marca.tipografiaCitada?.texto || fonteTitulo;
+  const corDestaque = papelDaCor(paleta, "destaque", "acento");
+  const fundoNaMarca = m ? corDaMarcaNoPapel(m.cor_do_fundo, paleta) : null;
+  const mapa = m ? mapearNoMolde(blocos, m) : null;
+  const temBarra = blocos.some((b) => b.texto.indexOf("\n") >= 0);
+  const img = (i: number) => `imagem ${i}`;
+  const paletaTxt = paleta.length
+    ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
+    : "a paleta das artes da marca";
+
+  // Cabeçalho: o que é a imagem 1 e o que troca.
+  const cabecalho = [
+    `MODO REPLICAR REFERÊNCIA: esta ${formato ? "peça" : `lâmina${serie ? ` (${e.card.ordem} de ${e.total})` : ""}`} é a referência escolhida pela equipe, refeita com o texto, a marca e o assunto deste cliente. Quem olhar as duas lado a lado reconhece o mesmo layout.`,
+    r1 && e.editando
+      ? `A imagem 1 é a BASE A EDITAR: é a referência 1, já no quadro desta lâmina. Mantenha dela a composição, a grade, a posição e a escala de cada bloco, os elementos gráficos, o recorte e o tratamento da imagem e o espaço vazio. Troque só o que está abaixo: o texto, as cores (pelas da marca, na mesma função), as fontes, a marca dela (pela logo oficial) e o assunto.`
+      : r1
+      ? `Referência 1 (${img(r1.indice)}): recrie a lâmina seguindo de perto o layout dela, trocando só o texto, as cores, as fontes, a marca e o assunto como abaixo.`
+      : "",
+    r2 ? `Referência 2 (${img(r2.indice)}): dela vem só o acabamento (luz, textura, tratamento de cor e os elementos gráficos); a posição e o tamanho dos blocos são os da referência 1.` : "",
+  ];
+
+  // Layout medido (a regra de layout desta lâmina).
+  const pos = (c: Caixa) => descreverPosicao(c);
+  const layout: string[] = m
     ? [
-      `- Referência: imagem ${refs[0].indice}. Copie dela a estrutura do layout (grid, divisão da tela, posição de cada bloco de texto e de cada imagem), a escala e a hierarquia da tipografia (qual texto é o maior, peso, caixa alta ou baixa, alinhamento, quebra em linhas), o recorte e o tratamento da imagem (plano, enquadramento, recorte do assunto, fundo, luz, cor aplicada) e os elementos gráficos (faixas, formas, setas, texturas), na mesma proporção de espaço vazio.${leitura(refs[0].leitura)}`,
+      "LAYOUT DA REFERÊNCIA 1 (medido na imagem; é a regra de layout desta lâmina, posições em % do quadro)",
+      m.grade ? `- Grade: ${m.grade}` : "",
+      `- Fundo: ${m.fundo || "o da referência"}${fundoNaMarca ? `; na marca, ${fundoNaMarca}${m.cor_do_fundo ? ` no lugar de ${m.cor_do_fundo}` : ""}` : ""}.`,
+      m.assunto ? `- Assunto da referência: ${m.assunto.descricao || m.assunto.tipo}, ${pos(m.assunto)}${m.assunto.enquadramento ? `, ${m.assunto.enquadramento}` : ""}.` : "- A referência não tem assunto fotográfico: só fundo, tipografia e elementos gráficos.",
+      m.elementos.length
+        ? `- Elementos gráficos, nos mesmos lugares e na mesma escala, com a cor trocada pela da marca na mesma função: ${m.elementos.map((x) => `${x.descricao} (${pos(x)}${x.cor ? `, ${corDaMarcaNoPapel(x.cor, paleta) || x.cor}` : ""})`).join("; ")}.`
+        : "",
+      m.tratamento ? `- Tratamento: ${m.tratamento}` : "",
     ]
-    : [
-      `- Referência 1: imagem ${refs[0].indice}. Dela vem a ESTRUTURA: grid, divisão da tela, posição de cada bloco de texto e de cada imagem, escala e hierarquia da tipografia (qual texto é o maior, peso, caixa, alinhamento, quebra em linhas) e a proporção de espaço vazio.${leitura(refs[0].leitura)}`,
-      `- Referência 2: imagem ${refs[1].indice}. Dela vem o TRATAMENTO: recorte e tratamento da imagem (plano, enquadramento, luz, cor aplicada, fundo), os elementos gráficos (faixas, formas, setas, texturas) e o acabamento.${leitura(refs[1].leitura)}`,
-      "- Onde as duas brigarem, vale a referência 1 para posição e tamanho e a referência 2 para o acabamento.",
-    ];
+    : r1
+    ? [
+      "LAYOUT DA REFERÊNCIA 1",
+      "- Copie dela a estrutura do layout (grade, divisão da tela, posição de cada bloco de texto e de cada imagem), a escala e a hierarquia da tipografia (qual texto é o maior, peso, caixa alta ou baixa, largura da letra, alinhamento, quebra em linhas), o recorte e o tratamento da imagem e os elementos gráficos, na mesma proporção de espaço vazio.",
+    ]
+    : [];
+
+  // Texto exato por papel, no lugar do bloco equivalente do molde.
+  const linhaDoBloco = (b: BlocoTexto, alvo: BlocoDoMolde | null) => {
+    const titulo = b.papel === "headline" || b.papel === "numero";
+    const fonte = titulo ? fonteTitulo : fonteTexto;
+    const t = textoNoMolde(b, alvo).replace(/\n/g, " / ");
+    if (!alvo) {
+      return `- ${b.papel.toUpperCase()}: "${t}"${fonte ? `, fonte ${fonte}` : ""}; ${m ? "a referência não tem bloco para ele: fica logo abaixo do bloco de texto principal, na mesma coluna e no mesmo alinhamento, menor que ele" : "no lugar e na escala do texto equivalente da referência (o título dela vira a headline, o texto menor vira o apoio)"}.`;
+    }
+    const corNaMarca = corLegivelNoFundo(corDaMarcaNoPapel(alvo.cor, paleta), fundoNaMarca, paleta);
+    const altura = Math.max(2.1, alvo.altura_da_letra);
+    const estilo = [alvo.familia, alvo.largura_da_letra !== "normal" ? alvo.largura_da_letra : "", `peso ${alvo.peso}`].filter(Boolean).join(", ");
+    // Texto maior que o bloco da referência (caracteres por linha pela altura da letra): cresce em linhas a partir do mesmo lugar.
+    const porLinha = Math.max(4, Math.floor((((alvo.x1 - alvo.x0) / 100) * Q.largura) / (px(altura, Q.altura) * 0.62)));
+    const cabe = porLinha * Math.max(1, alvo.linhas);
+    const tamanhoDoTexto = b.texto.replace(/\s+/g, " ").trim().length;
+    const cresce = !titulo && tamanhoDoTexto > cabe * 1.3
+      ? `; o texto é maior que o da referência: use mais linhas (cerca de ${Math.ceil(tamanhoDoTexto / porLinha)}) crescendo a partir desse lugar, no mesmo alinhamento, sem invadir o título nem o assunto`
+      : "";
+    return `- ${b.papel.toUpperCase()}: "${t}" no lugar do ${ROTULO_DO_PAPEL_NO_MOLDE[alvo.papel]} da referência, ${pos(alvo)}, ` +
+      `${alvo.caixa_alta ? "em CAIXA ALTA, " : ""}letra maiúscula com cerca de ${Math.round(altura * 10) / 10}% da altura do quadro (${px(altura, Q.altura)} px), ` +
+      `${alvo.linhas > 1 && b.texto.indexOf("\n") < 0 && !cresce ? `em cerca de ${alvo.linhas} linhas, ` : ""}alinhado ${alvo.alinhamento === "centro" ? "ao centro" : `à ${alvo.alinhamento}`}` +
+      `${fonte ? `, fonte ${fonte} com o desenho da referência (${estilo})` : `, no desenho da referência (${estilo})`}${corNaMarca ? `, cor ${corNaMarca}` : ""}${cresce}.`;
+  };
+  const texto = [
+    "1. TEXTO EXATO (só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
+    ...(mapa ? mapa.lugares.map((l) => linhaDoBloco(l.bloco, l.alvo)) : blocos.map((b) => linhaDoBloco(b, null))),
+    temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
+    mapa && mapa.vagos.length
+      ? `- Blocos de texto da referência sem texto nesta lâmina (${mapa.vagos.map((v) => `${ROTULO_DO_PAPEL_NO_MOLDE[v.papel].toLowerCase()} em ${pos(v)}`).join("; ")}): ficam sem texto nenhum; o espaço continua vazio ou com o elemento gráfico da referência.`
+      : "",
+    "- Entrelinha dos títulos de 1,0 a 1,1, sem acento encostando na linha de cima; nenhuma letra cortada nem deformada.",
+  ];
+
+  // Logo: lugar da marca da referência (medido), tamanho e contraste da marca deste cliente.
+  const logo = [
+    "2. LOGO",
+    ...blocoDaLogo({
+      levaLogo: e.logo.leva,
+      temLogo: e.logo.indice !== null,
+      quadro: Q,
+      logo: e.logo.medida,
+      replicar: true,
+      lugarNoMolde: mapa?.marca ?? null,
+      anuncio: !!formato,
+      descricao: e.logo.descricao,
+      fundoDaLamina: fundoNaMarca,
+      corParaALogo: corOpostaNaPaleta(paleta, e.logo.medida ? e.logo.medida.clara : null),
+    }),
+    e.logo.leva && e.logo.indice !== null ? `- A logo é a ${img(e.logo.indice)}; a marca, o nome e o site da referência não entram.` : "",
+  ];
+
+  const marca = [
+    "3. MARCA",
+    `- Paleta (só estas cores, cada uma na função que a cor equivalente tem na referência: fundo por fundo, título por título, destaque por destaque): ${paletaTxt}.`,
+    corDestaque ? `- O que é colorido e chama atenção na referência (título colorido, faixa, seta, botão) fica em ${corDestaque} ou na cor da marca de mesma função, sempre legível.` : "",
+    fonteTitulo || fonteTexto
+      ? `- Fontes da marca: títulos em ${fonteTitulo || fonteTexto}, texto em ${fonteTexto || fonteTitulo}, com o peso, a largura (condensada, normal) e a escala do texto equivalente da referência. Se houver amostra da fonte anexada, siga o desenho das letras dela.`
+      : "- Tipografia: a da referência, na mesma escala e peso.",
+    e.marca.regras ? `- Regras da marca: ${e.marca.regras.replace(/\n+/g, " ")}` : "",
+  ];
+
   const fotos = e.fotos.filter((f) => f.indice > 0);
-  const nomeDasFotos = fotos.map((f) => `imagem ${f.indice}`).join(" e ");
-  const linhasDoAssunto = fotos.length
-    ? [
-      `- Assunto: a pessoa ou o produto da foto real do cliente (${nomeDasFotos}) entra no lugar do assunto da referência. É a mesma pessoa, idêntica: mesmo rosto, feições, formato do rosto, olhos, nariz, boca, tom de pele, cabelo, idade, corpo e roupa. Produto idêntico: mesma forma, proporções, cores, rótulo e detalhes.`,
-      "- Pode recortar, reposicionar, mudar a escala e integrar a foto à luz e ao layout da referência; não redesenhe nem troque a pessoa ou o produto, não mude a expressão e não escureça a foto.",
-      fotos.length > 1 ? `- Use todas as fotos do cliente (${nomeDasFotos}) na composição, cada uma no espaço de imagem equivalente da referência.` : "",
-    ]
-    : [e.editando
-      ? "- Assunto: se a referência tem pessoa, troque por outra pessoa diferente (não a da referência), com o mesmo enquadramento, pose e luz; se tem produto ou objeto de outra marca, troque pelo assunto desta lâmina (descrito em IMAGEM E COMPOSIÇÃO) no mesmo lugar e escala."
-      : "- Assunto: o desta lâmina (descrito em IMAGEM E COMPOSIÇÃO), no lugar do assunto da referência."];
-  return [
-    `MODO REPLICAR REFERÊNCIA (prioridade máxima nesta lâmina)`,
-    e.editando
-      ? `EDITE a imagem 1: ela é a referência 1, o MOLDE desta lâmina. Mantenha quase idênticos a composição, o grid, a posição e o tamanho de cada bloco, os elementos gráficos, o estilo e a escala da tipografia, o recorte e o tratamento da imagem e o espaço vazio. Troque SÓ o que está listado em "Troque" abaixo; o resto fica como está na imagem 1.`
-      : `A equipe escolheu ${refs.length === 1 ? "esta referência" : "estas duas referências"} para esta lâmina. Recrie a lâmina seguindo de perto a referência: quem olhar as duas lado a lado reconhece o mesmo layout, quase igual, só que com a marca e o conteúdo deste cliente.`,
-    ...linhasDasRefs,
-    ...linhasDoAssunto,
-    `- Troque: o texto da referência pelo texto exato desta lâmina (mesmo papel e mesma posição: o título dela vira a headline, o texto menor vira o apoio); as cores dela pelas da paleta da marca, na mesma função (fundo por fundo, destaque por destaque); as fontes dela pelas da marca, com o mesmo peso e a mesma escala; a marca dela pela logo oficial${e.logo ? ` (imagem ${e.logo})` : ""}, desenhada junto com a arte no tamanho do bloco LOGO (a referência orienta o lugar, nunca diminui a logo).`,
+  const nomes = fotos.map((f) => img(f.indice)).join(" e ");
+  const tema = blocos.find((b) => b.papel === "headline" || b.papel === "numero")?.texto.replace(/\s+/g, " ").trim() || "";
+  const assunto = [
+    "4. ASSUNTO",
+    fotos.length
+      ? `- A pessoa ou o produto da foto real do cliente (${nomes}) entra no lugar do assunto da referência${m && m.assunto ? ` (${pos(m.assunto)})` : ""}, com o mesmo enquadramento e a mesma escala. É a mesma pessoa, idêntica: mesmo rosto, feições, olhos, nariz, boca, tom de pele, cabelo, idade, corpo e roupa. Produto idêntico: mesma forma, cores, rótulo e detalhes.`
+      : m && m.assunto
+      ? m.assunto.tipo === "pessoa"
+        ? `- Pessoa: outra pessoa (nunca a da referência), com a mesma pose, enquadramento, escala e luz, roupa neutra e sem marcas.`
+        : `- ${m.assunto.tipo === "cena" ? "Cena" : "Objeto"}: no mesmo lugar, escala e enquadramento, um${m.assunto.tipo === "cena" ? "a cena equivalente" : " objeto neutro"} ligado ao tema${tema ? ` "${tema}"` : " desta lâmina"}, sem marca, logo ou texto de outra empresa.`
+      : "- Assunto: o mesmo tipo de assunto da referência, no mesmo lugar e escala; se ela tem pessoa, outra pessoa; se tem produto de outra marca, um objeto neutro ligado ao tema, sem marca.",
+    fotos.length
+      ? "- Pode recortar, reposicionar, mudar a escala e integrar a foto à luz e ao layout da referência; não redesenhe nem troque a pessoa ou o produto, não mude a expressão e não escureça a foto."
+      : "",
+    fotos.length > 1 ? `- Use todas as fotos do cliente (${nomes}), cada uma no espaço de imagem equivalente da referência.` : "",
     "- Não copie da referência: o texto, a logo, o nome ou o site de outra marca, marcas d'água e as pessoas dela.",
-    e.capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed, na posição em que a referência põe o título." : "",
-    "- Onde o padrão de design ou a composição descrita adiante divergirem da referência, vale a referência. Continuam valendo: o texto exato, a paleta, as fontes e a logo da marca (no tamanho pedido), as margens de segurança e a ortografia.",
-  ].filter(Boolean).join("\n");
+  ];
+
+  const formatoTxt = [
+    "5. FORMATO",
+    `- Arte ${Q.largura} x ${Q.altura}, usando o quadro inteiro, sem bordas vazias. Margens de segurança: ${px(margens.x, Q.largura)} px nas laterais, ${px(margens.topo, Q.altura)} px no topo e ${px(margens.base, Q.altura)} px na base. Onde a referência encosta texto ou logo na borda, aproxime do lugar dela sem passar da margem.`,
+    capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed, na posição em que a referência põe o título." : "",
+    formato ? regrasDoCriativo(formato) : "",
+  ];
+
+  const prompt = [
+    ...cabecalho,
+    ...layout,
+    ...texto,
+    ...logo,
+    ...marca,
+    ...assunto,
+    ...formatoTxt,
+    blocoDasProibicoes({ serie, replicar: true }),
+  ].filter((l) => l !== "").join("\n");
+  return { prompt, textoExato: textoExatoNoMolde(e.card.texto_exato, mapa), mapa };
 }
 
 /**

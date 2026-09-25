@@ -53,8 +53,9 @@ describe("referências", () => {
   });
   it("as escolhidas pela equipe são reproduzidas de perto com a identidade da marca", () => {
     // 26/09: a escolha da equipe replica o layout (modo replicar) e fica no topo da prioridade dos anexos.
-    expect(corpoDe(estudio, "gerarCard")).toContain('"REFERÊNCIA 1 escolhida pela equipe (layout a replicar)"');
-    expect(corpoDe(estudio, "gerarCard")).toContain("blocoReplicarReferencia({ referencias: refsNoPrompt,");
+    expect(corpoDe(estudio, "gerarCard")).toContain('"REFERÊNCIA 1 escolhida pela equipe: o molde desta lâmina (layout, grade, escala e posição de cada bloco)"');
+    // 27/09: prompt próprio do replicar, com o molde medido por visão.
+    expect(corpoDe(estudio, "gerarCard")).toContain("const replica = promptDoReplicar({");
   });
 });
 

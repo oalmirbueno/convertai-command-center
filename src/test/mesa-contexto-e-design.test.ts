@@ -244,10 +244,10 @@ describe("regressão de 23/09: série contínua, capa da marca e logo legível",
     expect(escura).toContain("tom dominante #1E5AA8");
     // Desde 25/09 o prompt não pede fundo claro atrás da logo (o gerador desenhava uma caixa branca).
     expect(escura).toContain("nunca sobre a mesma cor nem o mesmo valor da logo");
-    expect(escura).toContain("A logo entra sem caixa, cartão, faixa, retângulo ou fundo branco atrás");
+    expect(escura).toContain("A logo entra direto sobre a arte, sem caixa, cartão, retângulo ou fundo próprio atrás");
     expect(escura).not.toContain("o fundo atrás dela é claro e liso");
     const clara = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true, logo: { tom: "#FFFFFF", clara: true } });
-    expect(clara).toContain("A logo é clara");
+    expect(clara).toContain("A logo tem letras ou partes claras: ela fica sobre uma área ESCURA da própria arte");
   });
 
   it("a base e o estrategista pedem série contínua com variação e quantidade de lâminas pelo conteúdo", () => {

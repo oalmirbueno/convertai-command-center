@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integrations/supabase/client", () => ({ supabase: { from: vi.fn(), storage: { from: vi.fn() }, functions: { invoke: vi.fn() } } }));
-import { blocoReplicarReferencia, promptDaLamina, type MarcaParaDirecao } from "../../supabase/functions/_shared/direcao-arte";
+import { moldeNoQuadro, normalizarMolde, promptDoReplicar, type MarcaParaDirecao, type MoldeDaReferencia } from "../../supabase/functions/_shared/direcao-arte";
 import { baseDaLamina, versaoRecompos, AVISO_FOTO_RECOMPOSTA } from "@/components/mesa/EstudioBaseDaLamina";
 import { comTrabalhoTrocado } from "@/components/mesa/estudioUtil";
 import { MAX_NO_ESTUDIO, papelDaEscolhida } from "@/components/mesa/ReferenciasDoEstudio";
@@ -59,22 +59,33 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
     expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
   });
 
-  it("replicar: fotos do cliente primeiro, depois as referências; geração nova e o modo gravado na versão", () => {
+  it("replicar: fotos do cliente primeiro, depois as referências; prompt próprio, qualidade alta e o modo gravado na versão", () => {
     // 26/09: os anexos são candidatos com prioridade (anexosDaLamina): foto do cliente, elemento, referência da equipe, logo...
     expect(gerar.indexOf('tipo: "foto_cliente"')).toBeLessThan(gerar.indexOf('tipo: "referencia_equipe"'));
     expect(gerar.indexOf("FOTO REAL do cliente")).toBeLessThan(gerar.indexOf("REFERÊNCIA 1 escolhida pela equipe"));
-    const bloco = gerar.slice(gerar.indexOf("  if (replicar) {\n    const prompt"), gerar.indexOf("// 1a) Foto de fundo"));
-    expect(bloco).toContain("blocoReplicarReferencia({ referencias: refsNoPrompt, fotos: fotosReplicar, logo: indiceDaLogo");
-    expect(bloco).toContain("regrasDeRender(t, card, legendas, regraDaLogo, true)");
+    const bloco = gerar.slice(gerar.indexOf("// 0) Replicar a referência"), gerar.indexOf("// 1a) Foto de fundo"));
+    // 27/09: o replicar tem prompt PRÓPRIO (promptDoReplicar), sem a cena do diretor (baseComCampanha).
+    expect(bloco).toContain("const replica = promptDoReplicar({");
+    expect(bloco).not.toContain("baseComCampanha");
+    expect(bloco).not.toContain("blocoDaSerie");
+    expect(bloco).toContain("regrasDeRender(t, { ...card, texto_exato: replica.textoExato }, legendas, regraDaLogo, true)");
+    // O molde (leitura por visão) vai no prompt e as posições são convertidas para o quadro da lâmina.
+    expect(bloco).toContain("moldeNoQuadro(r.molde, origemDoMolde, quadro)");
+    expect(bloco).toContain('const qualidadeDoReplicar: Qualidade = "alta";');
+    expect(bloco).toContain("qualidade: qualidadeDoReplicar,");
     // Sem máscara: a foto é recomposta, não devolvida.
     expect(bloco).not.toContain("mascara(");
     expect(bloco).not.toContain("devolverOriginal");
     expect(bloco).toContain('modo: "replicar_referencia"');
     expect(bloco).toContain("foto_recomposta: fotosReplicar.length > 0");
+    // Transparência: o prompt e as legendas ficam na versão.
+    expect(bloco).toContain("...transparencia(prompt, legendas,");
     // Referência sem imagem: não gera às cegas.
     expect(gerar).toContain('"referencia_sem_imagem"');
-    // Uma chamada, sem laço de correção.
+    // Uma chamada de imagem, sem laço de correção.
     expect(bloco.match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
+    // A capa da série não vai anexada no replicar (puxava a cena de volta).
+    expect(gerar).toContain("if (capa && !replicar) {");
   });
 
   it("o panorama do carrossel contínuo segue a regra de sempre (agora pela capacidade do modelo)", () => {
@@ -93,44 +104,110 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
   });
 });
 
-describe("prompt do modo replicar", () => {
-  it("uma referência: copia estrutura, tipografia e tratamento; a foto é o assunto idêntico", () => {
-    const b = blocoReplicarReferencia({ referencias: [{ indice: 2, leitura: "Título enorme no topo" }], fotos: [{ indice: 1, papel: "fundo" }], logo: 3, capa: true });
-    expect(b).toContain("MODO REPLICAR REFERÊNCIA");
-    expect(b).toContain("Referência: imagem 2");
-    expect(b).toContain("O que se vê nela: Título enorme no topo");
-    expect(b).toContain("foto real do cliente (imagem 1)");
-    expect(b).toContain("mesmo rosto, feições");
-    expect(b).toContain("não escureça a foto");
-    expect(b).toContain("logo oficial (imagem 3)");
-    expect(b).not.toContain("—");
+const MOLDE: MoldeDaReferencia = {
+  versao: 1,
+  proporcao: "4:5",
+  fundo: "cor lisa clara",
+  cor_do_fundo: "#F2F2EE",
+  grade: "Título enorme na faixa de cima; pessoa centralizada embaixo; textos pequenos nos cantos.",
+  assunto: { tipo: "pessoa", descricao: "pessoa olhando para a câmera", enquadramento: "plano médio frontal", x0: 24, y0: 30, x1: 76, y1: 100 },
+  blocos: [
+    { papel: "titulo", x0: 6, y0: 6, x1: 94, y1: 27, altura_da_letra: 9.5, linhas: 2, caixa_alta: true, familia: "sem serifa", largura_da_letra: "condensada", peso: "black", cor: "#1E4FD8", alinhamento: "centro" },
+    { papel: "rotulo", x0: 5, y0: 2, x1: 30, y1: 4.5, altura_da_letra: 1.4, linhas: 1, caixa_alta: true, familia: "sem serifa", largura_da_letra: "normal", peso: "medio", cor: "#111111", alinhamento: "esquerda" },
+    { papel: "texto", x0: 5, y0: 88, x1: 32, y1: 96, altura_da_letra: 1.6, linhas: 3, caixa_alta: false, familia: "sem serifa", largura_da_letra: "normal", peso: "regular", cor: "#111111", alinhamento: "esquerda" },
+    { papel: "perfil", x0: 70, y0: 92, x1: 95, y1: 95.5, altura_da_letra: 1.5, linhas: 1, caixa_alta: false, familia: "sem serifa", largura_da_letra: "normal", peso: "medio", cor: "#111111", alinhamento: "direita" },
+  ],
+  elementos: [{ descricao: "celulares inclinados em volta da pessoa", cor: "#1E4FD8", x0: 4, y0: 35, x1: 96, y1: 85 }],
+  tratamento: "Luz de estúdio frontal, cores chapadas, acabamento de pôster editorial.",
+};
+const CARD_2 = {
+  ordem: 2,
+  funcao: "conteudo",
+  texto_exato: "Vale a pena?\nConsulta de rotina evita dor e gasto.",
+  blocos: [{ papel: "headline" as const, texto: "Vale a pena?" }, { papel: "apoio" as const, texto: "Consulta de rotina evita dor e gasto." }],
+};
+const entrada = (extra: Partial<Parameters<typeof promptDoReplicar>[0]> = {}): Parameters<typeof promptDoReplicar>[0] => ({
+  card: CARD_2,
+  marca: MARCA,
+  total: 3,
+  referencias: [{ indice: 1, molde: MOLDE }],
+  editando: true,
+  fotos: [],
+  logo: { leva: true, indice: 3, medida: { tom: "#FFFFFF", clara: true, aspecto: 3 }, descricao: 'As letras da logo formam exatamente "Sorria".' },
+  quadro: { largura: 1080, altura: 1350 },
+  ...extra,
+});
+
+describe("prompt do modo replicar (27/09: prompt próprio com o molde)", () => {
+  it("nada da cena do diretor: sem imagem, ponto focal, fundo, tratamento, zona, tamanhos, série nem estilo de cena", () => {
+    // Mesmo com layout e ilustração no card, nada disso entra.
+    const { prompt } = promptDoReplicar(entrada({ card: { ...CARD_2, layout: CARD.layout, ilustracao: CARD.ilustracao } as never }));
+    expect(prompt).not.toContain("dentista sorrindo");
+    expect(prompt).not.toContain("consultório claro");
+    expect(prompt).not.toContain("- Área do texto:");
+    expect(prompt).not.toMatch(/letra de cerca de \d+ px/);
+    expect(prompt).not.toContain("CONTINUIDADE DA SÉRIE");
+    expect(prompt).not.toContain("SÉRIE DO CARROSSEL");
+    expect(prompt).not.toContain("fotografia natural, luz de manhã");
+    expect(prompt).not.toContain("PADRÃO DE DESIGN");
+    // As proibições do replicar não brigam com a referência (pessoa, centralizado).
+    expect(prompt).not.toContain("tudo centralizado");
+    expect(prompt).not.toContain("—");
   });
 
-  it("duas referências: a 1ª dá a estrutura e a 2ª o tratamento", () => {
-    const b = blocoReplicarReferencia({ referencias: [{ indice: 2 }, { indice: 3 }], fotos: [] });
-    expect(b).toContain("Referência 1: imagem 2. Dela vem a ESTRUTURA");
-    expect(b).toContain("Referência 2: imagem 3. Dela vem o TRATAMENTO");
-    expect(b).toContain("vale a referência 1 para posição e tamanho");
-    // Sem foto: o assunto é o da lâmina.
-    expect(b).toContain("o desta lâmina");
-    expect(blocoReplicarReferencia({ referencias: [], fotos: [] })).toBe("");
+  it("a imagem 1 é a base a editar e o layout vem do molde, bloco por bloco", () => {
+    const { prompt, textoExato, mapa } = promptDoReplicar(entrada());
+    expect(prompt).toContain("A imagem 1 é a BASE A EDITAR");
+    expect(prompt).toContain("LAYOUT DA REFERÊNCIA 1 (medido na imagem");
+    expect(prompt).toContain("- Grade: Título enorme na faixa de cima");
+    // Headline no lugar do título, em caixa alta, com a altura medida e a fonte da marca no desenho da referência.
+    expect(prompt).toContain('- HEADLINE: "VALE A PENA?" no lugar do TÍTULO da referência, de 6% a 94% da largura e de 6% a 27% da altura do quadro, em CAIXA ALTA');
+    expect(prompt).toContain("(128 px)");
+    expect(prompt).toContain("fonte Fonte Título com o desenho da referência (sem serifa, condensada, peso black)");
+    // Apoio no texto corrido; o rótulo do canto fica vago (sem texto inventado).
+    expect(prompt).toContain('- APOIO: "Consulta de rotina evita dor e gasto." no lugar do TEXTO da referência');
+    expect(prompt).toContain("ficam sem texto nenhum");
+    expect(mapa!.vagos.map((v) => v.papel)).toEqual(["rotulo"]);
+    // A logo no lugar do @perfil da referência, no tamanho da marca.
+    expect(prompt).toContain("onde a referência põe a marca dela (de 70% a 95% da largura e de 92% a 96% da altura do quadro)");
+    expect(prompt).toContain('As letras da logo formam exatamente "Sorria".');
+    // Cores da referência trocadas pelas da marca na mesma função.
+    expect(prompt).toContain("na marca, #F5F0E6 no lugar de #F2F2EE");
+    // Pessoa da referência vira outra pessoa.
+    expect(prompt).toContain("outra pessoa (nunca a da referência)");
+    // O texto das regras finais sai com a caixa alta do molde (a conferência compara sem caixa).
+    expect(textoExato).toBe("VALE A PENA?\nConsulta de rotina evita dor e gasto.");
   });
 
-  it("promptDaLamina replicando: sem área fixa do texto nem tamanho em px; texto exato e marca continuam", () => {
-    const normal = promptDaLamina(CARD, MARCA, { total: 3, carrosselInfinito: false, levaLogo: true });
-    const replica = promptDaLamina(CARD, MARCA, { total: 3, carrosselInfinito: false, levaLogo: true, replicar: { comFoto: true } });
-    expect(normal).toContain("- Área do texto:");
-    expect(replica).not.toContain("- Área do texto:");
-    expect(normal).toMatch(/letra de cerca de \d+ px/);
-    expect(replica).not.toMatch(/letra de cerca de \d+ px/);
-    expect(replica).toContain('"Seu sorriso merece cuidado"');
-    expect(replica).toContain("mesma posição, escala e peso do texto equivalente da referência");
-    expect(replica.toLowerCase()).toContain("#1f6f43");
-    expect(replica).toContain("onde a referência põe a marca dela");
-    // A referência só orienta o lugar: a logo continua no tamanho da marca (26/09).
-    expect(replica).toContain("nunca menor");
-    expect(replica).toContain("FOTO REAL do cliente anexada é o assunto");
-    expect(replica).not.toContain("CAPA QUE PARA A ROLAGEM");
+  it("com a foto do cliente: ela é o assunto, idêntica, no lugar do assunto da referência", () => {
+    const { prompt } = promptDoReplicar(entrada({ fotos: [{ indice: 2, papel: "fundo" }] }));
+    expect(prompt).toContain("A pessoa ou o produto da foto real do cliente (imagem 2) entra no lugar do assunto da referência (de 24% a 76% da largura");
+    expect(prompt).toContain("mesmo rosto, feições");
+    expect(prompt).toContain("não escureça a foto");
+  });
+
+  it("sem molde (leitura falhou): cai na cópia geral da estrutura; duas referências, a 2ª só no acabamento", () => {
+    const { prompt } = promptDoReplicar(entrada({ referencias: [{ indice: 1, molde: null }, { indice: 2, molde: null }], editando: false }));
+    expect(prompt).toContain("Referência 1 (imagem 1): recrie a lâmina seguindo de perto o layout dela");
+    expect(prompt).toContain("Referência 2 (imagem 2): dela vem só o acabamento");
+    expect(prompt).toContain("Copie dela a estrutura do layout");
+    expect(prompt).toContain('- HEADLINE: "Vale a pena?"');
+  });
+
+  it("molde normalizado: números no quadro, papéis conhecidos, sem bloco de texto é nulo", () => {
+    const m = normalizarMolde({ blocos: [{ papel: "xyz", x0: -5, y0: 10, x1: 140, y1: 30, altura_da_letra: 8, linhas: 2, caixa_alta: true, cor: "#abcdef" }], assunto: { tipo: "pessoa", x0: 0, y0: 0, x1: 50, y1: 50 } });
+    expect(m!.blocos[0]).toMatchObject({ papel: "texto", x0: 0, x1: 100, cor: "#ABCDEF", caixa_alta: true });
+    expect(normalizarMolde({ blocos: [{ papel: "marca", x0: 1, y0: 1, x1: 20, y1: 5 }] })).toBeNull();
+    expect(normalizarMolde(null)).toBeNull();
+  });
+
+  it("molde no quadro: referência 1:1 recortada em 4:5 muda as posições horizontais", () => {
+    const quadrado = moldeNoQuadro(MOLDE, { largura: 1000, altura: 1000 }, { largura: 1088, altura: 1360 });
+    // 1:1 em 4:5: sobra 80% da largura; x = 6% vira (6 - 10) / 0,8 = 0 e x = 94% vira 105 (limitado a 100).
+    expect(quadrado.blocos[0].x0).toBe(0);
+    expect(quadrado.blocos[0].x1).toBe(100);
+    expect(quadrado.blocos[0].y0).toBe(6);
+    expect(moldeNoQuadro(MOLDE, { largura: 1080, altura: 1350 }, { largura: 1088, altura: 1360 })).toBe(MOLDE);
   });
 });
 

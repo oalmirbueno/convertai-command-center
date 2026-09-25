@@ -104,6 +104,7 @@ import {
   NOTA_DO_FUNDO_CONTINUO,
   partesDoPanorama,
   useEstadoGuardado,
+  qualidadeNaGeracao,
   usaFundoContinuo,
   versaoForaDoFundo,
   laminaLevaLogo,
@@ -646,6 +647,13 @@ function DetalheDoItem({
     });
     return partesDoPanorama(comFundo, cardsDaDirecao.length, fundosProntos, modeloImagem, q);
   };
+  /** Preço de gerar estas lâminas, cada uma na qualidade em que sai de fato (replicar referência sai em alta). */
+  const partesGerarDas = (ordens: number[]): ParteDaEstimativa[] =>
+    ordens.reduce((todas: ParteDaEstimativa[], o) => {
+      const c = cardsDaDirecao.find((x) => x.ordem === o);
+      const q = qualidadeNaGeracao(c, trabalho?.direcao?.referencias_ids, comFundoContinuo && !!c && usaFundoContinuo(c), qualidade);
+      return todas.concat(partesGerar(1, q));
+    }, []);
   const ordensDaFila = filaDeGeracao.map((c) => c.ordem);
   const filaComFundo = partesDoFundo(ordensDaFila).length > 0;
   const precos = precosPorQualidade(
@@ -1144,7 +1152,7 @@ function DetalheDoItem({
           variant={semImagem.length ? "default" : "outline"}
           className="h-10 gap-1 px-3 text-[12.5px]"
           disabled={ocupado || entregue}
-          partes={() => partesGerar(filaDeGeracao.length).concat(partesDoFundo(ordensDaFila))}
+          partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}
           executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}
           aoConcluir={(data) => {
             toast.success(data?.parado ? "Geração parada" : "Lâminas geradas", { description: `Custo real: ${usd(custoDaResposta(data) || 0)}.` });
@@ -1253,7 +1261,7 @@ function DetalheDoItem({
       variant={v ? "outline" : "default"}
       className="h-8 w-full gap-1 px-2 text-[11px]"
       disabled={laminaOcupada(c.ordem) || entregue}
-      partes={() => partesGerar(1).concat(partesDoFundo([c.ordem]))}
+      partes={() => partesGerarDas([c.ordem]).concat(partesDoFundo([c.ordem]))}
       executar={() => gerarEConferir(c.ordem)}
     />
   );
@@ -1322,7 +1330,7 @@ function DetalheDoItem({
                 variant="outline"
                 className="h-7 shrink-0 px-2.5 text-[12px]"
                 disabled={laminaOcupada(cardSelecionado.ordem) || entregue}
-                partes={() => partesGerar(1).concat(partesDoFundo([cardSelecionado.ordem]))}
+                partes={() => partesGerarDas([cardSelecionado.ordem]).concat(partesDoFundo([cardSelecionado.ordem]))}
                 executar={() => gerarEConferir(cardSelecionado.ordem)}
               />
             }
@@ -1451,7 +1459,7 @@ function DetalheDoItem({
       onVersaoVista={setVersaoVista}
       areas={areas}
       onAreas={setAreas}
-      partesGerar={() => partesGerar(1).concat(partesDoFundo([cardSelecionado.ordem]))}
+      partesGerar={() => partesGerarDas([cardSelecionado.ordem]).concat(partesDoFundo([cardSelecionado.ordem]))}
       notaDoGerar={partesDoFundo([cardSelecionado.ordem]).length ? `${NOTA_DO_FUNDO_CONTINUO}.` : undefined}
       partesAjustar={partesAjustar}
       partesConferir={partesConferir}
@@ -1489,7 +1497,7 @@ function DetalheDoItem({
     const fundo = refazFundo && comFundoContinuo
       ? partesDoPanorama(ordens.filter((o) => cardsDaDirecao.some((c) => c.ordem === o && usaFundoContinuo(c))), cardsDaDirecao.length, null, modeloImagem, qualidade)
       : partesDoFundo(ordens);
-    return partesGerar(ordens.length).concat(fundo);
+    return partesGerarDas(ordens).concat(fundo);
   };
 
   const ferramentaDiretor = trabalho ? (

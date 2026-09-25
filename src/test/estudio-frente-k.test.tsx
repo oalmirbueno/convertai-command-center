@@ -51,7 +51,7 @@ import {
 } from "@/components/mesa/estudioUtil";
 import {
   anexosDaLamina,
-  blocoReplicarReferencia,
+  blocoDaLogo,
   caixaDaLogo,
   logoDaLamina,
   MAX_ANEXOS_DA_LAMINA,
@@ -154,14 +154,15 @@ describe("4. logo gerada junto com a arte, nunca pequenininha", () => {
   it("o prompt pede a logo anexada no tamanho, com o lugar da composição, em todos os modos", () => {
     const logo = { tom: "#0B2A4A", clara: false, aspecto: 4 };
     const normal = promptDaLamina(card(), marca(), { total: 3, carrosselInfinito: false, levaLogo: true, logo });
-    expect(normal).toContain("2. LOGO");
+    expect(normal).toContain("3. LOGO");
     expect(normal).toContain("cerca de 324 x 81 px numa arte de 1080 x 1350");
     expect(normal).toContain("nunca um detalhe pequenininho");
     expect(normal).toContain("faz parte da composição, alinhada ao mesmo eixo e à mesma margem do bloco de texto");
     expect(normal).not.toContain("NÃO desenhe logo");
     // Replicando: a referência só orienta o lugar; a logo não diminui.
-    const replica = promptDaLamina(card(), marca(), { total: 3, carrosselInfinito: false, levaLogo: true, logo, replicar: { comFoto: false } });
+    const replica = blocoDaLogo({ levaLogo: true, temLogo: true, quadro: { largura: 1080, altura: 1350 }, logo, replicar: true, lugarNoMolde: { x0: 70, y0: 92, x1: 95, y1: 96 } }).join(" ");
     expect(replica).toContain("A referência só orienta o lugar: a logo fica no tamanho acima, nunca menor.");
+    expect(replica).toContain("onde a referência põe a marca dela (de 70% a 95% da largura e de 92% a 96% da altura do quadro)");
     // Foto real e contínuo: a área aberta na máscara.
     const foto = promptDaLamina(card(), marca(), { total: 3, carrosselInfinito: false, levaLogo: true, logo, fotoReal: "loja", areaDaLogo: { x0: 11, y0: 7, x1: 46, y1: 15 } });
     expect(foto).toContain("- Lugar: dentro da área reservada para ela (de 11% a 46% da largura e de 7% a 15% da altura do quadro)");
@@ -173,7 +174,6 @@ describe("4. logo gerada junto com a arte, nunca pequenininha", () => {
     expect(promptDaLamina(card(), marca(false), { total: 3, carrosselInfinito: false, levaLogo: true })).toContain("NÃO desenhe nem invente logo");
     // Lâmina sem logo.
     expect(promptDaLamina(card(2), marca(), { total: 3, carrosselInfinito: false, levaLogo: false })).toContain("Sem logo nesta lâmina: não desenhe logo, símbolo nem marca.");
-    expect(blocoReplicarReferencia({ referencias: [{ indice: 2 }], fotos: [], logo: 3 })).toContain("nunca diminui a logo");
   });
 
   it("escolha da logo no kit: a da lâmina, a do conjunto ou a que contrasta com o fundo", () => {
@@ -220,12 +220,18 @@ describe("4. logo gerada junto com a arte, nunca pequenininha", () => {
 // ------------------------------------------------------------ 5. prompt e anexos
 
 describe("5. prompt priorizado, proibições e anexos limitados", () => {
-  it("o obrigatório vem primeiro, as proibições são explícitas e não há travessão", () => {
+  it("a imagem vem primeiro (ordem de 23 e 24/09), o desempate continua, as proibições são explícitas e não há travessão", () => {
     const p = promptDaLamina(card(), marca(), { total: 3, carrosselInfinito: false, levaLogo: true, logo: { tom: null, clara: true, aspecto: 1 } });
-    const ordem = ["PRIORIDADE, nesta ordem", "1. TEXTO EXATO", "2. LOGO", "3. MARCA", "4. IMAGEM E COMPOSIÇÃO", "5. FORMATO", "PROIBIDO", "PADRÃO DE DESIGN"];
+    // 27/09: a cena voltou a abrir o prompt; o desempate (texto, logo, marca, composição) segue escrito por nome.
+    const ordem = ["Em conflito entre regras, vale nesta ordem: o texto exato, a logo oficial", "1. IMAGEM E COMPOSIÇÃO", "2. TEXTO EXATO", "3. LOGO", "4. MARCA", "5. FORMATO", "PADRÃO DE DESIGN", "PROIBIDO"];
     for (let i = 1; i < ordem.length; i++) expect(p.indexOf(ordem[i - 1]), ordem[i]).toBeLessThan(p.indexOf(ordem[i]));
-    expect(p).toContain("Nenhum texto além do texto exato");
-    expect(p).toContain("Nenhuma pessoa, rosto, mão, objeto, produto, animal, ícone ou marca que a direção não pediu");
+    // O texto da logo é a exceção declarada; a regra da cena não esvazia mais a lâmina.
+    expect(p).toContain("Nenhum texto além do texto exato e das letras da própria logo oficial");
+    expect(p).toContain("pessoa a mais, objeto solto sem função");
+    expect(p).not.toContain("Nenhuma pessoa, rosto, mão, objeto, produto, animal, ícone ou marca que a direção não pediu");
+    // As técnicas do padrão voltaram (planos de profundidade, recorte intencional, rei da lâmina).
+    expect(p).toContain("Profundidade: foto e texto na mesma cena, em planos (fundo, texto, sujeito), com recorte intencional");
+    expect(p).toContain("um só ponto focal (o rei da lâmina)");
     expect(p).toContain("cinco dedos em cada mão");
     expect(p).toContain("A barra ( / ) marca a quebra de linha");
     expect(p).not.toContain("(as barras indicam quebra de linha, não desenhe as barras)");
@@ -233,7 +239,7 @@ describe("5. prompt priorizado, proibições e anexos limitados", () => {
     // A lista das lâminas anteriores ("mude a pose") saiu: a capa anexada guia a série.
     const miolo = promptDaLamina(card(2), marca(), { total: 3, carrosselInfinito: false, levaLogo: false, anteriores: ["mulher de costas"], fioVisual: "mesma mulher" });
     expect(miolo).not.toContain("Lâminas anteriores desta série mostraram");
-    expect(miolo).toContain("Só este assunto: nada além do que está descrito.");
+    expect(miolo).not.toContain("Só este assunto: nada além do que está descrito.");
   });
 
   it("anexos: no máximo 6 imagens com a editada, um de cada tipo, na ordem de prioridade", () => {

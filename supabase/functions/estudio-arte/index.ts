@@ -106,7 +106,17 @@ import {
   blocoDaSerie,
   blocoDasPreferencias,
   blocosDoTexto,
-  blocoReplicarReferencia,
+  descricaoDaLogo,
+  ESQUEMA_MOLDE,
+  legendaDaLogo,
+  type LeituraDaLogo,
+  type MoldeDaReferencia,
+  moldeNoQuadro,
+  normalizarLeituraDaLogo,
+  normalizarMolde,
+  promptDoReplicar,
+  SISTEMA_MOLDE,
+  VERSAO_DO_MOLDE,
   formatoDoPost,
   FORMATOS_DO_POST,
   type FormatoDoPost,
@@ -132,7 +142,6 @@ import {
   anexosDaLamina,
   type EscolhaDaLogo,
   escolhaDaLogo,
-  LEGENDA_DA_LOGO,
   logoDaLamina,
   type LogoMedida,
   type TipoDoAnexo,
@@ -181,8 +190,10 @@ import {
   analisarLogo,
   cobrir,
   decodificar,
+  dimensoesDoCabecalho,
   fotoNaLamina,
   logoLimpa,
+  logoSobreContraste,
   mascara,
   normalizarAreas,
   ALTURA_LAMINA,
@@ -1039,6 +1050,161 @@ function escolherLogoDoKit(logos: LogoDoKit[], t: Pick<Trabalho, "direcao">, car
     valorDoFundo,
   );
   return id ? logos.find((l) => l.id === id) || null : null;
+}
+
+// ------------------------------------ leituras por visão guardadas (logo e molde)
+//
+// Feitas uma vez pelo modelo de leitura do catálogo (o mesmo da conferência,
+// barato) e guardadas como JSON no bucket mesa, na pasta do cliente: não se
+// paga de novo e não precisa de coluna nova no banco. Sem o arquivo (ou com
+// versão antiga), lê de novo; se a leitura falhar, a lâmina segue sem ela.
+
+const pastaDasLeituras = (clientId: string) => `${clientId}/estudio/leituras`;
+
+async function leituraGuardada(caminho: string): Promise<Record<string, unknown> | null> {
+  try {
+    const bytes = await baixar("mesa", caminho);
+    const v = JSON.parse(new TextDecoder().decode(bytes));
+    return v && typeof v === "object" ? v as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+async function guardarLeitura(caminho: string, valor: unknown): Promise<void> {
+  try {
+    await servico().storage.from("mesa").upload(caminho, new Blob([JSON.stringify(valor)], { type: "application/json" }), {
+      contentType: "application/json",
+      upsert: true,
+    });
+  } catch {
+    // Sem o cache, a próxima geração lê de novo.
+  }
+}
+
+const ESQUEMA_LOGO = {
+  nome: "leitura_da_logo",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["texto_da_logo", "partes", "simbolo", "confianca"],
+    properties: {
+      texto_da_logo: { type: "string" },
+      partes: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["texto", "cor_nome", "cor_hex"],
+          properties: { texto: { type: "string" }, cor_nome: { type: "string" }, cor_hex: { type: "string" } },
+        },
+      },
+      simbolo: { type: "string" },
+      confianca: { type: "string", enum: ["alta", "media", "baixa"] },
+    },
+  },
+};
+
+const SISTEMA_LOGO = `Você lê a logo de uma marca. A imagem mostra a logo sobre um fundo liso de contraste; esse fundo NÃO faz parte da logo. Devolva:
+- texto_da_logo: as letras da logo exatamente como estão desenhadas, com as maiúsculas e minúsculas que aparecem e sem espaço onde não há; vazio se a logo é só símbolo.
+- partes: cada trecho do texto que tem uma cor diferente, na ordem de leitura, com cor_nome (branco, verde, preto...) e cor_hex aproximado. Juntas, as partes formam o texto_da_logo.
+- simbolo: descrição curta do símbolo (forma e cores) e onde ele fica em relação às letras; vazio se não há símbolo.
+- confianca: alta, media ou baixa (baixa se alguma letra não dá para ler).
+Não invente letras que não estão na imagem. Escreva sem travessão.`;
+
+/**
+ * Leitura por visão do arquivo da logo (texto exato, cor de cada parte e
+ * símbolo), guardada pelo hash da logo: logo trocada no kit é lida de novo.
+ * Recebe a logo já achatada no fundo de contraste (o branco aparece).
+ */
+async function leituraDaLogo(t: Trabalho, logo: { imagem: ImagemEntrada; achatada: Uint8Array | null }, nomeDaMarca: string, criadoPor: string): Promise<LeituraDaLogo | null> {
+  const hash = (await sha256Hex(logo.imagem.bytes)).slice(0, 24);
+  const caminho = `${pastaDasLeituras(t.client_id)}/logo-${hash}.json`;
+  const guardada = await leituraGuardada(caminho);
+  if (guardada && guardada.versao === 1) return normalizarLeituraDaLogo(guardada.leitura);
+  try {
+    const leitor = await modeloDoPapel("leitura");
+    const r = await chamarTexto({
+      clientId: t.client_id,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_LOGO,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Leia esta logo. O nome cadastrado da marca é "${nomeDaMarca}" (a grafia da logo pode ser diferente: transcreva a logo, não o nome).`,
+        imagens: [logo.achatada ? { bytes: logo.achatada, mime: "image/png", nome: "logo.png" } : logo.imagem],
+      }],
+      esquemaJson: ESQUEMA_LOGO,
+      maxTokensSaida: 1_500,
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor,
+    });
+    const l = (r.json ?? {}) as Record<string, unknown>;
+    await guardarLeitura(caminho, { versao: 1, lido_em: new Date().toISOString(), leitura: l });
+    return normalizarLeituraDaLogo(l);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Molde da referência (a leitura por visão como especificação de layout,
+ * ESQUEMA_MOLDE em direcao-arte.ts), guardado por referência. O banco global
+ * (prefixo g:) é guardado na pasta do cliente que usou.
+ */
+async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string): Promise<MoldeDaReferencia | null> {
+  const caminho = `${pastaDasLeituras(t.client_id)}/molde-${ref.id.replace(/[^0-9a-z-]/gi, "-")}.json`;
+  const guardado = await leituraGuardada(caminho);
+  if (guardado && guardado.versao === VERSAO_DO_MOLDE) return normalizarMolde(guardado.molde);
+  try {
+    const leitor = await modeloDoPapel("leitura");
+    const r = await chamarTexto({
+      clientId: t.client_id,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_MOLDE,
+      mensagens: [{ papel: "usuario", conteudo: "Meça o layout desta referência.", imagens: [imagem] }],
+      esquemaJson: ESQUEMA_MOLDE,
+      maxTokensSaida: 6_000,
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor,
+    });
+    const molde = normalizarMolde(r.json);
+    if (molde) await guardarLeitura(caminho, { versao: VERSAO_DO_MOLDE, referencia_id: ref.id, lido_em: new Date().toISOString(), molde });
+    return molde;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Anexo da logo para o gerador (dono, 26/09): a logo ACHATADA sobre um fundo
+ * liso de contraste (a parte branca aparece) e a legenda com o texto exato
+ * dela. Sem medida (a logo não abriu na análise), vai a transparente.
+ */
+async function anexoDaLogo(t: Trabalho, logo: LogoDoKit, nomeDaMarca: string, criadoPor: string): Promise<{ imagem: ImagemEntrada; legenda: string; descricao: string | null; leitura: LeituraDaLogo | null }> {
+  const clara = logo.medida ? logo.medida.clara : null;
+  const achatada = clara === null ? null : await logoSobreContraste(logo.imagem.bytes, clara).catch(() => null);
+  const leitura = await leituraDaLogo(t, { imagem: logo.imagem, achatada }, nomeDaMarca, criadoPor);
+  return {
+    imagem: achatada ? { bytes: achatada, mime: "image/png", nome: "logo-oficial.png" } : logo.imagem,
+    legenda: legendaDaLogo({ clara, texto: leitura?.texto || null, comFundo: !!achatada }),
+    descricao: descricaoDaLogo({ nome: nomeDaMarca, leitura, medida: logo.medida }),
+    leitura,
+  };
+}
+
+/** Transparência (27/09): o prompt enviado e as legendas dos anexos ficam na versão, para diagnóstico. */
+const MAX_PROMPT_GRAVADO = 20_000;
+function transparencia(prompt: string, legendas: string[], extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    prompt_enviado: prompt.length > MAX_PROMPT_GRAVADO ? `${prompt.slice(0, MAX_PROMPT_GRAVADO)} [cortado]` : prompt,
+    prompt_caracteres: prompt.length,
+    anexos_legendas: legendas.map((l) => texto(l, 600)),
+    ...extra,
+  };
 }
 
 type Referencia = {
@@ -2656,7 +2822,11 @@ async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
  *   cores e fontes da marca, o texto exato e a foto do cliente (se houver)
  *   como o assunto, idêntico. A foto é recomposta, não devolvida: a versão
  *   grava modo replicar_referencia e foto_recomposta para a tela avisar
- *   "confira o rosto". Não vale no carrossel contínuo (panorama);
+ *   "confira o rosto". Não vale no carrossel contínuo (panorama). Desde 27/09
+ *   o prompt é próprio (promptDoReplicar, sem a cena do diretor), o layout vem
+ *   do molde (leitura por visão da referência, guardada em
+ *   <cliente>/estudio/leituras), a referência 1 é a imagem 1 (base a editar;
+ *   no OpenRouter é a primeira de input_references) e a qualidade é alta;
  * - foto real: a lâmina tem imagens_ids; a foto do acervo é a base, o gerador
  *   só desenha a área do texto e a da logo, e o código devolve a foto original
  *   em todo o resto (a foto não é refeita);
@@ -2716,6 +2886,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     preferenciasDaArte(t.client_id).catch(() => ""),
   ]);
   const qualidade = (QUALIDADES.includes(t.qualidade as Qualidade) ? t.qualidade : QUALIDADE_PADRAO) as Qualidade;
+  // Marca do trabalho (kit, fontes, nome): o nome vai na leitura e na descrição da logo.
+  const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
 
   // Foto real escolhida para a lâmina (pelo diretor ou pela equipe), do acervo
   // ou trazida pela equipe (colada ou solta) como fundo.
@@ -2842,22 +3014,35 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     refsDaEquipe.forEach((ref, i) => {
       candidatos.push({
         tipo: "referencia_equipe",
-        rotulo: i === 0 ? "REFERÊNCIA 1 escolhida pela equipe (layout a replicar)" : "REFERÊNCIA 2 escolhida pela equipe (tratamento a replicar)",
-        carregar: () => imagemDaReferencia(ref),
+        rotulo: i === 0
+          ? "REFERÊNCIA 1 escolhida pela equipe: o molde desta lâmina (layout, grade, escala e posição de cada bloco)"
+          : "REFERÊNCIA 2 escolhida pela equipe: só o acabamento (luz, textura, tratamento de cor e elementos gráficos)",
+        carregar: async () => {
+          const img = imagensDasRefs[i];
+          if (!img) throw new Error("referencia_sem_arquivo");
+          return img;
+        },
         ref,
       });
     });
   }
-  if (logo) candidatos.push({ tipo: "logo", rotulo: LEGENDA_DA_LOGO, carregar: async () => logo.imagem });
+  // Replicar (27/09): cada referência é aberta uma vez (anexo e molde) e o molde
+  // (layout medido por visão, guardado) é lido junto com a logo, em paralelo.
+  const imagensDasRefs = replicar ? await Promise.all(refsDaEquipe.map((r) => imagemDaReferencia(r).catch(() => null))) : [];
+  const [anexoLogo, moldes] = await Promise.all([
+    logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),
+    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refsDaEquipe[i], img, ch.userId) : Promise.resolve(null)))),
+  ]);
+  // Logo achatada no fundo de contraste, com o texto dela na legenda (dono, 26/09: "a logo não tem nada a ver").
+  if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });
   // Conteúdo de campanha: selo do tema na capa e no fechamento, e a identidade da campanha no prompt.
   const campanha = t.direcao.campanha_id ? await lerCampanha(t.client_id, t.direcao.campanha_id) : null;
   const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;
-  if (capa) {
+  // Replicando, a capa não vai anexada (27/09): o layout é o da referência e a capa puxava a cena dela de volta.
+  if (capa && !replicar) {
     candidatos.push({
       tipo: "capa",
-      rotulo: replicar
-        ? "CAPA desta série (lâmina 1): mantenha só a mesma paleta, fontes e acabamento; o layout desta lâmina vem da referência escolhida, não da capa"
-        : cenaFixa
+      rotulo: cenaFixa
         ? "CAPA desta série (lâmina 1), guia do sistema do texto: siga só a tipografia, as cores do texto e os elementos gráficos do texto dela; NÃO copie a cena nem a foto dela, a cena desta lâmina é a imagem 1"
         : `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; repita o grid, as margens, as linhas, formas e elementos gráficos (mesmo traço, espessura e cor), a tipografia, a paleta, o tratamento e a mesma protagonista, cenário e luz; não copie o texto nem a composição exata dela${ordem === total ? "; o final fecha voltando a ela" : ""}`,
       carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
@@ -2901,7 +3086,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const rotulos: string[] = [];
   const idsReferencias: string[] = [];
   const fotosReplicar: { indice: number; descricao: string; papel: "fundo" | "elemento" }[] = [];
-  const refsNoPrompt: { indice: number; leitura: string | null }[] = [];
+  const refsNoPrompt: { indice: number; molde: MoldeDaReferencia | null; id: string }[] = [];
   let indiceDaLogo: number | null = null;
   let indiceDaCapa: number | null = null;
   const escolhidosDaLamina = anexosDaLamina(candidatos, { base: temBase });
@@ -2925,7 +3110,10 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     if (c.tipo === "capa") indiceDaCapa = indice;
     if (c.ref) idsReferencias.push(c.ref.id);
     if (c.fotoReplicar) fotosReplicar.push({ indice, ...c.fotoReplicar });
-    if (c.tipo === "referencia_equipe" && c.ref) refsNoPrompt.push({ indice, leitura: c.ref.leitura ? texto(c.ref.leitura, 700) : null });
+    if (c.tipo === "referencia_equipe" && c.ref) {
+      const k = refsDaEquipe.indexOf(c.ref);
+      refsNoPrompt.push({ indice, molde: k >= 0 ? moldes[k] ?? null : null, id: c.ref.id });
+    }
   }
   const legendas = rotulos.map((r, i) => `imagem ${i + 1 + deslocamento}: ${r}`);
   if (replicar && !refsNoPrompt.length) {
@@ -2935,7 +3123,6 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const logoNaChamada = indiceDaLogo !== null;
 
   // Direção com layout: o prompt é recomposto agora, com o kit atual da marca.
-  const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
   marca.temLogo = logoNaChamada;
   const base = card.layout
     ? promptDaLamina(cardDoPrompt, marca, {
@@ -2944,11 +3131,11 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       carrosselInfinito: infinito && !panorama,
       levaLogo: leva,
       conceito: t.direcao.conceito,
-      // Replicando, a foto não é a base editada: é o assunto recomposto no layout da referência.
+      // Replicando, este prompt não é usado (o replicar tem prompt próprio, promptDoReplicar).
       fotoReal: replicar ? null : resumoDoFundo,
-      replicar: replicar ? { comFoto: !!baseFoto || elementos.length > 0 } : null,
       fioVisual: t.direcao.fio_visual ?? null,
       logo: logo ? logo.medida : null,
+      logoDescricao: anexoLogo ? anexoLogo.descricao : null,
       areaDaLogo: caixaDaLogoAqui ? { x0: caixaDaLogoAqui.x0 * 100, y0: caixaDaLogoAqui.y0 * 100, x1: caixaDaLogoAqui.x1 * 100, y1: caixaDaLogoAqui.y1 * 100 } : null,
       // Criativo de anúncio: quadro, zona segura e regras do formato (conhecimento-ads.ts).
       anuncio: quadro.formato ? { formato: quadro.formato } : null,
@@ -2989,27 +3176,49 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     anexos: imagens.length + deslocamento,
   };
 
-  // 0) Replicar a referência escolhida pela equipe: geração nova (sem máscara)
-  // com as fotos do cliente primeiro, depois as referências, a logo, a capa e a fonte.
-  // A foto é recomposta, nunca escurecida.
+  // 0) Replicar a referência escolhida pela equipe (27/09): prompt PRÓPRIO, sem
+  // a cena do diretor (promptDoReplicar); o layout vem do molde medido por visão
+  // e a referência 1 é a imagem 1, a base editada. Qualidade alta: o molde tem
+  // tipografia grande e detalhe que a média borrava. A foto é recomposta, nunca escurecida.
   if (replicar) {
-    const prompt = [
-      blocoReplicarReferencia({ referencias: refsNoPrompt, fotos: fotosReplicar, logo: indiceDaLogo, capa: capaDaSerie, editando: refsNoPrompt[0].indice === 1 }),
-      baseComCampanha,
-      regrasDeRender(t, card, legendas, regraDaLogo, true),
-    ].join("\n\n");
     // A referência 1 (imagem 1) é o molde editado, no quadro da lâmina; o resto segue como referência.
     const editando = refsNoPrompt[0].indice === 1 && imagens.length > 0;
     let molde: Uint8Array | null = null;
+    let origemDoMolde: { largura: number; altura: number } | null = null;
     if (editando) {
+      origemDoMolde = dimensoesDoCabecalho(imagens[0].bytes);
       try {
         molde = await (cobrir(await decodificar(imagens[0].bytes), quadro.largura, quadro.altura)).encode(1);
       } catch {
         molde = null; // imagem que não abre (grande demais, formato): volta a ser só referência
       }
     }
+    const replica = promptDoReplicar({
+      card,
+      marca,
+      total,
+      referencias: refsNoPrompt.map((r, i) => ({
+        indice: r.indice,
+        // Posições do molde convertidas para o quadro da lâmina (a imagem 1 é a referência recortada em cover).
+        molde: r.molde ? (i === 0 ? moldeNoQuadro(r.molde, origemDoMolde, quadro) : r.molde) : null,
+      })),
+      editando: !!molde,
+      fotos: fotosReplicar,
+      logo: { leva, indice: indiceDaLogo, medida: logo ? logo.medida : null, descricao: anexoLogo ? anexoLogo.descricao : null },
+      quadro: quadro.final,
+      anuncio: quadro.formato ? { formato: quadro.formato } : null,
+      post: quadro.post,
+    });
+    const prompt = [
+      replica.prompt,
+      preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
+      blocoDeVariacao(versoesAntes, false, true, ordem, false),
+      regrasDeRender(t, { ...card, texto_exato: replica.textoExato }, legendas, regraDaLogo, true),
+    ].filter(Boolean).join("\n\n");
+    const qualidadeDoReplicar: Qualidade = "alta";
     const img = await chamarImagem({
       ...comum,
+      qualidade: qualidadeDoReplicar,
       ...(molde ? { editar: { bytes: molde }, referencias: imagens.slice(1) } : {}),
       prompt,
       promptSe2x3: card.layout && !quadro.fixo ? formatoPara2x3(prompt) : undefined,
@@ -3024,12 +3233,16 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         tamanho: img.tamanho,
         modo: "replicar_referencia",
         molde_editado: !!molde,
+        // Molde medido por visão (layout da referência como especificação): quais referências tinham.
+        molde_lido: refsNoPrompt.map((r) => ({ referencia_id: r.id, lido: !!r.molde })),
+        qualidade_usada: qualidadeDoReplicar,
         // A foto do cliente foi recomposta pelo gerador (não é o original): a tela pede para conferir o rosto.
         foto_recomposta: fotosReplicar.length > 0,
         imagem_id: foto?.id ?? null,
         foto_livre: fundoLivre ? fundoLivre.caminho : null,
         fotos_livres: livres.length,
         ...marcaDaLogo,
+        ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }),
       },
     });
   }
@@ -3046,7 +3259,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
       origem: "gerar",
       referencias: idsReferencias,
-      extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "foto_composta", imagem_id: foto?.id ?? null, fotos_livres: livres.length, ...marcaDaLogo },
+      extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "foto_composta", imagem_id: foto?.id ?? null, fotos_livres: livres.length, ...marcaDaLogo, ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }) },
     });
   }
 
@@ -3104,6 +3317,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         foto_livre: fundoLivre ? fundoLivre.caminho : null,
         alinhamento: medida,
         ...marcaDaLogo,
+        ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }),
         // Contínuo: o fundo usado e a geração dele (a tela compara com o panorama atual: "fora do fundo").
         ...(panorama ? { fundo: fundoUsado, fundo_geracao: geracaoDoPanorama(t.direcao.panorama), fora_da_emenda: cenaMudada } : {}),
       },
@@ -3152,6 +3366,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         zona_do_texto: layoutDoRecorte.zona_texto,
         fotos_livres: livres.length,
         ...marcaDaLogo,
+        ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }),
       },
     });
   }
@@ -3170,7 +3385,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   return await gravarVersao(ch, t, card, { ...img, png: img.png, mime: "image/png" }, {
     origem: "gerar",
     referencias: idsReferencias,
-    extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "normal", ...marcaDaLogo },
+    extra: { referencias_jev: escolhida.jev, tamanho: img.tamanho, modo: "normal", ...marcaDaLogo, ...transparencia(prompt, legendas, { logo_texto: anexoLogo?.leitura?.texto ?? null }) },
   });
 }
 
@@ -3358,8 +3573,11 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
     const daVersao = escolhaDaLogo(marcaDaVersao.logo_escolhida);
     const logo = escolherLogoDoKit(await logosDoKit(base.client_id, kit, escolhaDaLamina(base, card, daVersao)), base, { logo: card.logo ?? daVersao ?? undefined }, null);
     if (logo) {
-      referencias.push(logo.imagem);
-      legendas.push(`imagem ${referencias.length + 1}: ${LEGENDA_DA_LOGO}`);
+      // A mesma logo achatada no fundo de contraste e com o texto dela na legenda (gerar_card).
+      const nome = (await marcaDoCliente(base.client_id, kit, undefined, base).catch(() => null))?.nomeCliente || "";
+      const anexo = await anexoDaLogo(base, logo, nome, ch.userId);
+      referencias.push(anexo.imagem);
+      legendas.push(`imagem ${referencias.length + 1}: ${anexo.legenda}${anexo.descricao ? ` ${anexo.descricao}` : ""}`);
     }
   }
   // Referências escolhidas pela equipe (da lâmina ou do conjunto), como no

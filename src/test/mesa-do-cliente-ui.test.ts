@@ -257,7 +257,7 @@ describe("estimativa antes de toda ação que gasta", () => {
     expect(estudio).toContain("partesDiretor={partesDiretor}");
     expect(estudio).toContain("executar={() => gerarVarias(filaDeGeracao.map((c) => c.ordem))}");
     // No contínuo, o panorama que falta entra na mesma estimativa.
-    expect(estudio).toContain("partes={() => partesGerar(filaDeGeracao.length).concat(partesDoFundo(ordensDaFila))}");
+    expect(estudio).toContain("partes={() => partesGerarDas(ordensDaFila).concat(partesDoFundo(ordensDaFila))}");
     expect(estudio.slice(estudio.indexOf('titulo="Escrever a legenda"'), estudio.indexOf('acao: "legenda"'))).toContain("partes={");
     expect(cardEstudio).toContain("executar={onGerar}");
     expect(cardEstudio).toContain("executar={() => onAjustar(instrucao.trim())}");

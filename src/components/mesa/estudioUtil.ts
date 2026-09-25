@@ -347,6 +347,22 @@ export function usaFundoContinuo(card: { layout?: unknown; imagens_ids?: string[
 }
 
 /**
+ * Qualidade em que a lâmina é gerada de fato (27/09): com referência escolhida
+ * pela equipe (da lâmina ou do conjunto) e fora do fundo contínuo, o servidor
+ * gera no modo replicar referência sempre em qualidade alta (o molde tem
+ * tipografia grande e detalhe que a média borrava). O preço à vista segue isso.
+ */
+export function qualidadeNaGeracao(
+  card: { referencias_ids?: string[] | null } | null | undefined,
+  refsDoConjunto: string[] | null | undefined,
+  noFundoContinuo: boolean,
+  escolhida: "baixa" | "media" | "alta",
+): "baixa" | "media" | "alta" {
+  const refs = card && card.referencias_ids && card.referencias_ids.length ? card.referencias_ids : refsDoConjunto || [];
+  return refs.length > 0 && !noFundoContinuo ? "alta" : escolhida;
+}
+
+/**
  * Trechos do panorama que ainda vão ser gerados para as lâminas pedidas:
  * só os das lâminas cujo fundo ainda não existe em panorama.fundos, cada
  * trecho uma vez. Como no servidor, um trecho depois do primeiro precisa do
