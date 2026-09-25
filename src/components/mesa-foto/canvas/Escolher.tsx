@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ImagePlus, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { textoDoErro } from "@/lib/mesa/api";
 import { Moldura, useMesaFoto } from "../Comuns";
 import { acrescentarFotos, invalidarFotos, rotuloDoTipo, subirOriginais } from "../fotoApi";
 import { STATUS_DA_PERSONA } from "../modelosApi";
 import { TIPOS_DE_NO, type DadosDoNo, type ModoDoAmbiente } from "../canvasApi";
-import { BOTAO, CAMPO, capaDoKit, daFoto, Escolha, ICONES, kitsUsaveis, MiniaturaGrande, personaSemAncora, ROTULO, rostoDaPersona, type Fontes, type Miniatura } from "./comum";
+import { BOTAO, CAMPO, capaDoKit, daFoto, Escolha, Gaveta, ICONES, kitsUsaveis, MiniaturaGrande, personaSemAncora, ROTULO, rostoDaPersona, type Fontes, type LugarDaGaveta, type Miniatura } from "./comum";
 
 /**
- * Escolha com miniatura do que vai num cartão (v3: janela menor e preta).
+ * Escolha com miniatura do que vai num cartão. Dono, 26/09: "a parte de
+ * produtos, pessoa, ambiente está cobrindo demais o quadro". Agora é uma
+ * gaveta estreita encostada na paleta (folha no pé em tela pequena e no modo
+ * lista), com rolagem própria e sem véu escuro: o quadro continua à vista.
  * Produto (kits deste cliente; de outros clientes, pela esteira), Pessoa
  * (modelo sintética ou foto real com autorização), Ambiente (descrever, foto
  * usada como está ou complementada, ou pelo contexto) e Estilo. Dá para
@@ -88,7 +90,9 @@ export function EscolherCartao({
   fontes,
   onFechar,
   onEscolher,
+  lugar = "quadro",
 }: {
+  lugar?: LugarDaGaveta;
   pedido: PedidoDeEscolha | null;
   fontes: Fontes;
   onFechar: () => void;
@@ -123,13 +127,13 @@ export function EscolherCartao({
   const termo = busca.trim().toLowerCase();
   const fotos = fontes.fotos.filter((f) => !termo || String(f.nome || "").toLowerCase().indexOf(termo) >= 0).slice(0, 36);
   const tipo = TIPOS_DE_NO[aba];
-  const grade = "grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6";
+  const grade = lugar === "quadro" ? "grid min-w-0 grid-cols-3 gap-1.5" : "grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5";
 
   const fotosDoAcervo = (onFoto: (id: string) => void, rotuloDoEnvio: string) => (
     <div className="min-w-0">
       <div className="mb-1.5 flex min-w-0 flex-wrap items-center">
         <p className={`${ROTULO} mb-0 mr-2 min-w-0 flex-1`}>Fotos do acervo</p>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome" aria-label="Buscar foto do acervo" className={`${CAMPO} mb-1 mr-1.5 h-7 !w-40 !py-1 text-[11.5px]`} />
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome" aria-label="Buscar foto do acervo" className={`${CAMPO} mb-1 mr-1.5 h-7 !w-32 !py-1 text-[11.5px]`} />
         <MandarFoto rotulo={rotuloDoEnvio} onPronta={onFoto} />
       </div>
       {fotos.length ? (
@@ -144,13 +148,24 @@ export function EscolherCartao({
     </div>
   );
 
+  if (!pedido) return null;
+  const titulo = trocando ? `Trocar ${tipo.rotulo.toLowerCase()}` : "Pôr no quadro";
+
   return (
-    <Dialog open={!!pedido} onOpenChange={(v) => (!v ? onFechar() : undefined)}>
-      <DialogContent className="dark max-h-[82vh] max-w-xl overflow-y-auto border-white/10 bg-zinc-950 p-4 text-zinc-100" data-escolher-cartao={aba}>
-        <DialogHeader>
-          <DialogTitle className="text-[14px]">{trocando ? `Trocar ${tipo.rotulo.toLowerCase()}` : "Pôr no quadro"}</DialogTitle>
-          <DialogDescription className="text-[11.5px] text-zinc-400">{trocando ? tipo.dica : "Escolha pela foto. O cartão entra já ligado ao Resultado."}</DialogDescription>
-        </DialogHeader>
+    <Gaveta
+      lugar={lugar}
+      rotulo={titulo}
+      rotuloDoFechar="Fechar a escolha"
+      onFechar={onFechar}
+      dados={{ "data-escolher-cartao": aba }}
+      cabeca={
+        <>
+          <h3 className="truncate text-[13px] font-semibold">{titulo}</h3>
+          <p className="text-[11px] leading-snug text-zinc-400">{trocando ? tipo.dica : "Escolha pela foto. O cartão entra já ligado ao Resultado."}</p>
+        </>
+      }
+    >
+      <div className="min-w-0 space-y-3">
         {!trocando && (
           <div className="flex min-w-0 flex-wrap items-center" role="tablist" aria-label="O que pôr no quadro">
             {ABAS_DA_ESCOLHA.map((a) => {
@@ -163,7 +178,7 @@ export function EscolherCartao({
                   role="tab"
                   aria-selected={aba === a}
                   onClick={() => setAba(a)}
-                  className={`mb-1 mr-1 inline-flex h-8 items-center rounded-full border px-2.5 text-[12px] ${aba === a ? `${t.borda} ${t.fundo} text-white` : "border-white/10 text-zinc-400 hover:text-white"}`}
+                  className={`mb-1 mr-1 inline-flex h-7 items-center rounded-full border px-2 text-[11.5px] ${aba === a ? `${t.borda} ${t.fundo} text-white` : "border-white/10 text-zinc-400 hover:text-white"}`}
                 >
                   <Icone className={`mr-1.5 h-3.5 w-3.5 ${t.texto}`} /> {t.rotulo}
                 </button>
@@ -308,9 +323,9 @@ export function EscolherCartao({
           </div>
         )}
         <p className="flex items-center text-[10.5px] text-zinc-500">
-          <ImagePlus className="mr-1 h-3 w-3" /> Foto mandada daqui entra no acervo do cliente como original.
+          <ImagePlus className="mr-1 h-3 w-3 shrink-0" /> Foto mandada daqui entra no acervo do cliente como original.
         </p>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </Gaveta>
   );
 }

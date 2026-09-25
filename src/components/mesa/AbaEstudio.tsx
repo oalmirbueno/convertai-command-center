@@ -12,7 +12,9 @@ import {
   ListChecks,
   Loader2,
   Lock,
+  Maximize2,
   MessageSquare,
+  Minimize2,
   PenLine,
   RefreshCw,
   RotateCcw,
@@ -76,6 +78,10 @@ import {
   type FiltroDoEstudio,
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
+import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
+import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
+import EstudioRefinarTexto from "./EstudioRefinarTexto";
+import { useModoFoco } from "@/lib/modoFoco";
 import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type AndamentoDaLamina, type EtapaDaLamina } from "./PranchetaDoEstudio";
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
@@ -100,6 +106,8 @@ import {
   useEstadoGuardado,
   usaFundoContinuo,
   versaoForaDoFundo,
+  laminaLevaLogo,
+  type EscolhaDaLogo,
   type Area,
   type EscolhasDoPreparo,
   type TrabalhoGravado,
@@ -142,6 +150,13 @@ import {
  * roda até 3 lâminas ao mesmo tempo; no carrossel contínuo, uma de cada vez,
  * porque cada lâmina continua a anterior. A conferência roda logo depois de
  * cada lâmina. A tela nunca desenha texto por cima da arte.
+ *
+ * Pedidos do dono de 26/09: "Tela cheia" (modo foco, como o Canvas da Mesa
+ * Foto: a barra do painel e os botões flutuantes somem pelo
+ * src/lib/modoFoco.ts, a faixa de pautas sai e o estúdio ocupa a janela;
+ * volta pelo botão ou pelo Esc); a logo do kit escolhida na faixa da lâmina e
+ * no conjunto; referência na hora (arrastar, arquivo, colar imagem ou link);
+ * e "Refinar texto" no texto exato e na legenda.
  */
 
 const CODIGOS_QUE_NAO_PARAM_A_FILA = ["acao_desconhecida", "servico_indisponivel"];
@@ -341,6 +356,8 @@ function DetalheDoItem({
   temRoteiro,
   publicacaoDe,
   modo,
+  foco = false,
+  onFoco,
 }: {
   item: ItemDoMes;
   trabalho: Trabalho | null;
@@ -350,6 +367,9 @@ function DetalheDoItem({
   publicacaoDe: (postId: string) => PublicacaoDoPost | null;
   /** "colunas": altura fixa e rolagem por área; "pilha": a página rola. */
   modo: "colunas" | "pilha";
+  /** Tela cheia (modo foco): o estúdio ocupa a janela. */
+  foco?: boolean;
+  onFoco?: (ligado: boolean) => void;
 }) {
   const mesa = useMesa();
   const { clientId, catalogo } = mesa;
@@ -431,6 +451,10 @@ function DetalheDoItem({
   ];
   const partesDiretor = (): ParteDaEstimativa[] => [
     { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.preparar.entrada, tokensSaida: TAMANHOS.preparar.saida },
+  ];
+  /** Refinar texto: uma chamada do redator (modelo do diretor), do tamanho da legenda. */
+  const partesRefinar = (): ParteDaEstimativa[] => [
+    { modeloId: diretor?.id, tipo: "texto", tokensEntrada: TAMANHOS.legenda.entrada, tokensSaida: TAMANHOS.legenda.saida },
   ];
 
   /** Etapa nova da lâmina. O cronômetro só começa ao sair da fila e não recomeça entre etapas. */
@@ -1167,6 +1191,20 @@ function DetalheDoItem({
             {acaoPrincipal}
           </>
         )}
+        {colunas && onFoco && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mb-1 ml-2 mt-1 h-10 shrink-0 gap-1 px-2.5 text-[12px]"
+            aria-pressed={foco}
+            onClick={() => onFoco(!foco)}
+            title={foco ? "Voltar ao painel (Esc)" : "Tela cheia: esconde o topo do painel, as pautas e os botões flutuantes; volta pelo botão ou Esc"}
+          >
+            {foco ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {foco ? "Voltar (Esc)" : "Tela cheia"}
+          </Button>
+        )}
       </div>
       {estado === "producao" && (
         <div className="h-0.5 w-full bg-secondary" aria-hidden="true">
@@ -1308,6 +1346,30 @@ function DetalheDoItem({
                 { referencias_ids: (cardSelecionado.referencias_ids || []).filter((r) => r !== id) },
                 "Referência tirada da lâmina",
               )}
+            referenciaNaHora={
+              <EstudioReferenciaNaHora
+                compacto
+                escolhidas={cardSelecionado.referencias_ids || []}
+                onGravar={(ids) => configurar({ card: { ordem: cardSelecionado.ordem, referencias_ids: ids } })}
+                alvoRotulo={`lâmina ${cardSelecionado.ordem}`}
+                bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+                motivoDoBloqueio={entregue ? "Trabalho entregue: reabra para corrigir." : "Espere a lâmina terminar."}
+              />
+            }
+            logo={
+              laminaLevaLogo(cardSelecionado.ordem, cardsDaDirecao.length) ? (
+                <EstudioLogoDaLamina
+                  compacto
+                  trabalhoId={trabalho.id}
+                  alvo="lamina"
+                  ordem={cardSelecionado.ordem}
+                  escolha={((cardSelecionado as { logo?: EscolhaDaLogo }).logo) || null}
+                  doConjunto={(trabalho.direcao as { logo_escolhida?: EscolhaDaLogo | null }).logo_escolhida || null}
+                  bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+                  onSalvar={configurar}
+                />
+              ) : undefined
+            }
           />
         ) : undefined
       }
@@ -1401,6 +1463,22 @@ function DetalheDoItem({
       onConfigurar={(card) => configurar({ card: { ordem: cardSelecionado.ordem, ...card } })}
       onConcluido={atualizar}
       semTrocaDeFundo={comFundoContinuo && usaFundoContinuo(cardSelecionado)}
+      refinarTexto={
+        <EstudioRefinarTexto
+          key={`refino-${cardSelecionado.ordem}`}
+          trabalhoId={trabalho.id}
+          alvo="lamina"
+          ordem={cardSelecionado.ordem}
+          texto={cardSelecionado.texto_exato || ""}
+          partes={partesRefinar}
+          bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+          onAplicar={async (novo) => {
+            await configurar({ card: { ordem: cardSelecionado.ordem, texto_exato: novo } });
+            toast.success("Texto aplicado na lâmina", { description: ultimaDaEscolhida ? "Gere de novo para a arte mostrar o texto novo." : undefined });
+          }}
+          onConcluido={() => mesa.atualizarCusto()}
+        />
+      }
     />
   ) : (
     <p className="text-[12.5px] text-muted-foreground">Escolha uma lâmina na prancheta.</p>
@@ -1473,6 +1551,7 @@ function DetalheDoItem({
         onAtualizar={atualizar}
         entregue={entregue}
         onReabrir={() => void reabrir()}
+        referenciaNaHora
       />
     </div>
   ) : null;
@@ -1508,6 +1587,20 @@ function DetalheDoItem({
       <section>
         <Rotulo>Formato do post</Rotulo>
         <SeletorDeFormato valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
+      </section>
+
+      <section>
+        <Rotulo>Logo do kit</Rotulo>
+        <EstudioLogoDaLamina
+          trabalhoId={trabalho.id}
+          alvo="conjunto"
+          escolha={(trabalho.direcao as { logo_escolhida?: EscolhaDaLogo | null }).logo_escolhida || null}
+          bloqueado={entregue || algoGerando}
+          onSalvar={configurar}
+        />
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+          Vale na capa e no fechamento. O gerador desenha a logo junto com a arte, num tamanho que se lê de longe; a lâmina pode ter a própria (na faixa em cima dela).
+        </p>
       </section>
 
       {cardsDaDirecao.length > 1 && (
@@ -1615,6 +1708,18 @@ function DetalheDoItem({
         placeholder="A legenda do post aparece aqui. Dá para editar à mão; grava sozinha ao sair do campo."
         className="text-[13px] leading-relaxed"
         disabled={entregue}
+      />
+      <EstudioRefinarTexto
+        trabalhoId={trabalho.id}
+        alvo="legenda"
+        texto={legenda}
+        partes={partesRefinar}
+        bloqueado={entregue}
+        onAplicar={(novo) => {
+          setLegenda(novo);
+          toast.success("Legenda aplicada", { description: "Confira e salve (grava sozinha ao sair do campo)." });
+        }}
+        onConcluido={() => mesa.atualizarCusto()}
       />
       <div className="space-y-2">
         <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground"><Hash className="mr-1 h-3.5 w-3.5" /> Hashtags</p>
@@ -1827,6 +1932,22 @@ export default function AbaEstudio({
   const faixa = useFaixa();
   const colunas = emColunas(faixa);
   const altura = useAlturaDaEsteira(colunas);
+  // Tela cheia do Estúdio (dono, 26/09): só no computador (colunas).
+  const [foco, setFoco] = useState(false);
+  const focoLigado = foco && colunas;
+  useModoFoco("estudio", focoLigado);
+  const alturaDaJanela = useAlturaDaJanela(focoLigado);
+  useEffect(() => {
+    if (!focoLigado) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" && e.key !== "Esc") return;
+      // Esc de uma janela aberta (ampliar, confirmar) fecha só ela.
+      if (e.defaultPrevented || temJanelaAberta()) return;
+      setFoco(false);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [focoLigado]);
   const raiz = useRef<HTMLDivElement>(null);
   const areaDoEstudio = useRef<HTMLDivElement>(null);
   // A lista abre nos próximos 60 dias; escolher um mês muda para aquele mês (e a URL acompanha).
@@ -1918,11 +2039,24 @@ export default function AbaEstudio({
       temRoteiro={temRoteiroDe(selecionado)}
       publicacaoDe={publicacaoDe}
       modo={colunas ? "colunas" : "pilha"}
+      foco={focoLigado}
+      onFoco={setFoco}
     />
   ) : null;
 
   const carregando = dados.isLoading || (!!tarefaId && !selecionado && (avulso.isLoading || avulso.isFetching));
   const vazio = <SemPauta carregando={carregando} vazia={listaPronta && itens.length === 0} />;
+
+  // Tela cheia: a faixa de pautas e o topo saem; o estúdio ocupa a janela, estático, até o Voltar ou o Esc.
+  if (focoLigado && detalhe) {
+    return (
+      <div ref={raiz} className="fixed inset-0 z-40 flex flex-col bg-background p-2" role="region" aria-label="Estúdio em tela cheia" data-estudio-foco="">
+        <div className="flex min-h-0 min-w-0 flex-col" style={{ height: Math.max(480, alturaDaJanela - 16) }}>
+          {detalhe}
+        </div>
+      </div>
+    );
+  }
 
   if (colunas) {
     return (
@@ -1945,4 +2079,26 @@ export default function AbaEstudio({
       {detalhe || vazio}
     </div>
   );
+}
+
+/** Altura da janela (px), atualizada no resize enquanto `ativo`. */
+function useAlturaDaJanela(ativo: boolean): number {
+  const [altura, setAltura] = useState<number>(() => (typeof window !== "undefined" ? window.innerHeight || 800 : 800));
+  useEffect(() => {
+    if (!ativo) return;
+    const medir = () => setAltura(window.innerHeight || 800);
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [ativo]);
+  return altura;
+}
+
+/** Há uma janela (diálogo) aberta por cima: o Esc é dela. */
+function temJanelaAberta(): boolean {
+  try {
+    return !!document.querySelector('[role="dialog"], [role="alertdialog"]');
+  } catch {
+    return false;
+  }
 }

@@ -8,7 +8,11 @@
  *   real do cliente, pesquisa na web, devolve diagnostico e 8 a 15 temas; o Jev
  *   da nota de aderencia ao objetivo e de potencial de salvamento e
  *   compartilhamento de cada tema. Cria calendario_propostas com status temas
- *   e abre a conversa do agente.
+ *   e abre a conversa do agente. Frente O (26/09): uma quarta chamada, em
+ *   paralelo, faz a pesquisa do mês (web dirigida ao nicho, datas do Brasil,
+ *   leitura do perfil da Mesa Ads) e grava parametros.diagnostico_estruturado
+ *   (diagnostico.ts); `diagnostico` fica em texto curto. Os temas não esperam
+ *   a pesquisa mais que GRACA_DO_DIAGNOSTICO_MS.
  * - escolher_temas { proposta_id, temas: string[] }: marca os temas escolhidos.
  * - detalhar { proposta_id, modelo_id?, raciocinio? }: gera os itens completos
  *   dos temas escolhidos (todos os campos do prompt, roteiro de cada card,
@@ -98,6 +102,19 @@ import {
 } from "../_shared/conhecimento-conteudo.ts";
 import { conhecimentoCalendarioPara, type MomentoDoCalendario } from "../_shared/conhecimento-dos-agentes.ts";
 import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { datasDoPeriodo, pautasDePesquisa, type DataSazonal } from "../_shared/conhecimento-social.ts";
+import { hojeEmSaoPaulo, lerDesempenhoDoCliente, lerEvolucao, somarDiasIso } from "../_shared/evolucao.ts";
+import {
+  diagnosticoDasFrentes,
+  type DiagnosticoEstruturado,
+  ESQUEMA_DIAGNOSTICO,
+  GRACA_DO_DIAGNOSTICO_MS,
+  normalizarDiagnostico,
+  pedidoDoDiagnostico,
+  resumoDoPerfil,
+  textoCurtoDoDiagnostico,
+  urlsDoTexto,
+} from "./diagnostico.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -914,6 +931,9 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 const CONHECIMENTO_DO_CALENDARIO: Record<MomentoDoCalendario, string> = {
   mes: conhecimentoCalendarioPara("mes").texto,
   campanha: conhecimentoCalendarioPara("campanha").texto,
+  // Frente O (26/09): temas e diagnóstico com os blocos de social media (conhecimento-social.ts).
+  temas: conhecimentoCalendarioPara("temas").texto,
+  diagnostico: conhecimentoCalendarioPara("diagnostico").texto,
 };
 
 /**
@@ -1117,6 +1137,126 @@ async function pontuarTemasComJev(
   }
 }
 
+// ------------------------------------------------------------ pesquisa do mês (Frente O)
+
+type ResultadoDaPesquisa = {
+  estruturado: DiagnosticoEstruturado | null;
+  usoId: string | null;
+  custo: number;
+  saldo: number | null;
+  erro: string | null;
+  tempo_ms: number;
+};
+
+/**
+ * Leitura do perfil dos últimos 90 dias pelas regras da Mesa Ads
+ * (_shared/evolucao.ts): orgânico e anúncios, só leitura. Falha não derruba
+ * a pesquisa: volta o motivo e o modelo declara o limite.
+ */
+async function leituraDoPerfil(servico: SupabaseClient, clientId: string): Promise<{ perfil: unknown | null; erro: string | null }> {
+  try {
+    const hoje = hojeEmSaoPaulo();
+    const periodo = { inicio: somarDiasIso(hoje, -89), fim: hoje, dias: 90 };
+    const d = await lerDesempenhoDoCliente(servico, clientId, periodo);
+    const leitura = lerEvolucao({ periodo: { inicio: periodo.inicio, fim: periodo.fim }, anuncios: d._anuncios, posts: d._posts });
+    return { perfil: resumoDoPerfil(d, leitura), erro: null };
+  } catch (err) {
+    console.error("[agente-calendario] leitura do perfil falhou", { nome: err instanceof Error ? err.name : "desconhecido" });
+    return { perfil: null, erro: "leitura do perfil indisponível" };
+  }
+}
+
+/**
+ * A pesquisa do mês: quarta chamada do propor_temas, em paralelo com as três
+ * frentes de temas. Pesquisa na web dirigida ao nicho, datas do Brasil
+ * calculadas no código, leitura do perfil e o mesmo contexto das frentes;
+ * devolve o diagnóstico em JSON. Nunca lança: erro volta em `erro`.
+ */
+async function pesquisaDoMes(
+  servico: SupabaseClient,
+  e: {
+    clientId: string;
+    propostaId: string;
+    criadoPor: string;
+    modeloId: string;
+    raciocinio: string | undefined;
+    ctx: Contexto;
+    contexto: string;
+    pedido: string;
+    inicio: string;
+    datas: DataSazonal[];
+    parametros: Record<string, unknown>;
+  },
+): Promise<ResultadoDaPesquisa> {
+  const t0 = Date.now();
+  try {
+    const { perfil, erro: perfilErro } = await leituraDoPerfil(servico, e.clientId);
+    const pedido = pedidoDoDiagnostico({
+      pedido: e.pedido,
+      plano: blocoDoPlano(e.ctx, e.inicio),
+      datas: e.datas,
+      pautas: pautasDePesquisa({ inicio: e.inicio, regiao: e.parametros.regiao, oferta: e.parametros.oferta, objetivo: e.parametros.objetivo, datas: e.datas }),
+      perfil: perfil && e.ctx.marca ? { ...(perfil as Record<string, unknown>), escopo: "perfil inteiro do cliente (todas as marcas)" } : perfil,
+      perfilErro,
+    });
+    const saida = await chamarTexto({
+      clientId: e.clientId,
+      tarefa: "calendario",
+      agente: AGENTE,
+      modeloId: e.modeloId,
+      timeoutMs: TIMEOUT_CALENDARIO_MS,
+      sistema: sistemaDoCalendario(e.ctx, "diagnostico"),
+      mensagens: [{ papel: "usuario", conteudo: `${e.contexto}\n\n${pedido}` }],
+      raciocinio: e.raciocinio,
+      pesquisaWeb: true,
+      esquemaJson: ESQUEMA_DIAGNOSTICO,
+      referencia: { tipo: REF_TIPO, id: e.propostaId },
+      criadoPor: e.criadoPor,
+    });
+    const estruturado = normalizarDiagnostico(saida.json, { origem: "pesquisa", fontesExtras: urlsDoTexto(saida.texto) });
+    return { estruturado, usoId: saida.usoId, custo: saida.custoUsd, saldo: saida.saldoUsd, erro: estruturado ? null : "diagnostico_vazio", tempo_ms: Date.now() - t0 };
+  } catch (err) {
+    const codigo = err instanceof IaMotorErro ? err.codigo : err instanceof ErroHttp ? err.codigo : "pesquisa_falhou";
+    console.error("[agente-calendario] pesquisa do mês falhou", { codigo });
+    return { estruturado: null, usoId: null, custo: 0, saldo: null, erro: codigo, tempo_ms: Date.now() - t0 };
+  }
+}
+
+/** Espera a promessa até `ms`; depois disso devolve null e ela segue sozinha. */
+function comGraca<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<null>((ok) => {
+    relogio = setTimeout(() => ok(null), ms);
+  });
+  return Promise.race([p, limite]).finally(() => clearTimeout(relogio));
+}
+
+/**
+ * Pesquisa que chegou depois da resposta: grava o diagnóstico estruturado na
+ * proposta sem pisar no que a conversa já mudou (o texto só troca se ainda é
+ * o que o propor_temas gravou).
+ */
+async function gravarPesquisaAtrasada(servico: SupabaseClient, propostaId: string, clientId: string, textoGravado: string, r: ResultadoDaPesquisa) {
+  const { data } = await servico.from("calendario_propostas").select("parametros, diagnostico").eq("id", propostaId).eq("client_id", clientId).maybeSingle();
+  if (!data) return;
+  const atual = (data as { parametros: Record<string, unknown> | null; diagnostico: string | null });
+  const parametros = { ...(atual.parametros ?? {}) };
+  const campos: Record<string, unknown> = {};
+  if (r.estruturado) {
+    const mesmoTexto = (atual.diagnostico ?? "") === textoGravado;
+    const novoTexto = mesmoTexto ? textoCurtoDoDiagnostico(r.estruturado) : (atual.diagnostico ?? "");
+    parametros.diagnostico_estruturado = { ...r.estruturado, texto_base: novoTexto };
+    parametros.diagnostico_estado = "pronto";
+    delete parametros.diagnostico_erro;
+    if (mesmoTexto && novoTexto) campos.diagnostico = novoTexto;
+  } else {
+    parametros.diagnostico_estado = "falhou";
+    parametros.diagnostico_erro = r.erro;
+  }
+  campos.parametros = parametros;
+  await servico.from("calendario_propostas").update(campos).eq("id", propostaId).eq("client_id", clientId);
+}
+
 // ------------------------------------------------------------ acoes
 
 async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -1189,7 +1329,8 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     project_id: projectId,
     periodo_inicio: inicio,
     periodo_fim: fim,
-    parametros: { ...parametros, gerando_temas: true },
+    // Frente O: a pesquisa do mês nasce "gerando"; a tela mostra o aviso até o diagnóstico chegar.
+    parametros: { ...parametros, gerando_temas: true, diagnostico_estado: "gerando" },
     status: "temas",
     diagnostico: null,
     temas: [],
@@ -1219,11 +1360,29 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
   const frentes = temasPorFrente(maxTemas);
   const contexto = contextoEmTexto(ctx, { inicio, fim, parametros });
   const blocoEditorial = blocoDaEscolhaEditorial(escolha);
+
+  // Frente O (26/09): a pesquisa do mês corre ao lado das três frentes de
+  // temas, com o mesmo contexto; nunca bloqueia os temas e nunca lança.
+  const datasDoMes = datasDoPeriodo(inicio, fim);
+  const pesquisaP = pesquisaDoMes(servico, {
+    clientId,
+    propostaId,
+    criadoPor: chamador.userId,
+    modeloId: modelo.id,
+    raciocinio,
+    ctx,
+    contexto,
+    pedido,
+    inicio,
+    datas: datasDoMes,
+    parametros,
+  });
   const instrucaoDa = (f: { fase: string; min: number; max: number }, principal: boolean) => `${contexto}
 
 TAREFA: ${pedido}${blocoDoPlano(ctx, inicio)}
 ESTA CHAMADA cuida só da ${ROTULO_FASE[f.fase]}. Outras duas chamadas, ao mesmo tempo, cuidam das outras fases: proponha de ${f.min} a ${f.max} temas (mire ${f.max}) só desta fase, todos com fase ${f.fase}.
 Antes, pesquise na web dúvidas, buscas, comportamentos, datas sazonais e oportunidades do nicho e da região deste cliente que sirvam a esta fase.
+Datas do Brasil no período e logo depois (calculadas no código; use só as que se ligam a este cliente): ${datasDoMes.length ? datasDoMes.map((d) => `${d.data} ${d.nome}`).join("; ") : "nenhuma"}.
 Devolva:
 - diagnostico: ${principal ? "diagnóstico resumido a partir dos dados reais (melhores e piores conteúdos, o que as métricas mostram, o que falta)." : "no máximo 2 frases (a chamada da fase 1 faz o diagnóstico completo)."}
 - publicos_prioritarios e pilares.
@@ -1251,6 +1410,18 @@ ${blocoEditorial}`;
     return fila;
   };
 
+  // Pesquisa que termina antes das frentes aparece na proposta na hora.
+  let pesquisaPronta: ResultadoDaPesquisa | null = null;
+  let respondendo = false;
+  pesquisaP.then((r) => {
+    pesquisaPronta = r;
+    // Depois da graça quem grava é gravarPesquisaAtrasada (sem pisar na proposta final).
+    if (!r.estruturado || respondendo) return;
+    fila = fila.then(() => servico.from("calendario_propostas")
+      .update({ parametros: { ...parametros, gerando_temas: true, diagnostico_estado: "pronto", diagnostico_estruturado: r.estruturado } })
+      .eq("id", propostaId).eq("client_id", clientId)).catch(() => undefined);
+  });
+
   const resultados = await Promise.allSettled(frentes.map(async (f, k) => {
     const saida = await chamarTexto({
       clientId,
@@ -1258,7 +1429,7 @@ ${blocoEditorial}`;
       agente: AGENTE,
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
-      sistema: sistemaDoCalendario(ctx, "mes"),
+      sistema: sistemaDoCalendario(ctx, "temas"),
       mensagens: [{ papel: "usuario", conteudo: instrucaoDa(f, k === 0) }],
       raciocinio,
       pesquisaWeb: true,
@@ -1281,6 +1452,7 @@ ${blocoEditorial}`;
 
   const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
   if (porFase.size === 0 || juntar().length === 0) {
+    // Sem temas a proposta sai; a pesquisa em andamento não acha mais a linha para gravar.
     await desfazer();
     if (falhas[0]) throw falhas[0].reason;
     throw new ErroHttp(502, "temas_vazios", "O estrategista não devolveu temas. Tente de novo.");
@@ -1304,7 +1476,8 @@ ${blocoEditorial}`;
   const publicos = juntos("publicos_prioritarios");
   const pilares = juntos("pilares");
   const hipoteses = juntos("hipoteses");
-  const diagnostico = [
+  // Texto das frentes (o de antes): vai ao Jev e fica de reserva se a pesquisa do mês não chegar.
+  const diagnosticoDasFrentesTexto = [
     texto(principal.diagnostico, 6000),
     publicos.length ? `Públicos prioritários: ${publicos.join("; ")}.` : "",
     pilares.length ? `Pilares: ${pilares.join("; ")}.` : "",
@@ -1312,14 +1485,46 @@ ${blocoEditorial}`;
     hipoteses.length ? `Hipóteses (dado indisponível): ${hipoteses.join("; ")}.` : "",
   ].filter(Boolean).join("\n\n");
 
-  const jev = await pontuarTemasComJev(temas, {
-    cliente: ctx.cliente.nome,
-    objetivo: parametros.objetivo,
-    oferta: parametros.oferta,
-    regiao: parametros.regiao,
-    diagnostico,
-  }, { clientId, propostaId, criadoPor: chamador.userId });
-  tempo.marcar("jev");
+  // O Jev e a espera curta pela pesquisa do mês correm juntos: os temas não esperam mais que a graça.
+  const [jev, pesquisa] = await Promise.all([
+    pontuarTemasComJev(temas, {
+      cliente: ctx.cliente.nome,
+      objetivo: parametros.objetivo,
+      oferta: parametros.oferta,
+      regiao: parametros.regiao,
+      diagnostico: diagnosticoDasFrentesTexto,
+    }, { clientId, propostaId, criadoPor: chamador.userId }),
+    pesquisaPronta ? Promise.resolve(pesquisaPronta) : comGraca(pesquisaP, GRACA_DO_DIAGNOSTICO_MS),
+  ]);
+  respondendo = true;
+  tempo.marcar("jev_e_pesquisa");
+  await fila;
+
+  // Diagnóstico estruturado: o da pesquisa; sem ela, o montado das frentes (origem "frentes").
+  const estruturado: DiagnosticoEstruturado | null = pesquisa?.estruturado ?? diagnosticoDasFrentes({
+    textoFase1: texto(principal.diagnostico, 6000),
+    temas,
+    pesquisas,
+    hipoteses,
+    motivo: pesquisa
+      ? "A pesquisa do mês falhou; este resumo veio das frentes de temas."
+      : "A pesquisa do mês ainda não terminou; este resumo veio das frentes de temas e o completo entra quando ela terminar.",
+  });
+  const diagnostico = pesquisa?.estruturado
+    ? textoCurtoDoDiagnostico(pesquisa.estruturado, { publicos, pilares, hipoteses })
+    : diagnosticoDasFrentesTexto;
+  if (estruturado) parametros.diagnostico_estruturado = { ...estruturado, texto_base: diagnostico };
+  parametros.diagnostico_estado = pesquisa?.estruturado ? "pronto" : pesquisa ? "falhou" : "atrasado";
+  if (pesquisa?.erro) parametros.diagnostico_erro = pesquisa.erro;
+  if (pesquisa) {
+    custo += pesquisa.custo;
+    if (pesquisa.saldo != null) saldo = pesquisa.saldo;
+    if (pesquisa.usoId) usos.push(pesquisa.usoId);
+  } else {
+    // Chegou depois da resposta: grava sozinha quando terminar (a função segue viva com waitUntil).
+    const tarde = pesquisaP.then((r) => gravarPesquisaAtrasada(servico, propostaId, clientId, diagnostico, r)).catch(() => undefined);
+    (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(tarde);
+  }
   temas = jev.temas;
   if (jev.jev_erro) parametros.jev_erro = jev.jev_erro;
   const avisos: string[] = [];

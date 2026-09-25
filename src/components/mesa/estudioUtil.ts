@@ -56,11 +56,41 @@ export function corpoDoReabrir(trabalhoId: string, motivo?: string): Record<stri
 }
 
 /**
- * Corpo do "Tirar fundo" (mesa-foto preparar, modo fundo_transparente): a
- * derivada sem fundo vai para o acervo e a tela põe na lâmina como elemento.
+ * Corpo do "Tirar fundo" pelo método antigo (mesa-foto preparar, modo
+ * fundo_transparente), usado só quando o removedor profissional está sem
+ * chave: a derivada sem fundo vai para o acervo e a tela põe na lâmina como
+ * elemento. `aceitarRedesenhado` (26/09): a equipe aceita o recorte do
+ * gerador mesmo sem a garantia de pixels iguais aos da foto (o servidor só
+ * recebe o campo quando a equipe escolhe "Usar o recorte do gerador").
  */
-export function corpoDoTirarFundo(clientId: string, imagemId: string): Record<string, unknown> {
-  return { acao: "preparar", client_id: clientId, imagem_id: imagemId, modo: "fundo_transparente" };
+export function corpoDoTirarFundo(clientId: string, imagemId: string, opcoes: { aceitarRedesenhado?: boolean } = {}): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "preparar", client_id: clientId, imagem_id: imagemId, modo: "fundo_transparente" };
+  if (opcoes.aceitarRedesenhado) corpo.aceitar_recorte_redesenhado = true;
+  return corpo;
+}
+
+/** Aviso quando o removedor profissional está sem chave e o Estúdio cai no método antigo. */
+export const AVISO_DO_METODO_ANTIGO =
+  "O removedor profissional ainda não tem chave: usei o método antigo, em que o gerador redesenha o assunto. Confira as bordas e o rosto.";
+
+/**
+ * O que a falha do "Tirar fundo" oferece (dono, 26/09: "quando falhar,
+ * oferecer na hora usar o recorte do gerador ou tentar de novo, sem esconder
+ * o erro"): `caminho` é a versão sem garantia de pixels que o servidor já
+ * guardou (imagem_sem_garantia ou recorte_do_gerador nos detalhes do erro);
+ * `podeAceitar` diz que o servidor aceita um novo pedido com
+ * aceitar_recorte_redesenhado. Sem nenhum dos dois, só "Tentar de novo".
+ */
+export function ofertaDoRecorteDoGerador(detalhes: Record<string, unknown> | null | undefined): { caminho: string | null; podeAceitar: boolean } {
+  const d = detalhes || {};
+  const caminhoDe = (v: unknown): string | null => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (v && typeof v === "object" && typeof (v as { storage_path?: unknown }).storage_path === "string") return String((v as { storage_path: string }).storage_path);
+    return null;
+  };
+  const caminho = caminhoDe(d.imagem_sem_garantia) || caminhoDe(d.recorte_do_gerador);
+  const podeAceitar = d.aceita_recorte_redesenhado === true || d.pode_aceitar_redesenhado === true;
+  return { caminho, podeAceitar };
 }
 
 /** A foto do acervo já é um recorte sem fundo (preparada na Mesa Foto). */
@@ -413,4 +443,75 @@ export function gravarTrabalhoNoCache(queryClient: ClienteDoCache, clientId: str
   if (!trabalho || !trabalho.id) return;
   queryClient.setQueriesData({ queryKey: ["mesa", "itens-do-mes", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
   queryClient.setQueriesData({ queryKey: ["mesa", "item-avulso", clientId] }, (antes) => comTrabalhoTrocado(antes, trabalho));
+}
+
+// ------------------------------------------------------------ referência na hora
+
+/** Máximo de referências por lâmina ou conjunto (espelho de MAX_NO_ESTUDIO em ReferenciasDoEstudio). */
+const MAX_REFERENCIAS_NA_HORA = 2;
+
+/** O texto colado é um link só (https ou http), sem espaço: vira referência pelo servidor. */
+export function ehLinkColado(texto: string | null | undefined): boolean {
+  const t = String(texto || "").trim();
+  if (!t || t.length > 2048 || /\s/.test(t)) return false;
+  return /^https?:\/\/[^/\s]+\.[^/\s]+/i.test(t);
+}
+
+/**
+ * A referência que acabou de chegar (arrastada, escolhida, colada ou por link)
+ * entra na hora na lista escolhida, por último; passou de 2, sai a mais antiga.
+ */
+export function juntarReferenciaNaHora(escolhidas: string[], id: string, max = MAX_REFERENCIAS_NA_HORA): { ids: string[]; saiu: string | null } {
+  const sem = escolhidas.filter((x) => x !== id);
+  const ids = sem.concat([id]);
+  if (ids.length <= max) return { ids, saiu: null };
+  return { ids: ids.slice(ids.length - max), saiu: ids[0] };
+}
+
+/** Corpo do importar link (Pinterest, Behance, endereço de imagem ou página com imagem de capa). */
+export function corpoDoImportarLink(clientId: string, url: string, marca: Record<string, unknown> = {}): Record<string, unknown> {
+  return { acao: "referencias", subacao: "importar_link", client_id: clientId, url: url.trim(), ...marca };
+}
+
+// ------------------------------------------------------------ logo da lâmina
+
+/** Qual logo do kit a lâmina usa (espelho de EscolhaDaLogo em supabase/functions/_shared/direcao-arte.ts). */
+export type EscolhaDaLogo = "auto" | "principal" | "alternativa";
+
+export const ROTULO_DA_LOGO: Record<EscolhaDaLogo, string> = { auto: "Automática", principal: "Principal", alternativa: "Alternativa" };
+
+/** A lâmina leva logo: a capa e a última (espelho de levaLogo do servidor). */
+export const laminaLevaLogo = (ordem: number, total: number) => ordem === 1 || ordem === total;
+
+/** Corpo do configurar da logo: na lâmina (null volta para a do conjunto) ou no conjunto. */
+export function corpoDaLogo(alvo: "lamina" | "conjunto", escolha: EscolhaDaLogo | null, ordem?: number): Record<string, unknown> {
+  if (alvo === "lamina") return { card: { ordem, logo: escolha } };
+  return { conjunto: { logo_escolhida: escolha || "auto" } };
+}
+
+// ------------------------------------------------------------ refinar texto
+
+/** Objetivos do "Refinar texto" (espelho de OBJETIVOS_DO_REFINO em supabase/functions/estudio-arte/refinar-texto.ts). */
+export const OBJETIVOS_DO_REFINO: { id: string; rotulo: string }[] = [
+  { id: "mais_curto", rotulo: "Mais curto" },
+  { id: "mais_forte", rotulo: "Mais forte" },
+  { id: "mais_claro", rotulo: "Mais claro" },
+  { id: "gancho", rotulo: "Gancho melhor" },
+  { id: "cta", rotulo: "CTA melhor" },
+  { id: "tom_da_marca", rotulo: "Tom da marca" },
+];
+
+/** Corpo do refinar_texto: só o que a equipe escolheu; texto vazio usa o gravado. */
+export function corpoDoRefinar(
+  trabalhoId: string,
+  e: { alvo: "lamina" | "legenda"; ordem?: number; texto?: string; objetivos: string[]; framework?: string; pedido?: string },
+): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "refinar_texto", trabalho_id: trabalhoId, alvo: e.alvo, objetivos: e.objetivos.slice(0, 4) };
+  if (e.alvo === "lamina" && typeof e.ordem === "number") corpo.ordem = e.ordem;
+  const t = (e.texto || "").trim();
+  if (t) corpo.texto = t;
+  if (e.framework) corpo.framework = e.framework;
+  const p = (e.pedido || "").trim();
+  if (p) corpo.pedido = p.slice(0, 600);
+  return corpo;
 }

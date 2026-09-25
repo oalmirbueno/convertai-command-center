@@ -52,7 +52,9 @@ describe("referências", () => {
     expect(e).toContain("[...destaques, ...resto]");
   });
   it("as escolhidas pela equipe são reproduzidas de perto com a identidade da marca", () => {
-    expect(corpoDe(estudio, "gerarCard")).toContain("reproduza de perto esta peça");
+    // 26/09: a escolha da equipe replica o layout (modo replicar) e fica no topo da prioridade dos anexos.
+    expect(corpoDe(estudio, "gerarCard")).toContain('"REFERÊNCIA 1 escolhida pela equipe (layout a replicar)"');
+    expect(corpoDe(estudio, "gerarCard")).toContain("blocoReplicarReferencia({ referencias: refsNoPrompt,");
   });
 });
 
@@ -220,10 +222,11 @@ describe("restante da auditoria (23/09 noite)", () => {
 describe("contínuo sem caixa de fundo e erro de crédito claro (Para Si Ótica, 23/09)", () => {
   it("no contínuo a lâmina inteira é redesenhada e só as bordas voltam do panorama", () => {
     const g = corpoDe(estudio, "gerarCard");
-    expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasDeDesenho(card, total, comLogo, quadro);");
+    expect(g).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasComLogo;");
     expect(estudio).toContain("const INTERIOR_DA_LAMINA: Area = { x0: 0.07, y0: 0, x1: 0.93, y1: 1 };");
     // Desde 25/09 a fatia nunca é reenquadrada: só as letras são coladas nela (sem faixa dupla na borda).
-    expect(g).toContain("await colarMudancasNaBase(baseFoto, img.png, areasDoTexto, {");
+    // 26/09: a logo é desenhada pelo gerador; a área dela é colada junto com a do texto (nunca apagada).
+    expect(g).toContain("await colarMudancasNaBase(baseFoto, img.png, areasComLogo.map((a) => ampliar(a, 0.03)));");
     expect(g).toContain("devolverOriginalAlinhado(baseFoto, img.png, areas, 28, { texto: fotoFixa })");
   });
   it("texto sobre foto ou panorama nunca vem numa caixa, e a foto não é escurecida", () => {
@@ -322,11 +325,12 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
     expect(proporcaoDoTrechoConfere(1024, 1536, 3)).toBe(false);
   });
 
-  it("3: no panorama a fatia fica intacta: letras coladas por cima e logo pelo código", () => {
+  it("3: no panorama a fatia fica intacta: letras e a logo gerada coladas por cima", () => {
     const g = corpoDe(estudio, "gerarCard");
-    // Desde 25/09 a logo entra pelo código em todos os modos; no panorama, na mesma passada do recorte das letras.
-    expect(g).toContain("logosNoCodigo = daMarca.logos;");
-    expect(g).toContain("logo: logoNoCodigo ? { bytes: logosNoCodigo[0].bytes, caixa: areaDaLogo, clara: logosNoCodigo[0].clara } : null,");
+    // 26/09: a logo é gerada junto com a arte também no contínuo, dentro da área reservada (aberta na colagem).
+    expect(g).toContain("const caixaDaLogoAqui = mascaraComLogo && comLogo ? caixaDaLogoNoQuadro(zonaDoTexto, capaDaSerie, quadro, aspectoDaLogo) : null;");
+    expect(g).toContain("const areasComLogo = caixaDaLogoAqui ? areasDoTexto.concat([ampliar(caixaDaLogoAqui, 0.02)]) : areasDoTexto;");
+    expect(g).not.toContain("logosNoCodigo");
     expect(imagem).toContain("export async function colarMudancasNaBase(");
     // O gerado vai para o enquadramento da base (inverso do devolverOriginalAlinhado).
     expect(imagem).toContain("const xg = (x: number) => (((x + 0.5) / W - al.cu) * al.escala + 0.5) * W - 0.5;");
@@ -393,9 +397,9 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
   it("9: o prompt do panorama não pede pose nova nem fundo claro atrás da logo", () => {
     const g = corpoDe(estudio, "gerarCard");
     expect(g).toContain("carrosselInfinito: infinito && !panorama,");
-    expect(g).toContain("if (capa && ordem > 2 && !replicar) {");
-    expect(g).toContain("NÃO copie a cena dele, a cena desta lâmina é a imagem 1 e já está pronta");
-    expect(g).toContain("NÃO copie a cena nem a foto dela");
+    // 26/09: da lâmina 2 em diante só a capa guia a série (a anterior saiu dos anexos).
+    expect(g).toContain("const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;");
+    expect(g).toContain("NÃO copie a cena nem a foto dela, a cena desta lâmina é a imagem 1");
     expect(corpoDe(estudio, "regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t) && !cenaPronta");
   });
 

@@ -38,7 +38,59 @@ export function normalizarAreas(bruto: unknown, max = 6): Area[] {
   return saida;
 }
 
+/**
+ * Largura e altura lidas só do cabeçalho (PNG, JPEG, WebP, GIF), sem abrir a
+ * imagem. Nulo quando o formato não é reconhecido.
+ */
+export function dimensoesDoCabecalho(b: Uint8Array): { largura: number; altura: number } | null {
+  const u16 = (i: number) => (b[i] << 8) | b[i + 1];
+  const u32 = (i: number) => ((b[i] << 24) >>> 0) + (b[i + 1] << 16) + (b[i + 2] << 8) + b[i + 3];
+  const le16 = (i: number) => b[i] | (b[i + 1] << 8);
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { largura: u32(16), altura: u32(20) };
+  }
+  if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return { largura: le16(6), altura: le16(8) };
+  if (b.length > 30 && b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45) {
+    const tipo = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (tipo === "VP8X") return { largura: 1 + (b[24] | (b[25] << 8) | (b[26] << 16)), altura: 1 + (b[27] | (b[28] << 8) | (b[29] << 16)) };
+    if (tipo === "VP8 ") return { largura: le16(26) & 0x3fff, altura: le16(28) & 0x3fff };
+    if (tipo === "VP8L") {
+      const v = b[21] | (b[22] << 8) | (b[23] << 16) | (b[24] << 24);
+      return { largura: (v & 0x3fff) + 1, altura: ((v >> 14) & 0x3fff) + 1 };
+    }
+    return null;
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      // SOF0..SOF15, menos DHT (C4), JPG (C8) e DAC (CC).
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { altura: u16(i + 5), largura: u16(i + 7) };
+      if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+      i += 2 + u16(i + 2);
+    }
+  }
+  return null;
+}
+
+/**
+ * Teto de pixels para abrir na função (limite de memória da Edge Function).
+ * 26/09: a logo nova da AcelerIQ tinha 7813 x 7813 px; o Storage recusa
+ * reduzir ("resolution too large"), o código abria o original (cerca de 240 MB
+ * só em pixels) e a função caía com "Memory limit exceeded" ao gerar a lâmina.
+ */
+export const MAX_PIXELS_PARA_ABRIR = 25_000_000;
+
+export class ImagemGrandeDemais extends Error {
+  constructor(public largura: number, public altura: number) {
+    super(`imagem_grande_demais: ${largura} x ${altura} px (máximo ${MAX_PIXELS_PARA_ABRIR / 1_000_000} MP)`);
+  }
+}
+
 export async function decodificar(bytes: Uint8Array): Promise<Image> {
+  const d = dimensoesDoCabecalho(bytes);
+  if (d && d.largura * d.altura > MAX_PIXELS_PARA_ABRIR) throw new ImagemGrandeDemais(d.largura, d.altura);
   const img = await Image.decode(bytes);
   if (!(img instanceof Image)) throw new Error("imagem_animada");
   return img;
@@ -493,8 +545,10 @@ export function cobrirComFoco(img: Image, largura = LARGURA_LAMINA, altura = ALT
 // ------------------------------------------------ logo aplicada em código
 
 /**
- * Logo oficial posta pelo código na lâmina com foto real: o gerador não
- * redesenha a logo (saía torta, dentro de uma caixa fosca). Cabe na caixa,
+ * Logo oficial posta pelo código por cima de uma imagem. Desde 26/09 as
+ * lâminas do Estúdio (e os criativos do Estúdio Ads) NÃO usam mais: a logo é
+ * gerada junto com a arte pelo gerador (pedido do dono). Fica para quem ainda
+ * precisar de uma aplicação exata fora das lâminas. Cabe na caixa,
  * alinhada ao lado da caixa, e ganha um halo suave do valor oposto só quando
  * a foto atrás tem o mesmo valor dela (logo escura em foto escura). Não
  * escurece a foto: o halo acompanha o desenho da logo, sem caixa.
@@ -576,24 +630,39 @@ function desfocarCaixa(m: Float32Array, W: number, H: number, r: number): Float3
 }
 
 /**
- * Tom dominante e claridade da logo, para o prompt pôr atrás dela um fundo de
- * valor oposto (logo azul nunca sobre fundo azul). Ignora pixels transparentes
- * e, em logo sem transparência, o fundo quase branco.
+ * Tom dominante, claridade e proporção (largura / altura do desenho) da logo:
+ * o prompt pede um fundo de valor oposto atrás dela (logo azul nunca sobre
+ * fundo azul) e o tamanho pela forma dela (tamanhoDaLogo, direcao-arte.ts).
+ * Ignora pixels transparentes e, em logo sem transparência, o fundo quase branco.
  */
-export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | null; clara: boolean }> {
+export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | null; clara: boolean; aspecto: number | null }> {
   const img = await decodificar(bytes);
   const pequena = img.width > 200 ? img.clone().resize(200, Image.RESIZE_AUTO) : img;
   const b = pequena.bitmap;
+  const PW = pequena.width;
   let r = 0, g = 0, bl = 0, n = 0, opacos = 0;
+  // Caixa do desenho: a dos pixels opacos com tinta (sem o fundo branco) e, na logo branca, a dos opacos.
+  const tinta = { x0: PW, y0: pequena.height, x1: -1, y1: -1 };
+  const opaca = { x0: PW, y0: pequena.height, x1: -1, y1: -1 };
+  const crescer = (c: typeof tinta, x: number, y: number) => {
+    if (x < c.x0) c.x0 = x;
+    if (x > c.x1) c.x1 = x;
+    if (y < c.y0) c.y0 = y;
+    if (y > c.y1) c.y1 = y;
+  };
   for (let i = 0; i < b.length; i += 4) {
     if (b[i + 3] < 128) continue;
     opacos++;
+    const p = i / 4, x = p % PW, y = (p - x) / PW;
+    crescer(opaca, x, y);
     const claro = b[i] > 235 && b[i + 1] > 235 && b[i + 2] > 235;
     if (claro) continue;
+    crescer(tinta, x, y);
     r += b[i]; g += b[i + 1]; bl += b[i + 2]; n++;
   }
+  const proporcao = (c: typeof tinta) => (c.x1 >= c.x0 && c.y1 >= c.y0 ? Math.round(((c.x1 - c.x0 + 1) / (c.y1 - c.y0 + 1)) * 100) / 100 : null);
   // Quase tudo branco: logo branca (versão para fundo escuro).
-  if (!opacos || n < opacos * 0.08) return { tom: "#FFFFFF", clara: true };
+  if (!opacos || n < opacos * 0.08) return { tom: "#FFFFFF", clara: true, aspecto: proporcao(opaca) };
   r = Math.round(r / n); g = Math.round(g / n); bl = Math.round(bl / n);
   const lin = (v: number) => {
     const s = v / 255;
@@ -601,7 +670,7 @@ export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | n
   };
   const luminancia = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(bl);
   const hex = `#${[r, g, bl].map((v) => v.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
-  return { tom: hex, clara: luminancia > 0.45 };
+  return { tom: hex, clara: luminancia > 0.45, aspecto: proporcao(tinta) };
 }
 
 /**
@@ -613,10 +682,16 @@ export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | n
  * fundo claro e sem cor ligado à borda vira transparente (preenchimento a
  * partir das bordas, então o branco de dentro da logo fica) e a franja de 1 a
  * 2 px em volta do desenho perde o resto do fundo (sem contorno branco).
+ *
+ * `aparar` (26/09): tira a margem transparente em volta do desenho ANTES de
+ * reduzir. Logo que chega num quadro grande e quase vazio (ex.: 7.813 px com a
+ * marca pequena no meio) virava uma logo minúscula no anexo, e o gerador a
+ * copiava minúscula; aparada, o anexo é a logo inteira, na resolução certa.
  */
-export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
+export async function logoLimpa(bytes: Uint8Array, opcoes: { aparar?: boolean } = {}): Promise<Uint8Array> {
   const img = await decodificar(bytes);
-  const l = img.width > 512 || img.height > 512 ? img.clone().contain(512, 512) : img.clone();
+  const fonte = opcoes.aparar ? aparadaPeloAlfa(img) ?? img : img;
+  const l = fonte.width > 512 || fonte.height > 512 ? fonte.clone().contain(512, 512) : fonte.clone();
   const W = l.width, H = l.height, b = l.bitmap;
   // Cor do fundo pela borda: a média dos pixels opacos, claros e sem cor da moldura.
   let sr = 0, sg = 0, sb = 0, nClaros = 0, nBorda = 0;
@@ -670,8 +745,12 @@ export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
     if (y > 0) pilha.push(p - W);
     if (y < H - 1) pilha.push(p + W);
   }
-  // Nada ou quase tudo limpo: a logo não tinha fundo falso (ou é branca); vai como veio.
-  if (limpos < W * H * 0.005 || limpos > W * H * 0.97) return bytes;
+  // Nada ou quase tudo limpo: a logo não tinha fundo falso (ou é branca); vai como veio (aparada, se pedido).
+  if (limpos < W * H * 0.005 || limpos > W * H * 0.97) {
+    if (!opcoes.aparar) return bytes;
+    const semLimpeza = fonte.width > 512 || fonte.height > 512 ? fonte.clone().contain(512, 512) : fonte;
+    return fonte === img && semLimpeza === img ? bytes : await semLimpeza.encode(1);
+  }
   // Franja: 2 passadas nos pixels colados ao fundo tirado; o que é quase a cor
   // do fundo fica transparente em proporção e a cor perde a mistura com ele.
   for (let passe = 0; passe < 2; passe++) {
@@ -699,7 +778,38 @@ export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
       visto[p] = 2;
     }
   }
-  return await l.encode(1);
+  // Fundo branco tirado agora: a margem que ele ocupava também sai.
+  return await (opcoes.aparar ? aparadaPeloAlfa(l) ?? l : l).encode(1);
+}
+
+/**
+ * A imagem cortada na caixa do desenho (pixels com alfa de 16 para cima), com
+ * uma folga de 3%. Null quando não há o que cortar (o desenho já ocupa quase
+ * tudo) ou quando a imagem é toda transparente. Amostra a cada N px nas
+ * imagens grandes (limite de CPU).
+ */
+function aparadaPeloAlfa(img: Image, folga = 0.03): Image | null {
+  const W = img.width, H = img.height, b = img.bitmap;
+  const passo = Math.max(1, Math.floor(Math.max(W, H) / 1024));
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y += passo) {
+    for (let x = 0; x < W; x += passo) {
+      if (b[(y * W + x) * 4 + 3] < 16) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+  const mx = Math.round((x1 - x0 + 1) * folga) + passo, my = Math.round((y1 - y0 + 1) * folga) + passo;
+  x0 = Math.max(0, x0 - mx);
+  y0 = Math.max(0, y0 - my);
+  x1 = Math.min(W - 1, x1 + mx);
+  y1 = Math.min(H - 1, y1 + my);
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  if (w >= W * 0.97 && h >= H * 0.97) return null;
+  return img.clone().crop(x0, y0, w, h);
 }
 
 /**
@@ -739,6 +849,15 @@ function valorNaCaixa(img: Image, caixa: Area): number {
     }
   }
   return n ? soma / n : 128;
+}
+
+/**
+ * Claridade média (0 a 255) de uma área (fração do quadro) da imagem: o
+ * Estúdio escolhe a logo que contrasta com a foto ou a fatia do contínuo antes
+ * de pedir ao gerador que a desenhe ali. Uma decodificação, amostra a cada 2 px.
+ */
+export async function valorMedioNaArea(bytes: Uint8Array, area: Area): Promise<number> {
+  return valorNaCaixa(await decodificar(bytes), area);
 }
 
 /** Entre a principal e a alternativa, a que contrasta com o fundo da caixa (clara no escuro, escura no claro). */
@@ -832,8 +951,9 @@ export async function telaDoRecorte(
 /**
  * Acabamento da lâmina em UMA decodificação (limite de CPU): cola de novo o
  * recorte original por cima do que o gerador devolveu (a pessoa e o produto
- * ficam idênticos; o gerador só fez o entorno) e aplica a logo oficial na
- * caixa dela, escolhendo a versão que contrasta. Caixas em fração do quadro
+ * ficam idênticos; o gerador só fez o entorno). A opção `logo` (aplicar a
+ * logo oficial na caixa, na versão que contrasta) não é mais usada pelas
+ * lâminas desde 26/09: a logo é gerada junto com a arte. Caixas em fração do quadro
  * final; `proporcaoDoQuadro` (largura / altura) mapeia para o recorte central
  * quando a imagem voltou em outra proporção (reserva 2:3 do 4:5).
  */

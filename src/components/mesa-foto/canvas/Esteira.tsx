@@ -4,7 +4,7 @@ import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { useClients } from "@/hooks/useSupabaseData";
 import { TODOS_OS_CLIENTES, useEsteira, type ProdutoDaEsteira } from "../canvasApi";
-import { PAINEL } from "./comum";
+import { FLUTUANTE, PAINEL, useRodaPresa } from "./comum";
 
 /**
  * Esteira de produtos no topo do quadro (dono, 25/09: "em cima, uma esteira
@@ -25,13 +25,15 @@ export function EsteiraDeProdutos({ onPor }: { onPor: (p: ProdutoDaEsteira) => v
   const [filtro, setFiltro] = useState<string>(clientId);
   const [aberta, setAberta] = useState(true);
   const esteira = useEsteira(filtro || clientId, aberta);
+  // Roda na esteira anda a fila de produtos para o lado; nunca mexe no quadro nem na página.
+  const roda = useRodaPresa<HTMLDivElement>(true);
   const lista = esteira.data || [];
   const nomeDoCliente = (id: string) => {
     const c = ((clientes.data || []) as any[]).find((x) => x && x.id === id);
     return c ? String(c.company_name || c.full_name || "cliente") : "outro cliente";
   };
   return (
-    <div className={`${PAINEL} flex min-w-0 items-center rounded-2xl px-2 py-1.5`} data-esteira-de-produtos="" aria-label="Esteira de produtos">
+    <div ref={roda} className={`${PAINEL} ${FLUTUANTE} flex min-w-0 items-center rounded-2xl px-2 py-1.5`} data-esteira-de-produtos="" data-rolagem-propria="" aria-label="Esteira de produtos">
       <div className="mr-2 flex shrink-0 flex-col">
         <span className="flex items-center text-[10.5px] font-semibold uppercase tracking-wider text-zinc-400">
           <Box className="mr-1 h-3 w-3 text-emerald-300" /> Produtos
@@ -40,7 +42,7 @@ export function EsteiraDeProdutos({ onPor }: { onPor: (p: ProdutoDaEsteira) => v
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
           aria-label="Produtos de qual cliente"
-          className="mt-0.5 h-7 w-36 rounded-md border border-white/10 bg-zinc-900/70 px-1.5 text-[11.5px] text-zinc-100"
+          className="mt-0.5 h-7 w-28 rounded-md sm:w-36 border border-white/10 bg-zinc-900/70 px-1.5 text-[11.5px] text-zinc-100"
         >
           <option value={clientId}>Deste cliente</option>
           <option value={TODOS_OS_CLIENTES}>Todos os clientes</option>
@@ -55,7 +57,7 @@ export function EsteiraDeProdutos({ onPor }: { onPor: (p: ProdutoDaEsteira) => v
         </select>
       </div>
       {aberta && (
-        <div className="flex min-w-0 flex-1 items-center overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="flex min-w-0 flex-1 items-center overflow-x-auto overscroll-contain" data-fila-da-esteira="" style={{ WebkitOverflowScrolling: "touch" }}>
           {esteira.isLoading && <Loader2 className="mx-2 h-4 w-4 animate-spin text-zinc-400" />}
           {!esteira.isLoading && !lista.length && <p className="px-2 text-[11.5px] text-zinc-500">Nenhum produto confirmado {filtro === clientId ? "neste cliente" : "aqui"}.</p>}
           {lista.map((p) => {

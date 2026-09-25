@@ -1408,7 +1408,10 @@ describe("modelos e canvas: contratos da função", () => {
     expect(modelosFonte).toContain('if (corpo.etica_confirmada !== true) {');
     expect(modelosFonte).toContain('if (!motorId) throw new ErroDeRegra(400, "modelo_imagem_obrigatorio"');
     expect(modelosFonte).toContain('"motor_da_ancora"');
-    expect(modelosFonte).toContain('if (!aceitaResolucao(caps, "4K")) {');
+    // 4K sempre num gerador cuja capacidade inclui 4K (26/09: o OpenRouter recusou 4K no gemini-3-pro-image normal).
+    expect(modelosFonte).toContain("async function geradorDo4K(");
+    expect(modelosFonte).toContain('if (aceitaResolucao(caps, "4K")) {');
+    expect(modelosFonte).toContain('"resolucao_nao_suportada"');
     expect(modelosFonte).toContain('papel: "detalhe",');
     expect(modelosFonte).toContain('derivada_de: origem.id,');
     expect(modelosFonte).toContain('modo: "detalhe",');
@@ -1864,5 +1867,200 @@ describe("diretor de fotografia atual (2025/2026)", () => {
     expect(ESTETICA_NO_PROMPT).toContain("sem fundo degradê");
     expect(calculosFonte.split("linhas.push(ESTETICA_NO_PROMPT);").length - 1).toBe(2);
     expect(ler("supabase/functions/mesa-foto/receitas.ts")).not.toContain("gradiente");
+  });
+});
+
+// ================================================================== 26/09: 4K, clones e Book
+
+import { candidatosAo4K, MOTOR_DETALHE as MOTOR_DO_4K } from "../../supabase/functions/mesa-foto/personas";
+import {
+  caminhoNoDestino,
+  identidadesDaVariacao,
+  normalizarSugestoesDeVariacao,
+  planoDaTransferencia,
+  PRESET_UNIFORME,
+  presetPorId,
+  tracosDasConferencias,
+  usaLogoDaMarca,
+} from "../../supabase/functions/mesa-foto/clones-regras";
+import {
+  categoriasDoAssunto,
+  lerAssunto,
+  lerPedidoDoBook,
+  lerReferenciasDoBook,
+  lerSelecaoDoBook,
+  normalizarRespostaDoDiretorDoBook,
+  promptDoBook,
+} from "../../supabase/functions/mesa-foto/book-regras";
+import { capacidadesDaListaDeImagens as capsDaLista, capacidadesDoModelo as capsDoModelo, RESOLUCOES_RECUSADAS } from "../../supabase/functions/_shared/capacidades-imagem";
+
+describe("26/09: Detalhar em 4K só em gerador com 4K de verdade", () => {
+  it("o padrão da pessoa é a preview; a normal nunca recebe 4K, nem se a sincronização disser que sim", () => {
+    expect(MOTOR_DO_4K.pessoa).toBe("openrouter:google/gemini-3-pro-image-preview");
+    expect(candidatosAo4K("pessoa", null)[0]).toBe("openrouter:google/gemini-3-pro-image-preview");
+    expect(candidatosAo4K("produto", "openrouter:x")).toEqual(["openrouter:x", "openrouter:bytedance-seed/seedream-4.5", "openrouter:google/gemini-3-pro-image-preview", "openrouter:google/gemini-3.1-flash-image-preview"]);
+    expect(RESOLUCOES_RECUSADAS.map((r) => r.slug)).toEqual(["google/gemini-3-pro-image", "google/gemini-3.1-flash-image"]);
+    expect(RESOLUCOES_RECUSADAS[0].motivo).toMatch(/26\/09\/2026/);
+    const normal = capsDoModelo({ provedor: "openrouter", modelo_api: "google/gemini-3-pro-image", capacidades: { resolucoes: ["1K", "2K", "4K"] } });
+    expect(normal.resolucoes).toEqual(["1K", "2K"]);
+    const lista = capsDaLista({ id: "google/gemini-3.1-flash-image", architecture: { output_modalities: ["image", "text"] }, supported_parameters: { resolution: { values: ["512", "1K", "2K", "4K"] } } });
+    expect(lista.resolucoes).toEqual(["512", "1K", "2K"]);
+    const cap = ler("supabase/functions/_shared/capacidades-imagem.ts");
+    expect(cap).toContain("image_size '4K' is not supported by google/gemini-3-pro-image");
+  });
+});
+
+describe("26/09: clones (identidade da folha, contexto, uniforme, transferência)", () => {
+  it("a variação leva a real principal e TODAS as vistas aprovadas, na ordem da folha, até 8", () => {
+    const reais = [{ id: "r1", tipo: "real" as const, vista: null }, { id: "r2", tipo: "real" as const, vista: null, principal: true }];
+    const folha = [
+      { id: "f-corpo", tipo: "folha" as const, vista: "corpo_inteiro" },
+      { id: "f-perfil", tipo: "folha" as const, vista: "perfil_esq" },
+      { id: "f-frente", tipo: "folha" as const, vista: "frente" },
+      { id: "f-34", tipo: "folha" as const, vista: "tres_quartos_esq" },
+    ];
+    expect(identidadesDaVariacao(reais, folha, 14).map((x) => x.id)).toEqual(["r2", "f-frente", "f-34", "f-perfil", "f-corpo", "r1"]);
+    expect(identidadesDaVariacao(reais, folha, 3).map((x) => x.id)).toEqual(["r2", "f-frente", "f-34"]);
+    expect(identidadesDaVariacao(reais, [], 8).map((x) => x.id)).toEqual(["r2", "r1"]);
+  });
+
+  it("os traços lidos na conferência se repetem no prompt; uniforme anexa a logo; estilo vem depois; sem travessão", () => {
+    const tracos = tracosDasConferencias([
+      { leitura: { tracos: [{ traco: "nariz", nas_reais: "nariz fino e reto" }, { traco: "olhos", nas_reais: "não aparece" }] } },
+      { leitura: { tracos: [{ traco: "pele_e_marcas", nas_reais: "pinta acima do lábio, à esquerda dela" }] } },
+      null,
+    ]);
+    expect(tracos).toEqual(["nariz: nariz fino e reto", "pele, pintas e marcas: pinta acima do lábio, à esquerda dela"]);
+    const fontes = [{ id: "r1", tipo: "real" as const, vista: null, principal: true }, { id: "f1", tipo: "folha" as const, vista: "frente" }];
+    const pedido = lerPedidoDeVariacao({ preset: PRESET_UNIFORME });
+    expect(usaLogoDaMarca(pedido)).toBe(true);
+    expect(presetPorId(PRESET_UNIFORME)!.rotulo).toBe("Uniforme da marca");
+    const p = promptDaVariacaoDoClone({ nome: "Paula", fontes, invariantes: [], pedido, formato: "4:5", tracos, logo: { indice: 4, paleta: "verde #1B5E20" }, estilo: { inicio: 3, legendas: ["jardim ao sol"] } });
+    expect(p).toContain("Imagem 2: FOLHA DE IDENTIDADE APROVADA");
+    expect(p).toContain("IDENTIDADE APROVADA");
+    expect(p).toContain("TRAÇOS DA PESSOA (lidos nas fotos reais, repita todos): nariz: nariz fino e reto");
+    expect(p).toContain("Imagem 3: REFERÊNCIA SÓ DE ESTILO (jardim ao sol)");
+    expect(p).toContain("Imagem 4: LOGO OFICIAL DA MARCA");
+    expect(p).toContain("sem redesenhar");
+    expect(p).toContain("nas cores da marca (verde #1B5E20)");
+    expect(p).not.toMatch(/[—–]/);
+  });
+
+  it("sugestões pelo contexto: as que mudam a identidade ou pedem sexualização saem", () => {
+    const r = normalizarSugestoesDeVariacao({
+      negocio: "Paisagismo",
+      sugestoes: [
+        { rotulo: "Podando o jardim", roupa: "camisa de trabalho verde", cenario: "jardim residencial", pose: "podando", expressao: "concentrado", luz: "manhã", enquadramento: "meio_corpo", porque: "post de serviço" },
+        { rotulo: "Rejuvenescido", roupa: "camiseta, deixe mais jovem", cenario: "jardim", pose: "em pé", expressao: "", luz: "", enquadramento: "close", porque: "" },
+        { rotulo: "Na piscina", roupa: "roupa sensual", cenario: "piscina", pose: "", expressao: "", luz: "", enquadramento: "x", porque: "" },
+        { rotulo: "Vazia", roupa: "", cenario: "", pose: "" },
+      ],
+    });
+    expect(r.sugestoes.map((s) => s.rotulo)).toEqual(["Podando o jardim"]);
+    expect(r.sugestoes[0]).toMatchObject({ roupa: "camisa de trabalho verde", enquadramento: "meio_corpo", porque: "post de serviço" });
+    expect(r.descartadas).toBe(3);
+  });
+
+  it("transferência: muda a pasta do cliente, copia o que o cliente antigo usa e reaproveita o que já existe no destino", () => {
+    const A = "aaaaaaaa-0000-4000-8000-00000000000a";
+    const B = "bbbbbbbb-0000-4000-8000-00000000000b";
+    expect(caminhoNoDestino(`${A}/foto/originais/x.jpg`, A, B)).toBe(`${B}/foto/originais/x.jpg`);
+    expect(caminhoNoDestino("workspace://x.jpg", A, B)).toBe("workspace://x.jpg");
+    const plano = planoDaTransferencia({
+      origem: A,
+      destino: B,
+      imagens: [
+        { id: "real", storage_path: `${A}/foto/originais/real.jpg`, sha256: "s1", derivada_de: null },
+        { id: "var1", storage_path: `${A}/foto/clones/c/v1.png`, sha256: "s2", derivada_de: "real" },
+        { id: "dup", storage_path: `${A}/foto/originais/dup.jpg`, sha256: "s3", derivada_de: null },
+        { id: "var2", storage_path: `${A}/foto/clones/c/v2.png`, sha256: "s4", derivada_de: "dup" },
+        { id: "var3", storage_path: `${A}/foto/clones/c/v3.png`, sha256: null, derivada_de: "fora" },
+      ],
+      presas: ["real"],
+      noDestino: { s3: "ja-no-destino" },
+    });
+    expect(plano.copiar).toEqual([{ id: "real", de: `${A}/foto/originais/real.jpg`, para: `${B}/foto/originais/real.jpg` }]);
+    expect(plano.reaproveitar).toEqual([{ id: "dup", destino_id: "ja-no-destino" }]);
+    expect(plano.mover.map((m) => [m.id, m.derivada_de])).toEqual([["var1", "copia:real"], ["var2", "ja-no-destino"], ["var3", null]]);
+    expect(plano.mover[0].para).toBe(`${B}/foto/clones/c/v1.png`);
+  });
+
+  it("a função: transferir com acesso aos dois, desfaz se falhar, custo fica no antigo; aprovar sem assinar de novo; uniforme sem logo recusa", () => {
+    const c = ler("supabase/functions/mesa-foto/clones.ts");
+    expect(c).toContain("async function cloneTransferir(");
+    expect(c).toContain("await f.garantirAcesso(ch, destino);");
+    expect(c).toContain('"mesmo_cliente"');
+    expect(c).toContain("custo_fica_no_cliente_antigo: true");
+    expect(c).toContain("O custo e o uso de IA já cobrados continuam no cliente antigo.");
+    expect(c).toContain('await falhou("as fotos", e);');
+    expect(c).toContain("clone_transferir: cloneTransferir,");
+    expect(c).toContain("clone_variacoes_sugerir: cloneVariacoesSugerir,");
+    expect(c).toContain('"sem_logo_da_marca"');
+    expect(c).toContain('identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas)');
+    const decidir = c.slice(c.indexOf("async function cloneImagemDecidir"), c.indexOf("type ExtrasDaVariacao"));
+    expect(decidir).toContain("return f.json({ imagem: data, clone: atual");
+    expect(decidir).not.toContain("chamarTexto");
+    expect(decidir).not.toContain("jevPerguntar");
+    expect(c).toMatch(/ACOES_LONGAS_DE_CLONES = \[[^\]]*"clone_variacoes_sugerir"[^\]]*"clone_transferir"/);
+    expect(c).not.toMatch(/[—–]/);
+  });
+});
+
+describe("26/09: Book (estúdio do produto ou da pessoa)", () => {
+  const U = (n: number) => `cccccccc-0000-4000-8000-00000000000${n}`;
+  it("assunto, referências, pedidos e seleção lidos com as regras (sem pessoa conhecida, sem travessão)", () => {
+    expect(lerAssunto({ tipo: "produto", id: U(1) })).toEqual({ tipo: "produto", id: U(1) });
+    expect(() => lerAssunto({ tipo: "outro", id: U(1) })).toThrow(/assunto do book/);
+    expect(lerReferenciasDoBook([{ tipo: "acervo", id: U(1) }, { tipo: "acervo", id: U(1) }, { tipo: "web", id: U(2) }, { tipo: "biblioteca", id: U(3) }])).toEqual([{ tipo: "acervo", id: U(1) }, { tipo: "biblioteca", id: U(3) }]);
+    const p = lerPedidoDoBook({ prompt: "o produto na bancada — luz de janela, igual à foto", formato: "9:16", origem: { tipo: "biblioteca", id: U(4) }, referencias: [U(1), "x"] });
+    expect(p).toMatchObject({ formato: "9:16", origem: { tipo: "biblioteca", id: U(4) }, referencias: [U(1)] });
+    expect(p.prompt).not.toMatch(/[—–]/);
+    expect(() => lerPedidoDoBook({ prompt: "parecida com a Anitta" })).toThrow();
+    expect(() => lerPedidoDoBook({ prompt: "" })).toThrow(/Escreva/);
+    expect(lerSelecaoDoBook([U(1), U(1), "x", U(2)])).toEqual([U(1), U(2)]);
+    expect(categoriasDoAssunto("produto", "cosmetico")[0]).toBe("cosmetico");
+    expect(categoriasDoAssunto("clone")).toContain("pessoa");
+  });
+
+  it("prompt: identidade primeiro, estilo depois só como estilo, o que não muda e nunca escurecer", () => {
+    const t = promptDoBook({
+      assunto: { tipo: "produto", nome: "Mouse M720", invariantes: ["logotipo na lateral"], observado: ["corpo grafite"], lacunas: ["base não fotografada"] },
+      identidades: [{ papel: "identidade", nome: "frente.jpg" }, { papel: "detalhe" }],
+      estilo: ["travertino ao sol"],
+      pedido: "sobre bancada de travertino, sol de fim de tarde",
+      formato: "4:5",
+    });
+    expect(t).toContain("Imagem 1: IDENTIDADE do assunto");
+    expect(t).toContain("Imagem 3: REFERÊNCIA SÓ DE ESTILO (travertino ao sol)");
+    expect(t).toContain("O QUE NUNCA MUDA: logotipo na lateral");
+    expect(t).toContain("COMO A FOTO DEVE SER (pedido do book): sobre bancada de travertino");
+    expect(t).toContain("nunca escureça a foto");
+    expect(t).toContain("não invente; deixe fora de quadro");
+    expect(t).not.toMatch(/[—–]/);
+    const d = normalizarRespostaDoDiretorDoBook({ resposta: "Montei a abertura e os detalhes.", pedidos: [{ titulo: "Abertura", prompt: "produto no centro", formato: "4:5" }, { titulo: "x", prompt: "igual à Taylor Swift" }] });
+    expect(d.pedidos).toHaveLength(1);
+    expect(d.pedidos[0].origem.tipo).toBe("diretor");
+    expect(d.descartados).toBe(1);
+  });
+
+  it("a função registra o Book (ações, fôlego, estimativa) e a migration 05 não foi aplicada", () => {
+    const mapa = fonte.slice(fonte.indexOf("const ACOES:"), fonte.indexOf("const ACOES_LONGAS"));
+    expect(mapa).toContain("...BOOK.acoes");
+    const longas = fonte.slice(fonte.indexOf("const ACOES_LONGAS"), fonte.indexOf("Deno.serve"));
+    expect(longas).toContain("...ACOES_LONGAS_DO_BOOK");
+    expect(fonte).toContain("if (ALVOS_DE_ESTIMATIVA_DO_BOOK.includes(acao)) return await BOOK.estimar(ch, corpo, acao);");
+    const b = ler("supabase/functions/mesa-foto/book.ts");
+    for (const acao of ["books_listar", "book_criar", "book_ler", "book_salvar", "book_diretor", "book_gerar"]) expect(b).toContain(`${acao}:`);
+    expect(b).toContain("timeoutMs: 300_000");
+    expect(b).toContain("d.gerarVariacao(ch, c,");
+    expect(b).toContain('"kit_de_pessoa"');
+    expect(b).toContain('"foto_de_pessoa"');
+    expect(b).toContain("gerada: true,");
+    expect(b).not.toMatch(/[—–]/);
+    const sql = ler("docs/mesa-foto/migrations/05_book.sql");
+    expect(sql).toContain("NÃO APLICADA");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.foto_books");
+    expect(sql).toContain("public.can_access_client(client_id)");
+    expect(sql).not.toMatch(/[—–]/);
   });
 });

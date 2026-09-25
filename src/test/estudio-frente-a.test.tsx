@@ -21,6 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const ler = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const estudio = ler("supabase/functions/estudio-arte/index.ts");
 const imagemLocal = ler("supabase/functions/_shared/imagem-local.ts");
+const direcaoFonte = ler("supabase/functions/_shared/direcao-arte.ts");
 const corpoDe = (nome: string) => {
   const i = estudio.indexOf(`function ${nome}(`);
   const fins = [estudio.indexOf("\nasync function ", i + 10), estudio.indexOf("\nfunction ", i + 10), estudio.indexOf("\n// ----", i + 10)].filter((x) => x > 0);
@@ -74,6 +75,7 @@ import {
   FORMATOS_DO_POST as FORMATOS_DA_TELA,
   formatoDoTrabalho,
   jaSemFundo,
+  ofertaDoRecorteDoGerador,
   proporcaoDoFormato,
   versaoForaDoFormato,
 } from "@/components/mesa/estudioUtil";
@@ -160,7 +162,7 @@ beforeEach(() => {
 
 describe("1. trabalho entregue: reabrir para corrigir", () => {
   it("o servidor tem a ação reabrir: nova rodada, histórico da entrega e mesmas lâminas", () => {
-    expect(estudio).toContain("  reabrir,\n};");
+    expect(estudio).toContain("  reabrir,\n");
     const r = corpoDe("reabrir");
     expect(r).toContain("if (!estaEntregue(t)) return json({ trabalho: t, ja_aberto: true, custo_usd: 0 });");
     expect(r).toContain("entrega_rodada: rodada + 1,");
@@ -246,39 +248,45 @@ describe("1. trabalho entregue: reabrir para corrigir", () => {
 
 // ------------------------------------------------------------ 2. logo
 
-describe("2. logo sem caixa branca, pelo código em todos os modos", () => {
+describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (26/09)", () => {
   it("o prompt nunca pede fundo claro atrás da logo e proíbe caixa", () => {
     for (const clara of [true, false]) {
       const p = promptDaLamina(card(), marca(), { total: 1, carrosselInfinito: false, levaLogo: true, logo: { tom: "#0B2A4A", clara } });
       expect(p).not.toContain("claro e liso");
       expect(p).toContain("sem caixa, cartão, faixa, retângulo ou fundo branco atrás");
+      expect(p).toContain("Logo oficial anexada, desenhada junto com a arte e idêntica ao anexo");
     }
-    const noCodigo = promptDaLamina(card(), marca(), { total: 1, carrosselInfinito: false, levaLogo: true, logoNoCodigo: true });
-    expect(noCodigo).toContain("NÃO desenhe logo");
-    expect(noCodigo).toContain("sem caixa, cartão, faixa ou mancha clara reservando lugar para ela");
+    // Não existe mais a logo pelo código: o gerador sempre desenha a logo anexada.
+    expect(direcaoFonte).not.toContain("logoNoCodigo");
   });
 
-  it("gerar_card: logo limpa aplicada pelo código em todos os modos, com a versão que contrasta", () => {
+  it("gerar_card: a logo escolhida no kit vai anexada ao gerador em todos os modos; nada é colado pelo código", () => {
     const g = corpoDe("gerarCard");
-    expect(g).toContain("const daMarca = await logosDaMarca(t.client_id, kit);");
-    expect(g).toContain("logosNoCodigo = daMarca.logos;");
-    // replicar, foto composta, foto real, recorte e normal passam pelo acabamento.
-    expect((g.match(/await acabar\(/g) ?? []).length).toBe(5);
-    expect(corpoDe("logosDaMarca")).toContain("tomAlt.clara !== tom.clara");
-    expect(estudio).toContain("logoNoCodigo }),");
-    expect(blocoReplicarReferencia({ referencias: [{ indice: 1 }], fotos: [], logoNoCodigo: true })).toContain("não desenhe logo nem caixa para ela");
+    expect(g).toContain("const logosKit = leva ? await logosDoKit(t.client_id, kit, escolhaDaLamina(t, card)) : [];");
+    expect(g).toContain("const logo = escolherLogoDoKit(logosKit, t, card, valorDoFundo);");
+    expect(g).toContain('if (logo) candidatos.push({ tipo: "logo", rotulo: LEGENDA_DA_LOGO, carregar: async () => logo.imagem });');
+    expect(g).not.toContain("acabar(");
+    expect(g).not.toContain("logosNoCodigo");
+    // Só o recorte da pessoa ou do produto volta por cima (sem logo).
+    expect(g).toContain("recorte: { imagem: recorteNaLamina.recorte, posicao: recorteNaLamina.posicao, larguraDaTela: quadro.largura },");
+    expect(corpoDe("escolherLogoDoKit")).toContain("{ lamina: card.logo, conjunto: t.direcao.logo_escolhida }");
+    expect(blocoReplicarReferencia({ referencias: [{ indice: 1 }], fotos: [], logo: 3 })).toContain("a marca dela pela logo oficial (imagem 3), desenhada junto com a arte");
   });
 
-  it("o ajuste não redesenha a logo do código: fica fixa e volta pelo código", () => {
+  it("o ajuste mantém a logo gerada e anexa a mesma logo do kit; a versão antiga com logo colada fica protegida no contínuo", () => {
     const a = corpoDe("ajustarCard");
-    expect(a).toContain('const logoDoCodigo = !naEmenda && levaLogo(t, ordem) && marcaDaVersao.logo_no_codigo === true;');
-    expect(a).toContain('(naEmenda || logoDoCodigo) && levaLogo(base, ordem) ? "fixa"');
-    expect(a).toContain("await acabamentoDaLamina(img.png, {");
+    expect(a).toContain('regrasDeRender(base, cardAjustado, legendas, levaLogo(base, ordem) ? "manter" : false, false, naEmenda),');
+    expect(a).toContain("const logo = escolherLogoDoKit(await logosDoKit(base.client_id, kit, escolhaDaLamina(base, card, daVersao)), base, { logo: card.logo ?? daVersao ?? undefined }, null);");
+    expect(a).toContain("const protegidas: Area[] = marcaDaVersao.logo_no_codigo ? [c] : [];");
+    expect(a).not.toContain("logosDaMarca");
   });
 
   it("logoLimpa tira fundo branco, creme e a franja; a logo grande chega reduzida", () => {
     expect(imagemLocal).toContain("(temCorDeFundo && min >= 170 && distancia(i) <= 26)");
-    expect(imagemLocal).toContain("if (limpos < W * H * 0.005 || limpos > W * H * 0.97) return bytes;");
+    expect(imagemLocal).toContain("if (limpos < W * H * 0.005 || limpos > W * H * 0.97) {");
+    // 26/09: a margem vazia em volta da logo sai antes de reduzir (a logo não chega minúscula ao gerador).
+    expect(imagemLocal).toContain("const fonte = opcoes.aparar ? aparadaPeloAlfa(img) ?? img : img;");
+    expect(corpoDe("baixarLogo")).toContain("await logoLimpa(bruta.bytes, { aparar: true });");
     expect(imagemLocal).toContain("const a = Math.min(1, distancia(i) / 70);");
     expect(corpoDe("baixarLogoReduzida")).toContain('transform: { width: 1024, height: 1024, resize: "contain", format: "origin" }');
     // A caixa da logo vai para dentro do recorte central quando a arte volta em 2:3.
@@ -304,16 +312,47 @@ describe("3. Tirar fundo: a foto entra sem fundo como elemento", () => {
     expect(corpoDe("lerFotosLivres")).toContain('if (papel === "elemento" && o.recortada === true) saida[saida.length - 1].recortada = true;');
   });
 
-  it("com Tirar fundo ligado, a foto escolhida passa pela Mesa Foto e entra como elemento sem fundo", async () => {
+  it("com Tirar fundo ligado, a foto escolhida passa pelo removedor profissional e entra como elemento sem fundo", async () => {
     const derivada = `${CLIENTE}/foto/derivadas/x.png`;
-    mock.invoke.mockResolvedValue({ data: { imagem: { storage_path: derivada } }, error: null });
+    mock.invoke.mockResolvedValue({ data: { situacao: "pronto", imagem: { id: "d1", storage_bucket: "mesa", storage_path: derivada, nome: "x", tags: [] } }, error: null });
+    const onSalvar = vi.fn().mockResolvedValue(undefined);
+    montar(h(EstudioFotos, { card: { ordem: 1, fotos_livres: [] }, ocupado: false, temArte: false, onSalvar }));
+    fireEvent.click(screen.getByRole("tab", { name: /Mesa Foto/ }));
+    fireEvent.click(screen.getByRole("switch", { name: /Tirar fundo/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Usar nesta lâmina: Foto a1" }));
+    await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("mesa-foto", { body: { acao: "remover_fundo", client_id: CLIENTE, imagem_id: "a1" } }));
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 1, fotos_livres: [{ caminho: derivada, papel: "elemento", recortada: true }] } }));
+  });
+
+  it("sem a chave do removedor profissional, cai no método antigo; a falha fica à vista com Tentar de novo e Usar o recorte do gerador", async () => {
+    expect(corpoDoTirarFundo(CLIENTE, "a1", { aceitarRedesenhado: true })).toEqual({ acao: "preparar", client_id: CLIENTE, imagem_id: "a1", modo: "fundo_transparente", aceitar_recorte_redesenhado: true });
+    expect(ofertaDoRecorteDoGerador({ imagem_sem_garantia: { storage_path: "c/g.png" } })).toEqual({ caminho: "c/g.png", podeAceitar: false });
+    expect(ofertaDoRecorteDoGerador({ aceita_recorte_redesenhado: true })).toEqual({ caminho: null, podeAceitar: true });
+    expect(ofertaDoRecorteDoGerador({})).toEqual({ caminho: null, podeAceitar: false });
+    const semGarantia = `${CLIENTE}/foto/derivadas/sem-garantia.png`;
+    mock.invoke.mockImplementation(async (_nome: string, { body }: any) => {
+      if (body.acao === "remover_fundo") return { data: { error: "ferramenta_sem_chave", mensagem: "Sem a chave FAL_KEY." }, error: null };
+      return {
+        data: {
+          error: "recorte_desalinhado",
+          mensagem: "O gerador redesenhou o assunto e a máscara não bate com a foto original. Nada foi gravado; o custo da chamada já foi cobrado.",
+          imagem_sem_garantia: { storage_path: semGarantia },
+        },
+        error: null,
+      };
+    });
     const onSalvar = vi.fn().mockResolvedValue(undefined);
     montar(h(EstudioFotos, { card: { ordem: 1, fotos_livres: [] }, ocupado: false, temArte: false, onSalvar }));
     fireEvent.click(screen.getByRole("tab", { name: /Mesa Foto/ }));
     fireEvent.click(screen.getByRole("switch", { name: /Tirar fundo/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Usar nesta lâmina: Foto a1" }));
     await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("mesa-foto", { body: corpoDoTirarFundo(CLIENTE, "a1") }));
-    await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 1, fotos_livres: [{ caminho: derivada, papel: "elemento", recortada: true }] } }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain("redesenhou o assunto");
+    expect(screen.getByRole("button", { name: /Tentar de novo/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Usar o recorte do gerador" }));
+    await waitFor(() => expect(onSalvar).toHaveBeenCalledWith({ card: { ordem: 1, fotos_livres: [{ caminho: semGarantia, papel: "elemento", recortada: true }] } }));
+    mock.invoke.mockReset();
   });
 
   it("no servidor, o recorte entra do lado oposto ao texto, protegido na máscara e colado de novo", () => {
@@ -352,11 +391,11 @@ describe("4. série do carrossel guiada pela capa, sem o contínuo", () => {
   it("gerar_card anexa a capa atual e põe o bloco da série fora do replicar", () => {
     const g = corpoDe("gerarCard");
     expect(g).toContain("const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;");
-    expect(g).toContain("if (capa && ordem > 2 && !replicar) {");
-    expect(g).toContain('replicar ? "" : blocoDaSerie({ ordem, total, capa: posicaoDaCapa === null ? null : posicaoDaCapa + 1 + deslocamento, cenaFixa }),');
+    expect(g).toContain('tipo: "capa",');
+    expect(g).toContain('replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),');
     expect(g).toContain("CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual");
-    // O contínuo continua igual: fatia do panorama e letras coladas por cima.
-    expect(g).toContain("const colado = await colarMudancasNaBase(baseFoto, img.png, areasDoTexto, {");
+    // O contínuo continua igual: fatia do panorama e só as letras e a logo coladas por cima.
+    expect(g).toContain("const colado = await colarMudancasNaBase(baseFoto, img.png, areasComLogo.map((a) => ampliar(a, 0.03)));");
   });
 });
 

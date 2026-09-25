@@ -14,6 +14,7 @@ import { useCampanhaEscolhida } from "./CampanhaDaMesa";
 import { Cartao, MiniaturaDaFoto, Moldura, Pilulas, useMesaFoto, Vazio } from "./Comuns";
 import { ZonaDeEnvio } from "./EtapaAcervo";
 import SeletorDeFotos from "./SeletorDeFotos";
+import SeletorLateral, { type ItemDoSeletor } from "./SeletorLateral";
 import { acrescentarFotos, invalidarFotos, subirOriginais, useFotos } from "./fotoApi";
 import {
   acharNoCatalogo,
@@ -259,64 +260,57 @@ async function rodarVistas(p: { queryClient: QueryClient; clientId: string; pers
 
 // ------------------------------------------------------------------ galeria
 
-function CartaoDaPersona({ persona, ancora, ativa, onAbrir }: { persona: Persona; ancora: ImagemDaPersona | null; ativa: boolean; onAbrir: () => void }) {
-  const status = STATUS_DA_PERSONA[persona.status];
-  return (
-    <li className="min-w-0" data-persona={persona.id}>
-      <button
-        type="button"
-        onClick={onAbrir}
-        aria-pressed={ativa}
-        aria-label={`Abrir a persona ${persona.nome}`}
-        className={`block w-full min-w-0 rounded-xl border p-1.5 text-left transition-colors ${ativa ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40"}`}
-      >
-        <Moldura proporcao={0.8}>
-          {ancora ? (
-            <>
-              <ImagemDaPersonaNaTela imagem={ancora} alt={persona.nome} />
-              <SeloGerada />
-            </>
-          ) : (
-            <span className="flex h-full w-full items-center justify-center text-muted-foreground">
-              <UserRound className="h-6 w-6" />
-            </span>
-          )}
-        </Moldura>
-        <p className="mt-1.5 truncate px-0.5 text-[12.5px] font-semibold">{persona.nome}</p>
-        <div className="flex min-w-0 flex-wrap items-center px-0.5">
-          <span className={`mb-0.5 mr-1 rounded-full px-1.5 py-px text-[10px] font-medium ${status.cor}`}>{status.rotulo}</span>
-          <span className="mb-0.5 truncate text-[10px] text-muted-foreground">{persona.client_id ? "do cliente" : "da agência"}</span>
-        </div>
-      </button>
-    </li>
-  );
-}
+/** Ponto de cor de cada estado da persona (o seletor compacto não usa pílula grande). */
+const PONTO_DO_STATUS: Record<string, string> = {
+  rascunho: "bg-muted-foreground/40",
+  candidatos: "bg-primary/60",
+  ancora: "bg-primary",
+  folha: "bg-primary",
+  pronta: "bg-success",
+  arquivada: "bg-muted-foreground/30",
+};
 
+/**
+ * Personas no seletor lateral compacto (pedido do dono, 26/09: "muito
+ * grande, toma espaço; deixar pequeno, minimalista, com seletor"): seletor em
+ * cima e, no computador, a lista curta com a âncora em miniatura.
+ */
 function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { personas: Persona[]; escolhida: string | null; onEscolher: (id: string) => void; onNova: () => void; novaAberta: boolean }) {
   const [filtro, setFiltro] = useState<Filtro>("todas");
   const lista = personas.filter((p) => (filtro === "todas" ? p.status !== "arquivada" : filtro === "cliente" ? !!p.client_id : !p.client_id));
   const ancoras = useAncoras(personas.map((p) => p.ancora_imagem_id || ""));
+  const itens: ItemDoSeletor[] = lista.map((p) => {
+    const ancora = (ancoras.data || []).find((i) => i.id === p.ancora_imagem_id) || null;
+    return {
+      id: p.id,
+      nome: p.nome,
+      miniatura: (
+        <span className="block h-full w-full" data-persona={p.id}>
+          {ancora ? (
+            <ImagemDaPersonaNaTela imagem={ancora} alt={p.nome} />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <UserRound className="h-4 w-4" />
+            </span>
+          )}
+        </span>
+      ),
+      estado: { rotulo: STATUS_DA_PERSONA[p.status].rotulo, ponto: PONTO_DO_STATUS[p.status] || "bg-muted-foreground/40" },
+      nota: p.client_id ? null : "da agência",
+    };
+  });
   return (
-    <Cartao
-      titulo={`Personas · ${personas.length}`}
-      dica="Pessoas sintéticas para usar nas fotos. As da agência servem para qualquer cliente."
-      acao={
-        <Button type="button" size="sm" className="h-8 text-[12px]" onClick={onNova} disabled={novaAberta}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Nova persona
-        </Button>
-      }
-    >
-      <Pilulas rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={setFiltro} />
-      {lista.length === 0 ? (
-        <p className="mt-1 text-[12px] text-muted-foreground">{personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda. Crie a primeira."}</p>
-      ) : (
-        <ul className="mt-1 grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-3" aria-label="Galeria de personas">
-          {lista.map((p) => (
-            <CartaoDaPersona key={p.id} persona={p} ativa={p.id === escolhida} ancora={(ancoras.data || []).find((i) => i.id === p.ancora_imagem_id) || null} onAbrir={() => onEscolher(p.id)} />
-          ))}
-        </ul>
-      )}
-    </Cartao>
+    <SeletorLateral
+      titulo="Personas"
+      itens={itens}
+      escolhido={escolhida}
+      onEscolher={onEscolher}
+      onNovo={onNova}
+      novoRotulo="Nova persona"
+      novoAberto={novaAberta}
+      vazio={personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda. Crie a primeira."}
+      filtro={<Pilulas rotulo="Filtrar personas" opcoes={FILTROS} valor={filtro} onEscolher={setFiltro} />}
+    />
   );
 }
 
@@ -1112,8 +1106,9 @@ function PersonaLateral({ persona }: { persona: Persona }) {
   const tracos = [f.tom_de_pele, f.cabelo, f.rosto, f.olhos, f.estilo].filter(Boolean);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-3" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
-      <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] gap-3 lg:grid-cols-1">
+    <section className="min-w-0 rounded-xl border border-border bg-card p-2.5" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
+      {/* Compacta (26/09): âncora pequena ao lado do nome; ver grande no clique. */}
+      <div className="grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-2.5">
         <Moldura proporcao={resumo.ancora ? proporcaoDaImagem(resumo.ancora) : 0.8} className="border border-border">
           {resumo.ancora ? (
             <button type="button" className="block h-full w-full cursor-zoom-in" aria-label="Ver a âncora grande" onClick={() => setAmpliada(0)}>
@@ -1121,14 +1116,14 @@ function PersonaLateral({ persona }: { persona: Persona }) {
             </button>
           ) : (
             <span className="flex h-full w-full flex-col items-center justify-center px-2 text-center text-[11px] text-muted-foreground">
-              <UserRound className="mb-1 h-6 w-6" /> Sem âncora: gere a rodada e escolha a mais real.
+              <UserRound className="h-5 w-5" />
             </span>
           )}
           {resumo.ancora && <SeloGerada />}
         </Moldura>
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center">
-            <p className="mr-2 truncate text-[16px] font-semibold">{persona.nome}</p>
+            <p className="mr-2 truncate text-[14px] font-semibold">{persona.nome}</p>
             <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>
           </div>
           <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary" data-selo="gerada">
@@ -1161,7 +1156,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
               type="button"
               size="sm"
               variant="outline"
-              className="mt-2 h-8 w-full text-[12px] sm:w-auto lg:w-full"
+              className="mt-1.5 h-7 px-2 text-[11.5px]"
               onClick={() => {
                 pedirAoCanvas(clientId, persona.id);
                 irPara("canvas");
@@ -1172,7 +1167,7 @@ function PersonaLateral({ persona }: { persona: Persona }) {
           )}
         </div>
       </div>
-      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">Pessoa sintética. Ao publicar, ligue o rótulo de IA do Instagram.</p>
+      <p className="mt-1.5 text-[10.5px] leading-snug text-muted-foreground">{resumo.ancora ? "Pessoa sintética. Ao publicar, ligue o rótulo de IA do Instagram." : "Sem âncora: gere a rodada e escolha a mais real."}</p>
       {resumo.ancora && (
         <Ampliar imagens={[ampliavel(resumo.ancora, `${persona.nome}, âncora`)]} indice={ampliada} onFechar={() => setAmpliada(null)} />
       )}
@@ -1218,12 +1213,13 @@ export default function EtapaModelos() {
   return (
     <div className="min-w-0 pb-24">
       {personasQ.isError && <AvisoDeErro erro={personasQ.error} className="mb-3" />}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="min-w-0 space-y-4 lg:col-span-4 xl:col-span-3">
-          {!nova && aberta && <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />}
+      {/* Coluna da esquerda estreita (26/09): seletor compacto e a persona em resumo; o trabalho fica à direita. */}
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[250px_minmax(0,1fr)]" data-modelos-layout="">
+        <div className="min-w-0 space-y-3">
           <Galeria personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} novaAberta={nova} />
+          {!nova && aberta && <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />}
         </div>
-        <div className="min-w-0 lg:col-span-8 xl:col-span-9">
+        <div className="min-w-0">
           {nova ? (
             <NovaPersona
               onCancelar={() => setNova(false)}

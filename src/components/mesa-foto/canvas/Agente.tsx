@@ -56,7 +56,7 @@ export function ChatDoAgente({
   const avisarErro = useAvisarErro();
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const fim = useRef<HTMLDivElement>(null);
+  const conversa = useRef<HTMLDivElement>(null);
   const mensagens = no.dados.mensagens || [];
   const ligacao = canvas.ligacoes.find((l) => l.de === no.id) || null;
   const resultado = ligacao ? canvas.nos.find((n) => n.id === ligacao.para) || null : null;
@@ -64,9 +64,11 @@ export function ChatDoAgente({
   const ultima = prontas.length ? prontas[prontas.length - 1] : null;
   const bloqueios = resultado ? bloqueiosDoGerar(canvas, resultado.id, fontes.personas) : [];
 
+  // Mensagem nova: desce só a caixa da conversa. (scrollIntoView rolava também o painel e a página, e o quadro inteiro pulava.)
   useEffect(() => {
-    if (fim.current && typeof fim.current.scrollIntoView === "function") fim.current.scrollIntoView({ block: "end" });
-  }, [mensagens.length]);
+    const caixa = conversa.current;
+    if (caixa) caixa.scrollTop = caixa.scrollHeight;
+  }, [mensagens.length, enviando]);
 
   const enviar = async (mensagem: string) => {
     const m = mensagem.trim();
@@ -106,7 +108,7 @@ export function ChatDoAgente({
           <Link2 className="mr-1 h-3.5 w-3.5" /> Ligar ao Resultado
         </button>
       )}
-      <div className="max-h-[38vh] min-h-[80px] space-y-1.5 overflow-y-auto rounded-xl border border-white/10 bg-zinc-900/60 p-2" aria-label="Conversa com o agente" role="log">
+      <div ref={conversa} className="nowheel max-h-[30vh] min-h-[80px] space-y-1.5 overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-zinc-900/60 p-2" aria-label="Conversa com o agente" role="log" data-rolagem-propria="">
         {mensagens.length === 0 && <p className="text-[11.5px] text-zinc-500">Diga o que você quer: "ela segurando o produto na praia, pegada natural".</p>}
         {mensagens.map((msg, i) => (
           <p
@@ -122,7 +124,6 @@ export function ChatDoAgente({
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> pensando
           </p>
         )}
-        <div ref={fim} />
       </div>
       <div className="flex min-w-0 flex-wrap">
         {ATALHOS.map((a) => (
@@ -176,7 +177,7 @@ export function ChatDoAgente({
           />
           {bloqueios.length > 0 && <p className="text-[11px] text-amber-300">{bloqueios[0]}</p>}
           {ultima && (
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: 220 }}>
+            <div className="overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: 180 }}>
               <ImagemDaMesa caminho={ultima.storage_path || ultima.url} bucket={ultima.storage_bucket} alt="Última foto do Resultado" className="h-full w-full !object-contain" />
             </div>
           )}

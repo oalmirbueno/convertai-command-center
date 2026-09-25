@@ -107,7 +107,7 @@ import {
   type TipoDeNo,
 } from "./canvasApi";
 import { ChatDoAgente } from "./canvas/Agente";
-import { BOTAO, descrever, ICONE_DO_VIDEO, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, type Descricao, type Fontes } from "./canvas/comum";
+import { BOTAO, descrever, FLUTUANTE, Gaveta, ICONE_DO_VIDEO, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, useRodaPresa, type Descricao, type Fontes } from "./canvas/comum";
 import { AjustesDoResultado, CustoDoResultado, EditorDoCartao, useUsoDoResultado } from "./canvas/Editores";
 import { EscolherCartao, type AbaDaEscolha, type PedidoDeEscolha } from "./canvas/Escolher";
 import { EsteiraDeProdutos, TIPO_ARRASTADO_DA_ESTEIRA } from "./canvas/Esteira";
@@ -138,6 +138,14 @@ import { ModoLista } from "./canvas/ModoLista";
  * toque (tocar uma alça e depois a outra), cartões de tamanho fixo com as
  * alças declaradas no próprio nó, miniaturas com altura fixa em px. Em tela
  * menor que 768 px abre o modo lista, com o mesmo grafo em formulário.
+ *
+ * Uso (dono, 26/09: "está cobrindo demais o quadro" e "quando eu rolo, ele
+ * fica mexendo todo o canvas"): o que abre sobre o quadro é estreito, tem
+ * altura máxima e rolagem própria, e fica encostado na lateral (a escolha e
+ * os modelos prontos numa gaveta ao lado da paleta, os ajustes à direita; em
+ * tela pequena, folha no pé do quadro). Rolar no fundo do quadro move o
+ * quadro; Ctrl (ou Cmd) + rolar e a pinça dão zoom. Rolar num painel rola só
+ * o painel: classes nowheel/nopan/nodrag e a roda presa (./canvas/comum).
  */
 
 const ALCA = 12;
@@ -540,8 +548,15 @@ function alcasDoNo(tipo: TipoDeNo) {
 // ------------------------------------------------------------------ peças que flutuam sobre o quadro
 
 function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) => void; onAdicionar: () => void; onResultado: () => void }) {
+  const roda = useRodaPresa<HTMLElement>();
   return (
-    <nav aria-label="Cartões para o quadro" className={`${PAINEL} absolute left-3 top-3 z-10 w-[64px] rounded-2xl p-1`} data-paleta-lateral="">
+    <nav
+      ref={roda}
+      aria-label="Cartões para o quadro"
+      className={`${PAINEL} ${FLUTUANTE} absolute left-3 top-3 z-10 max-h-[calc(100%-24px)] w-[56px] overflow-y-auto rounded-2xl p-1`}
+      data-paleta-lateral=""
+      data-rolagem-propria=""
+    >
       {TIPOS_DA_BARRA.map((t) => {
         const tipo = TIPOS_DE_NO[t];
         const Icone = ICONES[t];
@@ -561,9 +576,9 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
             onClick={() => onTipo(t)}
             title={`${tipo.dica} Toque para pôr no quadro (ou arraste).`}
             data-paleta={t}
-            className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1.5 text-center transition-colors hover:bg-white/10"
+            className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center transition-colors hover:bg-white/10"
           >
-            <span className={`flex h-8 w-8 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} border ${tipo.borda} ${tipo.fundo}`}>
+            <span className={`flex h-7 w-7 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} border ${tipo.borda} ${tipo.fundo}`}>
               <Icone className={`h-3.5 w-3.5 ${tipo.texto}`} />
             </span>
             <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">{tipo.rotulo}</span>
@@ -571,8 +586,8 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
         );
       })}
       {TIPOS_FUTUROS.map((t) => (
-        <button key={t.chave} type="button" disabled title={t.dica} data-paleta={t.chave} aria-label={`${t.rotulo} (em breve)`} className="mb-0.5 flex w-full cursor-not-allowed flex-col items-center rounded-xl px-0.5 py-1.5 text-center opacity-50">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-white/20">
+        <button key={t.chave} type="button" disabled title={t.dica} data-paleta={t.chave} aria-label={`${t.rotulo} (em breve)`} className="mb-0.5 flex w-full cursor-not-allowed flex-col items-center rounded-xl px-0.5 py-1 text-center opacity-50">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-dashed border-white/20">
             <ICONE_DO_VIDEO className="h-3.5 w-3.5 text-zinc-400" />
           </span>
           <span className="mt-0.5 text-[10px] leading-none text-zinc-400">{t.rotulo}</span>
@@ -580,8 +595,8 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
         </button>
       ))}
       <span className="mx-1 my-1 block h-px bg-white/10" />
-      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1.5 text-center hover:bg-white/10" title="Escolher do acervo, dos produtos ou das pessoas, pela foto">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-black">
+      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1 text-center hover:bg-white/10" title="Escolher do acervo, dos produtos ou das pessoas, pela foto">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400 text-black">
           <Plus className="h-4 w-4" />
         </span>
         <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">Adicionar</span>
@@ -593,10 +608,16 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
   );
 }
 
+/**
+ * Ajustes à direita, recolhíveis. Aberta: estreita e só da altura do conteúdo
+ * (no máximo a do quadro), com rolagem própria; em tela pequena, folha no pé
+ * do quadro. Antes ia de cima a baixo e cobria o Resultado.
+ */
 function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, children }: { recolhida: boolean; onRecolher: (v: boolean) => void; titulo: ReactNode; custo: ReactNode; custoCurto: ReactNode; children: ReactNode }) {
+  const roda = useRodaPresa<HTMLElement>();
   if (recolhida) {
     return (
-      <div className={`${PAINEL} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-2xl px-1 py-1.5`} data-ajustes="recolhidos">
+      <div ref={roda} className={`${PAINEL} ${FLUTUANTE} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-2xl px-1 py-1.5`} data-ajustes="recolhidos">
         <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10" title="Ajustes do cartão ou do Resultado">
           <SlidersHorizontal className="h-4 w-4" />
         </button>
@@ -606,7 +627,12 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
     );
   }
   return (
-    <aside aria-label="Ajustes" className={`${PAINEL} absolute bottom-3 right-3 top-3 z-10 flex w-[288px] max-w-[46%] flex-col rounded-2xl`} data-ajustes="abertos">
+    <aside
+      ref={roda}
+      aria-label="Ajustes"
+      className={`${PAINEL} ${FLUTUANTE} absolute inset-x-2 bottom-2 z-20 flex max-h-[60%] min-w-0 flex-col rounded-2xl sm:inset-x-auto sm:bottom-auto sm:right-3 sm:top-3 sm:z-10 sm:max-h-[calc(100%-24px)] sm:w-[272px] xl:w-[296px]`}
+      data-ajustes="abertos"
+    >
       <div className="flex shrink-0 items-center border-b border-white/10 px-3 py-2">
         <SlidersHorizontal className="mr-2 h-3.5 w-3.5 text-zinc-400" />
         <div className="min-w-0 flex-1">
@@ -617,7 +643,9 @@ function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, childr
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-3" data-rolagem-propria="">
+        {children}
+      </div>
     </aside>
   );
 }
@@ -638,7 +666,13 @@ function Quadro({
   onSoltarProduto,
   cheia,
   onCheia,
+  folgaDireita,
+  onFundo,
 }: {
+  /** Largura (px) que os ajustes abertos cobrem à direita: o enquadrar deixa os cartões fora dela. */
+  folgaDireita: number;
+  /** Toque no fundo do quadro (fecha as gavetas). */
+  onFundo: () => void;
   canvas: Canvas;
   fontes: Fontes;
   selecionado: Selecao;
@@ -673,15 +707,17 @@ function Quadro({
   }, [canvas.ligacoes]);
   useEffect(() => () => relogios.current.forEach((t) => window.clearTimeout(t)), []);
 
-  // Cartão novo: a vista acompanha, para ele não nascer fora da tela.
+  // Cartão novo: a vista acompanha, para ele não nascer fora da tela (nem debaixo da paleta ou dos ajustes).
   const contagem = useRef(canvas.nos.length);
+  const folga = useRef(folgaDireita);
+  folga.current = folgaDireita;
   useEffect(() => {
     const antes = contagem.current;
     contagem.current = canvas.nos.length;
     if (canvas.nos.length <= antes) return;
     const id = window.setTimeout(() => {
       try {
-        void rf.fitView({ padding: 0.28, maxZoom: 1, duration: 350 });
+        void rf.fitView({ padding: margensDoQuadro(folga.current), maxZoom: 1, duration: 350 });
       } catch {
         /* quadro ainda sem tamanho */
       }
@@ -857,11 +893,14 @@ function Quadro({
           if (!religou.current) onMudarCanvas((c) => desligar(c, velha.id));
           religou.current = false;
         }}
-        onPaneClick={() => onSelecionar(null)}
+        onPaneClick={() => {
+          onSelecionar(null);
+          onFundo();
+        }}
         onMoveEnd={(_e, v) => onViewport(v)}
         defaultViewport={canvas.viewport}
         fitView={!canvas.id && canvas.nos.length > 0}
-        fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+        fitViewOptions={{ padding: margensDoQuadro(folgaDireita), maxZoom: 1 }}
         minZoom={0.25}
         maxZoom={1.6}
         // Piso Safari 11 / Chrome 64: a caixa de seleção usa Pointer Events (desligada); conexão por toque ligada.
@@ -870,23 +909,38 @@ function Quadro({
         multiSelectionKeyCode={null}
         connectOnClick
         panOnDrag
+        // Rolagem (dono, 26/09): rolar no fundo move o quadro; zoom só com Ctrl/Cmd + rolar ou pinça.
+        // Painéis, listas e gavetas levam nowheel/nopan/nodrag e a roda presa: rolar ali não mexe no quadro.
+        panOnScroll
+        zoomOnScroll={false}
         zoomOnPinch
-        zoomOnScroll
         preventScrolling
+        noWheelClassName="nowheel"
+        noPanClassName="nopan"
+        noDragClassName="nodrag"
         deleteKeyCode={["Backspace", "Delete"]}
         proOptions={{ hideAttribution: true }}
         style={estilo}
       >
         <Background id="fina" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#c4c7ce" />
-        <Controls showInteractive={false} position="bottom-left">
+        {/* Os controles ficam ao lado da paleta, não debaixo dela. */}
+        <Controls showInteractive={false} position="bottom-left" style={{ left: 60 }}>
           <ControlButton onClick={onCheia} title={cheia ? "Sair da tela cheia" : "Tela cheia"} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"}>
             {/* O CSS do quadro pinta o ícone por dentro; ícone de traço fica sem preenchimento. */}
             {cheia ? <Minimize2 style={{ fill: "none" }} /> : <Maximize2 style={{ fill: "none" }} />}
           </ControlButton>
         </Controls>
       </ReactFlow>
+      <p className="pointer-events-none absolute bottom-2 left-1/2 z-[4] hidden -translate-x-1/2 whitespace-nowrap rounded-full bg-white/70 px-2 py-0.5 text-[10px] text-zinc-500 md:block" data-ajuda-do-quadro="">
+        Rolar move o quadro. Ctrl (ou Cmd) + rolar, ou pinça: zoom. Nos painéis, rola só o painel.
+      </p>
     </div>
   );
+}
+
+/** Margens do enquadrar: a paleta à esquerda e os ajustes abertos à direita não escondem cartão. */
+function margensDoQuadro(folgaDireita: number) {
+  return { top: "24px", bottom: "40px", left: "84px", right: `${Math.max(24, folgaDireita)}px` } as const;
 }
 
 // ------------------------------------------------------------------ etapa
@@ -1008,11 +1062,11 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     if (Object.keys(porGerar).length) mudar((c) => juntarResultados(c, porGerar));
   }, [pend, canvas.id, mudar]);
 
-  // Esc sai da tela cheia.
+  // Esc sai da tela cheia (com uma gaveta aberta, o Esc fecha só a gaveta).
   useEffect(() => {
     if (!cheia) return;
     const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCheia(false);
+      if (e.key === "Escape" && !document.querySelector("[data-gaveta]")) setCheia(false);
     };
     window.addEventListener("keydown", tecla);
     return () => window.removeEventListener("keydown", tecla);
@@ -1075,6 +1129,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       if (trocarId) abrirNo(trocarId);
       return;
     }
+    setProntosAbertos(false);
     setEscolha({ tipo: tipo as AbaDaEscolha, trocarId, gerarId });
   };
 
@@ -1101,7 +1156,10 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
   const aoSoltar = (t: TipoDeNo, posicao: { x: number; y: number }) => {
     const id = porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { posicao, selecionar: t !== "gerar" });
-    if (t !== "texto" && t !== "gerar" && t !== "agente") setEscolha({ tipo: t as AbaDaEscolha, trocarId: id, gerarId: null });
+    if (t !== "texto" && t !== "gerar" && t !== "agente") {
+      setProntosAbertos(false);
+      setEscolha({ tipo: t as AbaDaEscolha, trocarId: id, gerarId: null });
+    }
   };
 
   const porProduto = (p: Pick<ProdutoDaEsteira, "kit_id" | "nome">, posicao: { x: number; y: number } | null = null) => {
@@ -1175,6 +1233,17 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const alternarFoco = () => {
     gravarMarca(CHAVE_DO_FOCO, foco);
     setFoco(!foco);
+  };
+
+  const alternarProntos = () => {
+    if (!prontosAbertos) setEscolha(null);
+    setProntosAbertos(!prontosAbertos);
+  };
+
+  /** Toque no fundo do quadro: as gavetas fecham (os ajustes ficam como estão). */
+  const fecharGavetas = () => {
+    setEscolha(null);
+    setProntosAbertos(false);
   };
 
   const alternarCheia = () => {
@@ -1344,7 +1413,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         </Button>
       )}
       <span className="hidden flex-1 sm:block" />
-      <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={() => setProntosAbertos(!prontosAbertos)}>
+      <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={alternarProntos}>
         <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Modelos prontos
       </Button>
       <Button type="button" size="sm" variant={comoFunciona ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={comoFunciona} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))}>
@@ -1360,6 +1429,11 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       </Button>
     </div>
   );
+
+  // Quanto os ajustes abertos cobrem à direita (em tela pequena viram folha no pé e não contam).
+  const larguraDaJanela = typeof window !== "undefined" ? window.innerWidth : 1280;
+  const folgaDireita = !recolhida && larguraDaJanela >= 640 ? (larguraDaJanela >= 1280 ? 296 : 272) + 24 : 72;
+  const gavetaAberta = !!escolha || prontosAbertos;
 
   const quadro = (
     <div
@@ -1386,6 +1460,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
             onSoltarProduto={(kitId, posicao) => porProduto({ kit_id: kitId, nome: "" }, posicao)}
             cheia={cheia}
             onCheia={alternarCheia}
+            folgaDireita={folgaDireita}
+            onFundo={fecharGavetas}
           />
         </ContextoDoQuadro.Provider>
         <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} onResultado={() => porNoQuadro("gerar")} />
@@ -1398,12 +1474,23 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
         >
           {conteudoDoPainel}
         </BarraLateral>
-        {comoFunciona && <ComoFunciona onFechar={fecharComoFunciona} />}
+        {comoFunciona && !gavetaAberta && <ComoFunciona onFechar={fecharComoFunciona} />}
         {prontosAbertos && (
-          <div className="absolute bottom-3 left-[84px] right-3 z-10 mx-auto max-w-[900px]">
-            <GaleriaDeModelos onAplicar={aplicarModelo} onFechar={() => setProntosAbertos(false)} onMontarPeloContexto={montarPeloContexto} />
-          </div>
+          <Gaveta
+            lugar="quadro"
+            rotulo="Modelos prontos"
+            rotuloDoFechar="Fechar os modelos prontos"
+            onFechar={() => setProntosAbertos(false)}
+            cabeca={
+              <h3 className="flex items-center truncate text-[13px] font-semibold">
+                <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-emerald-300" /> Modelos prontos
+              </h3>
+            }
+          >
+            <GaleriaDeModelos compacta onAplicar={aplicarModelo} onMontarPeloContexto={montarPeloContexto} />
+          </Gaveta>
         )}
+        <EscolherCartao lugar="quadro" pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />
       </div>
     </div>
   );
@@ -1415,11 +1502,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
       {lista ? (
         <div className="min-w-0 space-y-3">
-          {comoFunciona && (
-            <div className="relative min-w-0" style={{ minHeight: 132 }}>
-              <ComoFunciona onFechar={fecharComoFunciona} />
-            </div>
-          )}
+          {comoFunciona && <ComoFunciona onFechar={fecharComoFunciona} noQuadro={false} />}
           {(prontosAbertos || semEntradas) && <GaleriaDeModelos onAplicar={aplicarModelo} onFechar={prontosAbertos ? () => setProntosAbertos(false) : undefined} onMontarPeloContexto={montarPeloContexto} />}
           <ModoLista
             canvas={canvas}
@@ -1444,7 +1527,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       <p className="flex items-start text-[11px] leading-snug text-muted-foreground">
         <ClipboardList className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique.
       </p>
-      <EscolherCartao pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />
+      {lista && <EscolherCartao lugar="pagina" pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />}
     </div>
   );
 }

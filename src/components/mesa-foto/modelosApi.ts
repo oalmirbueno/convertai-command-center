@@ -162,8 +162,13 @@ export const MOTORES_DA_RODADA: MotorDaRodada[] = [
   { chave: "nano-banana-2", rotulo: "Nano Banana 2", procura: ["gemini-3.1-flash-image", "nano-banana-2"], resolucao: "1K", padrao: false },
 ];
 
-/** Motor que detalha em 4K (re-render, não ampliação fiel). */
-export const MOTOR_DO_DETALHE = { rotulo: "Nano Banana Pro 4K", procura: ["gemini-3-pro-image", "nano-banana-pro"] };
+/**
+ * Motor que detalha em 4K (re-render, não ampliação fiel). Só as versões
+ * PREVIEW fazem 4K: em 26/09/2026 o OpenRouter recusou 4K no
+ * google/gemini-3-pro-image normal. A tela procura só elas (nunca a normal);
+ * sem nenhuma no catálogo, a função escolhe o primeiro gerador com 4K.
+ */
+export const MOTOR_DO_DETALHE = { rotulo: "Nano Banana Pro 4K", procura: ["gemini-3-pro-image-preview", "gemini-3.1-flash-image-preview"] };
 
 const contem = (m: ModeloIa, trecho: string) => {
   const t = trecho.toLowerCase();

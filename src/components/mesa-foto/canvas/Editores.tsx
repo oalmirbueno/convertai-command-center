@@ -386,7 +386,7 @@ export function PedidoMontado({ m, fotos, onFechar }: { m: Montagem; fotos: Foto
           {a}
         </p>
       ))}
-      <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-zinc-900/70 p-2 text-[11px] leading-relaxed text-zinc-200 [overflow-wrap:anywhere]">{m.prompt || "A função não devolveu o texto do pedido."}</pre>
+      <pre className="nowheel max-h-56 overflow-y-auto overscroll-contain whitespace-pre-wrap rounded-lg bg-zinc-900/70 p-2 text-[11px] leading-relaxed text-zinc-200 [overflow-wrap:anywhere]">{m.prompt || "A função não devolveu o texto do pedido."}</pre>
     </div>
   );
 }

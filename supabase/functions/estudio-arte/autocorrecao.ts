@@ -141,7 +141,7 @@ export function decidirAutocorrecao(
     if (v.logo_presente === false) {
       motivos.push("Logo da marca faltando");
       passos.push(
-        "Coloque a logo oficial anexada, exatamente como é (sem redesenhar, sem mudar cor nem proporção), num canto com respiro, sem cobrir o texto nem o assunto principal.",
+        "Desenhe a logo oficial anexada, exatamente como é (sem redesenhar, sem mudar cor nem proporção), na área aberta da logo, grande o bastante para ser lida de longe (nunca pequenininha), com respiro, sem caixa atrás, sem cobrir o texto nem o assunto principal.",
       );
     } else {
       motivos.push("Logo onde não devia");

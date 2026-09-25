@@ -41,6 +41,7 @@ import {
   type ModeloIa,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
+import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
 import {
   artesAprovadas,
   caminhoDoArquivo,
@@ -1071,6 +1072,9 @@ async function origemDaImagem(clientId: string, origem: string, id: string): Pro
   return null;
 }
 
+/** Logo acima disto não entra no kit como está: o Estúdio não consegue abrir (limite de memória da função). */
+const LOGO_MAX_PIXELS = 16_000_000;
+
 async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
   const clientId = texto(corpo.client_id, 64);
   await garantirAcesso(ch, clientId);
@@ -1084,6 +1088,17 @@ async function definirLogo(ch: Chamador, corpo: Record<string, unknown>) {
   if (!onde) throw new ErroContexto(404, "logo_inexistente", "Esta imagem não foi encontrada entre as do cliente.");
   const img = await baixarImagem(onde.bucket, onde.caminho, "logo");
   if (!img) throw new ErroContexto(415, "logo_nao_e_imagem", "A logo precisa ser PNG, JPG ou WEBP (PNG com fundo transparente de preferência).");
+  // 26/09: logo de 7813 x 7813 px derrubou o Estúdio por memória (o Storage não reduz imagem desse tamanho).
+  // Acima de 16 MP a tela reduz no navegador e grava a versão menor (ContextoLogos).
+  const dim = dimensoesDoCabecalho(img.bytes);
+  if (dim && dim.largura * dim.altura > LOGO_MAX_PIXELS) {
+    throw new ErroContexto(413, "logo_grande_demais", `A logo tem ${dim.largura} x ${dim.altura} px. A tela reduz para 2048 px e grava de novo.`, {
+      largura: dim.largura,
+      altura: dim.altura,
+      bucket: onde.bucket,
+      caminho: onde.caminho,
+    });
+  }
 
   const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}.${EXTENSAO[img.mime] ?? "png"}`;
   const { error: erroUpload } = await servico().storage.from("mesa").upload(destino, new Blob([new Uint8Array(img.bytes)], { type: img.mime }), {

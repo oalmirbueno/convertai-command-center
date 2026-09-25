@@ -65,7 +65,8 @@ describe("campanhas", () => {
   });
   it("o Estúdio segue a identidade da campanha e anexa o selo na capa e no fechamento", () => {
     expect(estudio).toContain("direcao.campanha_id = campanha.id;");
-    expect(corpoDe(estudio, "gerarCard")).toContain("campanha?.selo_path && levaLogo(t, ordem)");
+    // 26/09: o selo vai como anexo de prioridade baixa (anexosDaLamina), só nas lâminas com logo.
+    expect(corpoDe(estudio, "gerarCard")).toContain("if (campanha?.selo_path && leva) {");
     expect(corpoDe(estudio, "gerarCard")).toContain("baseComCampanha");
   });
 });

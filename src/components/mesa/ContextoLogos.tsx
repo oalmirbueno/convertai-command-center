@@ -54,6 +54,70 @@ export function imagemDoArquivo(a: ArquivoDoPainel | null | undefined): { bucket
 
 type QualLogo = "logo" | "alt";
 
+/** Abre a imagem para desenhar no canvas; Safari 11 não tem createImageBitmap, então cai no <img>. */
+async function abrirImagem(blob: Blob): Promise<{ width: number; height: number } & CanvasImageSource> {
+  if (typeof createImageBitmap === "function") return await createImageBitmap(blob);
+  const url = URL.createObjectURL(blob);
+  try {
+    return await new Promise<HTMLImageElement>((resolver, rejeitar) => {
+      const img = new Image();
+      img.onload = () => resolver(img);
+      img.onerror = () => rejeitar(new Error("O navegador não conseguiu abrir a logo."));
+      img.src = url;
+    });
+  } finally {
+    // Revoga depois do próximo quadro: o <img> já decodificou.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+/** Lado máximo da logo reduzida no navegador (o Estúdio abre sem estourar a memória). */
+export const LADO_MAXIMO_DA_LOGO = 2048;
+
+/** Arquivo de logo pronto para subir: se passar de 2048 px, vira PNG reduzido; senão, vai como veio. */
+export async function reduzirArquivoDeLogo(arquivo: Blob): Promise<{ blob: Blob; reduziu: boolean }> {
+  const img = await abrirImagem(arquivo);
+  const escala = LADO_MAXIMO_DA_LOGO / Math.max(img.width, img.height);
+  if (escala >= 1) return { blob: arquivo, reduziu: false };
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * escala));
+  canvas.height = Math.max(1, Math.round(img.height * escala));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return { blob: arquivo, reduziu: false };
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const png: Blob | null = await new Promise((resolver) => canvas.toBlob(resolver, "image/png"));
+  return png ? { blob: png, reduziu: true } : { blob: arquivo, reduziu: false };
+}
+
+/**
+ * Baixa a imagem escolhida, reduz para no máximo 2048 px (PNG, mantém a
+ * transparência), grava em mesa/<cliente>/marca/ e aponta o kit do cliente
+ * para ela. Usado quando o servidor recusa a logo por ser grande demais.
+ */
+export async function gravarLogoReduzida(clientId: string, userId: string | null | undefined, alternativa: boolean, bucket: string, caminho: string) {
+  if (!bucket || !caminho) throw new Error("Não foi possível achar a imagem da logo para reduzir.");
+  const { data, error } = await supabase.storage.from(bucket).download(caminho);
+  if (error || !data) throw error || new Error("Não foi possível baixar a logo para reduzir.");
+  const bitmap = await abrirImagem(data);
+  const escala = Math.min(1, LADO_MAXIMO_DA_LOGO / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * escala));
+  canvas.height = Math.max(1, Math.round(bitmap.height * escala));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("O navegador não conseguiu reduzir a logo.");
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const png: Blob | null = await new Promise((resolver) => canvas.toBlob(resolver, "image/png"));
+  if (!png) throw new Error("O navegador não conseguiu reduzir a logo.");
+  const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-reduzida.png`;
+  const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
+  if (envio.error) throw envio.error;
+  const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
+  const { error: erroKit } = await (supabase as any)
+    .from("cliente_kit_marca")
+    .upsert({ client_id: clientId, ...campos, atualizado_por: userId ?? null }, { onConflict: "client_id" });
+  if (erroKit) throw erroKit;
+}
+
 /** Fundo de conferência da logo: xadrez (transparência), claro ou escuro. */
 export type FundoDaLogo = "xadrez" | "claro" | "escuro";
 const PROXIMO_FUNDO: Record<FundoDaLogo, FundoDaLogo> = { xadrez: "claro", claro: "escuro", escuro: "xadrez" };
@@ -149,7 +213,18 @@ export default function LogosDaMarca({
     const alternativaFlag = qual === "alt";
     setGravando(id);
     try {
-      await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem, id, alternativa: alternativaFlag });
+      try {
+        await chamarFuncao("agente-contexto", { acao: "definir_logo", client_id: clientId, origem, id, alternativa: alternativaFlag });
+      } catch (e) {
+        // Logo gigante (26/09: 7813 x 7813 px derrubou o Estúdio): reduz aqui e grava a versão menor.
+        const erro = e as { codigo?: string; detalhes?: Record<string, unknown> };
+        if (erro && erro.codigo === "logo_grande_demais" && erro.detalhes) {
+          await gravarLogoReduzida(clientId, userId, alternativaFlag, String(erro.detalhes.bucket || ""), String(erro.detalhes.caminho || ""));
+          toast.message("A logo era grande demais e foi reduzida para 2048 px.");
+        } else {
+          throw e;
+        }
+      }
       toast.success(alternativaFlag ? "Logo alternativa definida" : "Logo definida", nome ? { description: nome } : undefined);
       setEscolhendo(null);
       invalidar(clientId);

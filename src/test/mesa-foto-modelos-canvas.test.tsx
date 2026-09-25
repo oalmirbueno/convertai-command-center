@@ -165,6 +165,8 @@ const CANVAS = "ffffffff-0000-4000-8000-000000000001";
 
 const GPT = "openrouter:openai/gpt-image-2.5-sunburst";
 const NANO = "openrouter:google/gemini-3-pro-image";
+// 4K só na preview (erro do OpenRouter de 26/09/2026 com a normal).
+const NANO_4K = "openrouter:google/gemini-3-pro-image-preview";
 const SEEDREAM = "openrouter:bytedance-seed/seedream-5-0-pro";
 
 const imagemDoCatalogo = (id: string, api: string, preco: number, padrao = false): ModeloIa => ({
@@ -565,15 +567,20 @@ describe("aba Modelos", () => {
       (mock.tabelas.foto_modelo_imagens as any[]).push({ ...imagem, derivada_de: ANCORA });
       return { origem: "modelo", imagem, url: "https://arquivo.test/d.png", antes: { imagem_id: ANCORA, url: "https://arquivo.test/a.png" }, depois: { imagem_id: "detalhe-1", url: "https://arquivo.test/d.png" }, custo_usd: 0.24 };
     };
-    fireEvent.click(screen.getByRole("button", { name: /Detalhar em 4K/ }));
+    const detalhar = screen.getByRole("button", { name: /Detalhar em 4K/ });
+    fireEvent.click(detalhar);
+    // Sem estimativa local (gerador escolhido pela função), o botão pede o segundo clique.
+    if (!chamadasDe("modelo_detalhar").length) fireEvent.click(await screen.findByRole("button", { name: /clique de novo/i }));
     await waitFor(() => expect(chamadasDe("modelo_detalhar")).toHaveLength(1));
-    expect(chamadasDe("modelo_detalhar")[0]).toEqual({ acao: "modelo_detalhar", client_id: CLIENTE, modelo_id: P1, imagem_id: ANCORA, alvo: "pessoa", modelo_imagem_id: NANO });
+    // Sem a preview no catálogo, a tela não manda gerador: a função escolhe o primeiro com 4K de verdade.
+    expect(chamadasDe("modelo_detalhar")[0]).toEqual({ acao: "modelo_detalhar", client_id: CLIENTE, modelo_id: P1, imagem_id: ANCORA, alvo: "pessoa" });
     expect(await screen.findByLabelText("Cortina entre antes e depois")).toBeTruthy();
     // Ampliação fiel espera a conta fal.ai.
     expect((screen.getByRole("button", { name: "Ampliar fiel" }) as HTMLButtonElement).disabled).toBe(true);
     // Persona com âncora pode ir para o Canvas.
     expect(screen.getByRole("button", { name: /Usar no Canvas/ })).toBeTruthy();
-  });
+    // Seis vistas e o detalhe na mesma rodada: com a suíte inteira em paralelo passa dos 5 s padrão.
+  }, 15_000);
 
   it("conferir uma candidata mostra a leitura como aviso, sem escolher sozinho", async () => {
     mock.tabelas.foto_modelo_imagens = [imagemBruta("c1", { motor_id: GPT })];
@@ -1114,7 +1121,13 @@ describe("contrato tela x função: nomes de ação e de campo", () => {
       expect(o, r.modelo_imagem_id).toBeTruthy();
       expect(o && [o.padrao, o.resolucao]).toEqual([r.padrao, r.resolucao]);
     });
-    const comDetalhe = doServidor.concat([imagemDoCatalogo(MOTOR_DETALHE.produto, MOTOR_DETALHE.produto.split(":")[1], 0.1)]);
+    // 4K só na versão preview (erro do OpenRouter de 26/09/2026): a normal da rodada nunca vira o gerador do 4K.
+    expect(acharNoCatalogo(doServidor, MOTOR_DO_DETALHE.procura)).toBeNull();
+    const comDetalhe = doServidor.concat([
+      imagemDoCatalogo(MOTOR_DETALHE.produto, MOTOR_DETALHE.produto.split(":")[1], 0.1),
+      imagemDoCatalogo(MOTOR_DETALHE.pessoa, MOTOR_DETALHE.pessoa.split(":")[1], 0.24),
+    ]);
+    expect(MOTOR_DETALHE.pessoa).toBe("openrouter:google/gemini-3-pro-image-preview");
     expect((acharNoCatalogo(comDetalhe, MOTOR_DO_DETALHE.procura) || { id: "" }).id).toBe(MOTOR_DETALHE.pessoa);
   });
 

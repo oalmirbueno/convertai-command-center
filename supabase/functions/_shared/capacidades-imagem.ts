@@ -83,6 +83,41 @@ const numero = (v: unknown): number => {
 };
 
 /**
+ * Resoluções que o provedor RECUSA embora a lista pública do OpenRouter (ou a
+ * família acima) diga que aceita. Erro real de 26/09/2026 no "Detalhar em 4K":
+ * "image_size '4K' is not supported by google/gemini-3-pro-image; only
+ * google/gemini-3-pro-image-preview and google/gemini-3.1-flash-image-preview
+ * support 4K". As versões normais ficam em 1K e 2K; as preview fazem 4K.
+ * Vale na sincronização do catálogo (capacidadesDaListaDeImagens, que monta
+ * a coluna ia_modelos.capacidades) e na leitura (capacidadesDoModelo), para a
+ * próxima sincronização não voltar a marcar 4K nos modelos normais e o motor
+ * nunca mandar 4K a quem não aceita. Casa o slug EXATO (a preview não entra).
+ */
+export const RESOLUCOES_RECUSADAS: { slug: string; recusa: Resolucao[]; motivo: string }[] = [
+  {
+    slug: "google/gemini-3-pro-image",
+    recusa: ["4K"],
+    motivo: "OpenRouter, 26/09/2026: image_size 4K só em google/gemini-3-pro-image-preview e google/gemini-3.1-flash-image-preview.",
+  },
+  {
+    slug: "google/gemini-3.1-flash-image",
+    recusa: ["4K"],
+    motivo: "OpenRouter, 26/09/2026: image_size 4K só em google/gemini-3-pro-image-preview e google/gemini-3.1-flash-image-preview.",
+  },
+];
+
+/** Modelos que fazem 4K de verdade (conferidos no erro de 26/09/2026), na ordem de preferência para pessoa. */
+export const MODELOS_4K_CONFERIDOS = ["google/gemini-3-pro-image-preview", "google/gemini-3.1-flash-image-preview"];
+
+/** Tira da lista as resoluções que o provedor recusa para este slug (sem o prefixo openrouter:). */
+export function semResolucoesRecusadas(slug: string, resolucoes: string[] | undefined): string[] {
+  const lista = Array.isArray(resolucoes) ? resolucoes : [];
+  const s = String(slug || "").replace(/^openrouter:/, "");
+  const regra = RESOLUCOES_RECUSADAS.find((r) => r.slug === s);
+  return regra ? lista.filter((r) => !(regra.recusa as string[]).includes(r)) : lista;
+}
+
+/**
  * Capacidades de um modelo de imagem: a coluna do catálogo por cima da
  * família conhecida. Modelo do OpenRouter fora da tabela vai pela API de
  * imagens quando só devolve imagem (sem texto na saída); senão pelo chat,
@@ -105,6 +140,8 @@ export function capacidadesDoModelo(m: ModeloComCapacidades): CapacidadesImagem 
   if (/^openai\/gpt-image/.test(m.modelo_api)) junto.api = "imagens";
   if (junto.api !== "imagens" && junto.api !== "chat") junto.api = base.api ?? apiPadrao;
   if (!(numero(junto.refs_max) >= 0)) junto.refs_max = base.refs_max ?? 8;
+  // Exceção conhecida (RESOLUCOES_RECUSADAS): mesmo com o catálogo antigo dizendo 4K, não vai.
+  junto.resolucoes = semResolucoesRecusadas(m.modelo_api, junto.resolucoes);
   return junto;
 }
 
@@ -277,7 +314,8 @@ export function capacidadesDaListaDeImagens(o: ModeloDeImagemOpenRouter, endpoin
   return {
     api: /^openai\/gpt-image/.test(slug) || !saida.includes("text") ? "imagens" : "chat",
     refs_max: typeof refs?.max === "number" && refs.max >= 0 ? refs.max : 0,
-    resolucoes: valores(p.resolution).filter(ehResolucao),
+    // A lista pública ainda diz 4K no gemini-3-pro-image normal; o provedor recusa (RESOLUCOES_RECUSADAS).
+    resolucoes: semResolucoesRecusadas(slug, valores(p.resolution).filter(ehResolucao)),
     proporcoes: valores(p.aspect_ratio).filter((a) => a !== "auto"),
     qualidades,
     fundo_transparente: valores(p.background).includes("transparent"),

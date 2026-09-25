@@ -27,6 +27,7 @@
  */
 
 import {
+  ANALISE_DE_DESEMPENHO,
   ANTI_GENERICO,
   CALENDARIO_EDITORIAL,
   CTA_PRINCIPIOS,
@@ -52,9 +53,20 @@ import {
   REGRAS_DE_CORTE_E_ESCALA,
   VERSAO_ESPECIALISTAS_ADS,
 } from "./conhecimento-especialistas-ads.ts";
+import {
+  ALCANCE_E_CONVERSAO,
+  CARROSSEL_DE_RETENCAO,
+  CHECKLIST_SALVA_E_ENVIA,
+  DATAS_E_OPORTUNIDADES,
+  GANCHOS_POR_TIPO,
+  MISTURA_DO_MES,
+  SINAIS_DO_ALGORITMO,
+  SINAIS_PARA_MEDIR,
+  VERSAO_CONHECIMENTO_SOCIAL,
+} from "./conhecimento-social.ts";
 
 /** Versão do conjunto (vai no texto do prompt e no log de quem quiser registrar). */
-export const VERSAO_CONHECIMENTO_DOS_AGENTES = `especialistas ${VERSAO_ESPECIALISTAS_ADS}, marketing ${VERSAO_CONHECIMENTO_MARKETING}`;
+export const VERSAO_CONHECIMENTO_DOS_AGENTES = `especialistas ${VERSAO_ESPECIALISTAS_ADS}, marketing ${VERSAO_CONHECIMENTO_MARKETING}, social ${VERSAO_CONHECIMENTO_SOCIAL}`;
 
 /** A frase de prioridade entre as bases (regra de ouro 1 do COMO-INTEGRAR). */
 export const PRIORIDADE_DAS_BASES = `PRIORIDADE ENTRE AS BASES (versões: ${VERSAO_CONHECIMENTO_DOS_AGENTES}). Quando discordarem, vale nesta ordem: 1) dado real do cliente e régua do briefing ou do kit da marca (custo tolerável, paleta, logo, regras aprendidas com o cliente); 2) a base principal deste agente, que vem antes deste bloco; 3) o método dos especialistas de tráfego (Pedro Sobral e Natália Torres); 4) a base de marketing. Os blocos abaixo complementam: nenhuma regra anterior sai.`;
@@ -182,15 +194,29 @@ export function conhecimentoAdsPara(tarefa: TarefaAds, opcoes: { objetivo?: unkn
 // ------------------------------------------------------------------ calendário e campanhas
 
 /**
- * - mes: planejar o mês, propor temas, detalhar, conversar e completar itens.
+ * - mes: detalhar, conversar, completar itens e as outras escritas do mês.
+ * - temas: propor os temas do mês (as três frentes do propor_temas).
+ * - diagnostico: a pesquisa e o diagnóstico estruturado do mês (Frente O, 26/09).
  * - campanha: criar, ajustar e conversar sobre campanha.
  * ESTRUTURAS_DE_CONTEUDO fica por último no mês: a BASE_DO_ESTRATEGISTA já
  * traz as regras do carrossel e do estático, e o resto dele (blog, página)
  * não é formato do calendário. ROTEIRO_DE_VIDEO nunca entra: o calendário
- * proíbe vídeo (REGRAS_DE_SAIDA).
+ * proíbe vídeo (REGRAS_DE_SAIDA). Os blocos de social media
+ * (conhecimento-social.ts) somam ganchos de capa, carrossel de retenção e o
+ * checklist de salvar e enviar a quem escreve; mistura do mês, datas e
+ * alcance contra conversão a quem propõe temas; sinais e leitura do perfil
+ * ao diagnóstico.
  */
-export type MomentoDoCalendario = "mes" | "campanha";
+export type MomentoDoCalendario = "mes" | "campanha" | "temas" | "diagnostico";
+/** Teto da campanha (e o antigo teto único do calendário). */
 export const TETO_CALENDARIO = 7_500;
+/** Teto por momento (Frente O): o mês e os temas ganharam os blocos de social media. */
+export const TETO_CALENDARIO_POR_MOMENTO: Record<MomentoDoCalendario, number> = {
+  mes: 11_000,
+  temas: 12_500,
+  diagnostico: 11_000,
+  campanha: TETO_CALENDARIO,
+};
 
 const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConhecimento[]> = {
   mes: [
@@ -199,7 +225,32 @@ const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConheciment
     b("cta_principios", CTA_PRINCIPIOS, 5),
     b("voz_de_marca", VOZ_DE_MARCA, 4),
     b("anti_generico", ANTI_GENERICO, 8),
+    b("ganchos_por_tipo", GANCHOS_POR_TIPO, 7),
+    b("carrossel_de_retencao", CARROSSEL_DE_RETENCAO, 7.5),
+    b("checklist_salva_e_envia", CHECKLIST_SALVA_E_ENVIA, 6.5),
     b("estruturas_de_conteudo", ESTRUTURAS_DE_CONTEUDO, 1),
+  ],
+  temas: [
+    b("calendario_editorial", CALENDARIO_EDITORIAL, 9),
+    b("mistura_do_mes", MISTURA_DO_MES, 8.5),
+    b("datas_e_oportunidades", DATAS_E_OPORTUNIDADES, 8),
+    b("ganchos_por_tipo", GANCHOS_POR_TIPO, 7.5),
+    b("alcance_e_conversao", ALCANCE_E_CONVERSAO, 7),
+    b("formulas_de_titulo", FORMULAS_DE_TITULO, 6),
+    b("cta_principios", CTA_PRINCIPIOS, 5),
+    b("voz_de_marca", VOZ_DE_MARCA, 4),
+    b("anti_generico", ANTI_GENERICO, 8.8),
+    b("estruturas_de_conteudo", ESTRUTURAS_DE_CONTEUDO, 1),
+  ],
+  diagnostico: [
+    b("sinais_do_algoritmo", SINAIS_DO_ALGORITMO, 9),
+    b("sinais_para_medir", SINAIS_PARA_MEDIR, 8.5),
+    b("alcance_e_conversao", ALCANCE_E_CONVERSAO, 8),
+    b("mistura_do_mes", MISTURA_DO_MES, 7.5),
+    b("datas_e_oportunidades", DATAS_E_OPORTUNIDADES, 7),
+    b("analise_de_desempenho", ANALISE_DE_DESEMPENHO, 5),
+    b("calendario_editorial", CALENDARIO_EDITORIAL, 4),
+    b("anti_generico", ANTI_GENERICO, 3),
   ],
   campanha: [
     b("plano_de_campanha", PLANO_DE_CAMPANHA, 9),
@@ -212,7 +263,7 @@ const BLOCOS_CALENDARIO: Record<MomentoDoCalendario, readonly BlocoDeConheciment
 };
 
 export function conhecimentoCalendarioPara(momento: MomentoDoCalendario): ConhecimentoMontado {
-  return montarComTeto(BLOCOS_CALENDARIO[momento], TETO_CALENDARIO);
+  return montarComTeto(BLOCOS_CALENDARIO[momento], TETO_CALENDARIO_POR_MOMENTO[momento]);
 }
 
 // ------------------------------------------------------------------ Estúdio

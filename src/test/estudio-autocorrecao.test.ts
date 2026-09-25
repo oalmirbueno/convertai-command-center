@@ -317,7 +317,9 @@ describe("front: confere e corrige antes de revelar", () => {
 describe("correção só na área do texto e refazer diferente (24/09/2026)", () => {
   it("corrigir_card abre só as áreas de texto e logo; o ajuste devolve o original fora delas", () => {
     const c = corpoDe("corrigirCard");
-    expect(c).toContain("areasDeDesenho(card, totalCards(t), levaLogo(t, ordem) && !logoDoCodigo, quadroDoCard(t, card))");
+    // 26/09: a logo é gerada junto com a arte; a área dela (a gravada na versão, quando a máscara a fixou) abre com a do texto.
+    expect(c).toContain("areasDeDesenho(card, totalCards(t), levaLogo(t, ordem) && !logoArea, quadroDoCard(t, card))");
+    expect(c).not.toContain("logoDoCodigo");
     expect(c).toContain("areas: areasDaCorrecao");
     expect(corpoDe("ajustarCard")).toContain("auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas)");
   });

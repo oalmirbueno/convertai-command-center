@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode, type UIEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ClipboardPaste, Eye, Loader2, Maximize2, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
+import { CheckSquare, ClipboardPaste, Eye, Loader2, Maximize2, MoreHorizontal, MousePointerClick, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { imagensDoColar } from "@/components/mesa/EstudioFotos";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { padraoPara } from "@/lib/mesa/api";
 import { AprovarFoto, BotoesDeUso } from "./AcoesDeUso";
+import AcoesProDaFoto from "./AcoesProDaFoto";
 import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, Pilulas, SeloCurto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import ProdutoDasFotos from "./ProdutoDasFotos";
 import { MenuDeUso } from "./UsoDaFoto";
@@ -42,6 +43,11 @@ import {
  * tratada, gerada, aprovada) e as ações de cada foto num menu (ver grande,
  * preparar, Usar na Mesa, Mesa Ads, baixar, aprovação, Arquivos). O original
  * nunca é alterado: tudo o que muda vira derivada, com a linhagem à vista.
+ *
+ * 26/09 (pedido do dono): a área das fotos tem rolagem própria de verdade no
+ * computador (filtros fixos em cima, grade e painel da foto rolando cada um
+ * no seu lugar) e o painel da foto ficou em seções (principal, ferramentas
+ * pro de ampliar e tirar fundo, mais ferramentas, sobre a foto).
  */
 
 export type FiltroDaClasse = "todas" | "original" | "derivada" | "gerada" | "aprovada";
@@ -192,14 +198,14 @@ function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
  * os pixels originais do assunto (do gerador vem só o contorno, alinhado à
  * foto); a versão sem fundo entra no acervo como derivada, com o selo.
  */
-export function BotaoTirarFundo({ foto, onPronta }: { foto: FotoDoAcervo; onPronta?: (id: string) => void }) {
+export function BotaoTirarFundo({ foto, onPronta, rotulo = "Tirar fundo" }: { foto: FotoDoAcervo; onPronta?: (id: string) => void; rotulo?: string }) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   return (
     <BotaoComCusto
       rotulo={
         <>
-          <Scissors className="mr-1.5 h-3.5 w-3.5" /> Tirar fundo
+          <Scissors className="mr-1.5 h-3.5 w-3.5" /> {rotulo}
         </>
       }
       titulo="Fundo tirado"
@@ -220,6 +226,16 @@ export function BotaoTirarFundo({ foto, onPronta }: { foto: FotoDoAcervo; onPron
         if (data && data.aviso) toast.message("Confira o recorte", { description: data.aviso });
       }}
     />
+  );
+}
+
+/** Seção do painel da foto aberta: título pequeno e o conteúdo. */
+function SecaoDoDetalhe({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 border-t border-border pt-2.5">
+      <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{titulo}</p>
+      {children}
+    </div>
   );
 }
 
@@ -246,7 +262,7 @@ function DetalheDaFoto({
   const origem = foto.derivada_de ? todas.find((f) => f.id === foto.derivada_de) || null : null;
   const filhas = todas.filter((f) => f.derivada_de === foto.id);
   return (
-    <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-3.5" aria-label={`Foto ${foto.nome}`}>
+    <section className="min-w-0 space-y-3 p-3.5" aria-label={`Foto ${foto.nome}`} data-detalhe-da-foto={foto.id}>
       <div className="flex min-w-0 items-start">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-semibold" title={foto.nome}>
@@ -268,8 +284,58 @@ function DetalheDaFoto({
           Imagem gerada por IA. Partes que não aparecem nas fotos originais podem ter sido criadas.
         </p>
       )}
-      {(origem || filhas.length > 0) && (
-        <div className="space-y-1 text-[12px]">
+      {/* Principal: aprovar, usar (Mesa, Mesa Ads, baixar, aprovação) e ver grande. */}
+      <div className="flex min-w-0 flex-wrap items-center" data-acoes-principais="">
+        <AprovarFoto foto={foto} />
+        <MenuDeUso foto={foto} rotulo="Usar" variante="outline" className="mb-1.5 mr-1.5" />
+        <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={onAmpliar}>
+          <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Ver grande
+        </Button>
+      </div>
+      <SecaoDoDetalhe titulo="Ampliar e tirar fundo (pro)">
+        <AcoesProDaFoto foto={foto} onPronta={(nova) => onAbrir(nova.id)} />
+      </SecaoDoDetalhe>
+      <SecaoDoDetalhe titulo="Mais ferramentas">
+        <div className="flex min-w-0 flex-wrap items-center">
+          <BotaoComCusto
+            rotulo={
+              <>
+                <ScanSearch className="mr-1.5 h-3.5 w-3.5" />
+                {leitura ? "Ler de novo" : "Ler foto"}
+              </>
+            }
+            titulo="Foto lida"
+            descricao="O modelo de leitura descreve o que aparece, lê o texto, avalia nitidez, luz e enquadramento e sugere o produto e o papel da foto."
+            variant="outline"
+            className="mb-1.5 mr-1.5 h-8 text-[12px]"
+            partes={() => partesDaLeitura(catalogo)}
+            executar={() => lerFoto(clientId, foto.id)}
+            aoConcluir={(data) => {
+              onLeitura(data as LeituraDaFoto);
+              invalidarFotos(queryClient, clientId);
+            }}
+          />
+          {!foto.referencia_web && (
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("preparar", { imagem: foto.id })}>
+              <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Preparar
+            </Button>
+          )}
+          {podeVirarClone(foto) && (
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("clones", { imagem: foto.id })} title="Mesmo rosto em outras roupas, cenários e poses (pessoa real, com autorização)">
+              <UsersRound className="mr-1.5 h-3.5 w-3.5" /> Variações desta pessoa
+            </Button>
+          )}
+          {/* Alternativa ao "Tirar fundo (pro)": o recorte pelo gerador da casa (preparar, fundo transparente). */}
+          {podeTirarFundo(foto) && <BotaoTirarFundo foto={foto} onPronta={onAbrir} rotulo="Tirar fundo (alternativa)" />}
+        </div>
+      </SecaoDoDetalhe>
+      <SecaoDoDetalhe titulo="Sobre a foto">
+        <div className="space-y-1.5 text-[12px]">
+          {foto.largura && foto.altura ? (
+            <p className="text-muted-foreground tabular-nums">
+              {foto.largura} x {foto.altura} px
+            </p>
+          ) : null}
           {origem && (
             <p className="min-w-0 truncate">
               <span className="text-muted-foreground">Veio de </span>
@@ -289,49 +355,36 @@ function DetalheDaFoto({
               ))}
             </p>
           )}
+          {!leitura && foto.descricao && <p className="leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{foto.descricao}</p>}
+          {leitura && <LeituraNaTela leitura={leitura} />}
         </div>
-      )}
-      {foto.largura && foto.altura ? (
-        <p className="text-[11.5px] text-muted-foreground tabular-nums">
-          {foto.largura} x {foto.altura} px
-        </p>
-      ) : null}
-      {!leitura && foto.descricao && <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{foto.descricao}</p>}
-      {leitura && <LeituraNaTela leitura={leitura} />}
-      <div className="flex flex-wrap items-center">
-        <AprovarFoto foto={foto} />
-        <BotaoComCusto
-          rotulo={
-            <>
-              <ScanSearch className="mr-1.5 h-3.5 w-3.5" />
-              {leitura ? "Ler de novo" : "Ler foto"}
-            </>
-          }
-          titulo="Foto lida"
-          descricao="O modelo de leitura descreve o que aparece, lê o texto, avalia nitidez, luz e enquadramento e sugere o produto e o papel da foto."
-          variant="outline"
-          className="mb-1.5 mr-1.5 h-8 text-[12px]"
-          partes={() => partesDaLeitura(catalogo)}
-          executar={() => lerFoto(clientId, foto.id)}
-          aoConcluir={(data) => {
-            onLeitura(data as LeituraDaFoto);
-            invalidarFotos(queryClient, clientId);
-          }}
-        />
-        {podeTirarFundo(foto) && <BotaoTirarFundo foto={foto} onPronta={onAbrir} />}
-        {podeVirarClone(foto) && (
-          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("clones", { imagem: foto.id })} title="Mesmo rosto em outras roupas, cenários e poses (pessoa real, com autorização)">
-            <UsersRound className="mr-1.5 h-3.5 w-3.5" /> Variações desta pessoa
-          </Button>
-        )}
-        <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("preparar", { imagem: foto.id })}>
-          <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Preparar
-        </Button>
-        <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={onAmpliar}>
-          <Maximize2 className="mr-1.5 h-3.5 w-3.5" /> Ver grande
-        </Button>
-      </div>
+      </SecaoDoDetalhe>
     </section>
+  );
+}
+
+/** Sem foto aberta: o que dá para fazer, em itens curtos (antes era um parágrafo só). */
+function GuiaDaArea() {
+  const itens: { icone: ReactNode; texto: string }[] = [
+    { icone: <MousePointerClick className="h-3.5 w-3.5" />, texto: "Toque numa foto: ela abre aqui, com a linhagem e as ferramentas." },
+    { icone: <Maximize2 className="h-3.5 w-3.5" />, texto: "A lupa no canto mostra a foto grande." },
+    { icone: <CheckSquare className="h-3.5 w-3.5" />, texto: "A caixinha marca várias para identificar o produto, baixar ou levar juntas." },
+    { icone: <MoreHorizontal className="h-3.5 w-3.5" />, texto: "O menu leva para a Mesa, a Mesa Ads, baixar ou mandar ao cliente." },
+  ];
+  return (
+    <div className="p-4" data-guia-das-fotos="">
+      <p className="flex items-center text-[12.5px] font-medium">
+        <Eye className="mr-1.5 h-4 w-4 text-primary" /> Nenhuma foto aberta
+      </p>
+      <ul className="mt-2.5 space-y-2">
+        {itens.map((i) => (
+          <li key={i.texto} className="flex min-w-0 items-start text-[12px] leading-snug text-muted-foreground">
+            <span className="mr-2 mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-muted text-foreground">{i.icone}</span>
+            <span className="min-w-0">{i.texto}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -354,14 +407,27 @@ function CartaoDaFoto({
   return (
     <div
       className={`relative min-w-0 rounded-lg border bg-card p-1 transition-colors ${
-        aberta ? "border-primary" : marcada ? "border-primary/60" : "border-border hover:border-primary/40"
+        aberta ? "border-primary ring-1 ring-primary" : marcada ? "border-primary/60" : "border-border hover:border-primary/40"
       }`}
       data-foto={foto.id}
     >
-      <button type="button" onClick={onAbrir} className="block w-full min-w-0 text-left" title={foto.descricao || foto.nome} aria-label={`Abrir ${foto.nome}`}>
-        <MiniaturaDaFoto foto={foto} />
-        <span className="mt-1 block truncate px-0.5 text-[10.5px] font-medium">{foto.nome}</span>
-      </button>
+      <div className="relative min-w-0">
+        <button type="button" onClick={onAbrir} className="block w-full min-w-0 text-left" title={foto.descricao || foto.nome} aria-label={`Abrir ${foto.nome}`}>
+          <MiniaturaDaFoto foto={foto} />
+        </button>
+        {/* Lupa: ver grande direto da grade (pílula clara, sem véu escuro na foto). */}
+        <button
+          type="button"
+          onClick={onAmpliar}
+          aria-label={`Ver grande ${foto.nome}`}
+          className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+        >
+          <Maximize2 className="h-3 w-3" />
+        </button>
+      </div>
+      <p className="mt-1 truncate px-0.5 text-[10.5px] font-medium" title={foto.nome}>
+        {foto.nome}
+      </p>
       <div className="flex min-w-0 items-center justify-between px-0.5">
         <SeloCurto foto={foto} />
         <MenuDeUso
@@ -371,7 +437,7 @@ function CartaoDaFoto({
           extras={[
             { rotulo: "Ver grande", acao: onAmpliar },
             { rotulo: "Detalhes e leitura", acao: onAbrir },
-            // Abre o detalhe, onde o botão Tirar fundo mostra o custo antes.
+            // Abre o detalhe, onde o "Tirar fundo (pro)" mostra o custo antes.
             ...(podeTirarFundo(foto) ? [{ rotulo: "Tirar fundo", acao: onAbrir }] : []),
             ...(podeVirarClone(foto) ? [{ rotulo: "Variações desta pessoa (clone)", acao: () => irPara("clones", { imagem: foto.id }) }] : []),
             ...(foto.referencia_web ? [] : [{ rotulo: "Preparar (fundo, luz, cenário)", acao: () => irPara("preparar", { imagem: foto.id }) }]),
@@ -385,11 +451,14 @@ function CartaoDaFoto({
   );
 }
 
+/** Estilo da área com rolagem própria: não passa a rolagem para a página quando chega ao fim. */
+const ROLAGEM_PROPRIA = { overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" } as const;
+
 export default function EtapaAcervo() {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const { selecionadas, setSelecionadas, irPara, imagemId } = useMesaFoto();
+  const { selecionadas, setSelecionadas, imagemId } = useMesaFoto();
   const fotos = useFotos(clientId);
   const kits = useKits(clientId);
   const [classe, setClasse] = useState<FiltroDaClasse>("todas");
@@ -400,6 +469,7 @@ export default function EtapaAcervo() {
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [andamento, setAndamento] = useState<string | null>(null);
   const [leituras, setLeituras] = useState<Record<string, LeituraDaFoto>>({});
+  const painel = useRef<HTMLElement | null>(null);
 
   const todas = useMemo(() => fotos.data || [], [fotos.data]);
   const listaDeKits = useMemo(() => kits.data || [], [kits.data]);
@@ -415,6 +485,11 @@ export default function EtapaAcervo() {
     }
     return c;
   }, [todas]);
+
+  // Foto nova aberta: o painel do lado volta ao topo (a rolagem dele é própria).
+  useEffect(() => {
+    if (painel.current) painel.current.scrollTop = 0;
+  }, [aberta]);
 
   const enviar = async (arquivos: File[]) => {
     if (!arquivos.length || andamento) return;
@@ -476,6 +551,11 @@ export default function EtapaAcervo() {
       setSelecionadas(novas);
     }
   };
+  // Rolagem da grade perto do fim: carrega mais sem botão (o botão fica para quem prefere).
+  const aoRolarAGrade = (e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (filtradas.length > limite && el.scrollTop + el.clientHeight > el.scrollHeight - 320) setLimite((l) => l + POR_PAGINA);
+  };
 
   const vazio = fotos.isSuccess && todas.length === 0;
 
@@ -490,38 +570,6 @@ export default function EtapaAcervo() {
         }
       >
         <ZonaDeEnvio compacta={!vazio && todas.length > 0} destaque onArquivos={(a) => void enviar(a)} andamento={andamento} />
-        {todas.length > 0 && (
-          <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
-            <div className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, descrição ou tag" className="h-9 pl-8" aria-label="Buscar no acervo" />
-            </div>
-            <Select value={kitFiltro} onValueChange={setKitFiltro}>
-              <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Filtrar por produto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODOS_OS_KITS}>Todos os produtos</SelectItem>
-                <SelectItem value={SEM_KIT}>Sem produto</SelectItem>
-                {listaDeKits.map((k) => (
-                  <SelectItem key={String(k.id)} value={String(k.id)}>
-                    {k.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Pilulas
-              className="md:col-span-2"
-              rotulo="Filtrar por tipo de foto"
-              opcoes={FILTROS_DA_CLASSE.map((f) => ({ ...f, rotulo: `${f.rotulo} · ${f.valor === "todas" ? todas.length : contagem[f.valor]}` }))}
-              valor={classe}
-              onEscolher={(v) => {
-                setClasse(v);
-                setLimite(POR_PAGINA);
-              }}
-            />
-          </div>
-        )}
       </Cartao>
 
       {todas.length > 0 && <ProdutoDasFotos fotos={todas} />}
@@ -539,63 +587,111 @@ export default function EtapaAcervo() {
       )}
 
       {todas.length > 0 && (
-        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="min-w-0">
-            <div className="mb-2 flex min-w-0 flex-wrap items-center text-[12px] text-muted-foreground">
-              <span className="mr-3">
-                {filtradas.length} {filtradas.length === 1 ? "foto" : "fotos"}
-              </span>
-              {visiveis.length > 0 && (
-                <button type="button" className="font-medium text-primary hover:underline" onClick={marcarVisiveis}>
-                  {todasVisiveisMarcadas ? "Desmarcar as visíveis" : "Selecionar as visíveis"}
-                </button>
+        /*
+         * Área das fotos (pedido do dono, 26/09: "tem um scroll só para rodar as fotos, mas fica
+         * rodando a página inteira"). No computador a área tem a altura da tela: a barra de filtros
+         * fica fixa em cima, a grade rola sozinha e o painel da foto aberta rola sozinho do lado,
+         * sem levar a página junto. No celular (tela estreita) tudo segue a rolagem da página: caixa
+         * com rolagem própria prende o dedo (armadilha conhecida do painel).
+         */
+        <section
+          className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card lg:grid lg:h-[calc(100vh-176px)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_360px]"
+          aria-label="Fotos do acervo"
+          data-area-das-fotos=""
+        >
+          <div className="flex min-w-0 flex-col lg:min-h-0 lg:border-r lg:border-border">
+            <div className="shrink-0 space-y-2 border-b border-border bg-card px-3 pb-1 pt-2.5" data-barra-das-fotos="">
+              <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
+                <div className="relative min-w-0">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, descrição ou tag" className="h-9 pl-8" aria-label="Buscar no acervo" />
+                </div>
+                <Select value={kitFiltro} onValueChange={setKitFiltro}>
+                  <SelectTrigger className="h-9 min-w-0 text-[12.5px]" aria-label="Filtrar por produto">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TODOS_OS_KITS}>Todos os produtos</SelectItem>
+                    <SelectItem value={SEM_KIT}>Sem produto</SelectItem>
+                    {listaDeKits.map((k) => (
+                      <SelectItem key={String(k.id)} value={String(k.id)}>
+                        {k.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Pilulas
+                rotulo="Filtrar por tipo de foto"
+                opcoes={FILTROS_DA_CLASSE.map((f) => ({ ...f, rotulo: `${f.rotulo} · ${f.valor === "todas" ? todas.length : contagem[f.valor]}` }))}
+                valor={classe}
+                onEscolher={(v) => {
+                  setClasse(v);
+                  setLimite(POR_PAGINA);
+                }}
+              />
+              <div className="flex min-w-0 flex-wrap items-center pb-1 text-[12px] text-muted-foreground">
+                <span className="mr-3 tabular-nums">
+                  {filtradas.length} {filtradas.length === 1 ? "foto" : "fotos"}
+                  {escolhidas.length ? ` · ${escolhidas.length} ${escolhidas.length === 1 ? "marcada" : "marcadas"}` : ""}
+                </span>
+                {visiveis.length > 0 && (
+                  <button type="button" className="font-medium text-primary hover:underline" onClick={marcarVisiveis}>
+                    {todasVisiveisMarcadas ? "Desmarcar as visíveis" : "Selecionar as visíveis"}
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className={`min-w-0 p-2 lg:min-h-0 lg:flex-1 lg:overflow-y-auto ${escolhidas.length ? "lg:pb-24" : ""}`} style={ROLAGEM_PROPRIA} onScroll={aoRolarAGrade} data-rolagem-das-fotos="">
+              {filtradas.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-border p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
+              ) : (
+                <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+                  {visiveis.map((f) => (
+                    <CartaoDaFoto
+                      key={f.id}
+                      foto={f}
+                      marcada={selecionadas.indexOf(f.id) >= 0}
+                      aberta={aberta === f.id}
+                      onMarcar={() => marcar(f.id)}
+                      onAbrir={() => setAberta(f.id)}
+                      onAmpliar={() => setAmpliada(Math.max(0, filtradas.indexOf(f)))}
+                    />
+                  ))}
+                </div>
+              )}
+              {filtradas.length > limite && (
+                <Button type="button" size="sm" variant="ghost" className="mt-2 h-8 w-full text-[12px]" onClick={() => setLimite((l) => l + POR_PAGINA)}>
+                  Ver mais {Math.min(POR_PAGINA, filtradas.length - limite)}
+                </Button>
               )}
             </div>
-            {filtradas.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-border bg-card p-4 text-center text-[12.5px] text-muted-foreground">Nenhuma foto com esse filtro.</p>
-            ) : (
-              <div className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-5 md:grid-cols-6 xl:grid-cols-8">
-                {visiveis.map((f) => (
-                  <CartaoDaFoto
-                    key={f.id}
-                    foto={f}
-                    marcada={selecionadas.indexOf(f.id) >= 0}
-                    aberta={aberta === f.id}
-                    onMarcar={() => marcar(f.id)}
-                    onAbrir={() => setAberta(f.id)}
-                    onAmpliar={() => setAmpliada(Math.max(0, filtradas.indexOf(f)))}
-                  />
-                ))}
-              </div>
-            )}
-            {filtradas.length > limite && (
-              <Button type="button" size="sm" variant="ghost" className="mt-2 h-8 text-[12px]" onClick={() => setLimite((l) => l + POR_PAGINA)}>
-                Ver mais {Math.min(POR_PAGINA, filtradas.length - limite)}
-              </Button>
-            )}
           </div>
-          <div className="order-first min-w-0 lg:order-none">
+          <aside
+            ref={painel}
+            className="order-first min-w-0 border-b border-border lg:order-none lg:min-h-0 lg:overflow-y-auto lg:border-b-0"
+            style={ROLAGEM_PROPRIA}
+            aria-label="Foto aberta"
+            data-painel-da-foto=""
+          >
             {fotoAberta ? (
-              <div className="lg:sticky lg:top-[140px]">
-                <DetalheDaFoto
-                  key={fotoAberta.id}
-                  foto={fotoAberta}
-                  todas={todas}
-                  leitura={leituras[fotoAberta.id] || null}
-                  onLeitura={(l) => setLeituras((m) => ({ ...m, [fotoAberta.id]: l }))}
-                  onAbrir={setAberta}
-                  onAmpliar={() => setAmpliada(Math.max(0, filtradas.indexOf(fotoAberta)))}
-                  onFechar={() => setAberta(null)}
-                />
-              </div>
+              <DetalheDaFoto
+                key={fotoAberta.id}
+                foto={fotoAberta}
+                todas={todas}
+                leitura={leituras[fotoAberta.id] || null}
+                onLeitura={(l) => setLeituras((m) => ({ ...m, [fotoAberta.id]: l }))}
+                onAbrir={setAberta}
+                onAmpliar={() => setAmpliada(Math.max(0, filtradas.indexOf(fotoAberta)))}
+                onFechar={() => setAberta(null)}
+              />
             ) : (
-              <p className="hidden rounded-xl border border-dashed border-border p-4 text-[12px] text-muted-foreground lg:block">
-                <Eye className="mb-1 h-4 w-4" />
-                Toque numa foto para ver grande, a linhagem e ler com IA. O menu de cada foto leva para a Mesa, a Mesa Ads, baixa ou manda ao cliente. Marque várias para identificar o produto ou levar juntas.
-              </p>
+              <div className="hidden lg:block">
+                <GuiaDaArea />
+              </div>
             )}
-          </div>
-        </div>
+          </aside>
+        </section>
       )}
 
       {escolhidas.length > 0 && (

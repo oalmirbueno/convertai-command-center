@@ -47,7 +47,7 @@ vi.mock("@/integrations/supabase/client", () => {
     },
   };
 });
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn(), message: vi.fn() } }));
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ profile: { role: "admin" }, user: { id: "u-1" } }) }));
 
 const CLIENTE = "11111111-1111-1111-1111-111111111111";
@@ -379,11 +379,11 @@ describe("rota, casca e troca entre mesas", () => {
     const botoes = within(nav).getAllByRole("button");
     // Pedido do dono (25/09, "não tem um processo mais simples"): 1 Fotos (o produto é identificado ali),
     // 2 Criar, 3 Usar (com a revisão dentro); Biblioteca, Modelos e Canvas como ferramentas de apoio.
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Clones", "Canvas"]);
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "canvas"]);
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Clones", "Book", "Canvas"]);
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "book", "canvas"]);
     expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "ensaio", "campanha", "preparar"], ["usar", "revisar"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
-    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["canvas", true]]);
+    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["book", true], ["canvas", true]]);
     // Celular: o caminho principal em 3 colunas e as de apoio quebram a linha, sem rolagem lateral.
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(caminho.className).toContain("grid-cols-3");
@@ -1927,7 +1927,8 @@ describe("25/09: aba Clones (pessoa real com autorização)", () => {
     expect(document.querySelector(`[data-clone-aberto="${CL}"]`)).toBeTruthy();
     expect(screen.getByText(/pessoa real autorizada/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Gerar a folha/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "Na rua" }));
+    // O clone abre já com o provisório (sem esqueleto); as variações prontas chegam com a leitura completa.
+    fireEvent.click(await screen.findByRole("radio", { name: "Na rua" }));
     expect((screen.getByLabelText("Cenário") as HTMLInputElement).value).toBe("rua arborizada");
     const gerar = screen.getByRole("button", { name: /Gerar 2 variações/ });
     fireEvent.click(gerar);
@@ -1978,7 +1979,248 @@ describe("25/09: Modelos ocupam o espaço", () => {
     const t = ler("src/components/mesa-foto/EtapaModelos.tsx");
     expect(t).toContain("data-persona-lateral");
     expect(t).toContain('className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe=""');
-    expect(t).toContain("lg:col-span-4 xl:col-span-3");
-    expect(t).toContain("lg:col-span-8 xl:col-span-9");
+    // 26/09: coluna da esquerda estreita, com o seletor compacto (antes 4 de 12 colunas com cartões grandes).
+    expect(t).toContain("lg:grid-cols-[250px_minmax(0,1fr)]");
+    expect(t).toContain("<SeletorLateral");
+    expect(t).toContain("grid-cols-[64px_minmax(0,1fr)]");
+  });
+});
+
+// ================================================================== 26/09: fotos, clones sem piscar e Book
+
+import EtapaBook from "@/components/mesa-foto/EtapaBook";
+import { moverNaSelecao, normalizarBookAberto, pedidoDaBiblioteca } from "@/components/mesa-foto/bookApi";
+import { cloneAbertoProvisorio, resumoDaFolhaLocal, transferirClone } from "@/components/mesa-foto/clonesApi";
+
+/** Clica e, se o botão pedir o segundo clique (sem estimativa ou caro), clica de novo. */
+async function clicarComCusto(nome: RegExp, acao: string) {
+  const botao = await screen.findByRole("button", { name: nome });
+  fireEvent.click(botao);
+  await new Promise((r) => setTimeout(r, 30));
+  if (!chamadasDe(acao).length) fireEvent.click(botao);
+  await waitFor(() => expect(chamadasDe(acao).length).toBeGreaterThan(0));
+}
+
+describe("26/09: Fotos com rolagem própria e painel organizado", () => {
+  it("a grade e o painel rolam sozinhos só no computador (celular segue a página); o painel tem seções e as ferramentas pro", async () => {
+    montar(h(EtapaAcervo), { imagemId: F1 });
+    const detalhe = await screen.findByRole("region", { name: /Foto mouse-frente.jpg/ });
+    const area = document.querySelector("[data-area-das-fotos]") as HTMLElement;
+    expect(area.className).toContain("lg:h-[calc(100vh-176px)]");
+    const rolagem = document.querySelector("[data-rolagem-das-fotos]") as HTMLElement;
+    expect(rolagem.className).toContain("lg:overflow-y-auto");
+    expect(rolagem.className).not.toMatch(/(^|\s)overflow-y-auto/);
+    const painel = document.querySelector("[data-painel-da-foto]") as HTMLElement;
+    expect(painel.className).toContain("lg:overflow-y-auto");
+    // Barra de filtros fixa em cima da grade (fora da rolagem).
+    expect((document.querySelector("[data-barra-das-fotos]") as HTMLElement).contains(screen.getByLabelText("Buscar no acervo"))).toBe(true);
+    expect(rolagem.contains(screen.getByLabelText("Buscar no acervo"))).toBe(false);
+    for (const secao of ["Ampliar e tirar fundo (pro)", "Mais ferramentas", "Sobre a foto"]) expect(within(detalhe).getByText(secao)).toBeTruthy();
+    expect(detalhe.querySelector(`[data-ferramentas-pro="${F1}"]`)).toBeTruthy();
+    // Lupa de ver grande em cada foto da grade.
+    expect(screen.getByRole("button", { name: "Ver grande mouse-caixa.jpg" })).toBeTruthy();
+    fireEvent.click(within(detalhe).getByRole("button", { name: "Fechar o detalhe" }));
+    expect(await screen.findByText("Nenhuma foto aberta")).toBeTruthy();
+    expect(document.querySelectorAll("[data-guia-das-fotos] li")).toHaveLength(4);
+  });
+
+  it("baixar sem ZIP: uma a uma, com a URL de download da função (tamanho original)", async () => {
+    respostas.baixar = (b: any) => ({ arquivos: b.imagem_ids.map((id: string) => ({ imagem_id: id, arquivo: `${id}.jpg`, url: `https://arquivo.test/${id}.jpg?download=${id}.jpg` })) });
+    const clique = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    montar(h(EtapaAcervo), { selecionadas: [F1, F3] });
+    await screen.findByText("mouse-frente.jpg");
+    const barra = document.querySelector("[data-barra-de-selecao]") as HTMLElement;
+    fireEvent.click(within(barra).getByRole("button", { name: /^Baixar$/ }));
+    await waitFor(() => expect(chamadasDe("baixar")).toEqual([{ acao: "baixar", client_id: CLIENTE, imagem_ids: [F1, F3] }]));
+    await waitFor(() => expect(clique).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    clique.mockRestore();
+    expect(ler("src/components/mesa-foto/AcoesDeUso.tsx")).toContain("baixarUmaAUma(clientId, fotos");
+  });
+});
+
+describe("26/09: Clones sem piscar, aprovar na hora, contexto, uniforme e transferência", () => {
+  const VISTA = "eeeeeeee-0000-4000-8000-000000000001";
+  const cloneNaLista = () => ({ ...CLONE_LIDO.clone, capa_url: null, autorizacao_valida: { ok: true, motivo: null } });
+
+  it("criar o clone abre ele na hora, sem voltar ao vazio nem ao esqueleto", async () => {
+    respostas.clones_listar = { clones: [] };
+    respostas.clone_criar = { clone: { ...CLONE_LIDO.clone }, custo_usd: 0 };
+    // A leitura completa demora: a tela tem de mostrar o clone já com o provisório.
+    respostas.clone_ler = () => new Promise(() => undefined);
+    montar(h(EtapaClones), { imagemId: F1 });
+    await screen.findByLabelText("Nome do clone");
+    fireEvent.change(screen.getByLabelText("Nome do clone"), { target: { value: "Dra. Paula" } });
+    fireEvent.change(screen.getByLabelText("Quem autorizou"), { target: { value: "A própria Paula" } });
+    fireEvent.change(screen.getByLabelText("Data da autorização"), { target: { value: "20/09/2026" } });
+    fireEvent.change(screen.getByLabelText("Finalidade"), { target: { value: "posts da clínica" } });
+    for (const caixa of screen.getAllByRole("checkbox")) fireEvent.click(caixa);
+    fireEvent.click(screen.getByRole("button", { name: /Criar clone/ }));
+    await waitFor(() => expect(document.querySelector(`[data-clone-aberto="${CL}"]`)).toBeTruthy());
+    expect(screen.queryByText("Crie o primeiro clone")).toBeNull();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(screen.getByText(/Lendo a folha e as variações/)).toBeTruthy();
+  });
+
+  it("aprovar a vista muda na hora (antes da função responder) e baixa o original sem ZIP", async () => {
+    respostas.clones_listar = { clones: [cloneNaLista()] };
+    respostas.clone_ler = { ...CLONE_LIDO, imagens: [{ id: VISTA, modelo_id: CL, papel: "vista", vista: "frente", storage_bucket: "mesa", storage_path: `${CLIENTE}/foto/clones/${CL}/frente.png`, aprovada: null }] };
+    let responder: (v: unknown) => void = () => undefined;
+    respostas.clone_imagem_decidir = () => new Promise((r) => (responder = r));
+    montar(h(EtapaClones));
+    const frente = await waitFor(() => {
+      const el = document.querySelector('[data-vista-do-clone="frente"]');
+      if (!el || !within(el as HTMLElement).queryByRole("button", { name: /Aprovar/ })) throw new Error("sem a vista");
+      return el as HTMLElement;
+    });
+    expect(within(frente).getByRole("button", { name: "Baixar Frente" })).toBeTruthy();
+    fireEvent.click(within(frente).getByRole("button", { name: /Aprovar/ }));
+    expect(await within(frente).findByText("aprovada")).toBeTruthy();
+    expect(chamadasDe("clone_imagem_decidir")).toEqual([{ acao: "clone_imagem_decidir", imagem_id: VISTA, decisao: "aprovar" }]);
+    responder({ imagem: { id: VISTA, aprovada: true }, custo_usd: 0 });
+  });
+
+  it("variações pelo contexto do cliente: o diretor sugere, sai uma foto por sugestão marcada, e ela aparece na hora", async () => {
+    let variacoes: any[] = [];
+    respostas.clones_listar = { clones: [cloneNaLista()] };
+    respostas.clone_ler = () => ({ ...CLONE_LIDO, variacoes });
+    respostas.clone_variacoes_sugerir = {
+      negocio: "Paisagismo residencial; a pessoa é a jardineira da equipe.",
+      sugestoes: [
+        { rotulo: "Podando o jardim", roupa: "camisa de trabalho verde", cenario: "jardim residencial", pose: "podando", expressao: "concentrada", luz: "manhã", enquadramento: "meio_corpo", porque: "post de serviço" },
+        { rotulo: "Com o cliente", roupa: "camisa de trabalho", cenario: "varanda", pose: "mostrando o projeto", expressao: "simpática", luz: "tarde", enquadramento: "meio_corpo", porque: "anúncio" },
+      ],
+      custo_usd: 0.01,
+    };
+    respostas.clone_variacao_gerar = (b: any) => {
+      const f = fotoBruta(b.pedido.cenario === "varanda" ? F2 : F3, { gerada: true, modo: "clone", tags: [`clone:${CL}`], nome: b.pedido.cenario });
+      variacoes = [f].concat(variacoes);
+      return { imagem: { ...f, url: "https://arquivo.test/v.png" }, custo_usd: 0.14 };
+    };
+    montar(h(EtapaClones));
+    fireEvent.click(await screen.findByRole("radio", { name: "Pelo contexto do cliente" }));
+    await clicarComCusto(/Sugerir pelo contexto/, "clone_variacoes_sugerir");
+    expect(chamadasDe("clone_variacoes_sugerir")[0]).toMatchObject({ modelo_id: CL, quantidade: 6 });
+    expect(await screen.findByText("Podando o jardim")).toBeTruthy();
+    expect(screen.getByText(/jardineira da equipe/)).toBeTruthy();
+    await clicarComCusto(/Gerar 2 variações/, "clone_variacao_gerar");
+    await waitFor(() => expect(chamadasDe("clone_variacao_gerar")).toHaveLength(2));
+    const cenarios = chamadasDe("clone_variacao_gerar").map((c) => c.pedido.cenario).sort();
+    expect(cenarios).toEqual(["jardim residencial", "varanda"]);
+    expect(chamadasDe("clone_variacao_gerar")[0].pedido.preset).toBeNull();
+    // Aparecem sem esperar a releitura do clone.
+    await waitFor(() => expect(document.querySelector(`[data-variacao-do-clone="${F3}"]`)).toBeTruthy());
+    variacoes = [];
+  });
+
+  it("uniforme da marca manda o preset que anexa a logo oficial; transferir chama a função com o destino", async () => {
+    respostas.clones_listar = { clones: [cloneNaLista()] };
+    respostas.clone_ler = { ...CLONE_LIDO, presets: CLONE_LIDO.presets.concat([{ id: "uniforme_marca", rotulo: "Uniforme da marca", roupa: "uniforme", cenario: "trabalho", pose: "", expressao: "", luz: "", enquadramento: "meio_corpo" }]) };
+    respostas.clone_variacao_gerar = { imagem: fotoBruta(F3, { gerada: true, modo: "clone", tags: [`clone:${CL}`, "uniforme_da_marca"] }), custo_usd: 0.14, avisos: ["Uniforme com a logo oficial: confira a logo."] };
+    montar(h(EtapaClones));
+    fireEvent.click(await screen.findByRole("radio", { name: "Uniforme da marca" }));
+    expect(screen.getByText(/logo oficial do kit da marca/)).toBeTruthy();
+    await clicarComCusto(/Gerar 2 variações/, "clone_variacao_gerar");
+    expect(chamadasDe("clone_variacao_gerar")[0].pedido.preset).toBe("uniforme_marca");
+    expect(screen.getByRole("button", { name: /Transferir para outro cliente/ })).toBeTruthy();
+
+    const OUTRO = "22222222-2222-2222-2222-222222222222";
+    respostas.clone_transferir = { clone: { ...CLONE_LIDO.clone, client_id: OUTRO }, resumo: { de: CLIENTE, para: OUTRO, movidas: 3, copiadas: 1, reaproveitadas: 0, folha: 6 }, avisos: ["O custo e o uso de IA já cobrados continuam no cliente antigo."] };
+    const r = await transferirClone(CL, OUTRO);
+    expect(chamadasDe("clone_transferir")).toEqual([{ acao: "clone_transferir", modelo_id: CL, client_id_destino: OUTRO }]);
+    expect(r.resumo).toMatchObject({ movidas: 3, copiadas: 1, folha: 6 });
+    expect(r.avisos[0]).toMatch(/cliente antigo/);
+  });
+
+  it("provisório e folha local: o clone abre com as fotos reais do cache e a aprovação conta na hora", () => {
+    const c = normalizarClone({ ...CLONE_LIDO.clone })!;
+    const p = cloneAbertoProvisorio(c, FOTOS.map((f) => normalizarFotoD(f)!));
+    expect(p.reais.map((r) => r.id)).toEqual([F1]);
+    expect(p.folha.total).toBe(6);
+    const img = (id: string, vista: string, aprovada: boolean | null) => ({ id, modelo_id: CL, papel: "vista" as const, vista, uso_da_referencia: null, storage_bucket: "mesa", storage_path: "x", url: "", largura: null, altura: null, motor_id: null, resolucao: null, derivada_de: null, conferencia: null, aprovada, custo_usd: 0, criado_em: "" });
+    const r = resumoDaFolhaLocal([img("a", "frente", true), img("b", "perfil_esq", true), img("c", "meio_corpo", true), img("d", "corpo_inteiro", null)]);
+    expect(r).toMatchObject({ aprovadas: 3, frente_aprovada: true, pronto: true });
+  });
+
+  it("a tela dos Clones e do Book seguem as regras da casa (sem travessão, sem CSS moderno, nada escurece a foto)", () => {
+    for (const arq of ["src/components/mesa-foto/EtapaClones.tsx", "src/components/mesa-foto/clonesApi.ts", "src/components/mesa-foto/EtapaBook.tsx", "src/components/mesa-foto/bookApi.ts", "src/components/mesa-foto/SeletorLateral.tsx", "src/components/mesa-foto/AcoesProDaFoto.tsx", "src/components/mesa-foto/EtapaAcervo.tsx"]) {
+      const t = ler(arq);
+      expect(t, arq).not.toMatch(/[—–]/);
+      expect(t, arq).not.toMatch(/aspect-ratio|:has\(|\.at\(|Object\.hasOwn|\(\?<[=!a-z]|\\p\{/);
+      expect(t, arq).not.toMatch(/\[(?:min|max|clamp)\(/);
+      expect(t, arq).not.toMatch(/bg-black\/|brightness-/);
+    }
+  });
+});
+
+describe("26/09: Book", () => {
+  const BOOK = "ffffffff-0000-4000-8000-00000000000b";
+  const PROMPT = "dddddddd-0000-4000-8000-0000000000p1".replace("p1", "a1");
+  const bookBruto = (extra: Record<string, unknown> = {}) => ({
+    id: BOOK,
+    client_id: CLIENTE,
+    nome: "Book do Mouse M720",
+    assunto: { tipo: "produto", id: KIT, nome: "Mouse M720" },
+    referencias: [],
+    pedidos: [],
+    selecao: [],
+    conversa: [],
+    status: "aberto",
+    custo_usd: 0,
+    ...extra,
+  });
+
+  it("sem book: escolhe o produto e cria (sem custo)", async () => {
+    respostas.books_listar = { books: [] };
+    respostas.book_criar = { book: bookBruto(), assunto: { tipo: "produto", id: KIT, nome: "Mouse M720", categorias: ["produto"] } };
+    respostas.book_ler = () => new Promise(() => undefined);
+    montar(h(EtapaBook));
+    fireEvent.click(await screen.findByRole("button", { name: /Mouse M720/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Criar book/ }));
+    await waitFor(() => expect(chamadasDe("book_criar")).toEqual([{ acao: "book_criar", client_id: CLIENTE, assunto: { tipo: "produto", id: KIT } }]));
+  });
+
+  it("arsenal lateral põe o prompt na fila, gera com o custo antes, o resultado aparece na hora e entra no book", async () => {
+    mock.tabelas.foto_biblioteca = [{ id: PROMPT, client_id: null, tipo: "prompt", categoria: "produto", titulo: "Bancada de travertino", prompt_pt: "o produto sobre bancada de travertino, sol de fim de tarde", imagem_url: "https://img.test/t.jpg", tags: [] }];
+    let atual = bookBruto();
+    respostas.books_listar = () => ({ books: [atual] });
+    respostas.book_ler = () => ({ book: atual, assunto: { tipo: "produto", id: KIT, nome: "Mouse M720", categorias: ["produto", "luz"], capa_url: null, detalhe: "", aviso: null }, resultados: [], referencias: [] });
+    respostas.book_salvar = (b: any) => {
+      atual = { ...atual, ...(b.pedidos ? { pedidos: b.pedidos } : {}), ...(b.selecao ? { selecao: b.selecao } : {}) };
+      return { book: atual };
+    };
+    respostas.book_gerar = () => ({ imagem: { ...fotoBruta(F3, { nome: "Book do Mouse M720: Bancada de travertino", gerada: true, modo: "ensaio", tags: [`book:${BOOK}`] }), url: "https://arquivo.test/b.png" }, custo_usd: 0.17 });
+    montar(h(EtapaBook));
+    const arsenal = (await waitFor(() => {
+      const el = document.querySelector("[data-arsenal-de-prompts]");
+      if (!el || !within(el as HTMLElement).queryByText("Bancada de travertino")) throw new Error("sem arsenal");
+      return el;
+    })) as HTMLElement;
+    fireEvent.click(within(arsenal).getByRole("button", { name: "Pôr na fila" }));
+    await waitFor(() => expect(chamadasDe("book_salvar").length).toBeGreaterThan(0));
+    expect(chamadasDe("book_salvar")[0].pedidos[0]).toMatchObject({ titulo: "Bancada de travertino", prompt: "o produto sobre bancada de travertino, sol de fim de tarde", origem: { tipo: "biblioteca", id: PROMPT } });
+    await clicarComCusto(/Gerar 1 foto/, "book_gerar");
+    expect(chamadasDe("book_gerar")[0]).toMatchObject({ book_id: BOOK, pedido: { prompt: "o produto sobre bancada de travertino, sol de fim de tarde", formato: "4:5" }, qualidade: "alta" });
+    const resultado = (await waitFor(() => {
+      const el = document.querySelector(`[data-resultado-do-book="${F3}"]`);
+      if (!el) throw new Error("sem resultado");
+      return el;
+    })) as HTMLElement;
+    fireEvent.click(within(resultado).getByRole("button", { name: /pôr no book/ }));
+    await waitFor(() => expect(chamadasDe("book_salvar").some((c) => Array.isArray(c.selecao) && c.selecao[0] === F3)).toBe(true));
+    expect((await screen.findAllByText(/Book final · 1/)).length).toBeGreaterThan(0);
+  });
+
+  it("regras da tela do book: ordem do book, pedido da biblioteca, normalizador tolerante", () => {
+    expect(moverNaSelecao(["a", "b", "c"], "c", -1)).toEqual(["a", "c", "b"]);
+    expect(moverNaSelecao(["a", "b"], "a", -1)).toEqual(["a", "b"]);
+    expect(pedidoDaBiblioteca({ id: "x", titulo: "T", prompt_pt: "", prompt_en: "" })).toBeNull();
+    expect(pedidoDaBiblioteca({ id: "x", titulo: "T", prompt_pt: "p", prompt_en: "" })!.origem).toEqual({ tipo: "biblioteca", id: "x" });
+    const a = normalizarBookAberto({ book: bookBruto({ pedidos: [{ prompt: "" }, { prompt: "ok", formato: "21:9" }] }), resultados: [fotoBruta(F1)], referencias: [{ id: F2, tipo: "acervo", titulo: "ref" }] })!;
+    expect(a.book.pedidos).toHaveLength(1);
+    expect(a.book.pedidos[0].formato).toBe("4:5");
+    expect(a.resultados[0].id).toBe(F1);
+    expect(a.referencias[0]).toMatchObject({ tipo: "acervo", id: F2 });
+    // A aba Book está nas ferramentas de apoio e é carregada sob demanda.
+    expect(ler("src/pages/MesaFoto.tsx")).toContain('{etapa === "book" && <EtapaBook />}');
   });
 });

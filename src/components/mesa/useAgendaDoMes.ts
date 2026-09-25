@@ -18,6 +18,24 @@ export const FORMATOS_DO_ESTUDIO = ["carousel", "static", "design"];
 
 export const ehFormatoDeArte = (tipo?: string | null) => FORMATOS_DO_ESTUDIO.indexOf(String(tipo || "")) >= 0;
 
+/**
+ * Formatos de PEÇA: arte ou vídeo (carrossel, estático, design, Reels,
+ * story, vídeo, short e post do Google). Pedido do dono em 26/09: "dentro da
+ * Mesa, só puxe o que é arte ou vídeo; o resto fica na agenda". O formato
+ * mora no campo tasks.delivery_type (o mesmo da Agenda e do agente do
+ * calendário); planejamento, relatório, copy, site, tráfego, documento,
+ * "outro" e "não definido" ficam só na Agenda.
+ */
+export const FORMATOS_DE_PECA = ["carousel", "static", "design", "reel", "story", "video", "short", "google_post"];
+
+export const ehPeca = (tipo?: string | null) => FORMATOS_DE_PECA.indexOf(String(tipo || "").toLowerCase()) >= 0;
+
+/** Separa os itens do mês em peças (ficam na Mesa) e o resto (fica na Agenda). */
+export function separarPecas<T extends { delivery_type?: string | null }>(itens: T[]): { pecas: T[]; outros: number } {
+  const pecas = itens.filter((i) => ehPeca(i.delivery_type));
+  return { pecas, outros: itens.length - pecas.length };
+}
+
 export interface ItemDaAgenda {
   id: string;
   title: string;

@@ -100,11 +100,31 @@ export function padraoDoMotor(modeloImagemId: string): { qualidade: "baixa" | "m
   return m ? { qualidade: m.qualidade, resolucao: m.resolucao } : { qualidade: "alta", resolucao: null };
 }
 
-/** "Detalhar em 4K" sem chave nova: Nano Banana Pro 4K para pessoa, Seedream 4.5 4K para produto. */
+/**
+ * "Detalhar em 4K" sem chave nova: Nano Banana Pro PREVIEW 4K para pessoa,
+ * Seedream 4.5 4K para produto. Em 26/09/2026 o OpenRouter recusou 4K no
+ * google/gemini-3-pro-image normal ("only google/gemini-3-pro-image-preview and
+ * google/gemini-3.1-flash-image-preview support 4K"): o 4K sai da preview.
+ */
 export const MOTOR_DETALHE: Record<AlvoDoDetalhe, string> = {
-  pessoa: "openrouter:google/gemini-3-pro-image",
+  pessoa: "openrouter:google/gemini-3-pro-image-preview",
   produto: "openrouter:bytedance-seed/seedream-4.5",
 };
+
+/**
+ * Ordem de procura do gerador do 4K (o primeiro ativo cuja capacidade inclua
+ * 4K vence): o pedido da tela, o padrão do alvo e as reservas conferidas.
+ * Gerador sem 4K nunca recebe 4K (capacidades-imagem.ts, RESOLUCOES_RECUSADAS).
+ */
+export const RESERVAS_DO_4K: Record<AlvoDoDetalhe, string[]> = {
+  pessoa: ["openrouter:google/gemini-3-pro-image-preview", "openrouter:google/gemini-3.1-flash-image-preview"],
+  produto: ["openrouter:bytedance-seed/seedream-4.5", "openrouter:google/gemini-3-pro-image-preview", "openrouter:google/gemini-3.1-flash-image-preview"],
+};
+
+export function candidatosAo4K(alvo: AlvoDoDetalhe, pedido?: string | null): string[] {
+  const lista = [pedido || "", MOTOR_DETALHE[alvo], ...RESERVAS_DO_4K[alvo]].filter(Boolean);
+  return lista.filter((x, i) => lista.indexOf(x) === i);
+}
 
 // ------------------------------------------------------------------ ficha
 

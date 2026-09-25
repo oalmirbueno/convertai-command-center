@@ -258,7 +258,7 @@ describe("aplicar na direção", () => {
 
 describe("estudio-arte: ações conversar e aplicar_mudancas", () => {
   it("estão no roteador; conversar é longa (resposta com fôlego), aplicar não", () => {
-    expect(estudio).toContain("  conversar,\n  aplicar_mudancas: aplicarMudancas,\n  reabrir,\n};");
+    expect(estudio).toContain("  conversar,\n  aplicar_mudancas: aplicarMudancas,\n  reabrir,\n");
     const longas = estudio.slice(estudio.indexOf("const ACOES_LONGAS"), estudio.indexOf("\n", estudio.indexOf("const ACOES_LONGAS")));
     expect(longas).toContain('"conversar"');
     expect(longas).not.toContain("aplicar_mudancas");

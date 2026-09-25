@@ -35,11 +35,11 @@ export const AVISO_FOTO_NO_CONTINUO = "Com foto própria, esta lâmina sai do fu
 
 export const DESCRICAO_DO_MODO: Record<ModoDaGeracao, string> = {
   replicar_referencia: "Replica o layout da referência com a marca, o texto e a foto desta lâmina.",
-  foto_real: "Foto real fixa: o gerador só escreve o texto e a logo entra pelo sistema.",
+  foto_real: "Foto real fixa: o gerador só escreve o texto e desenha a logo na área dela; a foto fica como está.",
   foto_composta: "Foto de fundo com pessoa ou objeto real composto por cima.",
   elementos: "O gerador cria a cena e põe a pessoa ou o objeto real como é.",
   recorte: "Pessoa ou produto sem fundo: entra inteiro do lado oposto ao texto, com a cena, a referência e a identidade em volta, sem caixa.",
-  continuo: "Carrossel contínuo: o fundo panorâmico manda na cena.",
+  continuo: "Carrossel contínuo: o fundo panorâmico manda na cena; o gerador escreve o texto e desenha a logo por cima.",
   normal: "O gerador cria a lâmina inteira pela direção de arte.",
 };
 
@@ -175,6 +175,8 @@ export default function EstudioBaseDaLamina({
   onTirarFotoDoAcervo,
   onTirarReferencia,
   bloqueado = false,
+  logo,
+  referenciaNaHora,
 }: {
   card: CardDaDirecao;
   refsDoConjunto: string[] | null | undefined;
@@ -198,6 +200,10 @@ export default function EstudioBaseDaLamina({
   onTirarReferencia?: (id: string) => void;
   /** Trabalho entregue ou lâmina ocupada: sem os botões de tirar. */
   bloqueado?: boolean;
+  /** Seletor da logo do kit desta lâmina (26/09); só nas lâminas que levam logo. */
+  logo?: ReactNode;
+  /** Referência na hora (arrastar, arquivo, colar imagem ou link), gravada nesta lâmina (26/09). */
+  referenciaNaHora?: ReactNode;
 }) {
   const base = baseDaLamina(card, refsDoConjunto, continuo);
   const foraDaEmenda = !!versao && versao.modo === "panorama" && versao.fora_da_emenda === true;
@@ -256,7 +262,16 @@ export default function EstudioBaseDaLamina({
           )}
         </div>
       </div>
-      <p className="text-[11.5px] leading-snug text-muted-foreground">{DESCRICAO_DO_MODO[base.modo]}</p>
+      {referenciaNaHora}
+      {logo && (
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
+          <span className="mb-1 mr-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Logo do kit que o gerador desenha junto com a arte">
+            Logo
+          </span>
+          {logo}
+        </div>
+      )}
+      <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground">{DESCRICAO_DO_MODO[base.modo]}</p>
       {continuoSemModelo && (
         <p className="mt-1 flex items-start text-[11.5px] leading-snug text-warning" data-aviso="continuo-sem-modelo">
           <TriangleAlert className="mr-1 mt-0.5 h-3.5 w-3.5 shrink-0" /> {AVISO_CONTINUO_SEM_MODELO}

@@ -23,7 +23,15 @@
  *     -> { imagem (cliente_imagens), url, custo_usd, saldo_usd, avisos } (UMA foto por chamada)
  * - clone_conferir { modelo_id, imagem_id, origem?: 'folha'|'acervo' } -> { conferencia, custo_usd } (visão + Jev só como aviso)
  * - clone_pacote { modelo_id } -> { pacote } (formato para a futura mesa de vídeo; sem IA)
- * - estimar aceita acao_alvo clone_folha, clone_variacao e clone_conferir.
+ * 26/09 (pedido do dono):
+ * - clone_variacao_gerar usa TODAS as vistas aprovadas da folha como identidade (na ordem da folha) e repete os
+ *   traços lidos nas fotos reais; preset "uniforme_marca" (ou aplicar_logo: true) anexa a logo oficial do kit da marca.
+ * - clone_variacoes_sugerir { modelo_id, quantidade?, pedido?, campanha_id?, marca_id? } -> { sugestoes, negocio, custo_usd }
+ *   (variações coerentes com o negócio do cliente, pelo contexto consolidado; não gera imagem)
+ * - clone_transferir { modelo_id, client_id_destino } -> { clone, resumo, avisos } (só quem acessa os dois clientes;
+ *   move clone, folha e fotos do acervo ligadas, com os arquivos; custo e uso já cobrados ficam no cliente antigo)
+ * - clone_imagem_decidir ficou leve (sem assinar URL de novo; a tela já tem a imagem e aprova na hora).
+ * - estimar aceita acao_alvo clone_folha, clone_variacao, clone_conferir e clone_sugerir.
  */
 
 import {
@@ -42,6 +50,7 @@ import {
   type SaidaImagem,
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
+import { kitComMarca, marcaDoPedido } from "../_shared/marca.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, limpoOuNulo, listaDeTextos, mimeDe, nomeSeguro, sha256Hex, UUID } from "./calculos.ts";
 import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramentas.ts";
 import { estimativaDeUmaImagem, type LinhaImagemPersona } from "./modelos.ts";
@@ -49,6 +58,13 @@ import { lerSemente, lerVista, type VistaDaPersona } from "./personas.ts";
 import {
   alertasDoClone,
   autorizacaoValida,
+  caminhoNoDestino,
+  identidadesDaVariacao,
+  MAX_IDENTIDADES_NA_VARIACAO,
+  normalizarSugestoesDeVariacao,
+  planoDaTransferencia,
+  tracosDasConferencias,
+  usaLogoDaMarca,
   type AutorizacaoDoClone,
   FOLHA_DO_CLONE,
   type FonteDeIdentidade,
@@ -188,18 +204,25 @@ export function acoesDeClones(f: FerramentasDaMesa) {
 
   const padraoDo = (m: ModeloIa) => motorDoClone(m.id) ?? { qualidade: "alta" as Qualidade, resolucao: null as Resolucao | null };
 
-  /** Fotos reais e vistas aprovadas que vão ao gerador, já baixadas, com a legenda de cada uma. */
-  async function identidadesBaixadas(c: LinhaClone, vista: VistaDaPersona | null, m: ModeloIa): Promise<{ fontes: FonteDeIdentidade[]; imagens: ImagemEntrada[] }> {
+  /**
+   * Fotos reais e vistas aprovadas que vão ao gerador, já baixadas, com a
+   * legenda de cada uma. Na folha: reais primeiro e até 2 vistas perto do
+   * ângulo (até 5). Na variação: a real principal e TODAS as vistas
+   * aprovadas, na ordem da folha (até 8, menos as vagas reservadas para
+   * logo e referência de estilo). Devolve também os traços já lidos pela
+   * conferência das vistas aprovadas (para repetir no prompt, sem custo).
+   */
+  async function identidadesBaixadas(c: LinhaClone, vista: VistaDaPersona | null, m: ModeloIa, modo: "folha" | "variacao" = "folha", vagasReservadas = 0): Promise<{ fontes: FonteDeIdentidade[]; imagens: ImagemEntrada[]; tracos: string[] }> {
     const [reais, folha] = await Promise.all([fotosReais(c), imagensDaFolha(c.id)]);
     if (!reais.length) throw new ErroDeRegra(409, "sem_fotos_reais", "As fotos reais deste clone saíram do acervo. Escolha as fotos de novo.");
     const aprovadas = folha.filter((i) => i.papel === "vista" && i.aprovada === true);
-    const limite = Math.min(limiteDeReferencias(m) || MAX_IDENTIDADES_NO_GERADOR, MAX_IDENTIDADES_NO_GERADOR);
-    const fontes = identidadesDoClone(
-      reais.map((r) => ({ id: r.id, tipo: "real" as const, vista: null, principal: r.principal })),
-      aprovadas.map((a) => ({ id: a.id, tipo: "folha" as const, vista: a.vista })),
-      vista,
-      limite,
-    );
+    const reaisFontes = reais.map((r) => ({ id: r.id, tipo: "real" as const, vista: null, principal: r.principal }));
+    const folhaFontes = aprovadas.map((a) => ({ id: a.id, tipo: "folha" as const, vista: a.vista }));
+    const doGerador = limiteDeReferencias(m) || MAX_IDENTIDADES_NO_GERADOR;
+    const fontes = modo === "variacao"
+      ? identidadesDaVariacao(reaisFontes, folhaFontes, Math.max(1, Math.min(doGerador, MAX_IDENTIDADES_NA_VARIACAO) - vagasReservadas))
+      : identidadesDoClone(reaisFontes, folhaFontes, vista, Math.min(doGerador, MAX_IDENTIDADES_NO_GERADOR));
+    const tracos = modo === "variacao" ? tracosDasConferencias(aprovadas.map((a) => a.conferencia).filter(Boolean)) : [];
     const imagens = await f.emParalelo(fontes, 3, (fo) => {
       if (fo.tipo === "real") {
         const r = reais.find((x) => x.id === fo.id)!;
@@ -208,7 +231,42 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       const a = aprovadas.find((x) => x.id === fo.id)!;
       return f.baixarReduzida(a.storage_bucket, a.storage_path, LADO_IDENTIDADE, `folha-${a.vista ?? "vista"}`);
     });
-    return { fontes, imagens };
+    return { fontes, imagens, tracos };
+  }
+
+  /**
+   * Logo oficial do kit da marca (a marca do pedido por cima do cliente; a
+   * CME sem logo sai sem logo, nunca a da Acerbi) e a paleta em texto. Sem
+   * logo: null (a variação de uniforme recusa com a frase certa).
+   */
+  async function logoDaMarca(clientId: string, corpo: Record<string, unknown>): Promise<{ imagem: ImagemEntrada; paleta: string | null } | null> {
+    const [kitLido, marca] = await Promise.all([
+      db().from("cliente_kit_marca").select("paleta, logo_file_id, logo_path").eq("client_id", clientId).maybeSingle().then((r) => r.data as Record<string, unknown> | null, () => null),
+      marcaDoPedido(db(), clientId, corpo).catch(() => null),
+    ]);
+    const kit = kitComMarca(kitLido ?? null, marca) as { paleta?: unknown; logo_path?: string | null; logo_file_id?: string | null } | null;
+    let imagem: ImagemEntrada | null = null;
+    if (kit?.logo_path && String(kit.logo_path).indexOf(`${clientId}/`) === 0) {
+      imagem = await f.baixarReduzida("mesa", String(kit.logo_path), 1024, "logo-oficial").catch(() => null);
+    }
+    if (!imagem && kit?.logo_file_id) {
+      const { data } = await db().from("files").select("client_id, file_url, storage_bucket, storage_path").eq("id", kit.logo_file_id).maybeSingle();
+      const a = data as { client_id: string; file_url: string | null; storage_bucket: string | null; storage_path: string | null } | null;
+      if (a && a.client_id === clientId) {
+        let bucket = a.storage_bucket;
+        let caminho = a.storage_path;
+        if (!caminho && a.file_url && a.file_url.indexOf("files://") === 0) {
+          bucket = "files";
+          caminho = a.file_url.slice("files://".length);
+        }
+        if (bucket && caminho) imagem = await f.baixarReduzida(bucket, caminho, 1024, "logo-oficial").catch(() => null);
+      }
+    }
+    if (!imagem) return null;
+    const cores = Array.isArray(kit?.paleta)
+      ? (kit!.paleta as Record<string, unknown>[]).map((x) => [limpo(x?.nome, 30), limpo(x?.hex, 12)].filter(Boolean).join(" ")).filter(Boolean).slice(0, 5)
+      : [];
+    return { imagem, paleta: cores.length ? cores.join(", ") : null };
   }
 
   /** Grava o gerador como preferido do clone na primeira geração. */
@@ -473,34 +531,70 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     }
     const { data, error } = await db().from("foto_modelo_imagens").update({ aprovada: decisao === "aprovar", motivo: limpoOuNulo(corpo.motivo, 500) }).eq("id", img.id).select("*").single();
     if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", "Não foi possível gravar a decisão.");
+    // Leve (pedido do dono, 26/09: "aprovar demora"): sem assinar URL de novo (a tela já tem a imagem e
+    // aprova na hora); uma leitura da folha só para o status. Nada de visão nem Jev no aprovar.
     const todas = await imagensDaFolha(c.id);
     const atual = await atualizarStatus(c, todas);
-    return f.json({ imagem: await comUrl(data as LinhaImagemPersona), clone: atual, folha: resumoDaFolhaDoClone(todas), custo_usd: 0 });
+    return f.json({ imagem: data, clone: atual, folha: resumoDaFolhaDoClone(todas), custo_usd: 0 });
   }
 
-  async function cloneVariacaoGerar(ch: Chamador, corpo: Record<string, unknown>) {
-    let c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+  type ExtrasDaVariacao = {
+    /** Referências SÓ de estilo (Book): vão depois da identidade e da logo, com legenda. */
+    estilo?: { imagens: ImagemEntrada[]; legendas: string[] } | null;
+    tags?: string[];
+    pasta?: string;
+    nome?: string;
+    referencia?: { tipo: string; id: string };
+  };
+
+  /**
+   * Uma variação do clone (UMA foto por chamada), usada pela aba Clones e
+   * pelo Book: identidade com todas as vistas aprovadas, traços repetidos,
+   * logo oficial no uniforme e, no Book, as referências de estilo. A foto vai
+   * para o acervo do cliente marcada como gerada e com a pessoa real indicada.
+   */
+  async function gerarVariacao(ch: Chamador, cloneLido: LinhaClone, corpo: Record<string, unknown>, extras: ExtrasDaVariacao = {}) {
+    let c = cloneLido;
     garantirGeravel(c);
     const pedido = lerPedidoDeVariacao(corpo.pedido ?? corpo);
     const formato = lerFormatoDaVariacao(corpo.formato);
     const m = await motorDaChamada(c, corpo.modelo_imagem_id);
     const p = padraoDo(m);
+    const avisos: string[] = [];
+    const comLogo = usaLogoDaMarca(pedido, corpo.aplicar_logo);
+    const logo = comLogo ? await logoDaMarca(c.client_id, corpo) : null;
+    if (comLogo && !logo) {
+      throw new ErroDeRegra(409, "sem_logo_da_marca", "O kit da marca não tem a logo oficial em imagem. Defina a logo no Contexto do cliente (ou da marca) antes do uniforme.");
+    }
+    const estilo = extras.estilo && extras.estilo.imagens.length ? extras.estilo : null;
+    const vagas = (logo ? 1 : 0) + (estilo ? estilo.imagens.length : 0);
     const vistaMaisPerto: VistaDaPersona = pedido.enquadramento === "corpo_inteiro" ? "corpo_inteiro" : pedido.enquadramento === "meio_corpo" ? "meio_corpo" : "frente";
-    const { fontes, imagens } = await identidadesBaixadas(c, vistaMaisPerto, m);
-    const prompt = promptDaVariacaoDoClone({ nome: c.nome, fontes, invariantes: c.invariantes, pedido, formato });
+    const { fontes, imagens, tracos } = await identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas);
+    const referencias = [...imagens, ...(estilo ? estilo.imagens : []), ...(logo ? [logo.imagem] : [])];
+    const prompt = promptDaVariacaoDoClone({
+      nome: c.nome,
+      fontes,
+      invariantes: c.invariantes,
+      pedido,
+      formato,
+      tracos,
+      estilo: estilo ? { inicio: fontes.length + 1, legendas: estilo.legendas } : null,
+      logo: logo ? { indice: referencias.length, paleta: logo.paleta } : null,
+    });
+    if (logo) avisos.push("Uniforme com a logo oficial: confira a logo na roupa (letras, cores e proporção) antes de aprovar.");
     const qualidade = lerQualidade(corpo.qualidade, p.qualidade);
     const resolucao = lerResolucao(corpo.resolucao) ?? p.resolucao;
     const saida = await chamarImagem({
       clientId: c.client_id,
       modeloId: m.id,
       prompt,
-      referencias: imagens,
+      referencias,
       qualidade,
       tamanho: FORMATOS_DA_VARIACAO[formato],
       resolucao,
       seed: lerSemente(corpo.seed),
       mesmoModelo: true,
-      referencia: { tipo: REF_CLONE, id: c.id },
+      referencia: extras.referencia ?? { tipo: REF_CLONE, id: c.id },
       criadoPor: ch.userId,
       tarefa: "estudio",
       agente: "gerador_imagem",
@@ -511,16 +605,17 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     await f.salvarNoMesa(caminho, saida.png, mime);
     const principal = c.identidade_real.find((r) => r.principal) ?? c.identidade_real[0] ?? null;
     const oQueMudou = [pedido.roupa, pedido.cenario, pedido.pose, pedido.expressao].filter(Boolean).join("; ");
+    const rotuloDoPreset = pedido.preset ? PRESETS_DE_VARIACAO.find((x) => x.id === pedido.preset)?.rotulo ?? pedido.preset : null;
     const { data, error } = await db().from("cliente_imagens").insert({
       client_id: c.client_id,
       origem: "mesa_foto",
       storage_bucket: "mesa",
       storage_path: caminho,
-      nome: `${c.nome} (variação${pedido.preset ? `: ${PRESETS_DE_VARIACAO.find((x) => x.id === pedido.preset)?.rotulo ?? pedido.preset}` : ""})`.slice(0, 160),
-      pasta: "Mesa Foto / Clones",
+      nome: (extras.nome ?? `${c.nome} (variação${rotuloDoPreset ? `: ${rotuloDoPreset}` : ""})`).slice(0, 160),
+      pasta: extras.pasta ?? "Mesa Foto / Clones",
       categoria: "pessoa",
-      tags: Array.from(new Set(["mesa_foto", "gerada", "pessoa_real_autorizada", "clone_variacao", `clone:${c.id}`, "tipo:pessoa"])),
-      descricao: `Pessoa real (${c.nome}) recriada por IA a partir de fotos reais, com autorização de uso de imagem de ${c.autorizacao?.data ?? "data registrada"} (${c.autorizacao?.finalidade ?? ""}). ${oQueMudou ? `Mudou: ${oQueMudou}. ` : ""}Motor ${saida.modeloId}. Ao publicar, ligue o rótulo de IA.`.slice(0, 1000),
+      tags: Array.from(new Set(["mesa_foto", "gerada", "pessoa_real_autorizada", "clone_variacao", `clone:${c.id}`, "tipo:pessoa", ...(logo ? ["uniforme_da_marca"] : []), ...(extras.tags ?? [])])).slice(0, 30),
+      descricao: `Pessoa real (${c.nome}) recriada por IA a partir de fotos reais${fontes.some((x) => x.tipo === "folha") ? " e da folha de identidade aprovada" : ""}, com autorização de uso de imagem de ${c.autorizacao?.data ?? "data registrada"} (${c.autorizacao?.finalidade ?? ""}). ${oQueMudou ? `Mudou: ${oQueMudou}. ` : ""}${logo ? "Uniforme com a logo oficial da marca. " : ""}Motor ${saida.modeloId}. Ao publicar, ligue o rótulo de IA.`.slice(0, 1000),
       derivada_de: principal?.imagem_id ?? null,
       gerada: true,
       modo: "clone",
@@ -537,7 +632,300 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     c = await prenderMotor(c, saida.modeloId);
     const nova = data as unknown as ImagemDoAcervoLida;
     const url = await f.urlAssinada("mesa", caminho);
-    return f.json({ imagem: { ...nova, url }, url, clone: c, pedido, ...respostaDaGeracao(saida) });
+    return {
+      imagem: { ...nova, url },
+      url,
+      clone: c,
+      pedido,
+      identidade: fontes.map((x) => ({ tipo: x.tipo === "real" ? "foto_real" : "vista_aprovada", id: x.id, vista: x.vista })),
+      saida,
+      avisos,
+    };
+  }
+
+  async function cloneVariacaoGerar(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    const r = await gerarVariacao(ch, c, corpo);
+    const resposta = respostaDaGeracao(r.saida);
+    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, ...resposta, avisos: [...r.avisos, ...resposta.avisos] });
+  }
+
+  // ---------------------------------------------------------------- variações pelo contexto do cliente
+
+  const ESQUEMA_SUGESTOES = {
+    nome: "variacoes_do_clone",
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["negocio", "sugestoes"],
+      properties: {
+        negocio: { type: "string" },
+        sugestoes: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["rotulo", "roupa", "cenario", "pose", "expressao", "luz", "enquadramento", "porque"],
+            properties: {
+              rotulo: { type: "string" },
+              roupa: { type: "string" },
+              cenario: { type: "string" },
+              pose: { type: "string" },
+              expressao: { type: "string" },
+              luz: { type: "string" },
+              enquadramento: { type: "string", enum: ["close", "meio_corpo", "corpo_inteiro"] },
+              porque: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const SISTEMA_SUGESTOES = `Você é o diretor de fotografia da agência Aceleriq. A equipe tem o CLONE de uma pessoa real do cliente (com autorização de uso de imagem) e quer novas fotos dela coerentes com o NEGÓCIO do cliente.
+Leia o contexto do cliente (o que ele faz, serviços, público, tom, marca, campanha) e entenda o papel da pessoa no negócio (ex.: jardineiro de uma empresa de paisagismo, dentista de uma clínica, dona de uma confeitaria).
+Sugira variações de foto que contem esse trabalho de forma real e atual: a pessoa trabalhando, atendendo, com as ferramentas certas, no ambiente certo, em momentos de marca.
+- negocio: uma frase com o que o cliente faz e o papel da pessoa.
+- Cada sugestão: rotulo curto (2 a 4 palavras), roupa, cenario, pose, expressao, luz, enquadramento (close, meio_corpo ou corpo_inteiro) e porque (uma frase: para que post ou anúncio serve).
+- Variações diferentes de verdade entre si (cenário, ação, enquadramento e luz).
+- Roupa de trabalho real e profissional; sem logotipo de terceiros; sem texto.
+- NUNCA mude rosto, idade, corpo, tom de pele ou cabelo da pessoa; sem sensualidade; sem parecer celebridade.
+- Estética atual: luz natural com direção, ambientes reais e bonitos, nada de banco de imagem.
+Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
+
+  async function cloneVariacoesSugerir(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    garantirGeravel(c);
+    if (!f.contextoDoCliente) throw new ErroDeRegra(503, "contexto_indisponivel", "O contexto do cliente não está disponível nesta função.");
+    const quantidade = Math.max(2, Math.min(8, Math.floor(Number(corpo.quantidade) || 6)));
+    const pedido = limpo(corpo.pedido, 600);
+    if (pedido) garantirPermitidoNoClone(pedido);
+    const [contexto, diretor] = await Promise.all([f.contextoDoCliente(c.client_id, corpo.campanha_id, corpo.marca_id), f.modeloDeTexto("diretor_arte", corpo.modelo_id_texto)]);
+    const saida = await chamarTexto({
+      clientId: c.client_id,
+      tarefa: "estudio",
+      agente: "diretor_arte",
+      modeloId: diretor.id,
+      sistema: SISTEMA_SUGESTOES,
+      mensagens: [{
+        papel: "usuario",
+        conteudo: `Sugira ${quantidade} variações de foto para a pessoa "${c.nome}".${c.invariantes.length ? ` Traços que não mudam: ${c.invariantes.join("; ")}.` : ""}
+${JSON.stringify({ cliente: contexto.dados, campanha: contexto.campanha, pedido_da_equipe: pedido || null })}`,
+      }],
+      esquemaJson: ESQUEMA_SUGESTOES,
+      maxTokensSaida: 3_000,
+      timeoutMs: 300_000,
+      referencia: { tipo: REF_CLONE, id: c.id },
+      criadoPor: ch.userId,
+    });
+    const bruto = (saida.json ?? {}) as Record<string, unknown>;
+    const { sugestoes, descartadas } = normalizarSugestoesDeVariacao(bruto, quantidade);
+    return f.json({
+      negocio: limpo(bruto.negocio, 300),
+      sugestoes,
+      avisos: descartadas ? [`${descartadas} ${descartadas === 1 ? "sugestão saiu" : "sugestões saíram"} por mudar a identidade ou fugir das regras do clone.`] : [],
+      campanha_mesa: contexto.campanha,
+      custo_usd: saida.custoUsd,
+      saldo_usd: saida.saldoUsd,
+      reserva_usada: saida.reservaUsada ?? null,
+    });
+  }
+
+  // ---------------------------------------------------------------- transferir para outro cliente
+
+  /**
+   * clone_transferir { modelo_id, client_id_destino }: o clone foi criado no
+   * cliente errado (pedido do dono, 26/09: "criei na Stop Informática por
+   * engano, era da Verzelo"). Move a persona, a folha (arquivos), as fotos
+   * reais e as variações do acervo, com os arquivos no Storage para a pasta
+   * do cliente novo; atualiza client_id em tudo e registra no clone. Foto
+   * que outra coisa do cliente antigo usa (derivada que fica, kit, Canvas,
+   * outro clone) vira CÓPIA no destino (a antiga fica). Custo e uso já
+   * cobrados ficam no cliente antigo. Só quem acessa os dois clientes.
+   * Arquivos: copia primeiro, grava o banco e só então apaga os antigos; se
+   * o banco falhar no meio, desfaz o que deu (sem apagar nada do antigo).
+   */
+  async function cloneTransferir(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    const destino = idDe(corpo.client_id_destino, "client_id_destino");
+    const origem = c.client_id;
+    if (destino === origem) throw new ErroDeRegra(409, "mesmo_cliente", "O clone já é deste cliente.");
+    await f.garantirAcesso(ch, destino);
+
+    // 1) O que vai junto: fotos reais, variações (ativas ou não) e a folha.
+    const [reais, folha, variacoesLidas] = await Promise.all([
+      f.lerImagens(origem, c.identidade_real.map((r) => r.imagem_id)),
+      imagensDaFolha(c.id),
+      db().from("cliente_imagens").select(f.camposImagem).eq("client_id", origem).contains("tags", [`clone:${c.id}`]).limit(1000)
+        .then((r) => (r.data as unknown as ImagemDoAcervoLida[] | null) ?? []),
+    ]);
+    const acervo: ImagemDoAcervoLida[] = [];
+    for (const i of [...reais, ...variacoesLidas]) if (!acervo.some((x) => x.id === i.id)) acervo.push(i);
+    const ids = acervo.map((i) => i.id);
+
+    // 2) O que prende uma foto no cliente antigo (vira cópia).
+    const presas = new Set<string>();
+    if (ids.length) {
+      const [filhas, refs, kits, canvas, outrosClones] = await Promise.all([
+        db().from("cliente_imagens").select("id, derivada_de").eq("client_id", origem).in("derivada_de", ids).then((r) => (r.data as { id: string; derivada_de: string }[] | null) ?? []),
+        db().from("foto_kit_refs").select("imagem_id").eq("client_id", origem).in("imagem_id", ids).then((r) => (r.data as { imagem_id: string }[] | null) ?? []),
+        db().from("foto_kits").select("frente_imagem_id").eq("client_id", origem).in("frente_imagem_id", ids).then((r) => (r.data as { frente_imagem_id: string }[] | null) ?? []),
+        db().from("foto_canvas_geracoes").select("imagem_id").eq("client_id", origem).in("imagem_id", ids).then((r) => (r.data as { imagem_id: string }[] | null) ?? [], () => []),
+        db().from("foto_modelos").select("id, identidade_real").eq("client_id", origem).eq("origem", ORIGEM_CLONE).neq("id", c.id).then((r) => (r.data as { id: string; identidade_real: IdentidadeReal[] | null }[] | null) ?? []),
+      ]);
+      filhas.filter((x) => ids.indexOf(x.id) < 0).forEach((x) => presas.add(x.derivada_de));
+      refs.forEach((x) => presas.add(x.imagem_id));
+      kits.forEach((x) => presas.add(x.frente_imagem_id));
+      canvas.forEach((x) => presas.add(x.imagem_id));
+      outrosClones.forEach((o) => (Array.isArray(o.identidade_real) ? o.identidade_real : []).forEach((r) => presas.add(r.imagem_id)));
+    }
+
+    // 3) A mesma foto já no destino (sha256 único por cliente): não duplica.
+    const shas = acervo.map((i) => i.sha256).filter((x): x is string => !!x);
+    const noDestino: Record<string, string> = {};
+    if (shas.length) {
+      const { data } = await db().from("cliente_imagens").select("id, sha256").eq("client_id", destino).in("sha256", shas);
+      ((data as { id: string; sha256: string }[] | null) ?? []).forEach((x) => (noDestino[x.sha256] = x.id));
+    }
+    const plano = planoDaTransferencia({
+      origem,
+      destino,
+      imagens: acervo.map((i) => ({ id: i.id, storage_path: i.storage_path, sha256: i.sha256, derivada_de: i.derivada_de })),
+      presas: Array.from(presas),
+      noDestino,
+    });
+    const bucketDe = (id: string) => acervo.find((i) => i.id === id)?.storage_bucket || "mesa";
+
+    // 4) Arquivos: copia tudo para a pasta do destino (os antigos ficam até o banco gravar).
+    type Copia = { bucket: string; de: string; para: string };
+    const arquivos: Copia[] = [
+      ...plano.mover.map((m) => ({ bucket: bucketDe(m.id), de: m.de, para: m.para })),
+      ...plano.copiar.map((m) => ({ bucket: bucketDe(m.id), de: m.de, para: m.para })),
+      ...folha.map((i) => ({ bucket: i.storage_bucket || "mesa", de: i.storage_path, para: caminhoNoDestino(i.storage_path, origem, destino) })),
+    ].filter((a) => a.de !== a.para);
+    const copiados: Copia[] = [];
+    const apagarCopias = () => Promise.all(copiados.map((a) => db().storage.from(a.bucket).remove([a.para]).catch(() => null)));
+    for (const a of arquivos) {
+      const { error } = await db().storage.from(a.bucket).copy(a.de, a.para);
+      if (error && !/exist/i.test(String(error.message || ""))) {
+        await apagarCopias();
+        throw new ErroDeRegra(503, "transferencia_falhou", "Não foi possível copiar os arquivos para o cliente novo. Nada mudou; tente de novo.", { arquivo: a.de });
+      }
+      if (!error) copiados.push(a);
+    }
+
+    // 5) Banco (com desfazer se algo falhar no meio).
+    const desfazer: (() => Promise<unknown>)[] = [];
+    const falhou = async (etapa: string, erro: unknown) => {
+      for (const d of desfazer.reverse()) await d().catch(() => null);
+      await apagarCopias();
+      throw new ErroDeRegra(503, "transferencia_falhou", `A transferência parou em ${etapa} e foi desfeita. Nada mudou no cliente antigo.`, { detalhe: String((erro as { message?: string })?.message ?? erro ?? "") });
+    };
+    const idDaCopia: Record<string, string> = {};
+    try {
+      // 5a) Cópias (a linha antiga fica no cliente antigo).
+      for (const cp of plano.copiar) {
+        const i = acervo.find((x) => x.id === cp.id)!;
+        const { data, error } = await db().from("cliente_imagens").insert({
+          client_id: destino,
+          origem: i.origem,
+          storage_bucket: i.storage_bucket,
+          storage_path: cp.para,
+          nome: i.nome,
+          pasta: i.pasta,
+          categoria: i.categoria,
+          tags: Array.from(new Set([...(i.tags ?? []), `transferida_de:${origem}`])).slice(0, 30),
+          descricao: i.descricao,
+          derivada_de: null,
+          gerada: i.gerada === true,
+          modo: i.modo,
+          kit_id: null,
+          sha256: i.sha256,
+          largura: i.largura,
+          altura: i.altura,
+          aprovada: i.aprovada === true,
+        }).select("id").single();
+        if (error || !data) throw error ?? new Error("cópia não gravada");
+        const novoId = (data as { id: string }).id;
+        idDaCopia[cp.id] = novoId;
+        desfazer.push(async () => await db().from("cliente_imagens").delete().eq("id", novoId).eq("client_id", destino));
+      }
+      // 5b) Quem muda: linhagem solta, troca de cliente numa instrução só, depois caminho e linhagem no destino.
+      const moverIds = plano.mover.map((m) => m.id);
+      if (moverIds.length) {
+        const antes = acervo.filter((i) => moverIds.indexOf(i.id) >= 0).map((i) => ({ id: i.id, derivada_de: i.derivada_de, storage_path: i.storage_path, kit_id: i.kit_id }));
+        let r = await db().from("cliente_imagens").update({ derivada_de: null }).eq("client_id", origem).in("id", moverIds);
+        if (r.error) throw r.error;
+        desfazer.push(async () => {
+          for (const a of antes) await db().from("cliente_imagens").update({ derivada_de: a.derivada_de }).eq("id", a.id);
+        });
+        r = await db().from("cliente_imagens").update({ client_id: destino, kit_id: null }).eq("client_id", origem).in("id", moverIds);
+        if (r.error) throw r.error;
+        desfazer.push(async () => {
+          await db().from("cliente_imagens").update({ derivada_de: null }).in("id", moverIds);
+          await db().from("cliente_imagens").update({ client_id: origem }).in("id", moverIds);
+          for (const a of antes) await db().from("cliente_imagens").update({ storage_path: a.storage_path, kit_id: a.kit_id }).eq("id", a.id);
+        });
+        for (const m of plano.mover) {
+          const alvo = m.derivada_de && m.derivada_de.indexOf("copia:") === 0 ? idDaCopia[m.derivada_de.slice(6)] ?? null : m.derivada_de;
+          const u = await db().from("cliente_imagens").update({ storage_path: m.para, derivada_de: alvo }).eq("id", m.id).eq("client_id", destino);
+          if (u.error) throw u.error;
+        }
+      }
+      // 5c) Folha: só o caminho (a imagem é do clone, não do cliente).
+      for (const i of folha) {
+        const para = caminhoNoDestino(i.storage_path, origem, destino);
+        if (para === i.storage_path) continue;
+        const u = await db().from("foto_modelo_imagens").update({ storage_path: para }).eq("id", i.id);
+        if (u.error) throw u.error;
+        desfazer.push(async () => await db().from("foto_modelo_imagens").update({ storage_path: i.storage_path }).eq("id", i.id));
+      }
+    } catch (e) {
+      await falhou("as fotos", e);
+    }
+
+    // 5d) O clone: cliente novo, identidade apontando para as fotos no destino e o registro da transferência.
+    const novoIdDe = (id: string) => idDaCopia[id] ?? plano.reaproveitar.find((x) => x.id === id)?.destino_id ?? id;
+    const registro = {
+      de: origem,
+      para: destino,
+      por: ch.userId,
+      em: new Date().toISOString(),
+      movidas: plano.mover.length,
+      copiadas: plano.copiar.length,
+      reaproveitadas: plano.reaproveitar.length,
+      folha: folha.length,
+      custo_fica_no_cliente_antigo: true,
+    };
+    const etica = { ...(c.etica ?? {}), transferencias: [...(Array.isArray((c.etica ?? {} as Record<string, unknown>).transferencias) ? (c.etica as { transferencias: unknown[] }).transferencias : []), registro].slice(-10) };
+    const { data: cloneNovo, error: erroClone } = await db().from("foto_modelos").update({
+      client_id: destino,
+      client_origem_id: destino,
+      identidade_real: c.identidade_real.map((r) => ({ imagem_id: novoIdDe(r.imagem_id), client_id: destino, principal: r.principal })),
+      etica,
+    }).eq("id", c.id).select("*").single();
+    if (erroClone || !cloneNovo) await falhou("o clone", erroClone);
+
+    // 6) Só agora sai do cliente antigo: os arquivos antigos de quem mudou (as cópias deixam o original lá).
+    const antigos = [
+      ...plano.mover.filter((m) => m.de !== m.para).map((m) => ({ bucket: bucketDe(m.id), caminho: m.de })),
+      ...folha.filter((i) => caminhoNoDestino(i.storage_path, origem, destino) !== i.storage_path).map((i) => ({ bucket: i.storage_bucket || "mesa", caminho: i.storage_path })),
+    ];
+    let naoApagados = 0;
+    for (const a of antigos) {
+      const { error } = await db().storage.from(a.bucket).remove([a.caminho]);
+      if (error) naoApagados++;
+    }
+    const avisos: string[] = ["O custo e o uso de IA já cobrados continuam no cliente antigo."];
+    if (plano.copiar.length) avisos.push(`${plano.copiar.length} ${plano.copiar.length === 1 ? "foto ficou também" : "fotos ficaram também"} no cliente antigo porque outra coisa de lá usa (kit, derivada, Canvas ou outro clone); no cliente novo entrou uma cópia.`);
+    if (plano.reaproveitar.length) avisos.push(`${plano.reaproveitar.length} ${plano.reaproveitar.length === 1 ? "foto já existia" : "fotos já existiam"} no cliente novo: o clone passou a usar a de lá.`);
+    if (naoApagados) avisos.push(`${naoApagados} ${naoApagados === 1 ? "arquivo antigo não saiu" : "arquivos antigos não saíram"} do Storage (o banco já aponta para o cliente novo).`);
+    return f.json({
+      clone: cloneNovo,
+      resumo: { ...registro, arquivos_copiados: copiados.length },
+      avisos,
+      custo_usd: 0,
+    });
   }
 
   // ---------------------------------------------------------------- conferência
@@ -720,6 +1108,11 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       const uma = estimativaDeUmaImagem(m, lerQualidade(corpo.qualidade, p.qualidade), lerResolucao(corpo.resolucao) ?? p.resolucao, Math.max(1, refs));
       return f.json({ estimativa_usd: arred6(uma * quantidade), por_imagem_usd: uma, quantidade, modelo_imagem_id: m.id, custo_usd: 0 });
     }
+    if (alvo === "clone_sugerir") {
+      const diretor = await f.modeloDeTexto("diretor_arte");
+      const uma = estimarComModelo(diretor, { tokensEntrada: 9_000, tokensSaida: 2_000 });
+      return f.json({ estimativa_usd: arred6(uma), por_imagem_usd: uma, quantidade: 1, custo_usd: 0 });
+    }
     if (alvo === "clone_conferir") {
       const leitor = await f.modeloDeTexto("leitura");
       const uma = estimarComModelo(leitor, { tokensEntrada: 4 * 1_600 + 1_500, tokensSaida: 1_800 });
@@ -739,13 +1132,19 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       clone_variacao_gerar: cloneVariacaoGerar,
       clone_conferir: cloneConferir,
       clone_pacote: clonePacote,
+      clone_variacoes_sugerir: cloneVariacoesSugerir,
+      clone_transferir: cloneTransferir,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarClones,
+    // Para o Book (book.ts): a mesma variação, com as mesmas regras e a mesma autorização.
+    cloneComAcesso,
+    gerarVariacao,
+    identidadesBaixadas,
   };
 }
 
 /** Ações de Clones que chamam IA ou baixam imagens (respondem com fôlego). */
-export const ACOES_LONGAS_DE_CLONES = ["clone_folha_gerar", "clone_variacao_gerar", "clone_conferir", "clone_ler", "clones_listar", "clone_criar", "clone_pacote"];
+export const ACOES_LONGAS_DE_CLONES = ["clone_folha_gerar", "clone_variacao_gerar", "clone_conferir", "clone_ler", "clones_listar", "clone_criar", "clone_pacote", "clone_variacoes_sugerir", "clone_transferir"];
 
 /** Alvos que a ação estimar repassa para Clones. */
-export const ALVOS_DE_ESTIMATIVA_DE_CLONES = ["clone_folha", "clone_variacao", "clone_conferir"];
+export const ALVOS_DE_ESTIMATIVA_DE_CLONES = ["clone_folha", "clone_variacao", "clone_conferir", "clone_sugerir"];

@@ -1,6 +1,6 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { chamarFuncao, type ModeloIa, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
-import { normalizarFoto, type FotoDoAcervo } from "./fotoApi";
+import { normalizarFoto, semearUrl, type FotoDoAcervo } from "./fotoApi";
 import { normalizarImagemDaPersona, type ImagemDaPersona } from "./modelosApi";
 
 /**
@@ -229,20 +229,98 @@ export function normalizarCloneAberto(data: any): CloneAberto | null {
   };
 }
 
-export function useCloneAberto(id: string | null) {
+/**
+ * O clone aberto. Enquanto a leitura completa não chega, a tela mostra o
+ * provisório (o clone da lista com as fotos reais do acervo em cache), em vez
+ * de esqueleto: sem a "piscada" que parecia reiniciar (pedido do dono, 26/09).
+ */
+export function useCloneAberto(id: string | null, provisorio?: CloneAberto | null) {
   return useQuery({
     queryKey: chaveDoClone(id || ""),
     enabled: !!id,
     staleTime: 20_000,
     refetchOnWindowFocus: false,
     retry: 1,
+    placeholderData: provisorio || undefined,
     queryFn: async () => normalizarCloneAberto(await chamarFuncao<any>("mesa-foto", { acao: "clone_ler", modelo_id: id })),
   });
 }
 
+/** Clone aberto provisório: o que a lista e o acervo em cache já sabem (sem ida à função). */
+export function cloneAbertoProvisorio(c: Clone, fotos: FotoDoAcervo[], motores: MotorDoClone[] = [], presets: PresetDoClone[] = []): CloneAberto {
+  const reais = c.identidade_real
+    .map((r) => {
+      const f = fotos.find((x) => x.id === r.imagem_id);
+      return f ? { ...f, principal: r.principal } : null;
+    })
+    .filter(Boolean) as (FotoDoAcervo & { principal: boolean })[];
+  const variacoes = fotos.filter((f) => f.tags.indexOf(`clone:${c.id}`) >= 0);
+  return {
+    clone: c,
+    reais,
+    imagens: [],
+    variacoes,
+    folha: { vistas: [], aprovadas: 0, total: VISTAS_DO_CLONE.length, pronto: false, frente_aprovada: false },
+    motores,
+    presets,
+  };
+}
+
+/**
+ * Invalida sem apagar: a lista e o clone aberto seguem na tela com o que já
+ * têm enquanto a releitura roda (nada volta a esqueleto nem a estado vazio).
+ */
 export function invalidarClone(queryClient: QueryClient, clientId: string, id?: string | null) {
   void queryClient.invalidateQueries({ queryKey: chaveDosClones(clientId) });
   if (id) void queryClient.invalidateQueries({ queryKey: chaveDoClone(id) });
+}
+
+/** Põe (ou troca) o clone na lista em cache, antes da releitura (criar e transferir não piscam). */
+export function guardarCloneNaLista(queryClient: QueryClient, clientId: string, c: Clone) {
+  queryClient.setQueryData<Clone[]>(chaveDosClones(clientId), (lista) => {
+    const atual = lista || [];
+    return atual.some((x) => x.id === c.id) ? atual.map((x) => (x.id === c.id ? { ...x, ...c, capa_url: c.capa_url || x.capa_url } : x)) : [c].concat(atual);
+  });
+}
+
+export function tirarCloneDaLista(queryClient: QueryClient, clientId: string, id: string) {
+  queryClient.setQueryData<Clone[]>(chaveDosClones(clientId), (lista) => (lista || []).filter((x) => x.id !== id));
+}
+
+/** Resumo da folha pelo que está na tela (depois de aprovar na hora, sem esperar a função). */
+export function resumoDaFolhaLocal(imagens: ImagemDaPersona[]): ResumoDaFolhaDoClone {
+  const vistas = VISTAS_DO_CLONE.map((v) => {
+    const dela = imagens.filter((i) => i.papel === "vista" && i.vista === v.valor);
+    const aprovada = dela.find((i) => i.aprovada === true) || null;
+    return { vista: v.valor, geradas: dela.length, aprovada_id: aprovada ? aprovada.id : null };
+  });
+  const aprovadas = vistas.filter((v) => v.aprovada_id).length;
+  const frente = !!vistas[0].aprovada_id;
+  return { vistas, aprovadas, total: VISTAS_DO_CLONE.length, pronto: frente && aprovadas >= 3, frente_aprovada: frente };
+}
+
+/** Muda o clone aberto em cache (imagem nova, aprovação, variação) e recalcula a folha. */
+export function mudarCloneAberto(queryClient: QueryClient, id: string, mudar: (a: CloneAberto) => CloneAberto) {
+  queryClient.setQueryData<CloneAberto | null>(chaveDoClone(id), (a) => {
+    if (!a) return a;
+    const novo = mudar(a);
+    return { ...novo, folha: resumoDaFolhaLocal(novo.imagens) };
+  });
+}
+
+/** Vista nova da folha na tela na hora em que a função devolve (URL assinada já no cache). */
+export function guardarVistaDoClone(queryClient: QueryClient, id: string, imagem: ImagemDaPersona) {
+  if (imagem.url) semearUrl(queryClient, imagem.storage_bucket, imagem.storage_path, imagem.url);
+  mudarCloneAberto(queryClient, id, (a) => ({ ...a, imagens: a.imagens.filter((i) => i.id !== imagem.id).concat([imagem]) }));
+}
+
+/** Variação nova (ou mudada, ex.: aprovada) no clone aberto em cache. */
+export function guardarVariacaoDoClone(queryClient: QueryClient, id: string, foto: FotoDoAcervo, url?: string | null) {
+  if (url) semearUrl(queryClient, foto.storage_bucket, foto.storage_path, url);
+  mudarCloneAberto(queryClient, id, (a) => ({
+    ...a,
+    variacoes: a.variacoes.some((v) => v.id === foto.id) ? a.variacoes.map((v) => (v.id === foto.id ? foto : v)) : [foto].concat(a.variacoes),
+  }));
 }
 
 // ------------------------------------------------------------------ rascunho e validação na tela
@@ -331,7 +409,9 @@ export async function criarClone(clientId: string, r: RascunhoDoClone): Promise<
 
 export async function gerarVistaDoClone(p: { modeloId: string; vista: string; qualidade: Qualidade }): Promise<{ imagem: ImagemDaPersona | null; custo_usd?: number }> {
   const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_folha_gerar", modelo_id: p.modeloId, vista: p.vista, qualidade: p.qualidade });
-  return { imagem: normalizarImagemDaPersona(data && data.imagem, p.modeloId), custo_usd: data && data.custo_usd };
+  const imagem = normalizarImagemDaPersona(data && data.imagem, p.modeloId);
+  if (imagem && !imagem.url && data && typeof data.url === "string") imagem.url = data.url;
+  return { imagem, custo_usd: data && data.custo_usd };
 }
 
 export async function decidirVistaDoClone(imagemId: string, decisao: "aprovar" | "rejeitar") {
@@ -345,15 +425,102 @@ export interface PedidoDaVariacao {
   pose: string;
   expressao: string;
   livre: string;
+  /** Vindo das sugestões pelo contexto (luz e enquadramento também vão). */
+  luz?: string;
+  enquadramento?: string;
 }
 
-export async function gerarVariacaoDoClone(p: { modeloId: string; pedido: PedidoDaVariacao; formato: string; qualidade: Qualidade }): Promise<{ imagem: FotoDoAcervo | null; custo_usd?: number }> {
+/** Preset que aplica a logo oficial do kit da marca (a função anexa a logo e avisa para conferir). */
+export const PRESET_UNIFORME = "uniforme_marca";
+
+export async function gerarVariacaoDoClone(p: { modeloId: string; pedido: PedidoDaVariacao; formato: string; qualidade: Qualidade }): Promise<{ imagem: FotoDoAcervo | null; url: string | null; custo_usd?: number; avisos: string[] }> {
   const pedido: Record<string, unknown> = { preset: p.pedido.preset };
-  (["roupa", "cenario", "pose", "expressao", "livre"] as const).forEach((k) => {
-    if (p.pedido[k].trim()) pedido[k] = p.pedido[k].trim();
+  (["roupa", "cenario", "pose", "expressao", "livre", "luz"] as const).forEach((k) => {
+    const v = p.pedido[k];
+    if (v && v.trim()) pedido[k] = v.trim();
   });
+  if (p.pedido.enquadramento) pedido.enquadramento = p.pedido.enquadramento;
   const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_variacao_gerar", modelo_id: p.modeloId, pedido, formato: p.formato, qualidade: p.qualidade });
-  return { imagem: normalizarFoto(data && data.imagem), custo_usd: data && data.custo_usd };
+  const url = data && data.imagem && typeof data.imagem.url === "string" ? data.imagem.url : data && typeof data.url === "string" ? data.url : null;
+  return { imagem: normalizarFoto(data && data.imagem), url, custo_usd: data && data.custo_usd, avisos: lista(data && data.avisos) };
+}
+
+// ------------------------------------------------------------------ variações pelo contexto do cliente
+
+export interface SugestaoDoClone {
+  rotulo: string;
+  roupa: string;
+  cenario: string;
+  pose: string;
+  expressao: string;
+  luz: string;
+  enquadramento: string;
+  porque: string;
+}
+
+export function normalizarSugestoesDoClone(data: any): { negocio: string; sugestoes: SugestaoDoClone[]; avisos: string[] } {
+  const d = data && typeof data === "object" ? data : {};
+  const sugestoes = (Array.isArray(d.sugestoes) ? d.sugestoes : [])
+    .map((x: any) => ({
+      rotulo: texto(x && x.rotulo) || "Sugestão",
+      roupa: texto(x && x.roupa),
+      cenario: texto(x && x.cenario),
+      pose: texto(x && x.pose),
+      expressao: texto(x && x.expressao),
+      luz: texto(x && x.luz),
+      enquadramento: texto(x && x.enquadramento) || "meio_corpo",
+      porque: texto(x && x.porque),
+    }))
+    .filter((x: SugestaoDoClone) => x.roupa || x.cenario || x.pose);
+  return { negocio: texto(d.negocio), sugestoes, avisos: lista(d.avisos) };
+}
+
+/** Variações coerentes com o negócio do cliente (texto; não gera imagem). */
+export async function sugerirVariacoesDoClone(modeloId: string, pedido?: string) {
+  const corpo: Record<string, unknown> = { acao: "clone_variacoes_sugerir", modelo_id: modeloId, quantidade: 6 };
+  if (pedido && pedido.trim()) corpo.pedido = pedido.trim();
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return { ...normalizarSugestoesDoClone(data), custo_usd: data && data.custo_usd };
+}
+
+/** Pedido de variação a partir de uma sugestão (sem preset: a sugestão já diz tudo). */
+export const pedidoDaSugestao = (s: SugestaoDoClone, livre = ""): PedidoDaVariacao => ({
+  preset: null,
+  roupa: s.roupa,
+  cenario: s.cenario,
+  pose: s.pose,
+  expressao: s.expressao,
+  livre,
+  luz: s.luz,
+  enquadramento: s.enquadramento,
+});
+
+export function partesDaSugestaoDoClone(diretor: ModeloIa | null): ParteDaEstimativa[] {
+  return [{ modeloId: diretor ? diretor.id : null, tipo: "texto", tokensEntrada: 9000, tokensSaida: 2000 }];
+}
+
+// ------------------------------------------------------------------ transferir para outro cliente
+
+export interface ResumoDaTransferencia {
+  de: string;
+  para: string;
+  movidas: number;
+  copiadas: number;
+  reaproveitadas: number;
+  folha: number;
+}
+
+/** Transfere o clone (folha, fotos reais e variações, com os arquivos) para outro cliente. */
+export async function transferirClone(modeloId: string, destino: string): Promise<{ clone: Clone | null; resumo: ResumoDaTransferencia | null; avisos: string[] }> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_transferir", modelo_id: modeloId, client_id_destino: destino });
+  const r = data && data.resumo && typeof data.resumo === "object" ? data.resumo : null;
+  return {
+    clone: normalizarClone(data && data.clone),
+    resumo: r
+      ? { de: texto(r.de), para: texto(r.para), movidas: Number(r.movidas) || 0, copiadas: Number(r.copiadas) || 0, reaproveitadas: Number(r.reaproveitadas) || 0, folha: Number(r.folha) || 0 }
+      : null,
+    avisos: lista(data && data.avisos),
+  };
 }
 
 export function normalizarConferenciaDoClone(v: any): ConferenciaDoClone | null {

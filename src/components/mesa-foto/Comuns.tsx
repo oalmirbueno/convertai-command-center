@@ -34,6 +34,7 @@ export const ETAPAS_DA_MESA_FOTO = [
   { valor: "biblioteca", rotulo: "Biblioteca" },
   { valor: "modelos", rotulo: "Modelos" },
   { valor: "clones", rotulo: "Clones" },
+  { valor: "book", rotulo: "Book" },
   { valor: "canvas", rotulo: "Canvas" },
 ] as const;
 
@@ -56,6 +57,8 @@ export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
   { etapa: "biblioteca", rotulo: "Biblioteca" },
   { etapa: "modelos", rotulo: "Modelos" },
   { etapa: "clones", rotulo: "Clones" },
+  // Estúdio do book (26/09): produto ou pessoa, arsenal de prompts, diretor, seleção e book final.
+  { etapa: "book", rotulo: "Book" },
   { etapa: "canvas", rotulo: "Canvas" },
 ];
 
@@ -69,6 +72,8 @@ export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean;
   { etapa: "modelos", rotulo: "Modelos", disponivel: true, depoisDe: "kits" },
   // Clones de pessoa real com autorização (25/09; docs/mesa-foto/CLONES.md).
   { etapa: "clones", rotulo: "Clones", disponivel: true, depoisDe: "modelos" },
+  // Book (26/09): precisa da migration 05 (foto_books); sem ela, a aba avisa e o resto segue.
+  { etapa: "book", rotulo: "Book", disponivel: true, depoisDe: "clones" },
   { etapa: "canvas", rotulo: "Canvas", disponivel: true, depoisDe: "criar" },
 ];
 

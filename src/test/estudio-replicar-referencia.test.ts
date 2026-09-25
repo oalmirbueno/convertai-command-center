@@ -51,23 +51,28 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
     expect(gerar).toContain("const refsDaEquipe = await referenciasDaEquipe(t, card);");
     expect(gerar).toContain("const replicar = refsDaEquipe.length > 0 && !panorama;");
     expect(gerar).toContain('? { refs: refsDaEquipe, jev: "escolha_da_equipe" }');
-    // Sem escolha da equipe, a foto real continua como era (alinhada, só texto, logo pelo código).
-    expect(gerar).toContain('baseFoto ? { refs: [] as Referencia[], jev: "foto_real" } : await escolherReferencias(t, card, kit, ch.userId)');
+    // Sem escolha da equipe, a foto real continua como era (alinhada, só texto e a logo gerada na área dela).
+    expect(gerar).toContain('? { refs: [] as Referencia[], jev: "foto_real" }');
+    // 26/09: só a capa busca referência automática; o miolo segue a capa anexada.
+    expect(gerar).toContain('? { refs: [] as Referencia[], jev: "serie_pela_capa" }');
+    expect(gerar).toContain(": await escolherReferencias(t, card, kit, ch.userId);");
     expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
   });
 
   it("replicar: fotos do cliente primeiro, depois as referências; geração nova e o modo gravado na versão", () => {
-    const bloco = gerar.slice(gerar.indexOf("if (replicar) {"), gerar.indexOf("// 1a) Foto de fundo"));
-    expect(bloco.indexOf("FOTO REAL do cliente")).toBeLessThan(bloco.indexOf("REFERÊNCIA 1 escolhida pela equipe"));
-    expect(bloco).toContain("blocoReplicarReferencia({ referencias: refsNoPrompt, fotos, logo: logoIndice");
-    expect(bloco).toContain("regrasDeRender(t, card, nomes.map((n, i) => `imagem ${i + 1}: ${n}`), comLogo, true)");
+    // 26/09: os anexos são candidatos com prioridade (anexosDaLamina): foto do cliente, elemento, referência da equipe, logo...
+    expect(gerar.indexOf('tipo: "foto_cliente"')).toBeLessThan(gerar.indexOf('tipo: "referencia_equipe"'));
+    expect(gerar.indexOf("FOTO REAL do cliente")).toBeLessThan(gerar.indexOf("REFERÊNCIA 1 escolhida pela equipe"));
+    const bloco = gerar.slice(gerar.indexOf("  if (replicar) {\n    const prompt"), gerar.indexOf("// 1a) Foto de fundo"));
+    expect(bloco).toContain("blocoReplicarReferencia({ referencias: refsNoPrompt, fotos: fotosReplicar, logo: indiceDaLogo");
+    expect(bloco).toContain("regrasDeRender(t, card, legendas, regraDaLogo, true)");
     // Sem máscara: a foto é recomposta, não devolvida.
     expect(bloco).not.toContain("mascara(");
     expect(bloco).not.toContain("devolverOriginal");
     expect(bloco).toContain('modo: "replicar_referencia"');
-    expect(bloco).toContain("foto_recomposta: fotos.length > 0");
+    expect(bloco).toContain("foto_recomposta: fotosReplicar.length > 0");
     // Referência sem imagem: não gera às cegas.
-    expect(bloco).toContain('"referencia_sem_imagem"');
+    expect(gerar).toContain('"referencia_sem_imagem"');
     // Uma chamada, sem laço de correção.
     expect(bloco.match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
   });
@@ -84,7 +89,7 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
   it("foto grande (Mesa Foto 4K) é reduzida pelo Storage antes de decodificar (limite de CPU)", () => {
     expect(estudio).toContain('transform: { width: 2000, height: 2500, resize: "contain", format: "origin" }');
     expect(gerar).toContain('await fotoDoBucketNaLamina("mesa", fundoLivre.caminho, quadro.largura, quadro.altura)');
-    expect(gerar).toContain('await imagemReduzida("mesa", el.caminho, "elemento-real")');
+    expect(gerar).toContain('imagemReduzida("mesa", el.caminho, "elemento-real")');
   });
 });
 
@@ -121,7 +126,9 @@ describe("prompt do modo replicar", () => {
     expect(replica).toContain('"Seu sorriso merece cuidado"');
     expect(replica).toContain("mesma posição, escala e peso do texto equivalente da referência");
     expect(replica.toLowerCase()).toContain("#1f6f43");
-    expect(replica).toContain("no lugar em que a referência põe a marca dela");
+    expect(replica).toContain("onde a referência põe a marca dela");
+    // A referência só orienta o lugar: a logo continua no tamanho da marca (26/09).
+    expect(replica).toContain("nunca menor");
     expect(replica).toContain("FOTO REAL do cliente anexada é o assunto");
     expect(replica).not.toContain("CAPA QUE PARA A ROLAGEM");
   });

@@ -58,6 +58,11 @@
  * - clones_listar, clone_criar, clone_ler, clone_editar, clone_folha_gerar, clone_imagem_decidir, clone_variacao_gerar,
  *   clone_conferir, clone_pacote (clones.ts; pessoa real só com autorização) e estimar clone_folha|clone_variacao|clone_conferir
  * - biblioteca_limpar_exemplos, biblioteca_exemplos_estimar, biblioteca_exemplo_proximo (biblioteca-lote.ts; só admin)
+ * - 26/09 (clones.ts e book.ts; docs/mesa-foto/migrations/05_book.sql, não aplicada): clone_variacoes_sugerir
+ *   (variações pelo contexto do cliente), clone_transferir (outro cliente, com os arquivos), preset uniforme_marca
+ *   (logo oficial do kit da marca anexada), estimar clone_sugerir; books_listar, book_criar, book_ler, book_salvar,
+ *   book_diretor, book_gerar e estimar book_gerar|book_diretor; modelo_detalhar sempre num gerador com 4K de verdade
+ * - ferramentas_estimar, upscale, remover_fundo, ferramenta_retomar (ferramentas-pro.ts; API externa, segredo FAL_KEY)
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
  * identidade separada de estilo (referência de estilo vai depois das fontes,
@@ -192,7 +197,9 @@ import { SEMENTE_DA_BIBLIOTECA, VERSAO_DA_SEMENTE } from "./biblioteca-semente.t
 import { ACOES_LONGAS_DE_MODELOS, acoesDeModelos, ALVOS_DE_ESTIMATIVA_DE_MODELOS } from "./modelos.ts";
 import { ACOES_LONGAS_DO_CANVAS, acoesDoCanvas, ALVOS_DE_ESTIMATIVA_DO_CANVAS } from "./canvas.ts";
 import { ACOES_LONGAS_DE_CLONES, acoesDeClones, ALVOS_DE_ESTIMATIVA_DE_CLONES } from "./clones.ts";
+import { ACOES_LONGAS_DO_BOOK, acoesDoBook, ALVOS_DE_ESTIMATIVA_DO_BOOK } from "./book.ts";
 import { ACOES_LONGAS_DA_BIBLIOTECA, acoesDaBibliotecaEmLote } from "./biblioteca-lote.ts";
+import { ACOES_LONGAS_DAS_FERRAMENTAS_PRO, acoesDasFerramentasPro } from "./ferramentas-pro.ts";
 import type { FerramentasDaMesa } from "./ferramentas.ts";
 import {
   AZIMUTES,
@@ -1841,7 +1848,8 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   if (ALVOS_DE_ESTIMATIVA_DE_MODELOS.includes(acao)) return await MODELOS.estimar(ch, corpo, acao);
   if (ALVOS_DE_ESTIMATIVA_DO_CANVAS.includes(acao)) return await CANVAS.estimar(ch, corpo);
   if (ALVOS_DE_ESTIMATIVA_DE_CLONES.includes(acao)) return await CLONES.estimar(ch, corpo, acao);
-  throw new ErroHttp(400, "alvo_invalido", `acao_alvo: preparar, tomada_gerar, ensaio, biblioteca_exemplo, ${[...ALVOS_DE_ESTIMATIVA_DE_MODELOS, ...ALVOS_DE_ESTIMATIVA_DO_CANVAS, ...ALVOS_DE_ESTIMATIVA_DE_CLONES].join(", ")}.`);
+  if (ALVOS_DE_ESTIMATIVA_DO_BOOK.includes(acao)) return await BOOK.estimar(ch, corpo, acao);
+  throw new ErroHttp(400, "alvo_invalido", `acao_alvo: preparar, tomada_gerar, ensaio, biblioteca_exemplo, ${[...ALVOS_DE_ESTIMATIVA_DE_MODELOS, ...ALVOS_DE_ESTIMATIVA_DO_CANVAS, ...ALVOS_DE_ESTIMATIVA_DE_CLONES, ...ALVOS_DE_ESTIMATIVA_DO_BOOK].join(", ")}.`);
 }
 
 // ------------------------------------------------------------------ ensaio
@@ -3930,7 +3938,18 @@ const MODELOS = acoesDeModelos(FERRAMENTAS);
 const CANVAS = acoesDoCanvas(FERRAMENTAS);
 const CAMPANHAS = acoesDeCampanhas(FERRAMENTAS);
 const CLONES = acoesDeClones(FERRAMENTAS);
+// Book (26/09; book.ts): reaproveita a persona de Modelos, a variação do clone e o diretor (mesmas regras da casa).
+const BOOK = acoesDoBook(FERRAMENTAS, {
+  lerPersona: MODELOS.lerPersona,
+  imagensDaPersona: MODELOS.imagensDaPersona,
+  cloneComAcesso: CLONES.cloneComAcesso,
+  gerarVariacao: CLONES.gerarVariacao,
+  modeloDeImagem,
+  diretrizes: `${REGRAS_DA_CASA}
+${PADRAO_PUBLICITARIO}`,
+});
 const BIBLIOTECA_EM_LOTE = acoesDaBibliotecaEmLote(FERRAMENTAS, { ehAdmin, atualizarItemDaBiblioteca, modeloDeImagem });
+const FERRAMENTAS_PRO = acoesDasFerramentasPro(FERRAMENTAS);
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
@@ -3968,6 +3987,10 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   // Clones de pessoa real com autorização (25/09; clones.ts) e a biblioteca em lote (biblioteca-lote.ts).
   ...CLONES.acoes,
   ...BIBLIOTECA_EM_LOTE.acoes,
+  // Book (26/09): estúdio do produto ou da pessoa (book.ts; tabela da migration 05).
+  ...BOOK.acoes,
+  // Ampliar (upscale) e Tirar fundo (pro) por API externa (26/09; ferramentas-pro.ts).
+  ...FERRAMENTAS_PRO.acoes,
 };
 
 /**
@@ -3979,7 +4002,8 @@ const ACOES_LONGAS = new Set([
   "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
   "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
   "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
-  ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS, ...ACOES_LONGAS_DE_CLONES, ...ACOES_LONGAS_DA_BIBLIOTECA,
+  ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS, ...ACOES_LONGAS_DE_CLONES, ...ACOES_LONGAS_DA_BIBLIOTECA, ...ACOES_LONGAS_DO_BOOK,
+  ...ACOES_LONGAS_DAS_FERRAMENTAS_PRO,
 ]);
 
 Deno.serve(async (req) => {

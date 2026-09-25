@@ -51,6 +51,7 @@ import type { Chamador, FerramentasDaMesa, ImagemDoAcervoLida } from "./ferramen
 import {
   type AlvoDoDetalhe,
   alertasDoRealismo,
+  candidatosAo4K,
   fichaSugerida,
   DESCRICAO_DA_VISTA,
   type FichaDaPersona,
@@ -63,7 +64,6 @@ import {
   lerSemente,
   lerUsoDeReferencia,
   lerVista,
-  MOTOR_DETALHE,
   NIVEIS_ANATOMIA,
   NIVEIS_LUZ,
   NIVEIS_PELE,
@@ -644,16 +644,37 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     return { imagens, ids: lista.map((i) => i.id) };
   }
 
+  /**
+   * Gerador do 4K: o primeiro ativo, na ordem de candidatosAo4K (pedido da
+   * tela, padrão do alvo, reservas conferidas), cuja capacidade inclua 4K.
+   * Nunca manda 4K a quem não aceita (erro do OpenRouter de 26/09/2026 com o
+   * gemini-3-pro-image normal). Pedido sem 4K troca pela reserva, com aviso.
+   */
+  async function geradorDo4K(alvo: AlvoDoDetalhe, pedidoBruto: unknown): Promise<{ m: ModeloIa; aviso: string | null }> {
+    const pedido = limpo(pedidoBruto, 160) || null;
+    const testados: { id: string; resolucoes: string[] }[] = [];
+    for (const id of candidatosAo4K(alvo, pedido)) {
+      let m: ModeloIa;
+      try {
+        m = await carregarModelo(id, "imagem");
+      } catch {
+        continue;
+      }
+      const caps = capacidadesDoModelo(m);
+      if (aceitaResolucao(caps, "4K")) {
+        const trocou = !!pedido && m.id !== pedido;
+        return { m, aviso: trocou ? `O gerador escolhido não gera em 4K: o detalhe saiu no ${m.rotulo || m.id}.` : null };
+      }
+      testados.push({ id: m.id, resolucoes: caps.resolucoes ?? [] });
+    }
+    throw new ErroDeRegra(409, "resolucao_nao_suportada", "Nenhum gerador ativo no catálogo faz 4K. Ative o google/gemini-3-pro-image-preview (pessoa) ou o Seedream 4.5 (produto).", { testados });
+  }
+
   async function modeloDetalhar(ch: Chamador, corpo: Record<string, unknown>) {
     const alvo = lerAlvoDoDetalhe(corpo.alvo);
     const imagemId = idDe(corpo.imagem_id, "imagem_id");
-    const motorId = limpo(corpo.modelo_imagem_id, 160) || MOTOR_DETALHE[alvo];
-    const m = await carregarModelo(motorId, "imagem");
-    const caps = capacidadesDoModelo(m);
-    // Detalhar é 4K de verdade: gerador sem 4K é erro explícito (sem cair calado para 2K).
-    if (!aceitaResolucao(caps, "4K")) {
-      throw new ErroDeRegra(409, "resolucao_nao_suportada", "Este gerador não gera em 4K. Use o Nano Banana Pro (pessoa) ou o Seedream 4.5 (produto).", { modelo_imagem_id: m.id, resolucoes: caps.resolucoes ?? [] });
-    }
+    // Detalhar é 4K de verdade: sempre num gerador cuja capacidade inclui 4K (sem cair calado para 2K).
+    const { m, aviso: avisoDoGerador } = await geradorDo4K(alvo, corpo.modelo_imagem_id);
     const qualidade = lerQualidade(corpo.qualidade, "alta");
     const limite = limiteDeReferencias(m);
 
@@ -684,7 +705,8 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
         url: await f.urlAssinada(linha.storage_bucket, linha.storage_path),
         antes: { imagem_id: origem.id, url: await f.urlAssinada(origem.storage_bucket, origem.storage_path) },
         depois: { imagem_id: linha.id, url: await f.urlAssinada(linha.storage_bucket, linha.storage_path) },
-        aviso: "Geração nova em 4K (não é ampliação fiel): compare rosto e detalhes com a cortina antes de usar.",
+        aviso: `${avisoDoGerador ? `${avisoDoGerador} ` : ""}Geração nova em 4K (não é ampliação fiel): compare rosto e detalhes com a cortina antes de usar.`,
+        modelo_imagem_id: m.id,
         ...respostaDaGeracao(saida),
       });
     }
@@ -753,7 +775,8 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
       url,
       antes: { imagem_id: origem.id, url: await f.urlAssinada(origem.storage_bucket, origem.storage_path) },
       depois: { imagem_id: nova.id, url },
-      aviso: "Geração nova em 4K (não é ampliação fiel): compare com a cortina antes de aprovar.",
+      aviso: `${avisoDoGerador ? `${avisoDoGerador} ` : ""}Geração nova em 4K (não é ampliação fiel): compare com a cortina antes de aprovar.`,
+      modelo_imagem_id: m.id,
       ...respostaDaGeracao(saida),
     });
   }
@@ -919,9 +942,9 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
     }
     if (alvo === "modelo_detalhar") {
       const a = lerAlvoDoDetalhe(corpo.alvo);
-      const m = await carregarModelo(limpo(corpo.modelo_imagem_id, 160) || MOTOR_DETALHE[a], "imagem");
-      const faz = aceitaResolucao(capacidadesDoModelo(m), "4K");
-      return f.json({ estimativa_usd: faz ? estimativaDeUmaImagem(m, lerQualidade(corpo.qualidade, "alta"), "4K", a === "pessoa" ? 4 : 1) : 0, faz_4k: faz, modelo_imagem_id: m.id, custo_usd: 0 });
+      // Mesmo gerador que o detalhe vai usar (o primeiro com 4K de verdade).
+      const { m, aviso } = await geradorDo4K(a, corpo.modelo_imagem_id);
+      return f.json({ estimativa_usd: estimativaDeUmaImagem(m, lerQualidade(corpo.qualidade, "alta"), "4K", a === "pessoa" ? 4 : 1), faz_4k: true, modelo_imagem_id: m.id, aviso, custo_usd: 0 });
     }
     throw new ErroDeRegra(400, "alvo_invalido", "acao_alvo desconhecida para Modelos.");
   }

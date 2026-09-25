@@ -387,9 +387,19 @@ describe("capacidades: limite de referências e API por família", () => {
 
 describe("capacidades: resolução, proporção, qualidade e referências", () => {
   it("resolução só vai quando o modelo aceita; senão a mais perto abaixo, com aviso", () => {
-    const pro = capacidadesDoModelo(or("google/gemini-3-pro-image"));
+    const pro = capacidadesDoModelo(or("google/gemini-3-pro-image-preview"));
     expect(resolucaoParaModelo(pro, "4K")).toEqual({ resolucao: "4K", aviso: null });
     expect(resolucaoParaModelo(pro, null)).toEqual({ resolucao: null, aviso: null });
+    // 26/09/2026: o OpenRouter recusa 4K no gemini-3-pro-image normal; mesmo com o catálogo dizendo 4K, vai 2K.
+    const normal = capacidadesDoModelo({ ...or("google/gemini-3-pro-image"), capacidades: { resolucoes: ["1K", "2K", "4K"] } });
+    expect(normal.resolucoes).toEqual(["1K", "2K"]);
+    expect(resolucaoParaModelo(normal, "4K").resolucao).toBe("2K");
+    expect(capacidadesDoModelo(or("google/gemini-3.1-flash-image")).resolucoes).not.toContain("4K");
+    expect(capacidadesDoModelo(or("google/gemini-3.1-flash-image-preview")).resolucoes).toContain("4K");
+    // A sincronização também não marca 4K nos normais (a lista pública ainda diz 4K).
+    const lista = { id: "google/gemini-3-pro-image", architecture: { output_modalities: ["image", "text"] }, supported_parameters: { resolution: { values: ["1K", "2K", "4K"] } } };
+    expect(capacidadesDaListaDeImagens(lista, null).resolucoes).toEqual(["1K", "2K"]);
+    expect(capacidadesDaListaDeImagens({ ...lista, id: "google/gemini-3-pro-image-preview" }, null).resolucoes).toEqual(["1K", "2K", "4K"]);
     const seed5 = capacidadesDoModelo(or("bytedance-seed/seedream-5-0-pro"));
     const r = resolucaoParaModelo(seed5, "4K");
     expect(r.resolucao).toBe("2K");

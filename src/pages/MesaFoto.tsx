@@ -38,7 +38,8 @@ import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarc
  * 3. Usar (o que falta revisar e as prontas, com Mesa, Mesa Ads, Baixar e
  * aprovação em cada foto). O próximo passo fica sempre em destaque. Depois de
  * um traço fino, as ferramentas de apoio: Biblioteca, Modelos (personas
- * sintéticas) e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md). O Canvas carrega
+ * sintéticas), Clones, Book (estúdio do book do produto ou da pessoa, 26/09)
+ * e Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md). O Canvas carrega
  * o React Flow só quando a aba abre. O diretor de fotografia fica à mão em
  * todas, no botão do centro da base. A Mesa é a principal: todo plano usa o
  * contexto do cliente e a campanha da Mesa (a escolhida ou a do mês).
@@ -58,9 +59,11 @@ const carregarCampanha = () => import("@/components/mesa-foto/EtapaCampanha");
 const carregarCriar = () => import("@/components/mesa-foto/EtapaCriar");
 const carregarModelos = () => import("@/components/mesa-foto/EtapaModelos");
 const carregarClones = () => import("@/components/mesa-foto/EtapaClones");
+const carregarBook = () => import("@/components/mesa-foto/EtapaBook");
 // O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
 const EtapaModelos = lazy(carregarModelos);
 const EtapaClones = lazy(carregarClones);
+const EtapaBook = lazy(carregarBook);
 const EtapaCanvas = lazy(() => import("@/components/mesa-foto/EtapaCanvas"));
 const EtapaCampanha = lazy(carregarCampanha);
 const EtapaCriar = lazy(carregarCriar);
@@ -241,7 +244,7 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos, carregarClones]) {
+        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos, carregarClones, carregarBook]) {
           carregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -444,6 +447,7 @@ export default function MesaFoto() {
                 {etapa === "biblioteca" && <EtapaBiblioteca />}
                 {etapa === "modelos" && <EtapaModelos />}
                 {etapa === "clones" && <EtapaClones />}
+                {etapa === "book" && <EtapaBook />}
                 {etapa === "canvas" && <EtapaCanvas />}
               </Suspense>
             </div>

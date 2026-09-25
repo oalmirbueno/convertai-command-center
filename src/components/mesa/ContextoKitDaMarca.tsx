@@ -12,6 +12,7 @@ import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { PaletaDaMarca } from "./ContextoPaleta";
 import { Campo, TituloDeSecao } from "./Seletores";
 import { useFontesDoCliente, useInvalidarContexto, useReferenciasDoCliente } from "./contextoDoCliente";
+import { reduzirArquivoDeLogo } from "./ContextoLogos";
 
 /**
  * Kit de uma marca que não é a principal (ex.: CME dentro da Acerbi; pedido
@@ -149,9 +150,12 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
     }
     setEnviando(alternativa ? "alt" : "logo");
     try {
-      const caminho = caminhoDaLogoDaMarca(clientId, marca.id, alternativa, ext);
-      const tipo = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-      const { error: erroEnvio } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
+      // Logo gigante (26/09: 7813 px derrubou o Estúdio por memória): reduz para 2048 px antes de subir.
+      const pronta = await reduzirArquivoDeLogo(arquivo).catch(() => ({ blob: arquivo as Blob, reduziu: false }));
+      const extFinal = pronta.reduziu ? "png" : ext;
+      const caminho = caminhoDaLogoDaMarca(clientId, marca.id, alternativa, extFinal);
+      const tipo = extFinal === "jpg" || extFinal === "jpeg" ? "image/jpeg" : `image/${extFinal}`;
+      const { error: erroEnvio } = await supabase.storage.from("mesa").upload(caminho, pronta.blob, { contentType: tipo, upsert: false });
       if (erroEnvio) throw erroEnvio;
       const campos = alternativa ? { logo_alt_path: caminho, logo_alt_file_id: null } : { logo_path: caminho, logo_file_id: null };
       const { error } = await (supabase as any)

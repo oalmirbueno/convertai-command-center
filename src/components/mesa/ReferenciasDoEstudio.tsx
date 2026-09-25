@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
+import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import SeletorDeReferencias, { MiniaturasEscolhidas, type AbaDoSeletor } from "./SeletorDeReferencias";
 import { gravarTrabalhoNoCache, type TrabalhoGravado } from "./estudioUtil";
 import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
@@ -49,6 +50,7 @@ export default function ReferenciasDoEstudio({
   onAtualizar,
   entregue = false,
   onReabrir,
+  referenciaNaHora = false,
 }: {
   trabalho: Trabalho;
   /** Trabalho entregue: a escolha não salva até reabrir (antes a tela marcava e o servidor recusava calado). */
@@ -60,6 +62,12 @@ export default function ReferenciasDoEstudio({
   aba: AbaDasReferencias;
   onAba: (a: AbaDasReferencias) => void;
   onAtualizar: () => void;
+  /**
+   * Referência na hora (26/09): arrastar, escolher arquivo, colar a imagem ou
+   * o link (Ctrl+V no painel), entrando na hora como escolhida do alvo. O
+   * Estúdio liga; quem não liga (Estúdio Ads) segue igual.
+   */
+  referenciaNaHora?: boolean;
 }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
@@ -176,6 +184,16 @@ export default function ReferenciasDoEstudio({
           )}
         </div>
         <MiniaturasEscolhidas ids={escolhidas} colunas={5} onTirar={(id) => gravar(escolhidas.filter((x) => x !== id))} />
+        {referenciaNaHora && (
+          <EstudioReferenciaNaHora
+            escolhidas={escolhidas}
+            onGravar={gravar}
+            alvoRotulo={alvoReal === "lamina" && cardSelecionado ? `lâmina ${cardSelecionado.ordem}` : "conjunto"}
+            bloqueado={entregue}
+            motivoDoBloqueio="Trabalho entregue: as referências não mudam. Reabra para corrigir."
+            ouvirColarNaJanela
+          />
+        )}
         {escolhidas.length > 0 && (
           <p className="text-[11px] leading-snug text-muted-foreground">
             {escolhidas.length === 1

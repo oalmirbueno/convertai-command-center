@@ -24,6 +24,7 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import AgendaDoMes from "./AgendaDoMes";
+import DiagnosticoDoMes from "./DiagnosticoDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
@@ -112,6 +113,8 @@ interface Proposta {
   parametros: Record<string, any>;
   status: "temas" | "detalhando" | "pronta" | "gravada" | "descartada";
   diagnostico: string | null;
+  /** Diagnóstico em seções (novo); o texto antigo continua valendo. */
+  diagnostico_estruturado?: unknown;
   temas: Tema[];
   itens: Item[];
   conversa_id: string | null;
@@ -570,12 +573,7 @@ function PlanejarComEstrategista() {
 
       <div className={`grid grid-cols-1 gap-5 ${conversaAberta ? "lg:grid-cols-[minmax(0,1fr)_360px]" : ""}`}>
         <div className="min-w-0 space-y-5">
-          {proposta.diagnostico && (
-            <section className="space-y-2">
-              <TituloDeSecao>Diagnóstico</TituloDeSecao>
-              <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">{proposta.diagnostico}</p>
-            </section>
-          )}
+          <DiagnosticoDoMes proposta={proposta} />
 
           {temas.length > 0 && (proposta.status === "temas" || itens.length === 0) && (
             <section className="space-y-3">

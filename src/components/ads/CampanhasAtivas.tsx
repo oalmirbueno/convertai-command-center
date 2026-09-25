@@ -1,8 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Activity, AlertTriangle, Clock, Flame, Lightbulb, MousePointerClick, TrendingUp,
+  Activity, AlertTriangle, ChevronDown, Clock, Flame, Lightbulb, MousePointerClick, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
@@ -71,7 +71,7 @@ export default function CampanhasAtivas({
       };
     },
     // O dono pediu tempo real. Um minuto é o intervalo em que a Meta
-    // realmente atualiza — pedir mais rápido gastaria chamada sem trazer
+    // realmente atualiza; pedir mais rápido gastaria chamada sem trazer
     // número novo.
     refetchInterval: 60_000,
   });
@@ -98,7 +98,7 @@ export default function CampanhasAtivas({
    *
    * Uma lista corrida com uma etiqueta pequena em cada linha ainda obriga
    * a ler linha por linha para saber de quem é. Agrupar responde a
-   * pergunta antes dela ser feita — e é ela que o dono fez: "não consigo
+   * pergunta antes dela ser feita, e é ela que o dono fez: "não consigo
    * entender qual campanha está ativa de qual cliente".
    *
    * A ordem é por gasto de 14 dias: quem consome mais dinheiro merece o
@@ -135,94 +135,86 @@ export default function CampanhasAtivas({
     };
   }, [data, hoje]);
 
+  const [listaAberta, setListaAberta] = useState(false);
+
   if (error) {
     return (
-      <div className="rounded-xl border border-destructive/30 bg-secondary p-3 text-[12px] text-destructive">
+      <div className="rounded-xl border border-destructive/30 bg-card p-3 text-[12px] text-destructive">
         Não consegui ler as campanhas: {error instanceof Error ? error.message : String(error)}.
-        Nenhuma campanha está sendo dada como parada — a leitura falhou.
+        Nenhuma campanha está sendo dada como parada: a leitura falhou.
       </div>
     );
   }
   if (isLoading) {
-    return <p className="py-4 text-center text-[11px] text-muted-foreground">lendo as campanhas…</p>;
+    return <p className="py-4 text-center text-[11px] text-muted-foreground">lendo as campanhas...</p>;
   }
 
+  // Um cartão só, e não três: o agora numa linha, o que fazer logo abaixo e
+  // a lista das campanhas ativas recolhida (pedido do dono em 26/09: "está
+  // poluído, não dá para entender nada").
   return (
-    <div className="space-y-4">
-      {/* O AGORA, em três números. */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <p className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <Activity className="h-3.5 w-3.5 text-success" /> No ar agora
-          </p>
-          {/* DE QUEM são estes números. Três totais sem escopo fazem quem lê
-              achar que é de um cliente só — e decidir errado por isso. */}
-          <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-foreground">
-            {clientId
-              ? (nomesDeClientes?.get(clientId) ?? "este cliente")
-              : `todos os clientes · ${clientesAtivos.length}`}
-          </span>
-          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-bold text-success">
-            {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"}
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            atualizado {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { r: "Gasto hoje", v: dinheiro(totalHoje.gasto), c: "text-warning" },
-            { r: "Impressões hoje", v: inteiro(totalHoje.impressoes), c: "text-foreground" },
-            { r: "Cliques hoje", v: inteiro(totalHoje.cliques), c: "text-info" },
-          ].map((k) => (
-            <div key={k.r} className="rounded-lg bg-secondary/50 p-2.5">
-              <p className="text-[9.5px] uppercase tracking-wider text-muted-foreground">{k.r}</p>
-              <p className={cn("mt-0.5 font-mono text-base font-semibold", k.c)}>{k.v}</p>
-            </div>
-          ))}
-        </div>
+    <section className="min-w-0 rounded-2xl border border-border bg-card">
+      {/* O AGORA, numa linha. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-3">
+        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
+          <Activity className="h-3.5 w-3.5 text-success" /> No ar agora
+        </p>
+        {/* DE QUEM são estes números. Totais sem escopo fazem quem lê
+            achar que é de um cliente só, e decidir errado por isso. */}
+        <span className="rounded-full bg-secondary px-2 py-0.5 text-[10.5px] font-medium text-foreground">
+          {clientId
+            ? (nomesDeClientes?.get(clientId) ?? "este cliente")
+            : `todos os clientes · ${clientesAtivos.length}`}
+        </span>
+        <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10.5px] font-semibold text-success">
+          {ativas.length} {ativas.length === 1 ? "campanha ativa" : "campanhas ativas"}
+        </span>
+        <span className="text-[11.5px] text-muted-foreground">
+          hoje: <span className="font-mono text-foreground">{dinheiro(totalHoje.gasto)}</span>
+          {" · "}{inteiro(totalHoje.impressoes)} exibições · {inteiro(totalHoje.cliques)} cliques
+        </span>
+        <span className="ml-auto inline-flex items-center gap-1 text-[10.5px] text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {new Date(dataUpdatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        </span>
         {totalHoje.impressoes === 0 && ativas.length > 0 && (
           /* Zero hoje não é zero sempre: a Meta consolida o dia com atraso,
              e chamar isso de "parado" às 9h da manhã seria alarme falso. */
-          <p className="mt-2 text-[10.5px] text-muted-foreground">
-            Sem números de hoje ainda. A Meta consolida o dia com algumas horas de atraso —
-            os últimos 30 dias abaixo já estão fechados.
+          <p className="w-full text-[10.5px] text-muted-foreground">
+            Sem números de hoje ainda: a Meta consolida o dia com algumas horas de atraso.
           </p>
         )}
       </div>
 
-      {/* AS RECOMENDAÇÕES, cada uma com a conta que a gerou. */}
-      <div className="rounded-xl border border-border bg-card p-4">
-        <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+      {/* O QUE FAZER, cada aviso com a conta que o gerou. */}
+      <div className="px-4 py-3">
+        <p className="mb-2 flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
           <Lightbulb className="h-3.5 w-3.5 text-warning" /> O que fazer
           {recomendacoes.length > 0 && (
-            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold normal-case text-warning">
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
               {recomendacoes.length}
             </span>
           )}
         </p>
         {recomendacoes.length === 0 ? (
-          <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            Nada pede ação agora. As regras olham gasto sem clique, fadiga de público,
-            CTR abaixo da média da própria conta, orçamento no teto e campanha ativa sem
-            entrega — e só opinam com volume suficiente para não confundir ruído com sinal.
+          <p className="text-[11.5px] text-muted-foreground">
+            Nada pede ação agora. Os avisos só aparecem com volume suficiente para não confundir ruído com sinal.
           </p>
         ) : (
-          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+          <div className="max-h-72 min-w-0 space-y-1.5 overflow-y-auto overscroll-contain pr-1">
             {recomendacoes.map((r, i) => {
               const Icone = ICONE[r.gravidade];
               return (
-                <div key={`${r.campaign_id}-${i}`} className={cn("rounded-lg border p-2.5", TOM[r.gravidade])}>
-                  <p className="flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+                <div key={`${r.campaign_id}-${i}`} className={cn("min-w-0 rounded-lg border px-3 py-2", TOM[r.gravidade])}>
+                  <p className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-foreground">
                     <Icone className={cn(
                       "h-3.5 w-3.5 shrink-0",
                       r.gravidade === "alta" ? "text-destructive"
                         : r.gravidade === "media" ? "text-warning" : "text-muted-foreground",
                     )} />
-                    {r.titulo}
+                    <span className="min-w-0 truncate">{r.titulo}</span>
                   </p>
-                  <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">
                     {!clientId && nomeDoClienteDaCampanha(r.campaign_id) && (
                       <span className="font-semibold text-foreground/80">
                         {nomeDoClienteDaCampanha(r.campaign_id)} ·{" "}
@@ -230,9 +222,10 @@ export default function CampanhasAtivas({
                     )}
                     {r.campanha}
                   </p>
-                  {/* O NÚMERO. Sem ele o aviso vira palpite. */}
-                  <p className="mt-1 text-[11.5px] text-foreground/90">{r.porque}</p>
-                  <p className="mt-1 text-[11px] text-muted-foreground">{r.acao}</p>
+                  {/* O NÚMERO e a ação. Sem o número o aviso vira palpite. */}
+                  <p className="mt-1 text-[11.5px] leading-snug text-foreground/90">
+                    {r.porque} <span className="text-muted-foreground">{r.acao}</span>
+                  </p>
                 </div>
               );
             })}
@@ -240,21 +233,29 @@ export default function CampanhasAtivas({
         )}
       </div>
 
-      {/* AS CAMPANHAS ATIVAS, com o desempenho de 14 dias. */}
+      {/* AS CAMPANHAS ATIVAS, recolhidas: abrem com um clique. */}
       {ativas.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            <TrendingUp className="h-3.5 w-3.5 text-info" /> Campanhas ativas · últimos 14 dias
-          </p>
-          <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
+        <div className="border-t border-border">
+          <button
+            type="button"
+            onClick={() => setListaAberta((v) => !v)}
+            aria-expanded={listaAberta}
+            className="flex w-full items-center gap-1.5 px-4 py-2.5 text-left text-[12px] font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", listaAberta ? "" : "-rotate-90")} />
+            <TrendingUp className="h-3.5 w-3.5 text-info" />
+            {listaAberta ? "Esconder" : "Ver"} as campanhas ativas · últimos 14 dias
+          </button>
+          {listaAberta && (
+          <div className="max-h-96 min-w-0 space-y-3 overflow-y-auto overscroll-contain px-4 pb-4">
             {porCliente.map((grupo) => (
-              <div key={grupo.clientId} className="space-y-1.5">
+              <div key={grupo.clientId} className="min-w-0 space-y-1.5">
                 {/* O cliente como cabeçalho, e não como etiqueta miúda. */}
                 {!clientId && (
                   <button
                     type="button"
                     onClick={() => aoAbrirCliente?.(grupo.clientId)}
-                    className="flex w-full items-center gap-2 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary"
+                    className="flex w-full min-w-0 items-center gap-2 rounded-lg bg-secondary/60 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary"
                   >
                     <LogoDoCliente
                       url={identidades?.get(grupo.clientId)?.profile_picture_url}
@@ -264,7 +265,7 @@ export default function CampanhasAtivas({
                     <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-foreground">
                       {grupo.nome}
                     </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                    <span className="shrink-0 text-[10.5px] text-muted-foreground">
                       {grupo.campanhas.length} ativa{grupo.campanhas.length > 1 ? "s" : ""}
                       {grupo.gasto > 0 && ` · ${dinheiro(grupo.gasto)} em 14 dias`}
                     </span>
@@ -285,52 +286,41 @@ export default function CampanhasAtivas({
                     aoAbrirCliente((c as any).client_id);
                   }}
                   className={cn(
-                    "rounded-lg border p-2.5",
+                    "min-w-0 rounded-lg border px-3 py-2",
                     aoAbrirCliente && "cursor-pointer transition-colors hover:border-primary/50",
                     temAviso ? "border-warning/40 bg-warning/[0.04]" : "border-border bg-secondary/40",
                   )}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
                     <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
                       {c.name || c.campaign_id}
                     </span>
-                    {c.objective && (
-                      <span className="rounded-full bg-secondary px-2 py-0.5 text-[9.5px] text-muted-foreground">
-                        {String(c.objective).replace(/_/g, " ").toLowerCase()}
-                      </span>
-                    )}
+                    <span className="shrink-0 font-mono text-[11px] text-foreground">{dinheiro(r.gasto)}</span>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px]">
-                    <span className="font-mono text-foreground">{dinheiro(r.gasto)}</span>
-                    <span className="text-muted-foreground">{inteiro(r.impressoes)} impressões</span>
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] text-muted-foreground">
+                    <span>{inteiro(r.impressoes)} exibições</span>
+                    <span className="inline-flex items-center gap-1">
                       <MousePointerClick className="h-2.5 w-2.5" />
-                      {inteiro(r.cliques)} · CTR {pct(r.ctr)}
+                      {inteiro(r.cliques)} cliques · CTR {pct(r.ctr)}
                     </span>
-                    {r.cpc > 0 && <span className="text-muted-foreground">CPC {dinheiro(r.cpc)}</span>}
+                    {r.cpc > 0 && <span>CPC {dinheiro(r.cpc)}</span>}
                     {r.frequencia > 0 && (
-                      <span className={cn(
-                        "text-muted-foreground",
-                        r.frequencia >= 3.5 && "font-semibold text-warning",
-                      )}>
+                      <span className={cn(r.frequencia >= 3.5 && "font-semibold text-warning")}>
                         freq. {r.frequencia.toFixed(1)}
                       </span>
                     )}
-                    {c.daily_budget ? (
-                      <span className="ml-auto text-muted-foreground">
-                        teto {dinheiro(Number(c.daily_budget))}/dia
-                      </span>
-                    ) : null}
-                  </div>
+                    {c.daily_budget ? <span>teto {dinheiro(Number(c.daily_budget))}/dia</span> : null}
+                  </p>
                 </div>
               );
             })}
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

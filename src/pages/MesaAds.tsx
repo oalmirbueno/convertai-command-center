@@ -323,9 +323,10 @@ export default function MesaAds() {
                   onCriativo={(id) => mudar({ criativo: id }, true)}
                   planoId={planoUrl}
                   onVerTodos={() => mudar({ plano: null }, true)}
+                  onImportado={(id) => mudar({ plano: id, criativo: null }, true)}
                 />
               )}
-              {etapa === "conta" && <AbaConta onCriarPlano={criarPlano} />}
+              {etapa === "conta" && <AbaConta onCriarPlano={criarPlano} onImportado={(id) => mudar({ etapa: "estudio", plano: id, criativo: null })} />}
               {etapa === "resultados" && <AbaResultados />}
             </Suspense>
           </div>

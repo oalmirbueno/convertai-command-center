@@ -1590,12 +1590,73 @@ async function urlsDasFotos(clientId: string, fotos: FotoDoAcervo[]): Promise<Re
   } catch (e) {
     if (!(e instanceof ErroDaMesa) || (e.codigo !== "servico_indisponivel" && e.codigo !== "acao_desconhecida")) throw e;
   }
+  const usados: string[] = [];
   for (const f of fotos) {
     if (urls[f.id]) continue;
-    const { data, error } = await supabase.storage.from(f.storage_bucket || "mesa").createSignedUrl(f.storage_path, 900);
+    // Sem a função: assina direto, já como download com nome bom (o arquivo original, sem reduzir).
+    const { data, error } = await supabase.storage.from(f.storage_bucket || "mesa").createSignedUrl(f.storage_path, 900, { download: nomeNoZip(f, usados) });
     if (!error && data && data.signedUrl) urls[f.id] = data.signedUrl;
   }
   return urls;
+}
+
+/** Dispara o download de uma URL assinada com Content-Disposition (não abre aba nem sai da tela). */
+export function dispararDownload(url: string, nome: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nome;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+const esperar = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+/**
+ * Baixa as fotos UMA A UMA, sem ZIP, no tamanho original (pedido do dono,
+ * 26/09: "baixar as fotos sem zip, em alta qualidade, para enviar ao
+ * cliente"). A ação baixar devolve a URL assinada já como download com o nome
+ * do arquivo; um intervalo curto entre elas evita o navegador juntar ou
+ * barrar os downloads (na primeira vez ele pode pedir para permitir vários).
+ */
+export async function baixarUmaAUma(clientId: string, fotos: FotoDoAcervo[], aoAvancar?: (feitos: number, total: number) => void): Promise<number> {
+  if (!fotos.length) return 0;
+  const urls = await urlsDasFotos(clientId, fotos);
+  const usados: string[] = [];
+  let feitas = 0;
+  for (const f of fotos) {
+    const url = urls[f.id];
+    if (!url) continue;
+    dispararDownload(url, nomeNoZip(f, usados));
+    feitas++;
+    if (aoAvancar) aoAvancar(feitas, fotos.length);
+    if (fotos.length > 1) await esperar(450);
+  }
+  if (!feitas) throw new Error("Nenhuma foto pôde ser baixada agora.");
+  return feitas;
+}
+
+/** Baixa um arquivo do Storage (ex.: vista da folha do clone) no tamanho original, com nome bom. */
+export async function baixarDoStorage(bucket: string, caminho: string, nome: string): Promise<void> {
+  const ext = extensao(caminho) || "png";
+  const arquivo = `${semAcentoNoNome(nome).slice(0, 80) || "foto"}.${ext}`;
+  const { data, error } = await supabase.storage.from(bucket || "mesa").createSignedUrl(caminho, 900, { download: arquivo });
+  if (error || !data || !data.signedUrl) throw error || new Error("Não foi possível baixar esta imagem agora.");
+  dispararDownload(data.signedUrl, arquivo);
+}
+
+/**
+ * Semeia no cache a URL assinada que a função já devolveu (geração, detalhe,
+ * variação): a imagem aparece na hora, sem outra ida ao Storage (pedido do
+ * dono, 26/09: "quando gera, fica vazio, a imagem demora demais"). Vale para
+ * a imagem inteira e para a miniatura padrão da grade.
+ */
+export function semearUrl(queryClient: QueryClient, bucket: string | null | undefined, caminho: string | null | undefined, url: string | null | undefined) {
+  if (!caminho || !url) return;
+  const b = bucket || "mesa";
+  queryClient.setQueryData(["mesa", "url", b, caminho], url);
+  queryClient.setQueryData(["mesa", "url", b, caminho, "mini-320-cover"], url);
 }
 
 /** Baixa as fotos num ZIP montado no navegador (jszip só carrega aqui). */

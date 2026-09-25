@@ -44,7 +44,7 @@ describe("foto real: o original volta alinhado ao que o gerador devolveu", () =>
   });
 });
 
-describe("foto real: recorte pelo foco e logo pelo código", () => {
+describe("foto real: recorte pelo foco e logo gerada na área dela", () => {
   it("a foto entra na lâmina recortada pelo foco, não pelo centro cego", () => {
     expect(imagem).toContain("return await cobrirComFoco(await decodificar(bytes), largura, altura).encode(1);");
     expect(imagem).toContain("const y = Math.max(0, Math.min(a - altura, Math.round(fy * a - altura * 0.42)));");
@@ -54,34 +54,38 @@ describe("foto real: recorte pelo foco e logo pelo código", () => {
     expect(fotoReal).not.toContain('resize: "cover"');
   });
 
-  it("a logo oficial é aplicada pelo código na lâmina com foto real fixa", () => {
+  it("26/09: na foto real fixa a logo é desenhada pelo gerador dentro da área aberta dela, nunca colada", () => {
     // Com referência escolhida a lâmina replica a referência (foto recomposta), então a foto fixa sai de cena.
     expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
-    // Desde 25/09 a logo entra pelo código em todos os modos (acabamento da lâmina), limpa e na versão que contrasta.
-    expect(gerar).toContain("logosNoCodigo = daMarca.logos;");
-    expect(gerar).toContain("const fim = await acabar(final);");
-    expect(gerar).toContain("      logoNoCodigo,\n");
-    // Halo do valor oposto só quando falta contraste, sem caixa e sem escurecer a foto.
-    expect(imagem).toContain("const poucoContraste = clara ? fundo > 150 : fundo < 95;");
+    expect(gerar).toContain("const mascaraComLogo = cenaFixa;");
+    // A área da logo entra na máscara e na devolução do original: o que o gerador desenhou ali fica.
+    expect(gerar).toContain("const areas = panorama ? [INTERIOR_DA_LAMINA] : areasComLogo;");
+    expect(gerar).toContain("areaDaLogo: caixaDaLogoAqui ?");
+    // Nenhuma logo colada pelo código nas lâminas.
+    expect(gerar).not.toContain("acabar(");
+    expect(gerar).not.toContain("logosNoCodigo");
+    // A claridade da área escolhe a logo que contrasta (principal ou alternativa) antes de pedir.
+    expect(gerar).toContain("valorDoFundo = await valorMedioNaArea(baseFoto,");
   });
 });
 
 describe("foto real: o prompt não pede mais o que quebrava a lâmina", () => {
   it("sem véu ou painel atrás do texto e sem reenquadrar", () => {
     expect(direcao).not.toContain("um painel ou véu suave dentro da área do texto");
-    expect(direcao).toContain("Desenhe só o texto, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás dele.");
+    expect(direcao).toContain("Desenhe só o texto e a logo, direto sobre a foto, sem painel, véu, caixa ou desfoque atrás deles.");
     expect(gerar).toContain("NAO_REENQUADRAR,");
     expect(estudio).toContain("Não reenquadre a imagem 1: mesmo corte, mesmo zoom");
   });
 
   it("não manda mudar pose e enquadramento quando a foto está decidida", () => {
-    expect(direcao).toContain("opcoes.anteriores && opcoes.anteriores.length && serie && !foto");
+    // 26/09: a lista das lâminas anteriores saiu do prompt (repetia "mude a pose" e puxava alucinação); a capa anexada guia a série.
+    expect(direcao).not.toContain("opcoes.anteriores && opcoes.anteriores.length");
     expect(direcao).toContain("opcoes.fioVisual && serie && !foto");
-    expect(gerar).toContain("NÃO copie a foto nem o enquadramento dele, a foto desta lâmina é a imagem 1");
+    expect(gerar).toContain("NÃO copie a cena nem a foto dela, a cena desta lâmina é a imagem 1");
   });
 
-  it("a logo aplicada pelo código não é desenhada pelo gerador", () => {
-    expect(direcao).toContain("opcoes.logoNoCodigo && opcoes.levaLogo");
-    expect(direcao).toContain("A logo oficial é aplicada depois pelo sistema no canto ${cantoDaLogo}");
+  it("26/09: a logo é sempre do gerador; com a área fixa pela máscara, o prompt diz onde", () => {
+    expect(direcao).not.toContain("logoNoCodigo");
+    expect(direcao).toContain("- Lugar: dentro da área reservada para ela (");
   });
 });

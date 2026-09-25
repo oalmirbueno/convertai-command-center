@@ -225,6 +225,7 @@ export default function CardDoEstudio({
   onConfigurar,
   onConcluido,
   semTrocaDeFundo = false,
+  refinarTexto,
 }: {
   conversaId: string | null;
   direcao: CardDaDirecao;
@@ -257,6 +258,8 @@ export default function CardDoEstudio({
   onConcluido: () => void;
   /** Carrossel contínuo: o fundo é o panorama (o servidor recusa trocar só o fundo). */
   semTrocaDeFundo?: boolean;
+  /** "Refinar texto" (26/09): o Estúdio passa o painel do refino; quem não passa (Estúdio Ads) segue igual. */
+  refinarTexto?: ReactNode;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
@@ -424,6 +427,7 @@ export default function CardDoEstudio({
             {direcao.texto_exato || "Sem texto nesta lâmina."}
           </p>
         )}
+        {refinarTexto && !editandoTexto ? <div className="mt-2">{refinarTexto}</div> : null}
       </section>
 
       {/* Ajustes: livre, por área (marcada na lâmina grande) ou só o fundo */}

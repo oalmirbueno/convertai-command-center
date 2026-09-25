@@ -12,6 +12,7 @@ import {
   TAREFAS_ADS,
   TETO_ADS,
   TETO_CALENDARIO,
+  TETO_CALENDARIO_POR_MOMENTO,
   TETO_CONTEXTO,
   TETO_ESTUDIO,
   TETO_MESA_FOTO,
@@ -164,24 +165,30 @@ describe("Mesa Ads: especialistas e marketing por tarefa, com teto", () => {
 describe("Calendário e campanhas: marketing por momento e cérebro", () => {
   const REGRAS_DE_SAIDA = constante(calendario, "REGRAS_DE_SAIDA");
 
-  it("mês e campanha cabem em 7.500 e somam à base do estrategista sem vídeo", () => {
-    for (const m of ["mes", "campanha"] as const) {
+  it("cada momento cabe no seu teto (campanha em 7.500) e soma à base do estrategista sem vídeo", () => {
+    expect(TETO_CALENDARIO_POR_MOMENTO.campanha).toBe(TETO_CALENDARIO);
+    for (const m of ["mes", "campanha", "temas", "diagnostico"] as const) {
       const k = conhecimentoCalendarioPara(m);
-      expect(k.tamanho, m).toBeLessThanOrEqual(TETO_CALENDARIO);
+      expect(k.tamanho, m).toBeLessThanOrEqual(TETO_CALENDARIO_POR_MOMENTO[m]);
+      expect(k.cortados.filter((id) => id !== "estruturas_de_conteudo" && id !== "calendario_editorial"), m).toEqual([]);
       expect(k.texto).not.toContain(ROTEIRO_DE_VIDEO);
-      expect(k.texto).toContain(VOZ_DE_MARCA);
       expect(k.texto).toContain(ANTI_GENERICO);
-      // Base de técnica (no prompt do banco) + marketing + regras de saída.
-      expect(BASE_DO_ESTRATEGISTA.length + k.texto.length + REGRAS_DE_SAIDA.length).toBeLessThanOrEqual(11_000);
+      if (m !== "diagnostico") expect(k.texto).toContain(VOZ_DE_MARCA);
+      // Base de técnica (no prompt do banco) + conhecimento + regras de saída.
+      expect(BASE_DO_ESTRATEGISTA.length + k.texto.length + REGRAS_DE_SAIDA.length, m).toBeLessThanOrEqual(TETO_CALENDARIO_POR_MOMENTO[m] + 3_500);
     }
     expect(conhecimentoCalendarioPara("mes").texto).toContain(CALENDARIO_EDITORIAL);
+    expect(conhecimentoCalendarioPara("temas").texto).toContain(CALENDARIO_EDITORIAL);
     expect(conhecimentoCalendarioPara("campanha").texto).toContain(PLANO_DE_CAMPANHA);
   });
 
   it("o sistema mantém o prompt do banco primeiro e as regras de saída por último, em todas as ações", () => {
     expect(corpoDe(calendario, "sistemaDoCalendario")).toContain("return `${ctx.prompt}\\n\\n${CONHECIMENTO_DO_CALENDARIO[momento]}\\n${REGRAS_DE_SAIDA}`;");
     expect(calendario).not.toContain("sistema: `${ctx.prompt}\\n${REGRAS_DE_SAIDA}`");
-    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(8);
+    // Frente O: as três frentes do propor_temas usam "temas" e a pesquisa do mês usa "diagnostico".
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "mes"\)/g)?.length).toBe(7);
+    expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "temas"\)/g)?.length).toBe(1);
+    expect(calendario.match(/sistema: sistemaDoCalendario\(e\.ctx, "diagnostico"\)/g)?.length).toBe(1);
     expect(calendario.match(/sistema: sistemaDoCalendario\(ctx, "campanha"\)/g)?.length).toBe(3);
     for (const r of ["somente carrossel ou post estático", "Nunca reels, vídeo, stories ou live", "segunda a sexta", "sem travessões", "tipo_editorial e framework"]) expect(REGRAS_DE_SAIDA).toContain(r);
     expect(calendario).toContain("${BASE_DO_ESTRATEGISTA}");

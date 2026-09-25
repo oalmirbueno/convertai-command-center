@@ -33,6 +33,7 @@ import {
   ehFormatoDeArte,
   rotuloDaPublicacao,
   seloDoItem,
+  separarPecas,
   useAgendaDoMes,
   type ItemDaAgenda,
   type PostDaAgenda,
@@ -295,11 +296,16 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   const agenda = useAgendaDoMes(clientId, mes);
   const dados = agenda.data;
   const apagarConteudo = useApagarConteudo();
+  // Na Mesa só entram as peças (arte ou vídeo); planejamento, reunião,
+  // relatório e o resto ficam na Agenda, com um contador discreto.
+  const separacao = useMemo(() => separarPecas(dados ? dados.itens : []), [dados]);
+  const itensDaMesa = separacao.pecas;
+  const outrosTipos = separacao.outros;
 
   const artes = useArtesDoMes(
     clientId,
     mes,
-    dados ? dados.itens.map((i) => i.id) : [],
+    itensDaMesa.map((i) => i.id),
     dados ? dados.posts.map((p) => ({ post_id: p.post_id, arquivo_id: p.arquivo_id || null })) : [],
   );
   const mapaDeArtes = artes.data || SEM_ARTES;
@@ -308,13 +314,13 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
   const itensPorId = useMemo(() => {
     const m = new Map<string, ItemDaAgenda>();
-    for (const i of dados ? dados.itens : []) m.set(i.id, i);
+    for (const i of itensDaMesa) m.set(i.id, i);
     return m;
-  }, [dados]);
+  }, [itensDaMesa]);
 
   const itensPorDia = useMemo(() => {
     const m = new Map<string, ItemDaAgenda[]>();
-    for (const i of dados ? dados.itens : []) {
+    for (const i of itensDaMesa) {
       const dia = i.due_date ? i.due_date.slice(0, 10) : "";
       if (!dia) continue;
       const lista = m.get(dia) || [];
@@ -322,7 +328,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
       m.set(dia, lista);
     }
     return m;
-  }, [dados]);
+  }, [itensDaMesa]);
 
   const postsPorItem = useMemo(() => {
     const m = new Map<string, PostDaAgenda[]>();
@@ -454,7 +460,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
   const diasDoMes = semanas.reduce((acc: string[], s) => acc.concat(s.filter((d): d is string => !!d)), []);
   const diasComConteudo = diasDoMes.filter((d) => itensPorDia.has(d) || postsSoltosPorDia.has(d));
 
-  const vazio = !!dados && dados.itens.length === 0 && dados.posts.length === 0;
+  const vazio = !!dados && itensDaMesa.length === 0 && dados.posts.length === 0;
 
   const voltar = () => {
     if (vista === "semana") {
@@ -657,7 +663,7 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" /> {agenda.isLoading ? "lendo a agenda" : "atualizando"}
               </>
             ) : dados && !vazio ? (
-              `${dados.itens.length} ${dados.itens.length === 1 ? "item" : "itens"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
+              `${itensDaMesa.length} ${itensDaMesa.length === 1 ? "peça" : "peças"} · ${dados.posts.length} ${dados.posts.length === 1 ? "post" : "posts"}`
             ) : null}
           </span>
           {escolhidos.length > 0 && (
@@ -680,7 +686,17 @@ export default function AgendaDoMes({ onAbrirNoEstudio }: { onAbrirNoEstudio?: (
 
         {vazio && (
           <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
-            Nada na agenda deste mês. Planeje abaixo com o estrategista ou crie o item na Agenda.
+            Nenhuma peça (arte ou vídeo) neste mês. Planeje abaixo com o estrategista ou crie o item na Agenda.
+          </p>
+        )}
+
+        {outrosTipos > 0 && (
+          <p data-outros-tipos={outrosTipos} className="border-t border-border px-3 py-1.5 text-[11.5px] text-muted-foreground">
+            {outrosTipos === 1 ? "1 tarefa de outro tipo fica" : `${outrosTipos} tarefas de outros tipos ficam`} na{" "}
+            <Link to={`/calendario?client=${clientId}`} className="text-primary underline-offset-2 hover:underline">
+              Agenda
+            </Link>
+            {" "}(planejamento, reunião, relatório e afins).
           </p>
         )}
 

@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, ClipboardPaste, ImagePlus, Images, Loader2, Lock, RefreshCw, Scissors, Sparkles, Upload, X } from "lucide-react";
+import { Check, ClipboardPaste, ImagePlus, Images, Loader2, Lock, Maximize2, RefreshCw, Scissors, Sparkles, TriangleAlert, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
+import { chamarFuncao, ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
+import { FerramentasDaImagem } from "@/components/ferramentas/FerramentasDaImagem";
+import { ehSemChave, tirarFundoPro, type ResultadoDaFerramenta } from "@/components/ferramentas/ferramentasApi";
 import { Ampliar } from "./Ampliar";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { extensaoDoAnexo, MAX_BYTES_ANEXO } from "./mesaV4Api";
 import SeletorDoAcervo, { FotoDoAcervo, useAcervo, type ImagemDoAcervo } from "./SeletorDoAcervo";
-import { corpoDoTirarFundo, jaSemFundo } from "./estudioUtil";
+import { AVISO_DO_METODO_ANTIGO, corpoDoTirarFundo, jaSemFundo, ofertaDoRecorteDoGerador } from "./estudioUtil";
 import type { CardDaDirecao, FotoLivre as FotoLivreBase } from "./useItensDoMes";
 
 /** Foto da lâmina; `recortada`: pessoa ou produto sem fundo (Tirar fundo), que entra pelo modo recorte. */
@@ -49,10 +51,17 @@ export type FotoLivre = FotoLivreBase & { recortada?: boolean };
  * mostra "Reabrir para corrigir") e clicar numa foto já na lâmina tira ela.
  *
  * Tirar fundo (25/09: "seleciono uma foto, quero essa foto sem o fundo; ele já
- * entra na lâmina real"): com "Tirar fundo" ligado, a foto escolhida passa pela
- * Mesa Foto (preparar, modo fundo_transparente), a derivada vai para o acervo e
+ * entra na lâmina real"): com "Tirar fundo" ligado, a foto escolhida passa pelo
+ * removedor profissional (26/09: tirarFundoPro, BRIA RMBG 2.0 pela fal.ai; sem a
+ * chave no servidor, cai no método antigo da Mesa Foto, preparar
+ * fundo_transparente, com o aviso de qualidade), a derivada vai para o acervo e
  * entra na lâmina como ELEMENTO recortado: o estúdio põe a pessoa ou o produto
  * inteiro do lado oposto ao texto, sem caixa, com a referência e a marca em volta.
+ * Falhou: o erro fica à vista com "Tentar de novo" e, quando o servidor oferece,
+ * "Usar o recorte do gerador" (versão sem garantia de pixels iguais).
+ *
+ * Ampliar (26/09): cada foto do acervo na lâmina abre as ferramentas
+ * profissionais (FerramentasDaImagem); a derivada ampliada troca a foto na lâmina.
  *
  * O Ctrl+V só é interceptado quando há ARQUIVO de imagem na área de
  * transferência: colar texto em qualquer campo continua normal. Imagem com
@@ -406,6 +415,19 @@ function MiniaturaDaFoto({ foto, indice, onAmpliar }: { foto: FotoLivre; indice:
   );
 }
 
+/** Falha do Tirar fundo mostrada no painel, com o que dá para fazer na hora. */
+type FalhaDoFundo = {
+  imagem: ImagemDoAcervo & { modo?: string | null };
+  trocar?: string;
+  mensagem: string;
+  codigo: string | null;
+  /** Versão do gerador já guardada pelo servidor (sem garantia de pixels iguais). */
+  recorteDoGerador: string | null;
+  /** O servidor aceita um novo pedido com aceitar_recorte_redesenhado. */
+  podeAceitar: boolean;
+  metodo: "pro" | "antigo";
+};
+
 export default function EstudioFotos({
   card,
   ocupado,
@@ -443,6 +465,10 @@ export default function EstudioFotos({
   // "Tirar fundo" ligado: a próxima foto escolhida sai sem fundo e entra como elemento.
   const [semFundo, setSemFundo] = useState(false);
   const [tirandoFundo, setTirandoFundo] = useState(0);
+  // Falha do Tirar fundo à vista, com as saídas (usar o recorte do gerador ou tentar de novo).
+  const [falhaDoFundo, setFalhaDoFundo] = useState<FalhaDoFundo | null>(null);
+  // Foto da lâmina com as ferramentas de ampliar abertas (pelo caminho).
+  const [ampliando, setAmpliando] = useState<string | null>(null);
   const [params, setParams] = useSearchParams();
   const daMesaFoto = (params.get("fotos") || "").split(",").map((x) => x.trim()).filter(Boolean);
   const [aba, setAba] = useState<AbaDasFotos>(daMesaFoto.length ? "mesa_foto" : "acervo");
@@ -526,12 +552,23 @@ export default function EstudioFotos({
     gravar(base.concat([{ caminho, papel: "elemento", recortada: true }]), "Foto sem fundo na lâmina (elemento)");
   };
 
+  /** Caminho da derivada (Tirar fundo pro ou Ampliar) no bucket mesa: a do cliente entra direto; a de fora é copiada. */
+  const caminhoDaDerivada = async (imagem: ResultadoDaFerramenta["imagem"]): Promise<string> =>
+    caminhoDiretoDoAcervo(clientId, imagem) || (await copiarDoAcervo(clientId, imagem as unknown as ImagemDoAcervo));
+
   /**
-   * Tirar o fundo de uma foto do acervo: mesa-foto preparar (fundo_transparente,
-   * custo de uma imagem). A derivada vai para o acervo (Mesa Foto / Preparadas)
-   * e entra na lâmina como elemento recortado. Foto que já é recorte entra direto.
+   * Tirar o fundo de uma foto do acervo pelo removedor profissional
+   * (tirarFundoPro; custo à vista na Mesa Foto). Sem a chave do provedor, o
+   * método antigo (mesa-foto preparar, fundo_transparente) com o aviso de
+   * qualidade. A derivada vai para o acervo e entra na lâmina como elemento
+   * recortado. Foto que já é recorte entra direto. Falhou: o painel de falha
+   * mostra o erro e as saídas; nada tenta de novo sozinho.
    */
-  const tirarFundo = async (imagem: ImagemDoAcervo & { modo?: string | null }, trocar?: string) => {
+  const tirarFundo = async (
+    imagem: ImagemDoAcervo & { modo?: string | null },
+    trocar?: string,
+    opcoes: { metodo?: "pro" | "antigo"; aceitarRedesenhado?: boolean } = {},
+  ) => {
     const motivo = impedimento();
     if (motivo) {
       avisarImpedimento(motivo);
@@ -548,10 +585,29 @@ export default function EstudioFotos({
       }
       return;
     }
+    setFalhaDoFundo(null);
     setTirandoFundo((n) => n + 1);
+    let metodo: "pro" | "antigo" = opcoes.metodo || "pro";
     try {
-      const r = await chamarFuncao<{ imagem?: { storage_path?: string } }>("mesa-foto", corpoDoTirarFundo(clientId, imagem.id));
-      const caminho = r && r.imagem && r.imagem.storage_path;
+      let caminho: string | null = null;
+      if (metodo === "pro") {
+        try {
+          const r = await tirarFundoPro({ clientId, imagemId: imagem.id });
+          caminho = r.imagem && r.imagem.storage_path ? await caminhoDaDerivada(r.imagem) : null;
+        } catch (e) {
+          if (!ehSemChave(e)) throw e;
+          metodo = "antigo";
+          toast.warning("Removedor profissional sem chave", { description: AVISO_DO_METODO_ANTIGO });
+        }
+      }
+      if (metodo === "antigo") {
+        const r = await chamarFuncao<{ imagem?: { storage_path?: string }; aviso?: string }>(
+          "mesa-foto",
+          corpoDoTirarFundo(clientId, imagem.id, { aceitarRedesenhado: opcoes.aceitarRedesenhado }),
+        );
+        caminho = (r && r.imagem && r.imagem.storage_path) || null;
+        if (r && typeof r.aviso === "string" && r.aviso) toast.warning("Confira o recorte", { description: r.aviso });
+      }
       if (!caminho) throw new Error("A foto sem fundo não voltou. Tente de novo.");
       adicionarRecorte(caminho, trocar);
       void queryClient.invalidateQueries({ queryKey: ["mesa", "acervo", clientId] });
@@ -566,11 +622,36 @@ export default function EstudioFotos({
           toast.error("Não foi possível usar a foto", { description: textoDoErro(e2) });
         }
       } else {
+        const oferta = ofertaDoRecorteDoGerador(e instanceof ErroDaMesa ? e.detalhes : null);
+        setFalhaDoFundo({ imagem, trocar, mensagem: textoDoErro(e), codigo: codigo || null, recorteDoGerador: oferta.caminho, podeAceitar: oferta.podeAceitar, metodo });
         toast.error("Não foi possível tirar o fundo", { description: textoDoErro(e) });
       }
     } finally {
       setTirandoFundo((n) => Math.max(0, n - 1));
       mesa.atualizarCusto();
+    }
+  };
+
+  /** "Usar o recorte do gerador": a versão já guardada entra direto; senão, um pedido novo que aceita o redesenho. */
+  const usarRecorteDoGerador = (f: FalhaDoFundo) => {
+    if (f.recorteDoGerador) {
+      setFalhaDoFundo(null);
+      adicionarRecorte(f.recorteDoGerador, f.trocar);
+      return;
+    }
+    void tirarFundo(f.imagem, f.trocar, { metodo: "antigo", aceitarRedesenhado: true });
+  };
+
+  /** Ampliar (ferramentas pro): a derivada troca a foto na lâmina, com o mesmo papel e a mesma nota. */
+  const trocarPelaAmpliada = async (caminhoAntigo: string, r: ResultadoDaFerramenta) => {
+    try {
+      const caminho = await caminhoDaDerivada(r.imagem);
+      if (caminho === caminhoAntigo) return;
+      gravar(atual.current.map((f) => (f.caminho === caminhoAntigo ? { ...f, caminho } : f)), "Foto ampliada na lâmina");
+      setAmpliando(null);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "acervo", clientId] });
+    } catch (e) {
+      toast.error("A foto ampliada não entrou na lâmina", { description: textoDoErro(e) });
     }
   };
 
@@ -730,6 +811,40 @@ export default function EstudioFotos({
             </span>
           )}
         </div>
+        {falhaDoFundo && (
+          <div role="alert" data-falha-do-fundo="" className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2.5">
+            <p className="flex items-start text-[12px] font-medium text-destructive">
+              <TriangleAlert className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0" /> Não foi possível tirar o fundo de {falhaDoFundo.imagem.nome || "a foto"}
+            </p>
+            <p className="mt-1 text-[11.5px] leading-snug [overflow-wrap:anywhere]">{falhaDoFundo.mensagem}</p>
+            {falhaDoFundo.metodo === "antigo" && (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">Método antigo (sem o removedor profissional): o gerador redesenha o assunto.</p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center">
+              {(falhaDoFundo.recorteDoGerador || falhaDoFundo.podeAceitar) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="mb-1 mr-2 h-8 text-[12px]"
+                  disabled={tirandoFundo > 0}
+                  onClick={() => usarRecorteDoGerador(falhaDoFundo)}
+                  title={falhaDoFundo.recorteDoGerador ? "Usa a versão que o gerador devolveu, sem a garantia de pixels iguais aos da foto" : "Pede de novo aceitando o recorte redesenhado pelo gerador (custa 1 imagem)"}
+                >
+                  Usar o recorte do gerador
+                </Button>
+              )}
+              <Button type="button" size="sm" variant="outline" className="mb-1 mr-2 h-8 text-[12px]" disabled={tirandoFundo > 0} onClick={() => void tirarFundo(falhaDoFundo.imagem, falhaDoFundo.trocar, { metodo: falhaDoFundo.metodo })}>
+                {tirandoFundo > 0 ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1 h-3.5 w-3.5" />} Tentar de novo
+              </Button>
+              <button type="button" className="mb-1 text-[11.5px] text-muted-foreground hover:text-foreground" onClick={() => setFalhaDoFundo(null)}>
+                Fechar
+              </button>
+            </div>
+            {!falhaDoFundo.recorteDoGerador && falhaDoFundo.podeAceitar && (
+              <p className="text-[11px] leading-snug text-muted-foreground">Usar o recorte do gerador pede de novo (custa 1 imagem) e os pixels podem não ser os da foto original.</p>
+            )}
+          </div>
+        )}
         {lista.length > 0 ? (
           <ul className="space-y-2.5">
             {lista.map((f, i) => (
@@ -797,6 +912,34 @@ export default function EstudioFotos({
                     className="mt-1.5 h-8 text-[12px]"
                     aria-label={`Como usar a foto ${i + 1}`}
                   />
+                  {(() => {
+                    const doAcervo = doAcervoPeloCaminho(f.caminho);
+                    if (!doAcervo) return null;
+                    const aberta = ampliando === f.caminho;
+                    return (
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setAmpliando(aberta ? null : f.caminho)}
+                          aria-expanded={aberta}
+                          disabled={ocupado || entregue}
+                          className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
+                          title="Ampliar esta foto com as ferramentas profissionais (custo à vista antes de confirmar)"
+                        >
+                          <Maximize2 className="mr-1 h-3.5 w-3.5" /> {aberta ? "Fechar ampliar" : "Ampliar a foto"}
+                        </button>
+                        {aberta && (
+                          <FerramentasDaImagem
+                            clientId={clientId}
+                            imagemId={doAcervo.id}
+                            semTirarFundo
+                            aoConcluir={(r) => void trocarPelaAmpliada(f.caminho, r)}
+                            className="mt-1.5"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </li>
             ))}

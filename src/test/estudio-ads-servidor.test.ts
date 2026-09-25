@@ -139,9 +139,10 @@ describe("Estúdio Ads: zona segura", () => {
     expect(margensDoQuadro("quadrado_1x1")).toEqual({ x: 8.3, topo: 9.3, base: 9.8, capaExtra: 0 });
     expect(margensDoQuadro("feed_4x5")).toEqual({ x: 8.3, topo: 7.4, base: 7.9, capaExtra: 0 });
     expect(margensDoQuadro("stories_9x16")).toEqual({ x: 8.3, topo: 14, base: 20, capaExtra: 0 });
-    // A logo tem os mesmos ~81 px em qualquer formato.
-    expect(caixaDaLogo("centro", false, "stories_9x16").y1 - caixaDaLogo("centro", false, "stories_9x16").y0).toBeCloseTo(4.2, 1);
-    expect(caixaDaLogo("centro", false, "quadrado_1x1").y1 - caixaDaLogo("centro", false, "quadrado_1x1").y0).toBeCloseTo(7.5, 1);
+    // 26/09: a área da logo sai do tamanho da logo (tamanhoDaLogo), igual em px em qualquer formato:
+    // logo horizontal comum (3:1) com 324 x 108 px, com folga de 25% na altura.
+    expect(caixaDaLogo("centro", false, "stories_9x16").y1 - caixaDaLogo("centro", false, "stories_9x16").y0).toBeCloseTo(7, 1);
+    expect(caixaDaLogo("centro", false, "quadrado_1x1").y1 - caixaDaLogo("centro", false, "quadrado_1x1").y0).toBeCloseTo(12.5, 1);
   });
 
   it("o prompt da peça única troca carrossel por criativo, leva regrasDoCriativo e as margens da zona segura", () => {
@@ -191,7 +192,7 @@ describe("Estúdio Ads: zona segura", () => {
   it("as áreas da máscara da foto real seguem o formato e o prompt do gerador recebe o anúncio", () => {
     const areas = corpoDe("areasDeDesenho");
     expect(areas).toContain("caixaDaZona(zona, capa, total > 1, formato, post)");
-    expect(areas).toContain("caixaDaLogo(zona, capa, formato, post)");
+    expect(areas).toContain("caixaDaLogo(zona, capa, formato, post, aspecto)");
     expect(corpoDe("gerarCard")).toContain("anuncio: quadro.formato ? { formato: quadro.formato } : null,");
   });
 });
@@ -226,7 +227,7 @@ describe("Estúdio Ads: sem panorama nem série", () => {
     expect(g).toContain("const infinito = !ads && !!t.direcao.carrossel_infinito;");
     // A tela dupla saiu em 25/09; a capa guia a série (fora do replicar), no post e no carrossel de anúncio.
     expect(g).not.toContain("const continuar =");
-    expect(g).toContain("if (capa && ordem > 2 && !replicar) {");
+    expect(g).toContain("const capa = ordem > 1 && total > 1 ? versaoAtual(t, 1) : null;");
     expect(g).toContain("carrosselInfinito: infinito && !panorama,");
     expect(corpoDe("regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t)");
     expect(corpoDe("configurar")).toContain("carrossel_infinito: infinito && cards.length > 1 && !ehAds(x)");
