@@ -11,6 +11,7 @@ import { MesaProvider, useCatalogo, type MesaValor } from "@/components/mesa/Mes
 import { inicioDoMes, lerPrevisao, usd, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { montarFila, useFilaDePrioridades, type AbaDaMesa } from "@/lib/mesa/fila";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
+import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 
 /**
  * Mesa do cliente (/mesa, só equipe: admin, gestor e design).
@@ -499,6 +500,8 @@ export default function MesaDoCliente() {
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
   const ondeGuardado = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (ondeGuardado && ondeGuardado.nome) || "";
+  // Marca por projeto (só a Acerbi hoje: Acerbi e CME). Cliente com uma marca só: vazio e null, nada muda.
+  const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
 
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
     const next = new URLSearchParams(params);
@@ -513,12 +516,12 @@ export default function MesaDoCliente() {
   // Trocar de cliente volta para a aba, o mês e o item em que parou nele.
   const trocarCliente = (id: string) => {
     const onde = lerOnde(id);
-    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null, painel: null });
+    mudar({ client: id, aba: (onde && onde.aba) || "contexto", mes: (onde && onde.mes) || null, task: (onde && onde.task) || null, campanha: null, hype: null, painel: null, marca: null });
   };
 
   // Da fila de prioridades direto para a aba certa do cliente certo.
   const abrirDaFila = (id: string, abaDaAcao: AbaDaMesa, mesDaAcao: string | null) => {
-    mudar({ client: id, aba: abaDaAcao, mes: mesDaAcao, task: null, campanha: null, hype: null, painel: null });
+    mudar({ client: id, aba: abaDaAcao, mes: mesDaAcao, task: null, campanha: null, hype: null, painel: null, marca: null });
   };
 
   const alternarPainel = (p: "prioridades" | "custos") => mudar({ painel: painel === p ? null : p });
@@ -615,6 +618,8 @@ export default function MesaDoCliente() {
         abrirChaves,
         abrirModelos,
         versaoCarteira,
+        marcas,
+        marca,
       }
     : null;
 
@@ -638,6 +643,16 @@ export default function MesaDoCliente() {
               onEscolher={trocarCliente}
             />
           </div>
+          {/* Troca rápida de marca: só aparece no cliente com 2 ou mais marcas.
+              Trocar de marca fecha o item e a campanha abertos (são de uma marca só). */}
+          {clientId && marca && (
+            <SeletorDeMarca
+              marcas={marcas}
+              valor={marca.id}
+              onEscolher={(id) => mudar({ marca: id, task: null, campanha: null, hype: null })}
+              className="mr-2"
+            />
+          )}
           {clientId && (
             <nav
               aria-label="Etapas da Mesa"
@@ -688,7 +703,7 @@ export default function MesaDoCliente() {
               </button>
             )}
           </div>
-          {clientId && <TrocaDeMesas atual="mesa" clientId={clientId} />}
+          {clientId && <TrocaDeMesas atual="mesa" clientId={clientId} marcaId={marca ? marca.id : null} />}
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}
@@ -721,7 +736,7 @@ export default function MesaDoCliente() {
 
       {valor && (
         <MesaProvider valor={valor}>
-          <div key={valor.clientId} className={painel ? "hidden" : "min-w-0"}>
+          <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className={painel ? "hidden" : "min-w-0"}>
             <Suspense fallback={<EsqueletoDaAba />}>
               {aba === "contexto" && <AbaContexto />}
               {aba === "mes" && (

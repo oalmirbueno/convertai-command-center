@@ -69,7 +69,15 @@ import { auditLog } from "../_shared/mcp-audit.ts";
 import { direcaoDoRoteiro } from "../_shared/direcao-arte.ts";
 import { aplicarFotosDoPlano, pecasDoPlanoGravado } from "../_shared/fotos-do-plano.ts";
 export { aplicarFotosDoPlano, pecasDoPlanoGravado };
-import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import {
+  blocoDaMarca,
+  kitComMarca,
+  lerMarcaParaDirecaoDaMarca,
+  type MarcaDoCliente,
+  marcasDoCliente,
+  projetosDoClienteNaMarca,
+  resolverMarca,
+} from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   AGENTE_ESCOLHE,
@@ -88,6 +96,8 @@ import {
   rotuloEditorial,
   type EscolhaEditorial,
 } from "../_shared/conhecimento-conteudo.ts";
+import { conhecimentoCalendarioPara, type MomentoDoCalendario } from "../_shared/conhecimento-dos-agentes.ts";
+import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -635,10 +645,14 @@ type Contexto = {
   titulos_recentes: string[];
   kit_marca: unknown | null;
   memoria: Array<{ tipo: string; texto: string }>;
+  /** Frente H: resumo do cérebro (calendário, campanha e copy), sem o "Plano do mês"; null quando a leitura falhou. */
+  cerebro: string | null;
   /** O que a conversa com o agente do mês combinou para cada mês (o mais novo de cada mês). */
   planos: Array<{ mes: string; texto: string }>;
   datasOcupadas: Set<string>;
   prompt: string;
+  /** Marca por projeto (ex.: Acerbi ou CME, _shared/marca.ts); ausente no cliente sem marca. */
+  marca?: string | null;
 };
 
 const corta = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : v ?? null);
@@ -683,7 +697,14 @@ export function blocoDoPlano(ctx: Pick<Contexto, "planos">, inicio: string): str
  * Monta o contexto do estrategista so com dado real do banco. O que nao existe
  * vai como vazio ou null, nunca preenchido.
  */
-async function montarContexto(servico: SupabaseClient, clientId: string, inicio: string, fim: string): Promise<Contexto> {
+async function montarContexto(
+  servico: SupabaseClient,
+  clientId: string,
+  inicio: string,
+  fim: string,
+  marcaDoPedido: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
+): Promise<Contexto> {
+  const marca = await marcaDoPedido;
   const hoje = new Date();
   const ha60 = new Date(hoje.getTime() - 60 * 86_400_000).toISOString();
   const ha180 = new Date(hoje.getTime() - 180 * 86_400_000).toISOString();
@@ -694,8 +715,11 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     .eq("client_id", clientId)
     .is("deleted_at", null)
     .limit(200);
-  const projectIds = (projetos ?? []).map((p: { id: string }) => p.id);
+  // Com marca por projeto (Acerbi e CME), a agenda e os títulos são só os projetos da marca.
+  const projectIds = await projetosDoClienteNaMarca(servico, clientId, marca, (projetos ?? []).map((p: { id: string }) => p.id));
 
+  // Frente H: cérebro do cliente (calendário, campanha e copy), lido junto; o "Plano do mês" segue pelo caminho próprio.
+  const cerebroP = resumoDoCerebro(servico, clientId, ["calendario", "campanha", "copy"], { limite: 2000, manter: (f) => !mesDoPlano(f.texto) });
   const [
     perfil,
     conta,
@@ -811,9 +835,12 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     },
     agenda_no_periodo: { tarefas, posts: postsNoPeriodo },
     titulos_recentes: ((tarefasRecentes.data ?? []) as Array<{ title: string }>).map((t) => t.title).slice(0, 60),
-    kit_marca: kit.data ?? null,
+    // Marca por projeto: kit da marca por cima do do cliente (sem marca, o mesmo objeto).
+    kit_marca: kitComMarca((kit.data as Record<string, unknown> | null) ?? null, marca),
+    ...(marca ? { marca: blocoDaMarca(marca, await marcasDoCliente(servico, clientId)) } : {}),
     // O plano do mês vai em campo próprio (planos), não misturado na memória.
     memoria: ((memoria.data ?? []) as Array<{ tipo: string; texto: string }>).filter((m) => !mesDoPlano(m.texto)),
+    cerebro: await cerebroP.then((c) => (c.falhou ? null : c.texto)),
     planos: planosUnicos((planos.data ?? []) as Array<{ texto: string }>),
     datasOcupadas,
     prompt,
@@ -844,7 +871,10 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     agenda_ja_existente_no_periodo: ctx.agenda_no_periodo,
     titulos_publicados_ou_planejados_nos_ultimos_60_dias: enxuto ? ctx.titulos_recentes.slice(0, 30) : ctx.titulos_recentes,
     kit_de_marca: ctx.kit_marca,
-    memoria_do_estrategista: ctx.memoria,
+    // Marca por projeto (Acerbi e CME): só aparece no cliente com marca cadastrada.
+    ...(ctx.marca ? { marca_deste_conteudo: ctx.marca } : {}),
+    // Frente H: o resumo do cérebro no lugar da lista crua; a lista só volta se o cérebro não respondeu.
+    ...(ctx.cerebro === null ? { memoria_do_estrategista: ctx.memoria } : { cerebro_do_cliente: ctx.cerebro || null }),
     planos_combinados_com_a_equipe: ctx.planos,
   };
   return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}`;
@@ -875,9 +905,25 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Publicações só de segunda a sexta, dentro do período.
 - Evite repetir temas que já estão na agenda do período ou nos títulos recentes.
 - Siga a memória do estrategista (preferências, aprendizados e o que evitar).
+- Siga o cérebro do cliente (cerebro_do_cliente): o que evitar, ajustes pedidos, reprovações com motivo e o que performou; regra do dono vale sobre sugestão sua.
 - Português do Brasil, sem travessões.
 - Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
 - Responda somente com o JSON pedido.`;
+
+/** Base de marketing de cada momento (Frente H), com teto: calendário editorial ou plano de campanha, voz, títulos, CTA e anti-genérico. */
+const CONHECIMENTO_DO_CALENDARIO: Record<MomentoDoCalendario, string> = {
+  mes: conhecimentoCalendarioPara("mes").texto,
+  campanha: conhecimentoCalendarioPara("campanha").texto,
+};
+
+/**
+ * Sistema do estrategista (COMO-INTEGRAR, opção 1): o prompt do banco (global,
+ * complemento do cliente e base de técnica) inteiro, a base de marketing do
+ * momento e as regras de saída, que continuam por último.
+ */
+function sistemaDoCalendario(ctx: Pick<Contexto, "prompt">, momento: MomentoDoCalendario): string {
+  return `${ctx.prompt}\n\n${CONHECIMENTO_DO_CALENDARIO[momento]}\n${REGRAS_DE_SAIDA}`;
+}
 
 /** Frentes do propor_temas em paralelo: uma por fase, com a parte de temas de cada uma. */
 const FRENTES_DE_TEMAS: Array<{ fase: "1" | "2" | "3"; parte: number }> = [
@@ -1098,6 +1144,9 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     projectId = String(corpo.project_id);
     await exigirProjetoDoCliente(servico, projectId, clientId);
   }
+  // Marca por projeto (Acerbi e CME): a proposta nasce no projeto da marca escolhida.
+  const marcaDaProposta = await marcaDaChamada(servico, clientId, corpo, projectId);
+  if (!projectId && marcaDaProposta?.project_id) projectId = marcaDaProposta.project_id;
   // A tela pode mandar o id da proposta para acompanhar os temas chegando.
   const idPedido = typeof corpo.proposta_id === "string" && UUID.test(corpo.proposta_id) ? corpo.proposta_id : null;
   if (idPedido) {
@@ -1122,7 +1171,7 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     frameworks: escolha.frameworks,
   };
 
-  const ctx = await montarContexto(servico, clientId, inicio, fim);
+  const ctx = await montarContexto(servico, clientId, inicio, fim, marcaDaProposta);
   tempo.marcar("contexto");
 
   // A proposta e a conversa nascem antes das chamadas: o uso de IA ja fica
@@ -1209,7 +1258,7 @@ ${blocoEditorial}`;
       agente: AGENTE,
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
-      sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+      sistema: sistemaDoCalendario(ctx, "mes"),
       mensagens: [{ papel: "usuario", conteudo: instrucaoDa(f, k === 0) }],
       raciocinio,
       pesquisaWeb: true,
@@ -1338,7 +1387,7 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
   if (escolhidos.length === 0) throw new ErroHttp(409, "sem_tema_escolhido", "Escolha os temas antes de detalhar.");
 
   const uteis = diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
-  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim);
+  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
   const { modelo, raciocinio } = await resolverModelo(
     corpo.modelo_id ?? p.parametros.modelo,
     corpo.raciocinio ?? p.parametros.raciocinio,
@@ -1411,7 +1460,7 @@ Regras dos itens:
       agente: AGENTE,
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
-      sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+      sistema: sistemaDoCalendario(ctx, "mes"),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_ITENS,
@@ -1483,7 +1532,7 @@ async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Rec
   if (!mensagem) throw new ErroHttp(400, "mensagem_vazia", "Escreva o ajuste que você quer na proposta.");
 
   const uteis = diasUteisDaProposta(p);
-  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim);
+  const ctx = await montarContexto(servico, p.client_id, p.periodo_inicio, p.periodo_fim, await marcaDaChamada(servico, p.client_id, corpo, p.project_id));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id ?? p.parametros.modelo, corpo.raciocinio ?? p.parametros.raciocinio);
   const conversaId = await garantirConversa(servico, p, chamador.userId);
 
@@ -1519,7 +1568,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA,
@@ -1668,7 +1717,9 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   if (p.status !== "pronta" && p.status !== "gravada") {
     throw new ErroHttp(409, "proposta_nao_pronta", "Detalhe todos os temas escolhidos antes de gravar na agenda.");
   }
-  const projectId = String(corpo.project_id ?? p.project_id ?? "");
+  // Sem projeto na tela nem na proposta: o projeto da marca escolhida (Acerbi ou CME), quando o cliente tem marca.
+  const marcaDoGravar = corpo.project_id == null && p.project_id == null ? await marcaDaChamada(servico, p.client_id, corpo, null) : null;
+  const projectId = String(corpo.project_id ?? p.project_id ?? marcaDoGravar?.project_id ?? "");
   await exigirProjetoDoCliente(servico, projectId, p.client_id);
   if (p.itens.length === 0) throw new ErroHttp(409, "proposta_sem_itens", "A proposta não tem itens para gravar.");
   const temaIds = Array.isArray(corpo.tema_ids) ? corpo.tema_ids.map((x) => String(x ?? "")).filter(Boolean) : null;
@@ -1928,7 +1979,8 @@ async function criarDirecoesDoRoteiro(
   const [{ data: existentes }, { data: tarefas }, marca, modeloImagem] = await Promise.all([
     servico.from("estudio_trabalhos").select("task_id").eq("client_id", clientId).in("task_id", ids),
     servico.from("tasks").select("id, delivery_type, deleted_at").in("id", ids),
-    lerMarcaParaDirecao(servico, clientId),
+    // Marca pelo projeto dos itens (Acerbi ou CME); cliente sem marca: a do cliente, como antes.
+    resolverMarca(servico, clientId, { task_id: ids[0] }).then((m) => lerMarcaParaDirecaoDaMarca(servico, clientId, m)),
     modeloPadrao("imagem"),
   ]);
   if (!modeloImagem) return 0;
@@ -2023,7 +2075,7 @@ async function completarItens(servico: SupabaseClient, chamador: Chamador, corpo
   const inicio = datas[0] ?? new Date().toISOString().slice(0, 10);
   const fim = datas[datas.length - 1] ?? inicio;
   const uteis = diasUteisDoPeriodo(inicio, fim);
-  const ctx = await montarContexto(servico, clientId, inicio, fim);
+  const ctx = await montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
@@ -2045,7 +2097,7 @@ Regras dos itens:
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_ITENS,
@@ -2141,8 +2193,18 @@ async function baixarAnexos(servico: SupabaseClient, clientId: string, bruto: un
   return { imagens, caminhos: validos };
 }
 
-/** Projeto de social do cliente (para gravar sem perguntar), o mais recente. */
-async function projetoSocialDoCliente(servico: SupabaseClient, clientId: string): Promise<string | null> {
+/**
+ * Projeto de social do cliente (para gravar sem perguntar), o mais recente.
+ * Com marca por projeto (Acerbi e CME): o projeto da marca; sem ele, o mais
+ * recente que não é de outra marca.
+ */
+async function projetoSocialDoCliente(
+  servico: SupabaseClient,
+  clientId: string,
+  marcaDoPedido: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
+): Promise<string | null> {
+  const marca = await marcaDoPedido;
+  if (marca?.project_id) return marca.project_id;
   const { data } = await servico
     .from("projects")
     .select("id")
@@ -2150,9 +2212,25 @@ async function projetoSocialDoCliente(servico: SupabaseClient, clientId: string)
     .eq("project_type", "social_media")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-    .limit(1);
-  return ((data as { id: string }[] | null) ?? [])[0]?.id ?? null;
+    .limit(marca ? 20 : 1);
+  const ids = ((data as { id: string }[] | null) ?? []).map((p) => p.id);
+  return (await projetosDoClienteNaMarca(servico, clientId, marca, ids))[0] ?? null;
 }
+
+/**
+ * Marca da chamada (_shared/marca.ts): o projeto da proposta ou do pedido
+ * manda; depois o marca_id que a casca das mesas manda. Cliente sem marca:
+ * null, e nada muda.
+ */
+function marcaDaChamada(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>, projectId?: string | null): Promise<MarcaDoCliente | null> {
+  // Mesma chamada lida duas vezes (contexto e projeto do mês): uma leitura só.
+  const memo = projectId === undefined ? marcasPorCorpo.get(corpo) : undefined;
+  if (memo && memo.clientId === clientId) return memo.marca;
+  const marca = resolverMarca(servico, clientId, { project_id: projectId ?? corpo.project_id, marca_id: corpo.marca_id });
+  if (projectId === undefined) marcasPorCorpo.set(corpo, { clientId, marca });
+  return marca;
+}
+const marcasPorCorpo = new WeakMap<Record<string, unknown>, { clientId: string; marca: Promise<MarcaDoCliente | null> }>();
 
 async function conversaDoAgenteDoMes(servico: SupabaseClient, clientId: string, userId: string): Promise<string> {
   const { data } = await servico
@@ -2733,9 +2811,9 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const escolhaDoPedido = lerEscolhaEditorial(corpo);
 
   const [ctx, anexos, projectId, conversaId, fotosDaCamp] = await Promise.all([
-    montarContexto(servico, clientId, inicio, fim),
+    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
-    projetoSocialDoCliente(servico, clientId),
+    projetoSocialDoCliente(servico, clientId, marcaDaChamada(servico, clientId, corpo)),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
     campanha ? fotosDaCampanha(servico, campanha) : Promise.resolve([]),
   ]);
@@ -2769,7 +2847,7 @@ ${REGRAS_DOS_ITENS}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_PEDIDO,
@@ -2863,8 +2941,8 @@ async function conteudoRapido(servico: SupabaseClient, chamador: Chamador, corpo
   const pedida = String(corpo.data ?? "");
   const fimJanela = DATA.test(pedida) && pedida > somarDias(hoje, 45) ? somarDias(pedida, 7) : somarDias(hoje, 45);
   const [ctx, projectId, conversaId, fotosDaCamp, rapido] = await Promise.all([
-    montarContexto(servico, clientId, hoje, fimJanela),
-    projetoSocialDoCliente(servico, clientId),
+    montarContexto(servico, clientId, hoje, fimJanela, marcaDaChamada(servico, clientId, corpo)),
+    projetoSocialDoCliente(servico, clientId, marcaDaChamada(servico, clientId, corpo)),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
     campanha ? fotosDaCampanha(servico, campanha) : Promise.resolve([]),
     resolverModeloRapido(corpo.modelo_id),
@@ -2892,7 +2970,7 @@ ${REGRAS_DOS_ITENS}`;
     agente: AGENTE,
     modeloId: rapido.modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio: rapido.raciocinio,
     esquemaJson: ESQUEMA_RAPIDO,
@@ -3087,9 +3165,9 @@ async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, co
   const quantidade = Number.isFinite(pedidoQtd) && pedidoQtd >= 1 ? Math.min(MAX_CONTEUDOS_POR_VEZ, pedidoQtd) : existentes.length ? 3 : 5;
 
   const [ctx, fotosDaCamp, projectId] = await Promise.all([
-    montarContexto(servico, c.client_id, inicio, fim),
+    montarContexto(servico, c.client_id, inicio, fim, marcaDaChamada(servico, c.client_id, corpo)),
     fotosDaCampanha(servico, c),
-    projetoSocialDoCliente(servico, c.client_id),
+    projetoSocialDoCliente(servico, c.client_id, marcaDaChamada(servico, c.client_id, corpo)),
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio);
   tempo.marcar("contexto");
@@ -3164,7 +3242,7 @@ ${REGRAS_DOS_ITENS}`;
       agente: AGENTE,
       modeloId: modelo.id,
       timeoutMs: TIMEOUT_CALENDARIO_MS,
-      sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+      sistema: sistemaDoCalendario(ctx, "campanha"),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_ITENS,
@@ -3281,7 +3359,7 @@ async function buscarHypes(servico: SupabaseClient, chamador: Chamador, corpo: R
     if (ja) return json({ hypes: ja, cache: true, custo_usd: 0 });
   }
 
-  const ctx = await montarContexto(servico, clientId, hoje, somarDias(hoje, 14));
+  const ctx = await montarContexto(servico, clientId, hoje, somarDias(hoje, 14), marcaDaChamada(servico, clientId, corpo));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, { pesquisaWeb: true });
   const pedido = `${contextoEmTexto(ctx, { inicio: hoje, fim: somarDias(hoje, 14), parametros: {} })}
 
@@ -3301,7 +3379,7 @@ Nada de assunto político, tragédia ou polêmica que exponha a marca. Nunca inv
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     pesquisaWeb: true,
@@ -3422,9 +3500,9 @@ async function campanhaCriar(servico: SupabaseClient, chamador: Chamador, corpo:
   const imagensPedidas = normalizarImagensDaCampanha(corpo.imagens);
 
   const [ctx, anexos, projectId, fotosAchadas] = await Promise.all([
-    montarContexto(servico, clientId, inicio, fim),
+    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
-    projetoSocialDoCliente(servico, clientId),
+    projetoSocialDoCliente(servico, clientId, marcaDaChamada(servico, clientId, corpo)),
     fotosDoAcervoPorId(servico, clientId, imagensPedidas.map((i) => i.imagem_id)),
   ]);
   const fotos = imagensPedidas
@@ -3469,7 +3547,7 @@ ${REGRAS_DO_PLANO_DE_IMAGENS}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "campanha"),
     mensagens: [{ papel: "usuario", conteudo: pedido, imagens: imagensDaChamada.length ? imagensDaChamada : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CAMPANHA,
@@ -3647,7 +3725,9 @@ async function campanhaSelo(servico: SupabaseClient, chamador: Chamador, corpo: 
   const modelo = await modeloPadrao("imagem");
   if (!modelo) throw new ErroHttp(409, "sem_modelo_de_imagem", "O catálogo não tem gerador de imagem padrão.");
   const id = (c.identidade ?? {}) as Record<string, any>;
-  const { data: kit } = await servico.from("cliente_kit_marca").select("paleta").eq("client_id", c.client_id).maybeSingle();
+  const { data: kitDoCliente } = await servico.from("cliente_kit_marca").select("paleta").eq("client_id", c.client_id).maybeSingle();
+  // Cores da marca escolhida (Acerbi ou CME) quando o cliente tem marca por projeto.
+  const kit = kitComMarca((kitDoCliente as Record<string, unknown> | null) ?? null, await marcaDaChamada(servico, c.client_id, corpo));
   const paleta = [...(Array.isArray((kit as any)?.paleta) ? (kit as any).paleta : []), ...(Array.isArray(id.paleta_apoio) ? id.paleta_apoio : [])]
     .map((p: any) => `${p?.nome ?? "cor"} ${p?.hex ?? ""}`).join(", ");
   const textoSelo = texto(id.selo?.texto, 60) || c.nome;
@@ -3756,7 +3836,7 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const podeMudarItens = !!proposta && proposta.status !== "descartada";
 
   const [ctx, anexos, conversaId, fotosDaCamp] = await Promise.all([
-    montarContexto(servico, c.client_id, inicio, fim),
+    montarContexto(servico, c.client_id, inicio, fim, marcaDaChamada(servico, c.client_id, corpo)),
     baixarAnexos(servico, c.client_id, corpo.anexos),
     conversaDaCampanha(servico, c, chamador.userId),
     fotosDaCampanha(servico, c),
@@ -3797,7 +3877,7 @@ ${REGRAS_DOS_ITENS}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "campanha"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA_CAMPANHA,
@@ -4352,7 +4432,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
   const [ctx, extra, imagens, conversaId] = await Promise.all([
-    montarContexto(servico, clientId, inicio, fim),
+    montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     contextoDoPlanejamento(servico, clientId, mes),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
@@ -4409,7 +4489,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     agente: AGENTE,
     modeloId: modelo.id,
     timeoutMs: TIMEOUT_CALENDARIO_MS,
-    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    sistema: sistemaDoCalendario(ctx, "mes"),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: imagens.imagens.length ? imagens.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_PLANEJAMENTO,

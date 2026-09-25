@@ -52,6 +52,17 @@ import {
   sincronizarReferencias,
   type ContextoConsolidado,
 } from "../_shared/contexto-cliente.ts";
+import { conhecimentoContexto } from "../_shared/conhecimento-dos-agentes.ts";
+import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import type { AreaDoCerebro, CategoriaDoCerebro } from "../_shared/cerebro-do-cliente.ts";
+
+/**
+ * Frente H (25/09): voz de marca, posicionamento, objeções e identidade
+ * (conhecimento-marketing.ts, teto de 6.500). Quando faltar guia de voz,
+ * posicionamento ou lista de objeções, o agente propõe um rascunho marcado
+ * como proposta. Só montar e conversar recebem; leitura e acervo não.
+ */
+const CONHECIMENTO_DO_CONTEXTO = conhecimentoContexto().texto;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -493,7 +504,7 @@ async function montar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "contexto",
     modeloId: leitor.id,
     raciocinio: raciocinioPara(leitor, ["medium", "low"]),
-    sistema: SISTEMA_CONTEXTO,
+    sistema: `${SISTEMA_CONTEXTO}\n\n${CONHECIMENTO_DO_CONTEXTO}`,
     mensagens: [{
       papel: "usuario",
       conteudo: [
@@ -822,7 +833,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "contexto",
     modeloId: estrategista.id,
     raciocinio: raciocinioPara(estrategista, ["low", "medium"]),
-    sistema: `${SISTEMA_CONVERSA}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}`,
+    sistema: `${SISTEMA_CONVERSA}\n\n${CONHECIMENTO_DO_CONTEXTO}\n\nCONTEXTO ATUAL (JSON):\n${JSON.stringify(estado)}`,
     mensagens: [
       ...anteriores.map((m) => ({ papel: (m.papel === "agente" ? "agente" : "usuario") as "agente" | "usuario", conteudo: texto(m.conteudo, 3000) })),
       { papel: "usuario", conteudo: mensagem },
@@ -858,9 +869,20 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     .filter((m: any) => ["estrategista", "diretor_arte"].includes(m?.agente) && ["aprendizado", "preferencia", "evitar"].includes(m?.tipo) && texto(m?.texto))
     .slice(0, 5)
     .map((m: any) => ({ client_id: clientId, agente: m.agente, tipo: m.tipo, texto: texto(m.texto, 600), origem: "manual" }));
-  if (memorias.length) {
-    const { error: erroMemoria } = await db.from("agente_memoria").insert(memorias);
-    if (erroMemoria) console.error("agente-contexto: memoria nao gravada", { client_id: clientId, erro: erroMemoria.message });
+  // Frente H: grava pelo cérebro do cliente, uma de cada vez (a segunda já enxerga a primeira):
+  // o mesmo aprendizado vira reforço e o que contradiz um antigo o aposenta.
+  for (const m of memorias) {
+    const area: AreaDoCerebro = m.agente === "diretor_arte" ? "arte" : "calendario";
+    const g = await gravarNoCerebro(db, {
+      client_id: clientId,
+      area,
+      categoria: m.tipo as CategoriaDoCerebro,
+      texto: m.texto,
+      motivo: "ensinado na conversa do agente de contexto",
+      fonte: "agente_contexto",
+      criado_por: ch.userId,
+    });
+    if (!g.gravada) console.error("agente-contexto: memoria nao gravada", { client_id: clientId, erro: g.erro });
   }
 
   const resposta = texto(o.resposta, 4000) || "Pronto.";

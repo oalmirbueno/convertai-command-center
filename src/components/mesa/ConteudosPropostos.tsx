@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import { useAvisarErro } from "./Custo";
-import { useMesa } from "./MesaContexto";
+import { useFiltroDaMarca, useMesa } from "./MesaContexto";
+import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import {
   atualizarAgenda,
   chaves,
@@ -108,11 +109,13 @@ function useProjetosDeSocial(clientId: string, ativo: boolean) {
     enabled: ativo,
     queryFn: () => lerProjetosDoCliente(clientId),
   });
+  // Marca por projeto (Acerbi e CME): só os projetos da marca aberta; sem marca, todos.
+  const filtroDaMarca = useFiltroDaMarca();
   const candidatos = useMemo(() => {
     const todos = projetos.data || [];
     const social = todos.filter((p) => p.project_type === "social_media");
-    return social.length ? social : todos;
-  }, [projetos.data]);
+    return projetosDaListaNaMarca(social.length ? social : todos, filtroDaMarca);
+  }, [projetos.data, filtroDaMarca]);
   return { ...projetos, candidatos };
 }
 

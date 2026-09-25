@@ -22,7 +22,8 @@ import {
   type ParteDaEstimativa,
 } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
-import { useMesa } from "./MesaContexto";
+import { useFiltroDaMarca, useMesa } from "./MesaContexto";
+import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { atualizarAgenda, novoIdDaProposta } from "./mesaV4Api";
 import MesEscolhaEditorial from "./MesEscolhaEditorial";
 import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEditorial } from "./MesConhecimento";
@@ -538,11 +539,13 @@ export default function PlanejamentoAutomatico() {
     },
   });
   // Projeto de social do cliente; sem nenhum de social, qualquer projeto.
+  // Marca por projeto (Acerbi e CME): só os projetos da marca aberta; sem marca, todos.
+  const filtroDaMarca = useFiltroDaMarca();
   const candidatos = useMemo(() => {
     const todos = projetos.data || [];
     const social = todos.filter((p) => p.project_type === "social_media");
-    return social.length ? social : todos;
-  }, [projetos.data]);
+    return projetosDaListaNaMarca(social.length ? social : todos, filtroDaMarca);
+  }, [projetos.data, filtroDaMarca]);
   useEffect(() => {
     if (!projetoId && candidatos.length === 1) setProjetoId(candidatos[0].id);
   }, [candidatos, projetoId]);

@@ -452,7 +452,7 @@ describe("6. designer mais forte e memória do cliente", () => {
   });
 
   it("as regras do cliente entram no preparo, na geração e no ajuste, pelo cérebro do cliente", () => {
-    expect(estudio).toContain('import { AREAS_DO_AGENTE, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";');
+    expect(estudio).toContain('import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";');
     expect(corpoDe("preferenciasDaArte")).toContain("areas: AREAS_DO_AGENTE.diretor_arte,");
     expect(corpoDe("preferenciasDaArte")).toContain("return blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));");
     expect(corpoDe("gerarCard")).toContain("preferenciasDaArte(t.client_id).catch(() => \"\"),");

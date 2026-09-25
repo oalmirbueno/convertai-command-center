@@ -56,7 +56,7 @@ import {
   type SaidaImagem,
 } from "../_shared/ia-motor.ts";
 import { resolucaoParaModelo } from "../_shared/capacidades-imagem.ts";
-import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { lerMarcaParaDirecaoDaMarca, marcaDoPedido } from "../_shared/marca.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, mimeDe, normalizarConferencia, sha256Hex, UUID } from "./calculos.ts";
 import {
@@ -351,7 +351,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       return null;
     };
     const precisaDoContexto = entradas.ambiente.some((n) => n.dados.modo === "contexto" && !n.dados.texto);
-    const contexto = precisaDoContexto && f.contextoDoCliente ? await f.contextoDoCliente(canvas.client_id).catch(() => null) : null;
+    const contexto = precisaDoContexto && f.contextoDoCliente ? await f.contextoDoCliente(canvas.client_id, undefined, corpo.marca_id).catch(() => null) : null;
     for (const no of entradas.ambiente) {
       const textos: string[] = [];
       const modo = String(no.dados.modo || "descrever");
@@ -393,7 +393,9 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     avisos.push(...ordem.avisos);
     const ajuste = resolucaoParaModelo(capacidadesDoModelo(m), resolucao);
     if (ajuste.aviso) avisos.push(ajuste.aviso);
-    const marca = await lerMarcaParaDirecao(db(), canvas.client_id).catch(() => null);
+    // Cores da marca escolhida no topo (Acerbi ou CME); sem marca, as do cliente.
+    const marca = await (corpo.marca_id === undefined ? Promise.resolve(null) : marcaDoPedido(db(), canvas.client_id, corpo))
+      .then((m) => lerMarcaParaDirecaoDaMarca(db(), canvas.client_id, m)).catch(() => null);
     const paleta = (marca?.paleta ?? [])
       .map((p) => (typeof p?.hex === "string" && /^#[0-9a-f]{3,8}$/i.test(p.hex) ? p.hex.toUpperCase() : null))
       .filter((x): x is string => !!x).slice(0, 5);
@@ -798,7 +800,7 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
     const [kitsQ, personasQ, contexto, modelo] = await Promise.all([
       db().from("foto_kits").select("id, client_id, nome, variante, tipo, invariantes, status").eq("client_id", c.client_id).neq("status", "arquivado").limit(30),
       db().from("foto_modelos").select("*").or(`client_id.is.null,client_id.eq.${c.client_id}`).neq("status", "arquivada").limit(30),
-      f.contextoDoCliente ? f.contextoDoCliente(c.client_id).catch(() => null) : Promise.resolve(null),
+      f.contextoDoCliente ? f.contextoDoCliente(c.client_id, undefined, corpo.marca_id).catch(() => null) : Promise.resolve(null),
       f.modeloDeTexto("diretor_arte", corpo.modelo_id),
     ]);
     const kits = ((kitsQ.data as { id: string; nome: string; variante: string | null; tipo: string; invariantes: string[] | null }[] | null) ?? []).filter((k) => k.tipo !== "pessoa");

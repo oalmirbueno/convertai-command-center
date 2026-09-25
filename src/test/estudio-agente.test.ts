@@ -301,8 +301,9 @@ describe("estudio-arte: ações conversar e aplicar_mudancas", () => {
     expect(c).toContain("throw erroTrabalhoEntregue();");
     expect(c).toContain("custo_usd: 0");
     expect(c).toContain("regerar");
-    expect(c).toContain('.from("agente_memoria").insert(');
-    expect(c).toContain('origem: "ajuste"');
+    // Frente H: o que a conversa ensinou vai pelo cérebro do cliente (reforço em vez de duplicar).
+    expect(c).toContain("await gravarNoCerebro(servico(), {");
+    expect(c).toContain('area: "arte",');
   });
 
   it("o estilo pedido entra no prompt de cada lâmina e no fundo contínuo", () => {

@@ -9,6 +9,7 @@ import { toast } from "sonner";
  * real da resposta (`custoDaResposta`).
  */
 import { supabase } from "@/integrations/supabase/client";
+import { corpoComMarca } from "@/lib/mesa/marcas";
 
 export type FuncaoDaMesa = "ia-gateway" | "agente-calendario" | "estudio-arte" | "agente-contexto" | "mesa-ads" | "mesa-foto";
 
@@ -133,7 +134,8 @@ async function erroDaFuncao(error: any, funcao: FuncaoDaMesa): Promise<ErroDaMes
 
 /** Chama uma função da Mesa e devolve o corpo; erro vira ErroDaMesa. */
 export async function chamarFuncao<T = any>(funcao: FuncaoDaMesa, corpo: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(funcao, { body: corpo });
+  // Marca escolhida na casca (Acerbi ou CME): vai como marca_id; cliente sem marca, corpo igual.
+  const { data, error } = await supabase.functions.invoke(funcao, { body: corpoComMarca(funcao, corpo) });
   if (error) throw await erroDaFuncao(error, funcao);
   if (data && typeof data === "object" && typeof (data as any).error === "string") {
     const codigo = String((data as any).error);

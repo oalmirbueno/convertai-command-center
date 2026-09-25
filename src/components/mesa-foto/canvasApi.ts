@@ -634,12 +634,49 @@ export interface ModeloPronto {
   /** Cores da miniatura (gradiente) enquanto a capa de verdade não chega. */
   cores: [string, string];
   /**
-   * Capa (URL pública) da miniatura. As 15 imagens de base que o dono separou
-   * entram aqui quando o orquestrador passar onde estão; sem capa, a
-   * miniatura desenha os cartões do modelo sobre o gradiente.
+   * Capa (estático do front, public/canvas-modelos/<chave>.webp, com um .jpg
+   * de mesmo nome para navegador sem webp). Sai das fotos de base que o dono
+   * subiu na Mesa Foto, reduzidas a 640 px, sem metadado e sem a marca do
+   * produto: a galeria vale para todos os clientes. Sem capa, a miniatura
+   * desenha os cartões do modelo sobre o gradiente.
    */
   capa?: string | null;
 }
+
+/** Capa pública do modelo pronto (arquivo em public/canvas-modelos). */
+const capaDoModelo = (chave: string) => `/canvas-modelos/${chave}.webp`;
+
+/** A mesma capa em jpg, para Safari 11 a 13 (sem webp). */
+export const capaDeReserva = (capa: string) => capa.replace(/\.webp$/, ".jpg");
+
+/**
+ * Referência de estilo de um modelo pronto: a foto de base que o dono subiu
+ * no acervo de um cliente. Só entra quando o Canvas é desse mesmo cliente (a
+ * função também recusa imagem de acervo de outro cliente).
+ */
+export interface ReferenciaDeEstiloDoModelo {
+  chave: string;
+  client_id: string;
+  imagem_id: string;
+}
+
+/** Ensaio de 24/09 no acervo do cliente dono das fotos de base (tomadas na mão, flat lay e rotina de trabalho). */
+const CLIENTE_DAS_FOTOS_DE_BASE = "6a847578-ba39-44cd-be61-08e34e18e4c9";
+
+export const REFERENCIAS_DE_ESTILO_DOS_MODELOS: ReferenciaDeEstiloDoModelo[] = [
+  { chave: "produto-na-mao", client_id: CLIENTE_DAS_FOTOS_DE_BASE, imagem_id: "4d5cf2df-f329-4f42-a267-4ed8a2636a6d" },
+  { chave: "flat-lay", client_id: CLIENTE_DAS_FOTOS_DE_BASE, imagem_id: "ecfc7b8a-2f14-4421-b195-ae98154fcb8c" },
+  { chave: "produto-no-ambiente", client_id: CLIENTE_DAS_FOTOS_DE_BASE, imagem_id: "2be68898-cc48-46e4-957b-1eb9acc27b15" },
+];
+
+/** A referência de estilo do modelo para este cliente, ou null (outro cliente nunca recebe). */
+export function referenciaDeEstiloDoModelo(chave: string, clientId: string | null | undefined): ReferenciaDeEstiloDoModelo | null {
+  if (!clientId) return null;
+  return REFERENCIAS_DE_ESTILO_DOS_MODELOS.find((r) => r.chave === chave && r.client_id === clientId) || null;
+}
+
+/** Guia do cartão Estilo que o modelo pronto põe com a foto de base. */
+export const GUIA_DA_REFERENCIA_DO_MODELO = "Use a foto só como referência de pegada: paleta, luz e enquadramento. O produto é o do cartão Produto.";
 
 /** O que o modelo pronto põe no Resultado (ação, pose, formato e carrossel). */
 function ajusteDoModelo(acao: string | null, pose: string | null, formato: string, carrossel = 0): Partial<DadosDoNo> {
@@ -657,6 +694,7 @@ export const MODELOS_PRONTOS: ModeloPronto[] = [
     rotulo: "Produto na mão",
     dica: "A pessoa segura o produto perto do rosto, produto nítido em primeiro plano.",
     cores: ["#0f766e", "#22e57a"],
+    capa: capaDoModelo("produto-na-mao"),
     resultado: ajusteDoModelo("na_mao", "apresentando", "4:5"),
     cartoes: [
       { tipo: "produto" },
@@ -706,6 +744,7 @@ export const MODELOS_PRONTOS: ModeloPronto[] = [
     rotulo: "Flat lay",
     dica: "Visto de cima, produto no centro com objetos da rotina.",
     cores: ["#78350f", "#fde68a"],
+    capa: capaDoModelo("flat-lay"),
     resultado: ajusteDoModelo("livre", "nenhuma", "1:1"),
     cartoes: [
       { tipo: "produto" },
@@ -730,6 +769,7 @@ export const MODELOS_PRONTOS: ModeloPronto[] = [
     rotulo: "Carrossel de produto",
     dica: "5 fotos coerentes: capa, detalhe, uso, ambiente e fechamento.",
     cores: ["#065f46", "#e879f9"],
+    capa: capaDoModelo("carrossel-de-produto"),
     resultado: ajusteDoModelo("segurando", "nenhuma", "4:5", 5),
     cartoes: [
       { tipo: "produto" },
@@ -743,6 +783,7 @@ export const MODELOS_PRONTOS: ModeloPronto[] = [
     rotulo: "Produto no ambiente",
     dica: "O produto em destaque num lugar com a cara da marca. Escolha a foto do lugar.",
     cores: ["#44403c", "#fbbf24"],
+    capa: capaDoModelo("produto-no-ambiente"),
     resultado: ajusteDoModelo("no_ambiente", null, "4:5"),
     cartoes: [
       { tipo: "produto" },
@@ -792,7 +833,21 @@ export function aplicarModeloPronto(
     gerarId = g.id;
   }
   if (m.resultado) novo = mudarDados(novo, gerarId, m.resultado);
-  m.cartoes.forEach((cartao) => {
+  // Foto de base do dono como referência de estilo: só no Canvas do cliente
+  // dono da foto. Entra no cartão Estilo do modelo (mantém o guia dele) ou
+  // num cartão Estilo novo antes do pedido.
+  const ref = referenciaDeEstiloDoModelo(m.chave, c.client_id);
+  let cartoes = m.cartoes;
+  if (ref) {
+    const i = cartoes.findIndex((x) => x.tipo === "estilo");
+    if (i >= 0) cartoes = cartoes.map((x, j) => (j === i ? { ...x, dados: { ...(x.dados || {}), imagem_id: ref.imagem_id } } : x));
+    else {
+      const estilo: CartaoDoModeloPronto = { tipo: "estilo", dados: { imagem_id: ref.imagem_id, texto: GUIA_DA_REFERENCIA_DO_MODELO } };
+      const t = cartoes.findIndex((x) => x.tipo === "texto");
+      cartoes = t >= 0 ? cartoes.slice(0, t).concat([estilo], cartoes.slice(t)) : cartoes.concat([estilo]);
+    }
+  }
+  cartoes.forEach((cartao) => {
     const dados: DadosDoNo = { ...(cartao.dados || {}) };
     if (cartao.tipo === "produto" && preencher.kit_id) dados.kit_id = preencher.kit_id;
     if (cartao.tipo === "modelo" && preencher.modelo_id) {

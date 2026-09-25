@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { somarMeses } from "@/lib/mesa/api";
+import { filtrarPorMarca, projetosDaMarca } from "@/lib/mesa/marcas";
+import { useMarcaDaMesa } from "./MesaContexto";
 import type { BlocoTexto, LayoutLamina } from "@/lib/mesa/layout";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 import { ordenarLaminasDoCarrossel } from "@/components/shared/CarouselSlider";
@@ -557,12 +560,22 @@ async function lerItensDaJanela(clientId: string, mes: string): Promise<DadosDos
  * 60 dias). Trocar a janela mantém a lista anterior na tela até a nova chegar.
  */
 export function useItensDoMes(clientId: string, mes: string) {
+  // Marca por projeto (Acerbi e CME): só os itens da marca aberta (filtro na tela,
+  // a leitura e o cache são os mesmos). Sem marca, paraMapas como antes.
+  const { marca, marcas } = useMarcaDaMesa();
+  const filtro = projetosDaMarca(marca, marcas);
+  const chaveDoFiltro = filtro ? JSON.stringify(filtro) : "";
+  const daMarca = useCallback(
+    (d: DadosDosItens) => paraMapas({ ...d, itens: filtrarPorMarca(d.itens || [], filtro) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chaveDoFiltro],
+  );
   return useQuery({
     queryKey: chaveDosItens(clientId, mes),
     enabled: !!clientId,
     placeholderData: keepPreviousData,
     queryFn: () => lerItensDaJanela(clientId, mes),
-    select: paraMapas,
+    select: filtro ? daMarca : paraMapas,
   });
 }
 

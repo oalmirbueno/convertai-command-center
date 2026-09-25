@@ -3,6 +3,8 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { resolverReferencia, type ReferenciaDoCliente } from "@/components/mesa/contextoDoCliente";
+import { useMarcaDaMesa } from "@/components/mesa/MesaContexto";
+import { marcaParaGravarAgora, referenciaDaMarca } from "@/lib/mesa/marcas";
 
 /**
  * Referências da Mesa, versão 5 (CONTRATOS-V5.md): papel com nome claro,
@@ -112,16 +114,22 @@ async function emLotes<T>(ids: string[], ler: (lote: string[]) => Promise<T[]>):
 
 /** Todas as referências do cliente com a imagem resolvida e o destaque, destaque primeiro. */
 export function useReferenciasComDestaque(clientId: string, ativo = true) {
+  // Marca por projeto (Acerbi e CME): só as referências da marca aberta; sem marca, todas.
+  const { marca } = useMarcaDaMesa();
   return useQuery({
     queryKey: chaveDasReferenciasComDestaque(clientId),
     enabled: ativo && !!clientId,
+    ...(marca
+      ? { select: (lista: ReferenciaComDestaque[]) => lista.filter((r) => referenciaDaMarca((r as { marca_id?: string | null }).marca_id, marca)) }
+      : {}),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: 1,
     queryFn: async (): Promise<ReferenciaComDestaque[]> => {
       const { data, error } = await (supabase as any)
         .from("cliente_referencias")
-        .select("id, origem, papel, url_origem, storage_path, workspace_node_id, file_id, leitura, tags, ativa, criado_em, destaque")
+        // "*": traz marca_id quando o banco já tem marcas (docs/marcas); sem a coluna, o mesmo de antes.
+        .select("*")
         .eq("client_id", clientId)
         .order("criado_em", { ascending: false })
         .limit(1000);
@@ -246,7 +254,8 @@ export async function subirReferencia(clientId: string, arquivo: File): Promise<
   if (erroUpload) throw erroUpload;
   const { data, error } = await (supabase as any)
     .from("cliente_referencias")
-    .insert({ client_id: clientId, origem: "upload", storage_path: caminho, papel: "tecnica", ativa: true })
+    // Com outra marca aberta no topo (ex.: CME), a referência nasce dela.
+    .insert({ client_id: clientId, origem: "upload", storage_path: caminho, papel: "tecnica", ativa: true, ...marcaParaGravarAgora(clientId) })
     .select("id")
     .single();
   if (error) {
@@ -277,7 +286,7 @@ export async function ligarImagemDoWorkspace(clientId: string, nodeId: string, p
   }
   const { data, error } = await (supabase as any)
     .from("cliente_referencias")
-    .insert({ client_id: clientId, origem: "workspace", workspace_node_id: nodeId, papel, ativa: true })
+    .insert({ client_id: clientId, origem: "workspace", workspace_node_id: nodeId, papel, ativa: true, ...marcaParaGravarAgora(clientId) })
     .select("id")
     .single();
   if (error) throw error;

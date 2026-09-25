@@ -545,7 +545,7 @@ export async function contextoParaAgente(
   db: BancoDoCerebro,
   clientId: string,
   area: AreaDoCerebro,
-  opcoes: { limiteCerebro?: number; limiteDossie?: number; agora?: Date } = {},
+  opcoes: { limiteCerebro?: number; limiteDossie?: number; agora?: Date; areas?: AreaDoCerebro[]; tituloCerebro?: string } = {},
 ): Promise<{ texto: string; cerebro: string; dossie: string | null; avisos: string[] }> {
   const [leitura, dossieR] = await Promise.all([
     lerCerebro(db, clientId, { agora: opcoes.agora }),
@@ -556,7 +556,8 @@ export async function contextoParaAgente(
         .order('effective_at', { ascending: false }).limit(1))
       .then((r: Resposta) => r, (): Resposta => ({ data: [], error: null })),
   ]);
-  const cerebro = resumoParaPrompt(leitura.fatos, { areas: [area], limite: opcoes.limiteCerebro }).texto;
+  // `areas` amplia a leitura (o diretor de arte lê arte e foto); `tituloCerebro` troca o cabeçalho do resumo.
+  const cerebro = resumoParaPrompt(leitura.fatos, { areas: opcoes.areas?.length ? opcoes.areas : [area], limite: opcoes.limiteCerebro, titulo: opcoes.tituloCerebro }).texto;
   const d = linhasDe(dossieR)[0];
   const limiteDossie = Math.min(Math.max(opcoes.limiteDossie ?? 4000, 500), 12_000);
   const corpo = d ? String(d.content ?? d.summary ?? '').trim() : '';

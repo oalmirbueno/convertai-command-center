@@ -355,8 +355,10 @@ describe("rota, casca e troca entre mesas", () => {
     const central = ler("src/pages/AdminExperience.tsx");
     expect(central).toContain("navigate(`/mesa-foto?client=${client.id}`)");
     expect(central.indexOf("Mesa Foto")).toBeGreaterThan(central.indexOf("navigate(`/mesa-ads?client=${client.id}`)"));
-    expect(ler("src/pages/MesaAds.tsx")).toContain('<TrocaDeMesas atual="ads" clientId={clientId} />');
-    expect(ler("src/pages/MesaDoCliente.tsx")).toContain('<TrocaDeMesas atual="mesa" clientId={clientId} />');
+    // Marca por projeto (docs/marcas): a troca de mesas leva a marca aberta junto.
+    expect(ler("src/pages/MesaAds.tsx")).toContain('<TrocaDeMesas atual="ads" clientId={clientId} marcaId={marca ? marca.id : null} />');
+    expect(ler("src/pages/MesaDoCliente.tsx")).toContain('<TrocaDeMesas atual="mesa" clientId={clientId} marcaId={marca ? marca.id : null} />');
+    expect(enderecoDaMesa("ads", CLIENTE, "m1")).toBe(`/mesa-ads?client=${CLIENTE}&marca=m1`);
     expect(enderecoDaMesa("foto", CLIENTE)).toBe(`/mesa-foto?client=${CLIENTE}`);
     expect(enderecoDaMesa("ads", CLIENTE)).toBe(`/mesa-ads?client=${CLIENTE}`);
     const api = ler("src/lib/mesa/api.ts");

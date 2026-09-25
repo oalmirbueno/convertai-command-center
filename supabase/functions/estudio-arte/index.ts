@@ -122,10 +122,23 @@ import {
   type MarcaParaDirecao,
 } from "../_shared/direcao-arte.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
+import {
+  type AlvoDaMarca,
+  colunasComMarca,
+  contextoComMarca,
+  filtrarReferenciasDaMarca,
+  fontesDaMarca,
+  kitComMarca,
+  type MarcaDoCliente,
+  marcaParaGravar,
+  resolverMarca,
+} from "../_shared/marca.ts";
 import { NIVEIS_CLAREZA, NIVEIS_RISCO_POLITICA, POLITICAS_META, TAMANHO_DO_FORMATO } from "../_shared/conhecimento-ads.ts";
 import { ANATOMIA_DO_ESTATICO, REGRAS_DE_HONESTIDADE } from "../_shared/conhecimento-ads.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
-import { AREAS_DO_AGENTE, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
+import { AREAS_DO_AGENTE, contextoParaAgente, lerCerebro, resumoParaPrompt } from "../_shared/cerebro-do-cliente.ts";
+import { gravarNoCerebro } from "../_shared/cerebro-nas-mesas.ts";
+import { conhecimentoEstudioPara } from "../_shared/conhecimento-dos-agentes.ts";
 import { decidirAutocorrecao, type DecisaoDeAutocorrecao, LIMITE_DE_AUTOCORRECAO, rodadasSeguidas } from "./autocorrecao.ts";
 import {
   aplicarNaDirecao,
@@ -806,24 +819,37 @@ type Kit = {
   regras: string | null;
 } | null;
 
-async function lerKit(clientId: string): Promise<Kit> {
-  const { data } = await servico()
-    .from("cliente_kit_marca")
-    .select("paleta, logo_file_id, logo_path, logo_alt_path, logo_alt_file_id, estilo, regras")
-    .eq("client_id", clientId)
-    .maybeSingle();
-  return (data as Kit) ?? null;
+/**
+ * Marca do trabalho (_shared/marca.ts): pelo projeto do item, pela
+ * direcao.marca_id (Estúdio Ads) ou pelo marca_id da tela. Sem alvo, ou
+ * cliente sem marca cadastrada: null, e tudo segue como antes.
+ */
+function marcaDe(clientId: string, alvo?: AlvoDaMarca): Promise<MarcaDoCliente | null> {
+  return alvo === undefined ? Promise.resolve(null) : resolverMarca(servico(), clientId, alvo);
+}
+
+async function lerKit(clientId: string, alvo?: AlvoDaMarca): Promise<Kit> {
+  const [{ data }, marca] = await Promise.all([
+    servico()
+      .from("cliente_kit_marca")
+      .select("paleta, logo_file_id, logo_path, logo_alt_path, logo_alt_file_id, estilo, regras")
+      .eq("client_id", clientId)
+      .maybeSingle(),
+    marcaDe(clientId, alvo),
+  ]);
+  return kitComMarca((data as Kit) ?? null, marca);
 }
 
 type Fonte = { id: string; nome: string; papel: string; amostra_path: string | null };
 
-async function lerFontes(clientId: string): Promise<Fonte[]> {
+async function lerFontes(clientId: string, alvo?: AlvoDaMarca): Promise<Fonte[]> {
+  const marca = await marcaDe(clientId, alvo);
   const { data } = await servico()
     .from("cliente_fontes")
-    .select("id, nome, papel, amostra_path")
+    .select(colunasComMarca("id, nome, papel, amostra_path", marca))
     .eq("client_id", clientId)
     .order("criado_em", { ascending: true });
-  return (data as Fonte[] | null) ?? [];
+  return fontesDaMarca(((data as unknown) as (Fonte & { marca_id?: string | null })[] | null) ?? [], marca);
 }
 
 /** Amostras PNG das fontes (geradas no navegador), no maximo tres. */
@@ -1033,17 +1059,55 @@ async function preferenciasDaArte(clientId: string, memoria?: { tipo: string; te
   return blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));
 }
 
+/** Mesmo cabeçalho das regras aprendidas (preferenciasDaArte), para o bloco do diretor. */
+const TITULO_DAS_REGRAS_APRENDIDAS = "REGRAS DA MARCA APRENDIDAS COM ESTE CLIENTE (pedidos de ajuste da equipe e reprovações do cliente; valem como regra da marca, acima do padrão de design e abaixo do texto exato, da paleta e da logo)";
+
+/**
+ * Frente H (25/09): o diretor de arte lê o cérebro E o dossiê atual do
+ * cliente (docs/cerebro/AGENTES.md, ponto 3.1), numa leitura só
+ * (contextoParaAgente, área arte com foto). Sem cérebro, as regras vêm da
+ * memória do diretor como antes; sem dossiê, só as regras. `usouCerebro` diz
+ * se o resumo do cérebro entrou (aí a lista crua da memória pode sair do JSON).
+ */
+async function cerebroEDossieDoDiretor(
+  clientId: string,
+  memoria?: { tipo: string; texto: string; origem: string }[],
+): Promise<{ texto: string; usouCerebro: boolean }> {
+  try {
+    const r = await contextoParaAgente(servico(), clientId, "arte", {
+      areas: AREAS_DO_AGENTE.diretor_arte,
+      limiteCerebro: 1600,
+      limiteDossie: 3000,
+      tituloCerebro: TITULO_DAS_REGRAS_APRENDIDAS,
+    });
+    if (r.cerebro) return { texto: r.texto, usouCerebro: true };
+    const regras = blocoDasPreferencias(memoria ?? await memoriaDoDiretor(clientId));
+    const dossie = r.dossie ? `DOSSIÊ ATUAL DO CLIENTE (fatos do painel; vazio não quer dizer que não existe)\n${r.dossie}` : "";
+    return { texto: [regras, dossie].filter(Boolean).join("\n\n"), usouCerebro: false };
+  } catch {
+    return { texto: await preferenciasDaArte(clientId, memoria).catch(() => ""), usouCerebro: false };
+  }
+}
+
+/** Base de marketing do diretor (anti-genérico, voz, revisão de marca, CTA), com teto; vai logo depois de CONHECIMENTO_DIRETOR. */
+const CONHECIMENTO_DA_DIRECAO = conhecimentoEstudioPara("direcao").texto;
+/** Títulos, CTA e anti-genérico para a legenda final, com teto. */
+const CONHECIMENTO_DA_LEGENDA = conhecimentoEstudioPara("legenda").texto;
+
 /** Marca pronta para o compositor: kit, fontes, contexto consolidado e nome. */
-async function marcaDoCliente(clientId: string, kit?: Kit, fontes?: Fonte[]): Promise<MarcaParaDirecao> {
-  const [k, f, contexto, perfil] = await Promise.all([
-    kit === undefined ? lerKit(clientId) : Promise.resolve(kit),
-    fontes === undefined ? lerFontes(clientId) : Promise.resolve(fontes),
+async function marcaDoCliente(clientId: string, kit?: Kit, fontes?: Fonte[], alvo?: AlvoDaMarca): Promise<MarcaParaDirecao> {
+  const [k, f, contextoDoCliente, perfil, daMarca] = await Promise.all([
+    kit === undefined ? lerKit(clientId, alvo) : Promise.resolve(kit),
+    fontes === undefined ? lerFontes(clientId, alvo) : Promise.resolve(fontes),
     lerContextoConsolidado(servico(), clientId),
     servico().from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
+    marcaDe(clientId, alvo),
   ]);
+  // Marca por projeto (Acerbi e CME): tom e contexto da marca por cima; o nome é o da marca que não é a principal.
+  const contexto = contextoComMarca(contextoDoCliente, daMarca);
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
   return {
-    nomeCliente: texto(p?.company_name || p?.full_name || "cliente", 120),
+    nomeCliente: daMarca && !daMarca.principal ? texto(daMarca.nome, 120) : texto(p?.company_name || p?.full_name || "cliente", 120),
     paleta: Array.isArray(k?.paleta) ? k!.paleta as MarcaParaDirecao["paleta"] : [],
     estilo: k?.estilo ?? null,
     regras: k?.regras ?? null,
@@ -1450,13 +1514,16 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
 
   // O que o cliente já tem entra sozinho (pastas de referência, artes aprovadas
   // e fotos reais para o acervo), em paralelo com a leitura do kit.
-  const [, , kit, fontes] = await Promise.all([
+  // Marca do item (ex.: Acerbi ou CME) pelo projeto da tarefa; cliente sem marca segue igual.
+  const alvoDaMarca: AlvoDaMarca = { task_id: item.tarefa.id, marca_id: corpo.marca_id };
+  const [, , kit, fontes, marcaDoItem] = await Promise.all([
     sincronizarReferencias(db, clientId).catch(() => null),
     sincronizarAcervo(db, clientId).catch(() => null),
-    lerKit(clientId),
-    lerFontes(clientId),
+    lerKit(clientId, alvoDaMarca),
+    lerFontes(clientId, alvoDaMarca),
+    marcaDe(clientId, alvoDaMarca),
   ]);
-  const marca = await marcaDoCliente(clientId, kit, fontes);
+  const marca = await marcaDoCliente(clientId, kit, fontes, alvoDaMarca);
 
   const postUnico = FORMATOS_POST_UNICO.has(item.tarefa.delivery_type);
   // Contínuo decidido no começo: o pedido da tela vale; senão o que o trabalho já tinha; senão o do estrategista.
@@ -1512,11 +1579,14 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         for (const f of plano.fotos.values()) if (!junto.some((a) => a.id === f.id)) junto.push(f);
         return junto;
       }),
-      db.from("cliente_referencias")
-        .select("id, origem, papel, leitura, tags")
-        .eq("client_id", clientId)
-        .eq("ativa", true)
-        .not("leitura", "is", null)
+      filtrarReferenciasDaMarca(
+        db.from("cliente_referencias")
+          .select("id, origem, papel, leitura, tags")
+          .eq("client_id", clientId)
+          .eq("ativa", true)
+          .not("leitura", "is", null),
+        marcaDoItem,
+      )
         .order("criado_em", { ascending: false })
         .limit(12),
       db.from("files")
@@ -1527,7 +1597,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         .is("archived_at", null)
         .order("created_at", { ascending: false })
         .limit(15),
-      preferenciasDaArte(clientId).catch(() => ""),
+      // Frente H: regras aprendidas (cérebro) e dossiê atual do cliente, numa leitura só.
+      cerebroEDossieDoDiretor(clientId).catch(() => ({ texto: "", usouCerebro: false })),
     ]);
     const contexto = {
       item: {
@@ -1573,7 +1644,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         nome: texto(a.file_name, 120),
         descricao: texto(a.description, 200) || null,
       })),
-      memoria_do_diretor: memoria,
+      // Com o cérebro no sistema, a lista crua da memória não se repete aqui.
+      memoria_do_diretor: preferencias.usouCerebro ? undefined : memoria,
       // Fotos reais do cliente: o diretor escolhe por id (imagem_acervo) e a foto entra como está.
       acervo: acervo.map((a) => ({ id: a.id, nome: texto(a.nome, 80), pasta: a.pasta, categoria: a.categoria, descricao: texto(a.descricao, 240) || null })),
       pedido_da_equipe: instrucao || null,
@@ -1592,7 +1664,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
       raciocinio: raciocinioPara(modeloDiretor, ["low", "medium"]),
       // Base de conhecimento primeiro: prefixo fixo, reaproveitado pelo cache do provedor.
       // As regras aprendidas com o cliente vêm por último: o prefixo fixo continua no cache do provedor.
-      sistema: [CONHECIMENTO_DIRETOR, prompt, INSTRUCOES_DIRECAO, preferencias].filter(Boolean).join("\n\n"),
+      // Frente H: base de marketing do diretor (com teto) logo depois da base de design; cérebro e dossiê no fim.
+      sistema: [CONHECIMENTO_DIRETOR, CONHECIMENTO_DA_DIRECAO, prompt, INSTRUCOES_DIRECAO, preferencias.texto].filter(Boolean).join("\n\n"),
       mensagens: [{ papel: "usuario", conteudo: `Escreva a direção de arte deste item. Contexto em JSON:\n${JSON.stringify(contexto)}` }],
       esquemaJson: ESQUEMA_DIRECAO,
       maxTokensSaida: 12_000,
@@ -1763,13 +1836,18 @@ async function escolherReferencias(
   // Escolha da equipe na tela (da lâmina ou do conjunto) vale sem passar pelo Jev.
   const daEquipe = await referenciasDaEquipe(t, card);
   if (daEquipe.length) return { refs: daEquipe, jev: "escolha_da_equipe" };
+  // Só as referências da marca do item (Acerbi ou CME); cliente sem marca vê todas.
+  const marcaDoTrabalho = await marcaDe(t.client_id, t);
   // Em destaque (marcadas pela equipe): entram sempre, antes das outras.
-  const { data: emDestaque } = await servico()
-    .from("cliente_referencias")
-    .select(CAMPOS_REF_CLIENTE)
-    .eq("client_id", t.client_id)
-    .eq("ativa", true)
-    .eq("destaque", true)
+  const { data: emDestaque } = await filtrarReferenciasDaMarca(
+    servico()
+      .from("cliente_referencias")
+      .select(CAMPOS_REF_CLIENTE)
+      .eq("client_id", t.client_id)
+      .eq("ativa", true)
+      .eq("destaque", true),
+    marcaDoTrabalho,
+  )
     .order("criado_em", { ascending: false })
     .limit(MAX_REFERENCIAS);
   const destaques = (emDestaque as Referencia[] | null) ?? [];
@@ -1780,12 +1858,15 @@ async function escolherReferencias(
     return { refs: [...destaques, ...resto].slice(0, MAX_REFERENCIAS), jev: r.jev === "ok" ? "destaque_e_jev" : r.jev };
   };
   const [doCliente, globais] = await Promise.all([
-    servico()
-      .from("cliente_referencias")
-      .select(CAMPOS_REF_CLIENTE)
-      .eq("client_id", t.client_id)
-      .eq("ativa", true)
-      .not("leitura", "is", null)
+    filtrarReferenciasDaMarca(
+      servico()
+        .from("cliente_referencias")
+        .select(CAMPOS_REF_CLIENTE)
+        .eq("client_id", t.client_id)
+        .eq("ativa", true)
+        .not("leitura", "is", null),
+      marcaDoTrabalho,
+    )
       .order("criado_em", { ascending: false })
       .limit(MAX_CANDIDATAS_JEV),
     globaisParaALamina(card),
@@ -1795,7 +1876,7 @@ async function escolherReferencias(
     ...globais.map((g) => globalComoReferencia(g, t.client_id)),
   ];
   if (!candidatas.length) {
-    const identidade = await artePublicadaMaisRecente(t.client_id);
+    const identidade = await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     return comDestaque({ refs: identidade ? [identidade] : [], jev: "sem_referencias_lidas" });
   }
 
@@ -1834,13 +1915,13 @@ async function escolherReferencias(
       .filter((x) => x.nota != null && x.nota >= NOTA_MINIMA_REFERENCIA)
       .sort((a, b) => (b.nota as number) - (a.nota as number));
     // Uma da identidade da marca e uma de técnica (do cliente ou do banco da agência).
-    const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id);
+    const identidade = notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     const tecnica = notas.find((x) => x.r.papel !== "identidade")?.r;
     const escolhidas = [identidade, tecnica].filter(Boolean).slice(0, MAX_REFERENCIAS) as Referencia[];
     return comDestaque({ refs: escolhidas, jev: "ok" });
   } catch (e) {
     // Sem Jev, ao menos a arte publicada mais recente da marca vai junto.
-    const identidade = await artePublicadaMaisRecente(t.client_id);
+    const identidade = await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho);
     return comDestaque({ refs: identidade ? [identidade] : [], jev: codigoMotor(e) });
   }
 }
@@ -1849,13 +1930,16 @@ async function escolherReferencias(
  * Arte já publicada mais recente da marca (referência de identidade), mesmo
  * ainda sem leitura: a série nova precisa continuar o estilo do que foi ao ar.
  */
-async function artePublicadaMaisRecente(clientId: string): Promise<Referencia | null> {
-  const { data } = await servico()
-    .from("cliente_referencias")
-    .select(CAMPOS_REF_CLIENTE)
-    .eq("client_id", clientId)
-    .eq("ativa", true)
-    .eq("papel", "identidade")
+async function artePublicadaMaisRecente(clientId: string, marca: MarcaDoCliente | null = null): Promise<Referencia | null> {
+  const { data } = await filtrarReferenciasDaMarca(
+    servico()
+      .from("cliente_referencias")
+      .select(CAMPOS_REF_CLIENTE)
+      .eq("client_id", clientId)
+      .eq("ativa", true)
+      .eq("papel", "identidade"),
+    marca,
+  )
     .order("criado_em", { ascending: false })
     .limit(1);
   return ((data as Referencia[] | null) ?? [])[0] ?? null;
@@ -2071,7 +2155,7 @@ async function conferirCard(ch: Chamador, corpo: Record<string, unknown>) {
     alvo = t.cards.find((c) => c.ordem === ordem && c.versao === versao) ?? null;
   }
   if (!alvo) throw new ErroEstudio(404, "versao_inexistente", "Esta versão do card não existe. Gere o card antes de conferir.");
-  const [kit, fontes] = await Promise.all([lerKit(t.client_id), lerFontes(t.client_id)]);
+  const [kit, fontes] = await Promise.all([lerKit(t.client_id, t), lerFontes(t.client_id, t)]);
   const conf = await verificar(ch, t, card, alvo.storage_path, kit, fontes);
   const custo = arred(conf.usos.reduce((s, u) => s + u.custoUsd, 0));
   const verificacao: Verificacao = {
@@ -2456,7 +2540,7 @@ async function prepararFundo(ch: Chamador, corpo: Record<string, unknown>) {
   if (!usaPanorama(t, card, modelo) || temFotoPropria) {
     return json({ trabalho: t, custo_usd: 0, fundo: null, pendente: false, continuo_indisponivel: continuoPedido && !modeloFazPanorama(modelo) });
   }
-  const r = await garantirFundoContinuo(ch, t, ordem, await lerKit(t.client_id));
+  const r = await garantirFundoContinuo(ch, t, ordem, await lerKit(t.client_id, t));
   return json({ trabalho: r.t, custo_usd: r.custo, fundo: r.pendente ? null : r.caminho, pendente: !!r.pendente });
 }
 
@@ -2513,8 +2597,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Carrossel contínuo não existe no anúncio.
   const infinito = !ads && !!t.direcao.carrossel_infinito;
   const [kit, fontes, modeloImagem, preferencias] = await Promise.all([
-    lerKit(t.client_id),
-    lerFontes(t.client_id),
+    lerKit(t.client_id, t),
+    lerFontes(t.client_id, t),
     carregarModelo(t.modelo_imagem_id!, "imagem"),
     preferenciasDaArte(t.client_id).catch(() => ""),
   ]);
@@ -2704,7 +2788,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   }
 
   // Direção com layout: o prompt é recomposto agora, com o kit atual da marca.
-  const marca = await marcaDoCliente(t.client_id, kit, fontes);
+  const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
   marca.temLogo = comLogo || logoNoCodigo;
   const base = card.layout
     ? promptDaLamina(cardDoPrompt, marca, {
@@ -3127,7 +3211,7 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
   // O ajuste é uma tradução do pedido em instrução de edição: o modelo de
   // leitura (com visão) resolve bem e custa uma fração do diretor.
   const [kit, leitor, preferencias] = await Promise.all([
-    lerKit(t.client_id),
+    lerKit(t.client_id, t),
     modeloDoPapel("leitura"),
     // A autocorreção só conserta texto e logo: as regras do cliente ficam para o ajuste pedido.
     auto ? Promise.resolve("") : preferenciasDaArte(t.client_id).catch(() => ""),
@@ -3322,15 +3406,18 @@ async function ajustarCard(ch: Chamador, corpo: Record<string, unknown>, auto: M
 
   // O que foi pedido vai para a memoria do diretor (origem ajuste). A
   // autocorreção não é gosto da marca: fica fora da memória.
+  // Frente H: grava pelo cérebro do cliente (área arte, categoria ajuste): o
+  // mesmo pedido de novo vira reforço, o que contradiz um antigo o aposenta.
+  // O card e o pedido literal vão no motivo, para o texto repetir e reforçar.
   const aprendizado = texto(a.memoria, 400);
-  if (!auto) await servico().from("agente_memoria").insert({
+  if (!auto) await gravarNoCerebro(servico(), {
     client_id: base.client_id,
-    agente: "diretor_arte",
-    tipo: "preferencia",
-    texto: aprendizado
-      ? `${aprendizado} (pedido no card ${ordem}: ${texto(pedido, 300)})`
-      : `Ajuste pedido no card ${ordem} (${card.funcao}): ${texto(pedido, 500)}`,
-    origem: "ajuste",
+    area: "arte",
+    categoria: "ajuste",
+    texto: aprendizado || `Ajuste pedido (${card.funcao}): ${texto(pedido, 500)}`,
+    motivo: `pedido no card ${ordem}: ${texto(pedido, 300)}`,
+    fonte: "estudio",
+    criado_por: ch.userId,
     referencia_id: base.id,
   });
 
@@ -3486,7 +3573,7 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
   }
   if (!t.task_id) throw new ErroEstudio(409, "trabalho_sem_item", "Este trabalho não está ligado a um item da agenda.");
   const item = await lerItemDaAgenda(t.task_id);
-  const [prompt, diretor, contexto, recentes, perfil] = await Promise.all([
+  const [prompt, diretor, contexto, recentes, perfil, marcaDaLegenda] = await Promise.all([
     promptDoDiretor(t.client_id),
     modeloDoPapel("diretor_arte"),
     lerContextoConsolidado(servico(), t.client_id),
@@ -3500,11 +3587,13 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
       .order("created_at", { ascending: false })
       .limit(5),
     servico().from("profiles").select("company_name, full_name").eq("id", t.client_id).maybeSingle(),
+    marcaDe(t.client_id, t),
   ]);
   const p = perfil.data as { company_name: string | null; full_name: string | null } | null;
+  // Marca por projeto (Acerbi e CME): nome e tom da marca do item; cliente sem marca segue igual.
   const marca = {
-    nome: texto(p?.company_name || p?.full_name, 120) || null,
-    contexto: contexto ?? null,
+    nome: marcaDaLegenda && !marcaDaLegenda.principal ? texto(marcaDaLegenda.nome, 120) : texto(p?.company_name || p?.full_name, 120) || null,
+    contexto: contexto ? contextoComMarca(contexto, marcaDaLegenda) : null,
   };
   const r = await chamarTexto({
     clientId: t.client_id,
@@ -3512,7 +3601,8 @@ async function legenda(ch: Chamador, corpo: Record<string, unknown>) {
     agente: "diretor_arte",
     modeloId: diretor.id,
     raciocinio: raciocinioPara(diretor, ["low", "medium"]),
-    sistema: `${prompt}\n\n${INSTRUCOES_LEGENDA}`,
+    // Frente H: títulos, CTA e anti-genérico (com teto) antes do prompt do diretor.
+    sistema: `${CONHECIMENTO_DA_LEGENDA}\n\n${prompt}\n\n${INSTRUCOES_LEGENDA}`,
     mensagens: [{
       papel: "usuario",
       conteudo: JSON.stringify({
@@ -3961,7 +4051,8 @@ async function importarPinterest(ch: Chamador, corpo: Record<string, unknown>) {
 
   const { data, error } = await servico()
     .from("cliente_referencias")
-    .insert({ id, client_id: clientId, origem: "pinterest", url_origem: canonica, storage_path: caminho, ativa: true })
+    // Com a marca escolhida no topo (ex.: CME), o pin entra como referência dela.
+    .insert({ id, client_id: clientId, origem: "pinterest", url_origem: canonica, storage_path: caminho, ativa: true, ...marcaParaGravar(await marcaDe(clientId, { marca_id: corpo.marca_id })) })
     .select("*")
     .single();
   if (error) {
@@ -4380,8 +4471,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
   const idsDasFotos = t.direcao.cards.flatMap((c) => c.imagens_ids ?? []);
   const idsDasReferencias = [...new Set([...(t.direcao.referencias_ids ?? []), ...t.direcao.cards.flatMap((c) => c.referencias_ids ?? [])])].slice(0, 12);
   const [kit, fontes, memoria, acervo, fotosEmUso, prompt, refsEscolhidas, refsDoCliente, campanha, item, historico, modelo] = await Promise.all([
-    lerKit(t.client_id),
-    lerFontes(t.client_id),
+    lerKit(t.client_id, t),
+    lerFontes(t.client_id, t),
     memoriaDoDiretor(t.client_id),
     lerAcervo(t.client_id, 30),
     imagensDoAcervo(t.client_id, idsDasFotos),
@@ -4403,7 +4494,7 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
       : Promise.resolve({ data: [] }),
     modeloDoPapel("diretor_arte"),
   ]);
-  const marca = await marcaDoCliente(t.client_id, kit, fontes);
+  const marca = await marcaDoCliente(t.client_id, kit, fontes, t);
   const semCaixa = laminasSemCaixa(t, kit);
   const fotoPorId = new Map<string, ImagemAcervo>();
   for (const a of [...acervo, ...fotosEmUso]) fotoPorId.set(a.id, a);
@@ -4432,6 +4523,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     };
   });
 
+  // Frente H: o diretor conversa sabendo o que o cliente já ensinou (cérebro) e o dossiê atual.
+  const doDiretor = await cerebroEDossieDoDiretor(t.client_id, memoria).catch(() => ({ texto: "", usouCerebro: false }));
   const contexto = {
     tipo: ehAds(t) ? "criativo de anúncio (Mesa Ads)" : "post da agenda",
     texto_pode_mudar: textoPodeMudar,
@@ -4470,7 +4563,8 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
     referencias_do_cliente: (((refsDoCliente as { data: unknown }).data as { papel: string; leitura: string; tags: string[] }[] | null) ?? [])
       .map((r) => ({ papel: r.papel === "identidade" ? "arte publicada da marca" : "técnica", tecnica: texto(r.leitura, 400), tags: r.tags })),
     acervo: acervo.map((a) => ({ id: a.id, nome: texto(a.nome, 80), categoria: a.categoria, descricao: texto(a.descricao, 200) || null })),
-    memoria_do_diretor: memoria,
+    // Com o cérebro no sistema, a lista crua da memória não se repete aqui.
+    memoria_do_diretor: doDiretor.usouCerebro ? undefined : memoria,
   };
 
   // A versão atual da lâmina em foco vai junto quando o modelo aceita imagem.
@@ -4496,9 +4590,11 @@ async function conversar(ch: Chamador, corpo: Record<string, unknown>) {
 
   const sistema = [
     CONHECIMENTO_DIRETOR,
+    CONHECIMENTO_DA_DIRECAO,
     prompt,
     ehAds(t) ? `${ANATOMIA_DO_ESTATICO}\n\n${POLITICAS_META}\n\n${REGRAS_DE_HONESTIDADE}` : "",
     INSTRUCOES_CONVERSA,
+    doDiretor.texto,
   ].filter(Boolean).join("\n\n");
   const pedido = [
     `CONTEÚDO DO TRABALHO (JSON):\n${JSON.stringify(contexto)}`,
@@ -4591,7 +4687,7 @@ async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
   const brutas = Array.isArray(corpo.mudancas) ? (corpo.mudancas as unknown[]).slice(0, 12) : [];
   if (!brutas.length) throw new ErroEstudio(400, "sem_mudancas", "Escolha pelo menos uma mudança para aplicar.");
 
-  const kit = await lerKit(t.client_id);
+  const kit = await lerKit(t.client_id, t);
   const idsDeFoto = brutas
     .map((m) => (m && typeof m === "object" ? ((m as { campos?: Record<string, unknown> }).campos ?? {}).foto_acervo : null))
     .map((v) => texto(v, 64))
@@ -4643,12 +4739,15 @@ async function aplicarMudancas(ch: Chamador, corpo: Record<string, unknown>) {
       });
       await servico().from("agente_mensagens").update({ anexos: novos }).eq("id", linha.id);
       if (memoria) {
-        await servico().from("agente_memoria").insert({
+        // Frente H: pelo cérebro do cliente (reforço em vez de duplicar; o contraditório aposenta o antigo).
+        await gravarNoCerebro(servico(), {
           client_id: t.client_id,
-          agente: "diretor_arte",
-          tipo: "preferencia",
-          texto: `${texto(memoria, 300)} (conversa no estúdio, aplicada)`,
-          origem: "ajuste",
+          area: "arte",
+          categoria: "preferencia",
+          texto: texto(memoria, 300),
+          motivo: "conversa no estúdio, aplicada",
+          fonte: "estudio_conversa",
+          criado_por: ch.userId,
           referencia_id: t.id,
         });
       }

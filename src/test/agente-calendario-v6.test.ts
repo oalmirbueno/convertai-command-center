@@ -51,8 +51,10 @@ describe("agente-calendario v6: planejar_mes", () => {
   it("uma chamada de texto com o tempo do calendário, esquema próprio e o contexto do cliente", () => {
     expect(planejar).toContain("timeoutMs: TIMEOUT_CALENDARIO_MS");
     expect(planejar).toContain("esquemaJson: ESQUEMA_PLANEJAMENTO");
-    expect(planejar).toContain("sistema: `${ctx.prompt}\\n${REGRAS_DE_SAIDA}`");
-    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim)");
+    // Frente H: o mesmo prompt e as mesmas regras de saída, com a base de marketing do mês no meio.
+    expect(planejar).toContain('sistema: sistemaDoCalendario(ctx, "mes")');
+    // Marca por projeto (docs/marcas): o contexto do mês é o da marca escolhida no topo.
+    expect(planejar).toContain("montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo))");
     expect(planejar).toContain("contextoDoPlanejamento(servico, clientId, mes)");
     expect(planejar).toContain("conversaDoAgenteDoMes(servico, clientId, chamador.userId)");
     expect(planejar).not.toContain("pesquisaWeb: true");

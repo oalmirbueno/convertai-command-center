@@ -44,7 +44,8 @@ import {
 } from "./planoDoMes";
 import { Ditado } from "./Ditado";
 import { AvisoDeErro, BotaoComCusto, EstimativaInline, avisarCustoReal } from "./Custo";
-import { useMesa } from "./MesaContexto";
+import { useFiltroDaMarca, useMesa } from "./MesaContexto";
+import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio, TituloDeSecao } from "./Seletores";
 
 /**
@@ -346,8 +347,11 @@ function PlanejarComEstrategista() {
       ? (propostas.data || []).find((p) => p.id === acompanhando.id) || null
       : (propostas.data || []).find((p) => p.id === propostaId) || (propostas.data || [])[0] || null;
 
+  // Marca por projeto (Acerbi e CME): a lista de projetos para gravar é só a da marca aberta.
+  const filtroDaMarca = useFiltroDaMarca();
   const projetos = useQuery({
     queryKey: ["mesa", "projetos", clientId],
+    select: (lista: { id: string; name: string; status: string }[]) => projetosDaListaNaMarca(lista, filtroDaMarca),
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("projects")

@@ -989,7 +989,7 @@ Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
     const pedido = limpo(corpo.pedido, 1000);
     garantirPermitido(pedido);
     if (!f.contextoDoCliente) throw new ErroDeRegra(503, "contexto_indisponivel", "O contexto do cliente não está disponível nesta função.");
-    const [contexto, diretor] = await Promise.all([f.contextoDoCliente(clientId, corpo.campanha_id), f.modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+    const [contexto, diretor] = await Promise.all([f.contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id), f.modeloDeTexto("diretor_arte", corpo.modelo_id)]);
     const saida = await chamarTexto({
       clientId,
       tarefa: "estudio",

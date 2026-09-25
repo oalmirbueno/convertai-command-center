@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { chamarFuncao, extensao, padraoPara, TAMANHOS, textoDoErro } from "@/lib/mesa/api";
 import { PAPEIS, type PapelDaReferencia, type ReferenciaComDestaque } from "@/lib/mesa/referencias";
+import { marcaParaGravarAgora } from "@/lib/mesa/marcas";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { useMesa } from "./MesaContexto";
 import SeletorDeReferencias from "./SeletorDeReferencias";
@@ -144,7 +145,8 @@ export default function ContextoReferencias() {
         if (error) throw error;
         const { error: erroLinha } = await (supabase as any)
           .from("cliente_referencias")
-          .insert({ id, client_id: clientId, origem: "upload", papel: "tecnica", storage_path: caminho });
+          // Com outra marca aberta no topo (ex.: CME), a referência nasce dela.
+          .insert({ id, client_id: clientId, origem: "upload", papel: "tecnica", storage_path: caminho, ...marcaParaGravarAgora(clientId) });
         if (erroLinha) throw erroLinha;
         enviados++;
       }

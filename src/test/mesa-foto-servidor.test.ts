@@ -1614,13 +1614,14 @@ describe("ligada à Mesa: campanha do mês pelo calendário (campanhas.ts, sem I
     expect(campanhasFonte).toContain('.in("status", ["pronta", "gravada"])');
     expect(campanhasFonte).toContain("custo_usd: 0");
     expect(f).toContain("campanhas_listar: CAMPANHAS.campanhas_listar,");
-    expect(f).toContain("async function contextoDoCliente(clientId: string, campanhaId?: unknown): Promise<ContextoFoto>");
+    // Marca por projeto (docs/marcas): o terceiro argumento é a marca escolhida no topo.
+    expect(f).toContain("async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId?: unknown): Promise<ContextoFoto>");
     expect(f).toContain('const semCampanha = campanhaId === "nenhuma";');
     expect(f).toContain('throw new ErroHttp(404, "campanha_inexistente"');
     expect(f).toContain('campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,');
     expect(f).toContain('campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,');
     expect(f).toContain("A Mesa é a principal e a Mesa Foto é ferramenta dela");
-    expect(f.match(/contextoDoCliente\(clientId, corpo\.campanha_id\)/g) || []).toHaveLength(4);
+    expect(f.match(/contextoDoCliente\(clientId, corpo\.campanha_id, corpo\.marca_id\)/g) || []).toHaveLength(4);
     // Gravada na direção do ensaio (ensaio e variações) e devolvida na resposta (variações e campanha).
     expect(f.match(/campanha_mesa: contexto\.campanha/g) || []).toHaveLength(4);
     expect(f).toContain("campanha_mesa: d.campanhaMesa ?? null,");
@@ -1642,7 +1643,7 @@ describe("ligada à Mesa: persona sugerida pelo brief (modelo_sugerir)", () => {
   it("a ação lê o contexto da Mesa, usa texto com 300 s e fôlego, e não grava", () => {
     const m = modelosFonte.replace(/\r\n/g, "\n");
     const acao = m.slice(m.indexOf("async function modeloSugerir"), m.indexOf("return {\n    acoes: {"));
-    expect(acao).toContain("f.contextoDoCliente(clientId, corpo.campanha_id)");
+    expect(acao).toContain("f.contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id)");
     expect(acao).toContain("timeoutMs: 300_000,");
     expect(acao).toContain("garantirPermitido(pedido);");
     expect(acao).not.toMatch(/\.insert\(|\.update\(/);

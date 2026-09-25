@@ -1,8 +1,9 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import { lerCatalogo, type ModeloIa } from "@/lib/mesa/api";
+import { projetosDaMarca, type MarcaDoCliente } from "@/lib/mesa/marcas";
 
 /**
  * O que todas as abas da Mesa precisam saber sem repassar de mão em mão:
@@ -27,6 +28,28 @@ export interface MesaValor {
    * mostrados antes da recarga somem quando ela muda (AvisoDeErro).
    */
   versaoCarteira?: number;
+  /**
+   * Marca por projeto (src/lib/mesa/marcas.ts): só no cliente com 2 ou mais
+   * marcas (hoje, a Acerbi com Acerbi e CME). Sem isso, vazio e nulo, e a
+   * Mesa segue como sempre.
+   */
+  marcas?: MarcaDoCliente[];
+  marca?: MarcaDoCliente | null;
+}
+
+/** Marca aberta na casca e a lista do cliente (lista vazia e null quando não há marca). */
+export function useMarcaDaMesa(): { marca: MarcaDoCliente | null; marcas: MarcaDoCliente[] } {
+  const v = useContext(Contexto);
+  return { marca: (v && v.marca) || null, marcas: (v && v.marcas) || [] };
+}
+
+/** Projetos da marca aberta ({ so } ou { menos }); null sem marca. Mesmo objeto enquanto a marca não muda. */
+export function useFiltroDaMarca() {
+  const { marca, marcas } = useMarcaDaMesa();
+  const filtro = projetosDaMarca(marca, marcas);
+  const chave = filtro ? JSON.stringify(filtro) : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => filtro, [chave]);
 }
 
 const Contexto = createContext<MesaValor | null>(null);

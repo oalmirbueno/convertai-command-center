@@ -183,7 +183,7 @@ describe("contratos do servidor", () => {
     const a = corpoDe("ajustarCard");
     expect(a).toContain("auto: MarcaDeAutocorrecao | null = null");
     expect(a).toContain("const novoTexto = auto ? card.texto_exato :");
-    expect(a).toContain('if (!auto) await servico().from("agente_memoria").insert({');
+    expect(a).toContain("if (!auto) await gravarNoCerebro(servico(), {");
     expect(a).toContain("...(auto ? { autocorrecao: auto } : {}),");
   });
 });

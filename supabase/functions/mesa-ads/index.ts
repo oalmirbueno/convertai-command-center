@@ -93,6 +93,7 @@ import {
 import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev } from "../_shared/jev.ts";
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { contextoComMarca, lerMarcaParaDirecaoDaMarca, type MarcaDoCliente, marcaDoPedido, marcaParaGravar } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
 import {
   AGENTE_DO_CANAL,
@@ -149,6 +150,8 @@ import {
   type FormatoAds,
   type Nicho,
 } from "../_shared/conhecimento-ads.ts";
+import { conhecimentoAdsPara, type TarefaAds } from "../_shared/conhecimento-dos-agentes.ts";
+import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import {
   alertaDePolitica,
   anguloAprovado,
@@ -922,14 +925,22 @@ function resumoDoBrief(bruto: unknown, limite = 5000): Record<string, unknown> |
  * dossiê atual, métricas de ads dos últimos 90 dias, aprendizados registrados
  * e memória. O que não existe vai vazio ou null, nunca preenchido.
  */
-async function montarContextoAds(servico: SupabaseClient, clientId: string): Promise<ContextoAds> {
+async function montarContextoAds(
+  servico: SupabaseClient,
+  clientId: string,
+  marcaDoPedidoP: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
+): Promise<ContextoAds> {
+  // Marca por projeto (Acerbi e CME, _shared/marca.ts): kit e contexto da marca escolhida; sem marca, o do cliente.
+  const marcaEscolhida = await marcaDoPedidoP;
   const hoje = hojeSaoPaulo();
   const desde = somarDias(hoje, -90);
   const inicioDoMes = `${hoje.slice(0, 7)}-01`;
   const fimDoMes = somarDias(`${somarDias(`${hoje.slice(0, 7)}-28`, 5).slice(0, 7)}-01`, -1);
+  // Cérebro do cliente (Frente H): ads, conta e copy, sem repetir e com teto; lido junto com o resto.
+  const cerebroP = resumoDoCerebro(servico, clientId, ["ads", "conta", "copy"], { limite: 2000 });
   const [marca, consolidado, dossie, anuncios, diarias, aprendizados, memoria, campanhasQ, briefQ, documentos] = await Promise.all([
-    lerMarcaParaDirecao(servico, clientId),
-    lerContextoConsolidado(servico, clientId),
+    lerMarcaParaDirecaoDaMarca(servico, clientId, marcaEscolhida),
+    lerContextoConsolidado(servico, clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
     servico.from("client_dossiers").select("content, summary, version, effective_at")
       .eq("client_id", clientId).eq("dossier_type", "contexto").eq("is_current", true)
       .order("effective_at", { ascending: false }).limit(1),
@@ -987,7 +998,8 @@ async function montarContextoAds(servico: SupabaseClient, clientId: string): Pro
       dossie_atual: d ? `Versão ${d.version} (${String(d.effective_at).slice(0, 10)}):\n${(d.summary ? `${d.summary}\n` : "") + String(d.content ?? "").slice(0, 12000)}` : null,
       anuncios_ultimos_90_dias: { total_lidos: anuncios.length, com_entrega: resumoAnuncios },
       aprendizados_registrados: aprendizados.data ?? [],
-      memoria_do_estrategista_ads: memoria.data ?? [],
+      // O resumo do cérebro substitui a lista crua da memória; ela só volta se o cérebro não responder.
+      ...(await cerebroP.then((c) => (c.falhou ? { memoria_do_estrategista_ads: memoria.data ?? [] } : { cerebro_do_cliente: c.texto || null }))),
       campanhas_do_mes: campanhas,
       brief_do_cliente: brief,
       documentos_do_cliente: (documentos as { nome: string; texto: string }[]).map((x) => ({ nome: x.nome, texto: x.texto })),
@@ -1022,9 +1034,18 @@ const REGRAS_DA_EXECUCAO = `REGRAS DESTA EXECUÇÃO NO PAINEL:
  * estilos visuais, objetivos, oferta, agressivo, conta e pacote de copy
  * (conhecimento-ads.ts), então toda ação usa o mesmo sistema e o prompt só
  * leva os dados do caso (e o nicho do cliente, nunca a lista inteira).
+ *
+ * Frente H (25/09): com a tarefa, entram entre a base e as regras da execução
+ * os blocos certos dos especialistas (Pedro Sobral e Natália Torres) e de
+ * marketing, com teto e ordem de corte (_shared/conhecimento-dos-agentes.ts).
+ * A base inteira continua primeiro (prefixo fixo) e vale sobre eles; com o
+ * objetivo, o checklist de criativo dele vai no fim do bloco.
  */
-function sistemaDoEstrategista(): string {
-  return `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${REGRAS_DA_EXECUCAO}`;
+function sistemaDoEstrategista(tarefa?: TarefaAds, objetivo?: unknown): string {
+  const extra = tarefa ? conhecimentoAdsPara(tarefa, { objetivo }).texto : "";
+  return extra
+    ? `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${extra}\n\n${REGRAS_DA_EXECUCAO}`
+    : `${CONHECIMENTO_ESTRATEGISTA_ADS}\n\n${REGRAS_DA_EXECUCAO}`;
 }
 
 const objetivoPorId = (id: unknown) => OBJETIVOS_DE_CAMPANHA.find((o) => o.id === id) ?? null;
@@ -1544,7 +1565,7 @@ function roteiroDaVariacao(v: Record<string, unknown>, formato: FormatoAds, ganc
 async function briefingSugerir(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  const [ctx, atual] = await Promise.all([montarContextoAds(servico, clientId), carregarBriefing(servico, clientId)]);
+  const [ctx, atual] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId)]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
   const pedido = `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; null ou vazio = não existe):
 ${JSON.stringify({ ...ctx.dados, briefing_atual: resumoDoBriefing(atual) }, null, 1)}
@@ -1560,7 +1581,7 @@ TAREFA: proponha o briefing de performance deste cliente para anúncios na Meta.
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("oferta"),
     mensagens: [{ papel: "usuario", conteudo: pedido }],
     raciocinio,
     esquemaJson: ESQUEMA_SUGESTAO,
@@ -2055,7 +2076,7 @@ async function planoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Re
   const objetivo = objetivoPorId(corpo.objetivo) ?? objetivoPorId((briefing.objetivo ?? {}).acao);
   const [ofertaLinha, ctx, refs, exemplos] = await Promise.all([
     corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
-    montarContextoAds(servico, clientId),
+    montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     referenciasParaOPlano(servico, clientId),
     carregarExemplos(servico, clientId, corpo.referencia_ids),
   ]);
@@ -2120,7 +2141,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista(),
+      sistema: sistemaDoEstrategista("angulos", objetivo),
       mensagens: [{ papel: "usuario", conteudo: instrucao }],
       raciocinio,
       esquemaJson: ESQUEMA_PLANO,
@@ -2186,7 +2207,7 @@ ${modo === "variar_vencedor" ? "- MODO VARIAR VENCEDOR: mantenha o mecanismo e a
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista(),
+        sistema: sistemaDoEstrategista("angulos", objetivo),
         mensagens: [{
           papel: "usuario",
           conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -2306,7 +2327,7 @@ async function planoConversar(servico: SupabaseClient, chamador: Chamador, corpo
 
   const [briefing, ctx, refs, anexos] = await Promise.all([
     carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch(() => null),
-    montarContextoAds(servico, p.client_id),
+    montarContextoAds(servico, p.client_id, marcaDoPedido(servico, p.client_id, corpo)),
     referenciasParaOPlano(servico, p.client_id),
     baixarAnexos(servico, p.client_id, corpo.anexos),
   ]);
@@ -2350,7 +2371,7 @@ Aplique o pedido. Devolva:
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("angulos", p.estrutura.objetivo),
     mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
     raciocinio,
     esquemaJson: ESQUEMA_CONVERSA_PLANO,
@@ -2423,9 +2444,11 @@ async function criativosProduzir(servico: SupabaseClient, chamador: Chamador, co
   if (total > MAX_CRIATIVOS_POR_CHAMADA) {
     throw new ErroHttp(400, "criativos_demais", `Isso daria ${total} criativos; o limite por vez é ${MAX_CRIATIVOS_POR_CHAMADA}. Escolha menos ângulos ou formatos.`);
   }
+  // Marca por projeto (Acerbi e CME): a escolhida na tela vai para a direção e o Estúdio usa a logo dela.
+  const marcaDosCriativos = await marcaDoPedido(servico, p.client_id, corpo);
   const [briefing, marca, modeloImagem] = await Promise.all([
     carregarBriefing(servico, p.client_id, p.briefing_id ?? undefined).catch(() => null),
-    lerMarcaParaDirecao(servico, p.client_id),
+    lerMarcaParaDirecaoDaMarca(servico, p.client_id, marcaDosCriativos),
     modeloPadrao("imagem"),
   ]);
   if (!modeloImagem) throw new ErroHttp(409, "sem_modelo_de_imagem", "O catálogo não tem gerador de imagem padrão.");
@@ -2475,7 +2498,7 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista(),
+      sistema: sistemaDoEstrategista("copy", objetivo),
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
       esquemaJson: ESQUEMA_COPIES,
@@ -2554,6 +2577,8 @@ Nada de número, depoimento, prazo, preço ou urgência que não esteja no brief
           tom,
         });
         direcao.ads = { criativo_id: criativoId, plano_id: p.id, angulo_id: a.id, variacao: i + 1 };
+        // O Estúdio lê a marca do trabalho de anúncio por aqui (não há item da agenda).
+        if (marcaDosCriativos) (direcao as Record<string, unknown>).marca_id = marcaDosCriativos.id;
         trabalhos.push({
           id: trabalhoId,
           client_id: p.client_id,
@@ -2638,7 +2663,7 @@ async function copyVariar(servico: SupabaseClient, chamador: Chamador, corpo: Re
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("copy", objetivoPorId(plano?.estrutura?.objetivo) ?? objetivoPorId((briefing?.objetivo ?? {}).acao)),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -2769,7 +2794,7 @@ async function aprendizadoRegistrar(servico: SupabaseClient, chamador: Chamador,
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista(),
+      sistema: sistemaDoEstrategista("conta"),
       mensagens: [{
         papel: "usuario",
         conteudo: `Registre o aprendizado deste criativo em até 4 frases, exatamente no formato: "No projeto X, para a oferta Y, no período Z, a execução A apresentou [resultado] em comparação com B, sob [condições]. Ainda não sabemos [incerteza]. O próximo teste mudará [componente]."
@@ -2823,19 +2848,23 @@ DIAGNÓSTICO (código): ${JSON.stringify({ situacao: diagnostico.situacao, sinai
 
   // Memória do estrategista de ads: o aprendizado também vira memória do
   // agente (além de ads_aprendizados, que o contexto do estrategista já lê).
+  // Frente H: grava pelo cérebro do cliente (área ads, resultado medido), que
+  // conta reforço em vez de duplicar e aposenta o que o novo contradiz.
   let memoria: Record<string, unknown> = { gravada: false, onde_fica: "ads_aprendizados" };
   if (MEMORIA_ACEITA_ESTRATEGISTA_ADS) {
-    const { error: erroMemoria } = await servico.from("agente_memoria").insert({
+    const g = await gravarNoCerebro(servico, {
       client_id: c.client_id,
-      agente: AGENTE,
-      tipo: "aprendizado",
-      origem: "metrica",
+      area: "ads",
+      categoria: "performou",
+      texto: String((aprendizado as { texto?: string } | null)?.texto ?? ""),
+      evidencia: `Evidência ${evidencia}, período ${inicio} a ${fim}`,
+      fonte: "mesa_ads",
+      criado_por: chamador.userId,
       referencia_id: (aprendizado as { id?: string } | null)?.id ?? null,
-      texto: String((aprendizado as { texto?: string } | null)?.texto ?? "").slice(0, 4000),
     });
-    memoria = erroMemoria
-      ? { gravada: false, motivo: erroMemoria.message, onde_fica: "ads_aprendizados" }
-      : { gravada: true, onde_fica: "agente_memoria e ads_aprendizados" };
+    memoria = g.gravada
+      ? { gravada: true, onde_fica: "agente_memoria e ads_aprendizados", situacao: g.situacao, avisos: g.avisos }
+      : { gravada: false, motivo: g.erro, onde_fica: "ads_aprendizados" };
   }
   return json({ aprendizado, criativo: criativo ?? c, memoria, custo_usd: custo, saldo_usd: saldo });
 }
@@ -3492,7 +3521,8 @@ async function referenciaParaEstudio(servico: SupabaseClient, chamador: Chamador
   }
   const { data, error } = await servico
     .from("cliente_referencias")
-    .insert({ client_id: clientId, origem: "upload", papel: "tecnica", storage_path: destino, leitura, tags: ["mesa-ads", ...(ref.tags ?? []).slice(0, 6)] })
+    // Com a marca escolhida no topo (ex.: CME), a referência entra como dela.
+    .insert({ client_id: clientId, origem: "upload", papel: "tecnica", storage_path: destino, leitura, tags: ["mesa-ads", ...(ref.tags ?? []).slice(0, 6)], ...marcaParaGravar(await marcaDoPedido(servico, clientId, corpo)) })
     .select("id")
     .single();
   if (error || !data) throw new ErroHttp(503, "referencia_nao_ligada", "Não foi possível levar a referência para o Estúdio.");
@@ -3716,7 +3746,7 @@ async function ofertaConversar(servico: SupabaseClient, chamador: Chamador, corp
   const [emFoco, briefing, ctx, anexos, { data: ofertasAtuais }, { data: historico }] = await Promise.all([
     corpo.oferta_id ? carregarOferta(servico, clientId, corpo.oferta_id) : Promise.resolve(null),
     carregarBriefing(servico, clientId).catch(() => null),
-    montarContextoAds(servico, clientId),
+    montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     baixarAnexos(servico, clientId, corpo.anexos),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("criado_em", { ascending: false }).limit(12),
     servico.from("agente_mensagens").select("papel, conteudo").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(16),
@@ -3764,7 +3794,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
       tarefa: TAREFA,
       agente: AGENTE,
       modeloId: modelo.id,
-      sistema: sistemaDoEstrategista(),
+      sistema: sistemaDoEstrategista("oferta"),
       mensagens: [...anteriores, { papel: "usuario", conteudo: pedido, imagens: anexos.imagens.length ? anexos.imagens : undefined }],
       raciocinio,
       esquemaJson: ESQUEMA_OFERTA_CONVERSA,
@@ -3798,7 +3828,7 @@ Responda como o estrategista de ofertas da agência. Devolva:
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista(),
+        sistema: sistemaDoEstrategista("oferta"),
         mensagens: [{
           papel: "usuario",
           conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -3923,7 +3953,7 @@ async function ofertaDoContexto(servico: SupabaseClient, chamador: Chamador, cor
   await exigirAcessoAoCliente(chamador, clientId);
   const [briefing, ctx, ofertasQ] = await Promise.all([
     carregarBriefing(servico, clientId).catch(() => null),
-    montarContextoAds(servico, clientId),
+    montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
     servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("criado_em", { ascending: false }).limit(50),
   ]);
   const bloco = (ctx.dados.anuncios_ultimos_90_dias ?? {}) as { com_entrega?: { nome: string | null; titulo: string | null; custo_por_resultado: number | null; resultados: Record<string, number> }[] };
@@ -4227,7 +4257,7 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("conta"),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(briefing))}
@@ -4389,7 +4419,7 @@ async function evolucao(servico: SupabaseClient, chamador: Chamador, corpo: Reco
         tarefa: TAREFA,
         agente: AGENTE,
         modeloId: modelo.id,
-        sistema: sistemaDoEstrategista(),
+        sistema: sistemaDoEstrategista("conta"),
         mensagens: [{
           papel: "usuario",
           conteudo: `LEITURA DE EVOLUÇÃO DO CLIENTE (calculada pelo painel; os grupos e os números são DEFINITIVOS, não mude nenhum):
@@ -4450,7 +4480,7 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
   await exigirAcessoAoCliente(chamador, clientId);
   const qtd = Math.min(16, Math.max(6, Math.round(Number(corpo.quantidade) || 10)));
   if (corpo.nicho != null && corpo.nicho !== "" && !NICHOS.some((n) => n.id === corpo.nicho)) throw new ErroHttp(400, "nicho_invalido", "Nicho desconhecido.");
-  const [ctx, briefing] = await Promise.all([montarContextoAds(servico, clientId), carregarBriefing(servico, clientId).catch(() => null)]);
+  const [ctx, briefing] = await Promise.all([montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)), carregarBriefing(servico, clientId).catch(() => null)]);
   const achado = await nichoDoCliente(ctx, briefing, { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId }, corpo.nicho);
   const nicho = achado.nicho;
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
@@ -4460,7 +4490,7 @@ async function bibliotecaDoNicho(servico: SupabaseClient, chamador: Chamador, co
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("angulos"),
     mensagens: [{
       papel: "usuario",
       conteudo: `DADOS REAIS DO CLIENTE: ${JSON.stringify(ctx.dados)}
@@ -4586,10 +4616,16 @@ type ContextoDoPacote = {
   marca: Awaited<ReturnType<typeof lerMarcaParaDirecao>>;
 };
 
-async function contextoDoPacote(servico: SupabaseClient, clientId: string, plano: Plano | null): Promise<ContextoDoPacote> {
+async function contextoDoPacote(
+  servico: SupabaseClient,
+  clientId: string,
+  plano: Plano | null,
+  marcaDoPedidoP: MarcaDoCliente | null | Promise<MarcaDoCliente | null> = null,
+): Promise<ContextoDoPacote> {
   const [briefing, marca] = await Promise.all([
     carregarBriefing(servico, clientId, plano?.briefing_id ?? undefined).catch(() => null),
-    lerMarcaParaDirecao(servico, clientId),
+    // Marca por projeto (Acerbi e CME): a da tela; sem marca, a do cliente.
+    Promise.resolve(marcaDoPedidoP).then((m) => lerMarcaParaDirecaoDaMarca(servico, clientId, m)),
   ]);
   const ofertaId = plano?.estrutura?.oferta_id;
   const ofertaLinha = ofertaId ? await carregarOferta(servico, clientId, ofertaId).catch(() => null) : null;
@@ -4620,7 +4656,7 @@ async function gerarPacoteDoCriativo(
     tarefa: TAREFA,
     agente: AGENTE,
     modeloId: modelo.id,
-    sistema: sistemaDoEstrategista(),
+    sistema: sistemaDoEstrategista("pacote", ctx.objetivo),
     mensagens: [{
       papel: "usuario",
       conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(ctx.briefing))}
@@ -4674,7 +4710,7 @@ TAREFA: escreva o pacote completo de copy deste criativo para o gestor de tráfe
           tarefa: TAREFA,
           agente: AGENTE,
           modeloId: modelo.id,
-          sistema: sistemaDoEstrategista(),
+          sistema: sistemaDoEstrategista("copy", ctx.objetivo),
           mensagens: [{
             papel: "usuario",
             conteudo: `BRIEFING: ${JSON.stringify(resumoDoBriefing(ctx.briefing))}
@@ -4753,7 +4789,7 @@ async function copyPacote(servico: SupabaseClient, chamador: Chamador, corpo: Re
     throw new ErroHttp(400, "sem_alvo", "Informe criativo_id ou plano_id.");
   }
   const clientId = criativos[0].client_id;
-  const ctx = await contextoDoPacote(servico, clientId, plano);
+  const ctx = await contextoDoPacote(servico, clientId, plano, marcaDoPedido(servico, clientId, corpo));
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista");
 
   // A mesma copy em formatos diferentes (feed, stories...) divide o pacote.
@@ -4881,7 +4917,7 @@ async function pacoteEnviar(servico: SupabaseClient, chamador: Chamador, corpo: 
   const criativos = ((data as Criativo[] | null) ?? []).map((c) => ({ ...c, copy: (c.copy ?? {}) as Record<string, unknown> }));
   if (!criativos.length) throw new ErroHttp(404, "sem_criativos", "Nenhum criativo encontrado para o pacote.");
   if (!plano && criativos[0].plano_id) plano = await carregarPlano(servico, criativos[0].plano_id).catch(() => null);
-  const ctx = await contextoDoPacote(servico, clientId, plano);
+  const ctx = await contextoDoPacote(servico, clientId, plano, marcaDoPedido(servico, clientId, corpo));
 
   const trabalhoIds = criativos.map((c) => c.trabalho_id).filter((x): x is string => !!x);
   const { data: trabalhos } = trabalhoIds.length

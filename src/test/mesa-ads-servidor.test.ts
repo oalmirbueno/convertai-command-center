@@ -114,13 +114,14 @@ describe("honestidade", () => {
     expect(fonte).toContain('const AGENTE = "estrategista_ads" as Agente;');
     // v2: oferta, conta, pacote e nicho usam o MESMO sistema; o conhecimento
     // de oferta, agressivo, conta e pacote já está em CONHECIMENTO_ESTRATEGISTA_ADS.
-    expect(corpoDe(fonte, "sistemaDoEstrategista")).toContain("function sistemaDoEstrategista(): string");
+    // Frente H: o mesmo sistema, com a tarefa escolhendo os blocos dos especialistas e de marketing.
+    expect(corpoDe(fonte, "sistemaDoEstrategista")).toContain("function sistemaDoEstrategista(tarefa?: TarefaAds, objetivo?: unknown): string");
     const chamadas = fonte.split("await chamarTexto({").slice(1);
     expect(chamadas.length).toBeGreaterThanOrEqual(14);
     for (const c of chamadas) {
       const trecho = c.slice(0, 400);
       expect(trecho).toContain("tarefa: TAREFA,");
-      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\(\)|SISTEMA_DO_LEITOR),/);
+      expect(trecho).toMatch(/sistema: (sistemaDoEstrategista\("(angulos|copy|pacote|oferta|conta)"[^\n]*\)|SISTEMA_DO_LEITOR),/);
     }
   });
   it("o leitor separa observado de inferido e nunca inventa métrica", () => {
@@ -274,8 +275,9 @@ describe("aprendizado", () => {
     const a = corpoDe(fonte, "aprendizadoRegistrar");
     expect(a).toContain("maiorEvidencia(c.evidencia, evidencia)");
     expect(a).toContain('.from("ads_aprendizados")');
-    expect(a).toContain('from("agente_memoria").insert');
-    expect(a).toContain('origem: "metrica"');
+    // Frente H: pelo cérebro do cliente (área ads, resultado medido: vira origem "metrica" no formato antigo).
+    expect(a).toContain("await gravarNoCerebro(servico, {");
+    expect(a).toContain('categoria: "performou",');
     expect(fonte).toContain("const MEMORIA_ACEITA_ESTRATEGISTA_ADS = true;");
   });
 });

@@ -1,24 +1,31 @@
+import { useState } from "react";
 import { HelpCircle, Wand2, X } from "lucide-react";
 import { BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
 import { partesDaConversa } from "../fotoApi";
-import { MODELOS_PRONTOS, rotuloDaAcao, rotuloDaPose, TIPOS_DE_NO, type ModeloPronto } from "../canvasApi";
+import { capaDeReserva, MODELOS_PRONTOS, rotuloDaAcao, rotuloDaPose, TIPOS_DE_NO, type ModeloPronto } from "../canvasApi";
 import { ICONES, PAINEL } from "./comum";
 
 /**
  * Galeria de modelos prontos (dono, 25/09: "templates pré-prontos bonitos;
  * auto paint com base no contexto"). Cada modelo tem miniatura: a capa
- * (quando as imagens de base do dono forem ligadas em MODELOS_PRONTOS.capa)
- * ou, até lá, os cartões do modelo desenhados sobre um gradiente. "Montar
+ * (foto de base do dono em public/canvas-modelos, webp com jpg de reserva
+ * para Safari 11 a 13) ou, sem capa ou se ela falhar, os cartões do modelo
+ * desenhados sobre um gradiente. "Montar
  * pelo contexto" pede ao agente (IA, custo à vista) que escolha o modelo e
  * preencha produto, pessoa, ambiente e pedido pelo contexto do cliente.
  */
 
 export function MiniaturaDoModelo({ m, altura = 84 }: { m: ModeloPronto; altura?: number }) {
+  const [capaFalhou, setCapaFalhou] = useState(false);
+  const capa = m.capa && !capaFalhou ? m.capa : null;
   return (
-    <span className="relative block w-full overflow-hidden rounded-lg" style={{ height: altura, background: `linear-gradient(135deg, ${m.cores[0]}, ${m.cores[1]})` }} data-miniatura-do-modelo={m.chave}>
-      {m.capa ? (
-        <img src={m.capa} alt="" className="h-full w-full object-cover" loading="lazy" />
+    <span className="relative block w-full overflow-hidden rounded-lg" style={{ height: altura, background: `linear-gradient(135deg, ${m.cores[0]}, ${m.cores[1]})` }} data-miniatura-do-modelo={m.chave} data-com-capa={capa ? "" : undefined}>
+      {capa ? (
+        <picture className="block h-full w-full">
+          <source srcSet={capa} type="image/webp" />
+          <img src={capaDeReserva(capa)} alt="" className="block h-full w-full object-cover" loading="lazy" decoding="async" onError={() => setCapaFalhou(true)} />
+        </picture>
       ) : (
         <span className="absolute inset-0 flex items-center justify-center">
           {m.cartoes.map((c, i) => {

@@ -21,6 +21,7 @@ import {
 } from "@/components/mesa-foto/Comuns";
 import { proximoPasso, useEnsaios, useFotos, useKits } from "@/components/mesa-foto/fotoApi";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
+import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 
 /**
  * Mesa Foto (/mesa-foto, só equipe: admin, gestor e design): o estúdio
@@ -174,6 +175,8 @@ export default function MesaFoto() {
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
+  // Marca por projeto (só a Acerbi hoje: Acerbi e CME): cores e contexto do diretor. Uma marca só: nada muda.
+  const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
 
   // Duas trocas no mesmo clique (ex.: escolher o kit e abrir o ensaio) se
   // somam: a segunda parte do endereço já mudado, não do que estava na tela.
@@ -194,7 +197,7 @@ export default function MesaFoto() {
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
     setSelecionadas([]);
-    mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null });
+    mudar({ client: id, etapa: o.etapa || "acervo", kit: o.kit, ensaio: o.ensaio, imagem: null, marca: null });
   };
 
   // Endereço só com o cliente: abre onde parou.
@@ -295,6 +298,8 @@ export default function MesaFoto() {
         abrirChaves,
         abrirModelos,
         versaoCarteira,
+        marcas,
+        marca,
       }
     : null;
 
@@ -335,6 +340,8 @@ export default function MesaFoto() {
             <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Foto</span>
             <SeletorDeCliente clientes={clientes} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
           </div>
+          {/* Troca rápida de marca: só no cliente com 2 ou mais marcas. */}
+          {clientId && marca && <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id }, true)} className="mr-2" />}
           {clientId && (
             <nav aria-label="Etapas da Mesa Foto" className="order-last mt-2 flex w-full min-w-0 flex-wrap items-center lg:order-none lg:mx-3 lg:mt-0 lg:w-auto lg:flex-1">
               <div className="grid w-full min-w-0 grid-cols-3 gap-0.5 rounded-lg bg-muted p-0.5 sm:w-auto sm:flex-1" data-caminho-principal="">
@@ -385,7 +392,7 @@ export default function MesaFoto() {
               </div>
             </nav>
           )}
-          {clientId && <TrocaDeMesas atual="foto" clientId={clientId} />}
+          {clientId && <TrocaDeMesas atual="foto" clientId={clientId} marcaId={marca ? marca.id : null} />}
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}

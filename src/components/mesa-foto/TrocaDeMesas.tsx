@@ -14,12 +14,24 @@ export const MESAS: { valor: QualMesa; rotulo: string; titulo: string; caminho: 
   { valor: "foto", rotulo: "Mesa Foto", titulo: "Abrir a Mesa Foto (estúdio fotográfico)", caminho: "/mesa-foto" },
 ];
 
-export const enderecoDaMesa = (mesa: QualMesa, clientId: string) => {
+/** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */
+export const enderecoDaMesa = (mesa: QualMesa, clientId: string, marcaId?: string | null) => {
   const m = MESAS.find((x) => x.valor === mesa) || MESAS[0];
-  return clientId ? `${m.caminho}?client=${clientId}` : m.caminho;
+  if (!clientId) return m.caminho;
+  return marcaId ? `${m.caminho}?client=${clientId}&marca=${marcaId}` : `${m.caminho}?client=${clientId}`;
 };
 
-export default function TrocaDeMesas({ atual, clientId, className = "" }: { atual: QualMesa; clientId: string; className?: string }) {
+export default function TrocaDeMesas({
+  atual,
+  clientId,
+  marcaId = null,
+  className = "",
+}: {
+  atual: QualMesa;
+  clientId: string;
+  marcaId?: string | null;
+  className?: string;
+}) {
   return (
     <nav aria-label="Trocar de mesa" className={`mr-1 hidden shrink-0 items-center xl:flex ${className}`}>
       {MESAS.map((m, i) => (
@@ -35,7 +47,7 @@ export default function TrocaDeMesas({ atual, clientId, className = "" }: { atua
             </span>
           ) : (
             <Link
-              to={enderecoDaMesa(m.valor, clientId)}
+              to={enderecoDaMesa(m.valor, clientId, marcaId)}
               title={m.titulo}
               className="inline-flex h-8 items-center rounded-lg px-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >

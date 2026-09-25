@@ -85,7 +85,10 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar, probabilidadeNoul } from "../_shared/jev.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
+import { contextoComMarca, lerMarcaParaDirecaoDaMarca, marcaDoPedido, resolverMarca } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { conhecimentoMesaFoto } from "../_shared/conhecimento-dos-agentes.ts";
+import { resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import { acoesDeCampanhas, campanhaParaOContexto, type CampanhaParaFoto, lerCampanhasParaFoto } from "./campanhas.ts";
 import {
   AVISO_REFERENCIA_WEB,
@@ -852,6 +855,15 @@ const PADRAO_PUBLICITARIO = `PADRÃO DE FOTOGRAFIA PUBLICITÁRIA:
 - Produto fiel: formato, cor, texto e proporções do kit; escala real em relação às mãos e ao cenário.
 ${ESTETICA_ATUAL}`;
 
+/**
+ * Frente H (25/09): base de marca e criativo do diretor de campanha e do
+ * agente da Mesa Foto (anti-genérico, identidade de marca e o método de
+ * criativo da Natália Torres), com teto de 5.000 caracteres. Vai depois das
+ * regras da casa, que valem antes dela. Leitor, kits, conferência e
+ * identificação não recebem: são tarefas de descrição e conferência.
+ */
+const CONHECIMENTO_DA_FOTO = conhecimentoMesaFoto().texto;
+
 const SISTEMA_LEITOR = `Você é o assistente de estúdio fotográfico da agência Aceleriq. Olhe a foto real do cliente e descreva só o que se vê.
 - descricao: até 3 frases objetivas sobre o assunto e a foto.
 - observado: fatos visíveis curtos (cor, material, forma, quantidade de botões ou peças, texto, estado), sem opinião.
@@ -928,6 +940,7 @@ TIPOS DE SUGESTÃO (até 6; em cada uma, campos que não se aplicam ficam null, 
 HONESTIDADE: referência da internet é uso interno para fidelidade, nunca foto final; pessoa sintética é gerada, adulta e não parece ninguém real; o que falta fica escrito. Você sugere, a equipe decide; nada de laço de correção.
 ${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
+${CONHECIMENTO_DA_FOTO}
 Responda só com o JSON pedido.`;
 
 const SISTEMA_IDENTIFICAR = `Você identifica produtos para o estúdio fotográfico da agência Aceleriq. Recebe fotos de uma embalagem ou do próprio produto.
@@ -957,6 +970,7 @@ const SISTEMA_CAMPANHA = `Você é o diretor de arte de campanhas publicitárias
 O produto do kit é invariante: forma, cor, peças e texto não mudam em nenhuma foto.
 ${PADRAO_PUBLICITARIO}
 ${REGRAS_DA_CASA}
+${CONHECIMENTO_DA_FOTO}
 Responda só com o JSON pedido.`;
 
 // ------------------------------------------------------------------ contexto do cliente
@@ -976,13 +990,17 @@ type ContextoFoto = {
  * marca, briefing de ads atual (oferta, público, objeções), nicho do último
  * plano da Mesa Ads e a memória do diretor. Sem dado, fica null.
  */
-async function contextoDoCliente(clientId: string, campanhaId?: unknown): Promise<ContextoFoto> {
+async function contextoDoCliente(clientId: string, campanhaId?: unknown, marcaId?: unknown): Promise<ContextoFoto> {
   // "nenhuma": a equipe escolheu seguir só a marca (nem a campanha do mês entra).
   const semCampanha = campanhaId === "nenhuma";
   const pedida = campanhaId != null && campanhaId !== "" && !semCampanha ? idDe(campanhaId, "campanha_id") : null;
+  // Frente H: cérebro do cliente nas áreas foto e arte (ajustes, reprovações com motivo, o que evitar), lido junto.
+  const cerebroP = resumoDoCerebro(servico(), clientId, ["foto", "arte"], { limite: 1500 });
+  // Marca por projeto (Acerbi e CME, _shared/marca.ts): a escolhida no topo; cliente sem marca segue igual.
+  const marcaEscolhida = marcaId === undefined ? null : await resolverMarca(servico(), clientId, { marca_id: marcaId });
   const [marca, consolidado, dossie, documentos, briefing, plano, memoria, campanhas] = await Promise.all([
-    lerMarcaParaDirecao(servico(), clientId),
-    lerContextoConsolidado(servico(), clientId),
+    lerMarcaParaDirecaoDaMarca(servico(), clientId, marcaEscolhida),
+    lerContextoConsolidado(servico(), clientId).then((c) => contextoComMarca(c, marcaEscolhida)),
     servico().from("client_dossiers").select("content, summary, dossier_type, effective_at").eq("client_id", clientId).eq("is_current", true)
       .order("effective_at", { ascending: false }).limit(2),
     lerDocumentosDeMarca(servico(), clientId, 6_000).catch(() => []),
@@ -1011,7 +1029,8 @@ async function contextoDoCliente(clientId: string, campanhaId?: unknown): Promis
       documentos_de_marca: (documentos as { nome: string; texto: string }[]).map((d) => ({ nome: d.nome, texto: d.texto.slice(0, 3_000) })),
       briefing_de_ads: briefing.data ?? null,
       nicho: typeof estrutura?.nicho === "string" ? estrutura.nicho : null,
-      memoria_do_diretor: memoria.data ?? [],
+      // O resumo do cérebro substitui a lista crua da memória; ela só volta se o cérebro não responder.
+      ...(await cerebroP.then((c) => (c.falhou ? { memoria_do_diretor: memoria.data ?? [] } : { cerebro_do_cliente: c.texto || null }))),
       // A Mesa é a principal: a campanha que ela usa (escolhida ou a do mês no calendário) orienta a foto.
       campanha_escolhida: escolhida ? campanhaParaOContexto(escolhida, "escolhida") : null,
       campanha_do_mes: doMes ? campanhaParaOContexto(doMes, "do_mes") : null,
@@ -1853,7 +1872,7 @@ async function ensaioPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
     if (desconhecidas.length) throw new ErroHttp(400, "tomada_desconhecida", "Há tomada que não existe nesta receita.", { tomada_ids: desconhecidas });
   }
   const receita = pedidas && pedidas.size ? { ...receitaBase, tomadas: receitaBase.tomadas.filter((t) => pedidas.has(t.id)) } : receitaBase;
-  const [contexto, diretor] = await Promise.all([contextoDoCliente(clientId, corpo.campanha_id), modeloDeTexto("diretor_arte", corpo.modelo_id)]);
+  const [contexto, diretor] = await Promise.all([contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id), modeloDeTexto("diretor_arte", corpo.modelo_id)]);
 
   const tomadasDaReceita = receita.tomadas.map((t) => ({
     id: t.id,
@@ -2118,7 +2137,7 @@ async function variacoesPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencia_ids) ? corpo.referencia_ids.map(String) : [];
   const [contexto, diretor, estilos] = await Promise.all([
-    contextoDoCliente(clientId, corpo.campanha_id),
+    contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, MAX_ESTILOS_NO_GERADOR),
   ]);
@@ -2296,7 +2315,7 @@ async function campanhaPlanejar(ch: Chamador, corpo: Record<string, unknown>) {
   const pedido = limpoOuNulo(corpo.pedido, 2000);
   const estiloIds = Array.isArray(corpo.referencias_estilo_ids) ? corpo.referencias_estilo_ids.map(String) : [];
   const [contexto, diretor, estilos] = await Promise.all([
-    contextoDoCliente(clientId, corpo.campanha_id),
+    contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     resolverReferenciasDeEstilo(clientId, estiloIds, 4),
   ]);
@@ -2521,7 +2540,8 @@ async function tomadaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const r = f as RefDoKit & { imagem: LinhaImagem };
     return baixarReduzida(r.imagem.storage_bucket, r.imagem.storage_path, LADO_FONTE, `${f.papel}-${r.imagem.nome}`);
   });
-  const contexto = await lerMarcaParaDirecao(servico(), ensaio.client_id);
+  // Marca por projeto (Acerbi e CME): a escolhida no topo; sem marca, a do cliente.
+  const contexto = await lerMarcaParaDirecaoDaMarca(servico(), ensaio.client_id, corpo.marca_id === undefined ? null : await marcaDoPedido(servico(), ensaio.client_id, corpo));
   const rejeicoes = tomada.versoes.filter((v) => v.aprovada === false && v.motivo_rejeicao).map((v) => v.motivo_rejeicao!);
   const direcao = ensaio.direcao as Record<string, unknown>;
   const prompt = promptDaTomada({
@@ -3418,7 +3438,7 @@ async function agenteConversar(ch: Chamador, corpo: Record<string, unknown>) {
     .map((x) => String((x as Record<string, unknown>).imagem_id ?? "")));
   const conversaId = await conversaDoAgente(ch, clientId, corpo.conversa_id, ensaio?.id ?? kit?.id ?? null, corpo.nova_conversa === true);
   const [contexto, diretor, historico, anexos, biblioteca, kitsDoCli] = await Promise.all([
-    contextoDoCliente(clientId, corpo.campanha_id),
+    contextoDoCliente(clientId, corpo.campanha_id, corpo.marca_id),
     modeloDeTexto("diretor_arte", corpo.modelo_id),
     servico().from("agente_mensagens").select("papel, conteudo, criado_em").eq("conversa_id", conversaId).order("criado_em", { ascending: false }).limit(MAX_HISTORICO_CONVERSA),
     anexosDaConversa(clientId, corpo.anexos),

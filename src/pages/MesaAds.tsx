@@ -10,6 +10,7 @@ import { inicioDoMes, lerPrevisao, type PrevisaoDoPlano } from "@/lib/mesa/api";
 import { CustoCompacto, SeletorDeCliente } from "@/pages/MesaDoCliente";
 import type { PedidoDePlano } from "@/components/mesa-ads/adsApi";
 import TrocaDeMesas from "@/components/mesa-foto/TrocaDeMesas";
+import SeletorDeMarca, { useMarcaNaCasca } from "@/components/mesa/SeletorDeMarca";
 
 /**
  * Mesa Ads (/mesa-ads, só equipe: admin, gestor e design): criativos de
@@ -139,6 +140,8 @@ export default function MesaAds() {
   const clientId = clientIdUrl && UUID_VALIDO.test(clientIdUrl) && !naoEstaNaLista ? clientIdUrl : "";
   const onde = useMemo(() => (clientId ? lerOnde(clientId) : null), [clientId]);
   const nomeDoCliente = (clienteNaLista && clienteNaLista.nome) || (onde && onde.nome) || "";
+  // Marca por projeto (só a Acerbi hoje: Acerbi e CME). Cliente com uma marca só: vazio e null, nada muda.
+  const { marcas, marca } = useMarcaNaCasca(clientId, params.get("marca"));
 
   const mudar = (mudancas: Record<string, string | null>, substituir = false) => {
     const next = new URLSearchParams(params);
@@ -153,7 +156,7 @@ export default function MesaAds() {
   const trocarCliente = (id: string) => {
     const o = lerOnde(id);
     setPedidoDePlano(null);
-    mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null });
+    mudar({ client: id, etapa: o.etapa || "oferta", plano: null, criativo: null, marca: null });
   };
 
   /** Pedido de plano vindo de outra etapa: vai ao Plano de teste, que gera uma vez. */
@@ -234,6 +237,8 @@ export default function MesaAds() {
         abrirChaves,
         abrirModelos,
         versaoCarteira,
+        marcas,
+        marca,
       }
     : null;
 
@@ -246,6 +251,10 @@ export default function MesaAds() {
             <span className="mr-2 hidden shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-primary sm:inline">Ads</span>
             <SeletorDeCliente clientes={clientes} valor={clientId} nome={nomeDoCliente} carregando={clientesQuery.isLoading} onEscolher={trocarCliente} />
           </div>
+          {/* Troca rápida de marca: só no cliente com 2 ou mais marcas; fecha o plano e o criativo abertos. */}
+          {clientId && marca && (
+            <SeletorDeMarca marcas={marcas} valor={marca.id} onEscolher={(id) => mudar({ marca: id, plano: null, criativo: null })} className="mr-2" />
+          )}
           {clientId && (
             <nav
               aria-label="Etapas da Mesa Ads"
@@ -267,7 +276,7 @@ export default function MesaAds() {
               ))}
             </nav>
           )}
-          {clientId && <TrocaDeMesas atual="ads" clientId={clientId} />}
+          {clientId && <TrocaDeMesas atual="ads" clientId={clientId} marcaId={marca ? marca.id : null} />}
           {clientId && (
             <CustoCompacto
               saldoUsd={saldoUsd}
@@ -295,7 +304,7 @@ export default function MesaAds() {
 
       {valor && (
         <MesaProvider valor={valor}>
-          <div key={valor.clientId} className="min-w-0">
+          <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className="min-w-0">
             <Suspense fallback={<EsqueletoDaEtapa />}>
               {etapa === "oferta" && <AbaOferta onCriarCriativos={criarPlano} />}
               {etapa === "referencias" && <AbaReferencias />}

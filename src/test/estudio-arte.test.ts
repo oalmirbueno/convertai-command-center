@@ -133,8 +133,9 @@ describe("estudio-arte: ajuste e edicao dentro do gerador sobre a versao atual",
 
   it("o diretor escreve a instrucao antes e o pedido vai para a memoria", () => {
     expect(ajuste.indexOf("await chamarTexto(")).toBeLessThan(ajuste.indexOf("await chamarImagem("));
-    expect(ajuste).toContain('from("agente_memoria").insert(');
-    expect(ajuste).toContain('origem: "ajuste"');
+    // Frente H: pelo cérebro do cliente (área arte, categoria ajuste).
+    expect(ajuste).toContain("await gravarNoCerebro(servico(), {");
+    expect(ajuste).toContain('categoria: "ajuste",');
   });
 
   it("gerar e ajustar so gravam a versao, com a conferencia pendente", () => {
@@ -189,7 +190,8 @@ describe("estudio-arte: conferencia de ortografia e identidade", () => {
     expect(e).toContain("globaisParaALamina(card)");
     expect(corpoDe("globaisParaALamina")).toContain('.from("referencias_globais")');
     expect(corpoDe("globaisParaALamina")).toContain('textSearch("leitura"');
-    expect(e).toContain('notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id)');
+    // Marca por projeto (docs/marcas): a arte publicada é a da marca do trabalho.
+    expect(e).toContain('notas.find((x) => x.r.papel === "identidade")?.r ?? await artePublicadaMaisRecente(t.client_id, marcaDoTrabalho)');
     // Escolha da equipe na tela vale antes do Jev.
     expect(e.indexOf("escolhidasNaTela")).toBeLessThan(e.indexOf("await jevPerguntar("));
     expect(fonte).toContain("const MAX_REFERENCIAS = 2;");

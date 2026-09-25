@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { somarMeses } from "@/lib/mesa/api";
+import { agendaDaMarca, projetosDaMarca } from "@/lib/mesa/marcas";
+import { useMarcaDaMesa } from "./MesaContexto";
 import type { EntregaStatus } from "./useItensDoMes";
 
 /**
@@ -158,9 +161,17 @@ function roteirosDasPropostas(
  *    a ligação post-item.
  */
 export function useAgendaDoMes(clientId: string, mes: string) {
+  // Marca por projeto (Acerbi e CME): só os itens da marca aberta, trocando na hora
+  // (a leitura do banco é a mesma, o filtro é na tela). Sem marca, tudo como antes.
+  const { marca, marcas } = useMarcaDaMesa();
+  const filtro = projetosDaMarca(marca, marcas);
+  const chaveDoFiltro = filtro ? JSON.stringify(filtro) : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const daMarca = useCallback((a: AgendaDoMes) => agendaDaMarca(a, filtro), [chaveDoFiltro]);
   return useQuery({
     queryKey: ["mesa", "agenda-do-mes", clientId, mes],
     enabled: !!clientId,
+    ...(filtro ? { select: daMarca } : {}),
     // Trocar de mês mantém a agenda anterior na tela até a nova chegar.
     placeholderData: keepPreviousData,
     queryFn: async (): Promise<AgendaDoMes> => {

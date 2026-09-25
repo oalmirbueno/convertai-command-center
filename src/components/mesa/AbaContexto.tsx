@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import AgenteDeContexto from "./AgenteDeContexto";
 import ContextoAutomatico from "./ContextoAutomatico";
 import ContextoMarca from "./ContextoMarca";
+import ContextoKitDaMarca from "./ContextoKitDaMarca";
+import { useMarcaDaMesa } from "./MesaContexto";
 import ContextoFontes from "./ContextoFontes";
 import ContextoImagens from "./ContextoImagens";
 import ContextoReferencias from "./ContextoReferencias";
@@ -28,6 +30,9 @@ export type ParteDoContexto = (typeof PARTES)[number]["valor"];
 /** Os editores de cada parte do contexto: uma parte por vez. */
 function DetalhesDoContexto({ parte, onParte }: { parte: ParteDoContexto; onParte: (p: ParteDoContexto) => void }) {
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
+  // Marca por projeto: com outra marca aberta no topo (ex.: CME), a parte Marca edita o kit dela.
+  const { marca } = useMarcaDaMesa();
+  const outraMarca = marca && !marca.principal ? marca : null;
   return (
     <div className="min-w-0 space-y-3">
       <div role="tablist" aria-label="Partes do contexto" className="-mx-1 flex min-w-0 overflow-x-auto px-1 pb-0.5">
@@ -48,7 +53,7 @@ function DetalhesDoContexto({ parte, onParte }: { parte: ParteDoContexto; onPart
       </div>
       <p className="text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{atual.dica}</p>
       <div className="min-w-0">
-        {parte === "marca" && <ContextoMarca />}
+        {parte === "marca" && (outraMarca ? <ContextoKitDaMarca marca={outraMarca} /> : <ContextoMarca />)}
         {parte === "fontes" && <ContextoFontes />}
         {parte === "imagens" && <ContextoImagens />}
         {parte === "referencias" && <ContextoReferencias />}
@@ -101,6 +106,7 @@ export default function AbaContexto() {
   const topo = useTopoFixo();
   const hubs = useHubsAbertos(DETALHES_DE_INICIO);
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
+  const { marca } = useMarcaDaMesa();
 
   const irPara = (p: ParteDoContexto) => {
     setParte(p);
@@ -117,6 +123,16 @@ export default function AbaContexto() {
       style={{ "--topo-da-mesa": `${topo}px` } as CSSProperties}
     >
       <div className="min-w-0 space-y-3">
+        {marca && !marca.principal && (
+          <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-primary/40 bg-primary/5 px-3 py-2 text-[12.5px]" data-aviso-da-marca="">
+            <p className="mr-3 min-w-0 flex-1 [overflow-wrap:anywhere]">
+              Marca <strong>{marca.nome}</strong> aberta: logo, cores, estilo e referências dela ficam em Editar em detalhe, Marca. Documentos, dossiê e o agente ao lado são do cliente.
+            </p>
+            <button type="button" onClick={() => irPara("marca")} className="mt-1 shrink-0 rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground sm:mt-0">
+              Editar o kit da {marca.nome}
+            </button>
+          </div>
+        )}
         <ContextoAutomatico onIrPara={irPara} />
         <div ref={detalhes} className="min-w-0 scroll-mt-28 md:scroll-mt-40">
           <Hub

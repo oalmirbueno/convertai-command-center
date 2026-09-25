@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { padraoPara, saidaPorRaciocinio, TAMANHOS, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "./Custo";
 import { Cronometro } from "./Cronometro";
-import { useMesa } from "./MesaContexto";
+import { useFiltroDaMarca, useMesa } from "./MesaContexto";
+import { projetosDaListaNaMarca } from "@/lib/mesa/marcas";
 import MesEscolhaEditorial from "./MesEscolhaEditorial";
 import { corpoDaEscolha, escolhaLivre, rotuloEditorial, type EscolhaEditorial } from "./MesConhecimento";
 import {
@@ -302,11 +303,13 @@ export default function CampanhaConteudos({
     enabled: !projetoDaProposta && livres.length > 0,
     queryFn: () => lerProjetosDoCliente(clientId),
   });
+  // Marca por projeto (Acerbi e CME): só os projetos da marca aberta; sem marca, todos.
+  const filtroDaMarca = useFiltroDaMarca();
   const candidatos = useMemo(() => {
     const todos = projetos.data || [];
     const social = todos.filter((p) => p.project_type === "social_media");
-    return social.length ? social : todos;
-  }, [projetos.data]);
+    return projetosDaListaNaMarca(social.length ? social : todos, filtroDaMarca);
+  }, [projetos.data, filtroDaMarca]);
   const projeto = projetoDaProposta || projetoEscolhido || (candidatos.length === 1 ? candidatos[0].id : "");
 
   const aplicarProposta = (p: PropostaV4 | null | undefined) => {
