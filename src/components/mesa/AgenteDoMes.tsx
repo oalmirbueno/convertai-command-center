@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarRange, Check, ChevronDown, Eye, Loader2, MessagesSquare, Minus, Plus, RefreshCw, Sparkles, Wand2, X } from "lucide-react";
+import { CalendarRange, Check, ChevronDown, Eye, Loader2, MessagesSquare, Minus, Plus, RefreshCw, Sparkles, Trash2, Undo2, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,8 +29,13 @@ import {
   partesDoPedido,
 } from "./mesaV4Api";
 import {
+  acaoNaAgendaDaMensagem,
   aplicarMudanca,
   chavesDoPlano,
+  desfazerAcaoNaAgenda,
+  ehPedidoNaAgenda,
+  executarAcaoNaAgenda,
+  type AcaoNaAgenda,
   corpoDoPlano,
   esquecerPlano,
   lerPlanosCombinados,
@@ -207,6 +212,117 @@ export function CartaoDaMudanca({ mensagemId, mudanca }: { mensagemId: string; m
           <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11.5px] ${estado === "aplicada" ? "bg-success/15 text-foreground" : "bg-muted text-muted-foreground"}`}>
             {estado === "aplicada" ? <Check className="mr-1 h-3 w-3" /> : <X className="mr-1 h-3 w-3" />}
             {estado === "aplicada" ? "Aplicada na proposta" : "Descartada"}
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ------------------------------------------------------------------ ação na agenda
+
+/**
+ * O que o agente vai fazer na agenda já gravada (apagar ou mudar a data),
+ * peça por peça. Só acontece ao confirmar; depois, dá para desfazer.
+ */
+export function CartaoDaAcaoNaAgenda({ mensagemId, acao }: { mensagemId: string; acao: AcaoNaAgenda }) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
+  const [atual, setAtual] = useState<AcaoNaAgenda>(acao);
+  const estado = atual.desfeita_em ? "desfeita" : atual.executada_em ? "feita" : atual.descartada_em ? "descartada" : "aberta";
+  const total = atual.apagar.length + atual.mudar_data.length;
+  const todos = (atual.resultados || []).concat(atual.mudancas || []);
+  const falhas = todos.filter((r) => !r.ok);
+  const motivoDe = (taskId: string) => {
+    const r = todos.find((x) => x.task_id === taskId);
+    return r && !r.ok ? r.motivo || "Não foi possível." : null;
+  };
+
+  const agir = async (tipo: "confirmar" | "descartar" | "desfazer") => {
+    setFazendo(tipo);
+    try {
+      const data = tipo === "desfazer" ? await desfazerAcaoNaAgenda(mensagemId) : await executarAcaoNaAgenda(mensagemId, tipo === "descartar");
+      if (data && data.anexo) setAtual(acaoNaAgendaDaMensagem([data.anexo]) || atual);
+      if (tipo !== "descartar") {
+        atualizarAgenda(queryClient, clientId);
+        if (tipo === "confirmar") {
+          const partes = [
+            data.apagados ? `${data.apagados} ${data.apagados === 1 ? "peça apagada" : "peças apagadas"}` : "",
+            data.movidos ? `${data.movidos} ${data.movidos === 1 ? "data mudada" : "datas mudadas"}` : "",
+          ].filter(Boolean);
+          toast.success(partes.join(" e ") || "Nada mudou", {
+            description: data.falhas ? `${data.falhas} não ${data.falhas === 1 ? "pôde ser feita" : "puderam ser feitas"}. O motivo está na lista.` : "Dá para desfazer no cartão.",
+          });
+        } else {
+          toast.success("Agenda como estava", { description: `${data.voltaram || 0} ${data.voltaram === 1 ? "peça voltou" : "peças voltaram"}.` });
+        }
+      }
+      void queryClient.invalidateQueries({ queryKey: chaves.agente(clientId) });
+    } catch (e) {
+      avisarErro(e, tipo === "desfazer" ? "Não foi possível desfazer" : tipo === "descartar" ? "Não foi possível cancelar" : "Não foi possível mexer na agenda");
+    } finally {
+      setFazendo(null);
+    }
+  };
+
+  const linha = (i: AcaoNaAgenda["apagar"][number], sinal: "sai" | "muda") => {
+    const motivo = motivoDe(i.task_id);
+    const quando = sinal === "muda" && i.para ? `${i.data ? diaCurto(i.data) : "sem data"} para ${diaCurto(i.para)}` : i.data ? diaCurto(i.data) : "sem data";
+    return (
+      <li key={`${sinal}-${i.task_id}`} className="flex min-w-0 items-start py-1 text-[12px] leading-snug">
+        {sinal === "sai" ? <Trash2 className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" /> : <RefreshCw className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />}
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="font-medium">{i.titulo}</span>
+          <span className="text-muted-foreground"> · {quando}{i.formato ? ` · ${i.formato}` : ""}</span>
+          {motivo && <span className="block text-[11.5px] text-destructive">{motivo}</span>}
+        </span>
+      </li>
+    );
+  };
+
+  return (
+    <section className="mr-6 min-w-0 rounded-2xl border border-destructive/30 bg-card p-3.5" data-acao-agenda={estado}>
+      <p className="flex items-center text-[12px] font-semibold">
+        <CalendarRange className="mr-1.5 h-3.5 w-3.5 text-destructive" />
+        Mudança na agenda gravada · {total} {total === 1 ? "peça" : "peças"}
+      </p>
+      {atual.resumo && <p className="mt-1 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto rounded-lg border border-border bg-background px-2.5 py-1">
+        {atual.apagar.map((i) => linha(i, "sai"))}
+        {atual.mudar_data.map((i) => linha(i, "muda"))}
+      </ul>
+      <div className="mt-2.5 flex flex-wrap items-center">
+        {estado === "aberta" && (
+          <>
+            <Button type="button" size="sm" variant="destructive" className="mb-1 mr-1.5 h-8" onClick={() => void agir("confirmar")} disabled={!!fazendo}>
+              {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+              {atual.apagar.length && !atual.mudar_data.length ? `Confirmar e apagar ${atual.apagar.length}` : "Confirmar"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" onClick={() => void agir("descartar")} disabled={!!fazendo}>
+              {fazendo === "descartar" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              Cancelar
+            </Button>
+            <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Sem custo. A arte já feita fica guardada no Estúdio, e dá para desfazer.</span>
+          </>
+        )}
+        {estado === "feita" && (
+          <>
+            <span className="mb-1 mr-2 inline-flex items-center rounded-full bg-success/15 px-2.5 py-1 text-[11.5px] text-foreground">
+              <Check className="mr-1 h-3 w-3" />
+              Feito{falhas.length ? ` · ${falhas.length} não ${falhas.length === 1 ? "pôde" : "puderam"}` : ""}
+            </span>
+            <Button type="button" size="sm" variant="outline" className="mb-1 h-8" onClick={() => void agir("desfazer")} disabled={!!fazendo}>
+              {fazendo === "desfazer" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Undo2 className="mr-1.5 h-3.5 w-3.5" />}
+              Desfazer
+            </Button>
+          </>
+        )}
+        {(estado === "descartada" || estado === "desfeita") && (
+          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-[11.5px] text-muted-foreground">
+            <X className="mr-1 h-3 w-3" />
+            {estado === "desfeita" ? "Desfeito: a agenda voltou como estava" : "Cancelado: nada mudou"}
           </span>
         )}
       </div>
@@ -416,9 +532,12 @@ export default function AgenteDoMes({
     setEnvio({ mensagem, desde: Date.now() });
     setTexto("");
     try {
+      // Apagar, limpar ou mudar a data de peças já gravadas: quem faz é o agente
+      // que planeja o mês (ele lê a agenda e prepara a lista para confirmar).
+      const naAgenda = !ajustando && !planejando && ehPedidoNaAgenda(mensagem);
       const data = ajustando
         ? await ajustarProposta(ajustando.id, mensagem)
-        : planejando
+        : planejando || naAgenda
           ? await planejarMes({ clientId, mensagem, mes, anexos: caminhos })
           : await pedidoLivre({ clientId, mensagem, anexos: caminhos, campanhaId: campanhaEscolhida ? campanhaEscolhida.id : null });
       // A resposta entra na conversa antes de o "Preparando" sair da tela.
@@ -557,6 +676,7 @@ export default function AgenteDoMes({
               const imagens = imagensDaMensagem(m);
               const idsDaMsg = propostasDaMensagem(m);
               const mudanca = m.papel === "agente" ? mudancaDaMensagem(m.anexos) : null;
+              const acaoNaAgenda = m.papel === "agente" ? acaoNaAgendaDaMensagem(m.anexos) : null;
               const mesesDoPlano = m.papel === "agente" ? planosDaMensagem(m.anexos) : [];
               return (
                 <div key={m.id} className="min-w-0 space-y-2">
@@ -576,6 +696,7 @@ export default function AgenteDoMes({
                     </div>
                   )}
                   {mudanca && <CartaoDaMudanca mensagemId={m.id} mudanca={mudanca} />}
+                  {acaoNaAgenda && <CartaoDaAcaoNaAgenda mensagemId={m.id} acao={acaoNaAgenda} />}
                   {imagens.length > 0 && (
                     <div className="ml-10 flex flex-wrap justify-end">
                       {imagens.map((c) => (

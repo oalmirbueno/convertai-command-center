@@ -83,6 +83,7 @@ import {
   resolverMarca,
 } from "../_shared/marca.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import { blocoDaAgendaParaAcoes, normalizarAcoesNaAgenda, pecasComApelido, REGRA_DAS_ACOES_NA_AGENDA, type AcaoNaAgenda, type PecaComApelido, type PecaDaAgenda } from "./acoes-agenda.ts";
 import {
   AGENTE_ESCOLHE,
   arcoDaCampanha,
@@ -4310,6 +4311,14 @@ export const ESQUEMA_PLANEJAMENTO = {
       }),
       type: ["object", "null"],
     },
+    acoes_na_agenda: {
+      ...obj({
+        resumo: S("string"),
+        apagar: { type: "array", items: S("string") },
+        mudar_data: { type: "array", items: obj({ ref: S("string"), data: S("string") }) },
+      }),
+      type: ["object", "null"],
+    },
   }),
 };
 
@@ -4449,6 +4458,28 @@ async function contextoDoPlanejamento(servico: SupabaseClient, clientId: string,
       : null,
     agenda_do_mes_e_dos_3_seguintes: Object.keys(porMes).sort().map((m) => ({ mes: m, ...porMes[m] })),
   };
+}
+
+/**
+ * Peças da agenda (arte e vídeo) da marca aberta, do começo do mês até o fim
+ * do 3º mês seguinte, com apelido para o agente (acoes-agenda.ts).
+ */
+async function pecasDaAgendaParaAcoes(servico: SupabaseClient, clientId: string, marca: MarcaDoCliente | null, mes: string): Promise<PecaComApelido[]> {
+  const inicio = `${mes}-01`;
+  const ate = fimDoMes(somarMesesAoMes(mes, 3));
+  const { data: projetos } = await servico.from("projects").select("id").eq("client_id", clientId).is("deleted_at", null).limit(200);
+  const ids = await projetosDoClienteNaMarca(servico, clientId, marca, ((projetos ?? []) as Array<{ id: string }>).map((p) => p.id));
+  if (!ids.length) return [];
+  const { data } = await servico
+    .from("tasks")
+    .select("id, title, due_date, delivery_type, status")
+    .in("project_id", ids)
+    .is("deleted_at", null)
+    .gte("due_date", inicio)
+    .lte("due_date", ate)
+    .order("due_date")
+    .limit(400);
+  return pecasComApelido((data ?? []) as PecaDaAgenda[]);
 }
 
 /** A proposta pedida ou a aberta mais recente do estrategista que começa neste mês. */
@@ -4636,11 +4667,12 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
   const proposta = await propostaDoPlanejamento(servico, clientId, corpo.proposta_id, inicio, fim);
   const editavel = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
 
-  const [ctx, extra, imagens, conversaId] = await Promise.all([
+  const [ctx, extra, imagens, conversaId, pecasDaAgenda] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim, marcaDaChamada(servico, clientId, corpo)),
     contextoDoPlanejamento(servico, clientId, mes),
     baixarAnexos(servico, clientId, corpo.anexos),
     conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+    marcaDaChamada(servico, clientId, corpo).then((m) => pecasDaAgendaParaAcoes(servico, clientId, m, mes)).catch(() => [] as PecaComApelido[]),
   ]);
   const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio ?? "medium");
 
@@ -4670,7 +4702,7 @@ async function planejarMes(servico: SupabaseClient, chamador: Chamador, corpo: R
 
 CONTEXTO DO PLANEJAMENTO (JSON, lido do painel agora; vazio significa que o dado não existe):
 ${JSON.stringify(extra)}${blocoDoPlano(ctx, inicio)}
-${blocoDaProposta}
+${blocoDaProposta}${blocoDaAgendaParaAcoes(pecasDaAgenda)}
 MÊS EM CONVERSA: ${mes} (de ${inicio} a ${fim}). Hoje é ${hojeSaoPaulo()}.
 MENSAGEM DA EQUIPE: ${mensagem}
 ${imagens.imagens.length ? `\nA equipe anexou ${imagens.imagens.length} imagem(ns) (prints de métricas, referências ou fotos). Use o conteúdo delas com fidelidade.\n` : ""}
@@ -4685,6 +4717,7 @@ Devolva:
 - mudancas: ${editavel
     ? `só quando a equipe pedir para mudar a proposta do mês (trocar, tirar ou acrescentar temas ou conteúdos, mudar datas). resumo: o que muda, em 1 a 3 frases. temas: só os temas novos ou alterados (mantenha o id do alterado; tema novo recebe id novo). temas_removidos: ids dos temas que saem. itens: só os conteúdos novos ou alterados, completos (mantenha o tema_id do alterado). itens_removidos: tema_id dos conteúdos que saem. Conteúdo com "gravado": true já está na agenda e não muda aqui. A equipe vê a mudança antes de aplicar. Sem pedido de mudança, null.`
     : "sempre null (não há proposta aberta para este mês; para gerar o mês, a equipe usa o gerador de meses, que segue o plano combinado)."}
+${REGRA_DAS_ACOES_NA_AGENDA}
 Datas só de segunda a sexta entre ${inicio} e ${fim}. Formato só carrossel ou estatico.
 ${editavel ? REGRAS_DOS_ITENS : ""}`;
 
@@ -4734,9 +4767,13 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     }
   }
 
+  // Apagar ou mudar de data peças já gravadas: só a lista; a equipe confirma (executar_acao_agenda).
+  const acaoNaAgenda = normalizarAcoesNaAgenda(r.acoes_na_agenda, pecasDaAgenda);
+
   const resposta = texto(r.resposta, 6000) || "Anotado.";
   const anexosDaResposta: Record<string, unknown>[] = planos.map((p) => ({ tipo: "plano", mes: p.mes }));
   if (mudanca) anexosDaResposta.push(mudanca);
+  if (acaoNaAgenda) anexosDaResposta.push({ ...acaoNaAgenda, mes });
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem, anexos: imagens.caminhos.map((c) => ({ caminho: c })) },
   ]);
@@ -4761,6 +4798,7 @@ ${editavel ? REGRAS_DOS_ITENS : ""}`;
     resposta,
     planos,
     mudanca,
+    acao_agenda: acaoNaAgenda ? { ...acaoNaAgenda, mes } : null,
     mensagem_id: (msgAgente as { id: string }).id,
     conversa_id: conversaId,
     proposta_id: proposta?.id ?? null,
@@ -5004,7 +5042,130 @@ async function restaurarItemDaAgenda(servico: SupabaseClient, chamador: Chamador
   return json({ task_id: t.id, titulo: t.title });
 }
 
+/** Anexo acao_agenda de uma mensagem do agente do mês, com o acesso conferido. */
+async function acaoDaMensagem(servico: SupabaseClient, chamador: Chamador, mensagemId: unknown) {
+  const id = String(mensagemId ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: msg, error } = await servico.from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(500, "mensagem_indisponivel", "Não foi possível ler a mensagem do agente.");
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  const m = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
+  await exigirAcessoAoCliente(chamador, m.client_id);
+  const anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+  const i = anexos.findIndex((a) => a && a.tipo === "acao_agenda");
+  if (i < 0) throw new ErroHttp(404, "acao_inexistente", "Esta mensagem não tem ação na agenda.");
+  const acao = anexos[i] as AcaoNaAgenda & Record<string, unknown>;
+  const gravar = async (novo: Record<string, unknown>) => {
+    const lista = anexos.slice();
+    lista[i] = novo;
+    await servico.from("agente_mensagens").update({ anexos: lista }).eq("id", m.id).eq("client_id", m.client_id);
+    return novo;
+  };
+  return { m, acao, gravar };
+}
+
+type ResultadoDaAcao = { task_id: string; titulo: string; ok: boolean; motivo?: string; memoria_id?: string | null; de?: string | null; para?: string };
+
+/**
+ * executar_acao_agenda { mensagem_id, descartar? }: o botão de confirmar da
+ * equipe. Apaga (arquivar_item_agenda, com as mesmas travas: pedido do
+ * cliente, publicação agendada ou no ar, arte aprovada) e muda datas. Arte já
+ * feita no Estúdio não trava: a lista que a equipe confirmou já mostrava a
+ * peça, e a arte fica guardada no Estúdio. Cada peça responde por si; o que
+ * não pôde sair volta com o motivo. Dá para desfazer (desfazer_acao_agenda).
+ */
+async function executarAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, acao, gravar } = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
+  if (acao.executada_em) throw new ErroHttp(409, "acao_ja_feita", "Esta ação já foi feita.");
+  if (acao.descartada_em) throw new ErroHttp(409, "acao_descartada", "Esta ação foi descartada. Peça de novo ao agente.");
+  if (corpo.descartar === true) return json({ anexo: await gravar({ ...acao, descartada_em: new Date().toISOString() }) });
+
+  const resultados: ResultadoDaAcao[] = [];
+  const apagar = Array.isArray(acao.apagar) ? acao.apagar : [];
+  // Em lotes de 5: cada apagar faz de 3 a 5 leituras curtas.
+  for (let k = 0; k < apagar.length; k += 5) {
+    const lote = apagar.slice(k, k + 5);
+    const feitos = await Promise.all(lote.map(async (it): Promise<ResultadoDaAcao> => {
+      try {
+        const r = await arquivarItemDaAgenda(servico, chamador, { client_id: m.client_id, task_id: it.task_id, confirmar_arte: true });
+        const j = (await r.json()) as { memoria_id?: string | null; ja_estava_apagado?: boolean };
+        return { task_id: it.task_id, titulo: it.titulo, ok: true, memoria_id: j.memoria_id ?? null, motivo: j.ja_estava_apagado ? "já estava fora da agenda" : undefined };
+      } catch (e) {
+        return { task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível apagar." };
+      }
+    }));
+    resultados.push(...feitos);
+  }
+
+  const mudancas: ResultadoDaAcao[] = [];
+  for (const it of Array.isArray(acao.mudar_data) ? acao.mudar_data : []) {
+    try {
+      const t = await tarefaDoCliente(servico, it.task_id, m.client_id);
+      if (t.deleted_at) throw new Error("Esta peça não está mais na agenda.");
+      const { data: vinculo } = await servico.from("editorial_post_internal").select("post_id").eq("task_id", t.id).maybeSingle();
+      const postId = (vinculo as { post_id?: string } | null)?.post_id ?? null;
+      if (postId) {
+        const { data: pubs } = await servico.from("editorial_publications").select("status").eq("post_id", postId).in("status", ["scheduled", "published"]).limit(1);
+        if ((pubs ?? []).length) throw new Error("A publicação desta peça já está agendada ou no ar. Mude pela Agenda.");
+      }
+      const { error } = await servico.from("tasks").update({ due_date: it.para }).eq("id", t.id).is("deleted_at", null);
+      if (error) throw new Error("Não foi possível mudar a data. Tente de novo.");
+      mudancas.push({ task_id: t.id, titulo: it.titulo, ok: true, de: t.due_date, para: it.para });
+    } catch (e) {
+      mudancas.push({ task_id: it.task_id, titulo: it.titulo, ok: false, motivo: e instanceof Error ? e.message : "Não foi possível mudar a data.", para: it.para });
+    }
+  }
+
+  const apagados = resultados.filter((r) => r.ok).length;
+  const movidos = mudancas.filter((r) => r.ok).length;
+  const falhas = resultados.length + mudancas.length - apagados - movidos;
+  const anexo = await gravar({ ...acao, executada_em: new Date().toISOString(), executada_por: chamador.userId, resultados, mudancas });
+  const partes: string[] = [];
+  if (apagados) partes.push(`${apagados} ${apagados === 1 ? "peça apagada" : "peças apagadas"}`);
+  if (movidos) partes.push(`${movidos} ${movidos === 1 ? "data mudada" : "datas mudadas"}`);
+  if (falhas) partes.push(`${falhas} não ${falhas === 1 ? "pôde ser feita" : "puderam ser feitas"} (motivo na lista)`);
+  await registrarMensagens(servico, m.conversa_id, m.client_id, [
+    { papel: "sistema", conteudo: `Agenda: ${partes.join(", ") || "nada mudou"}. Dá para desfazer.` },
+  ]);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_acao_na_agenda", origin: "mesa:agente-calendario",
+    keyId: `${PRINCIPAL_MESA}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { client_id: m.client_id, mensagem_id: m.id, apagar: apagar.length, mudar_data: mudancas.length },
+    success: falhas === 0, statusCode: 200, durationMs: 0, resultRef: m.id,
+  });
+  return json({ anexo, apagados, movidos, falhas });
+}
+
+/** desfazer_acao_agenda { mensagem_id }: devolve o que foi apagado e as datas de antes. */
+async function desfazerAcaoNaAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, acao, gravar } = await acaoDaMensagem(servico, chamador, corpo.mensagem_id);
+  if (!acao.executada_em) throw new ErroHttp(409, "acao_nao_feita", "Esta ação ainda não foi feita.");
+  if (acao.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Esta ação já foi desfeita.");
+  const resultados = (Array.isArray(acao.resultados) ? acao.resultados : []) as ResultadoDaAcao[];
+  const mudancas = (Array.isArray(acao.mudancas) ? acao.mudancas : []) as ResultadoDaAcao[];
+  let voltaram = 0;
+  for (const r of resultados.filter((x) => x.ok && !x.motivo)) {
+    try {
+      await restaurarItemDaAgenda(servico, chamador, { client_id: m.client_id, task_id: r.task_id, memoria_id: r.memoria_id });
+      voltaram++;
+    } catch {
+      // segue com as outras
+    }
+  }
+  for (const r of mudancas.filter((x) => x.ok && x.de)) {
+    const { error } = await servico.from("tasks").update({ due_date: r.de }).eq("id", r.task_id).eq("due_date", r.para as string);
+    if (!error) voltaram++;
+  }
+  const anexo = await gravar({ ...acao, desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId });
+  await registrarMensagens(servico, m.conversa_id, m.client_id, [
+    { papel: "sistema", conteudo: `Agenda: ação desfeita (${voltaram} ${voltaram === 1 ? "peça voltou" : "peças voltaram"} como estava).` },
+  ]);
+  return json({ anexo, voltaram });
+}
+
 const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
+  executar_acao_agenda: executarAcaoNaAgenda,
+  desfazer_acao_agenda: desfazerAcaoNaAgenda,
   planejar_mes: planejarMes,
   aplicar_mudanca: aplicarMudanca,
   tirar_item: tirarItem,

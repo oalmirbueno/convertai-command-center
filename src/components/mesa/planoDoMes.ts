@@ -223,3 +223,71 @@ export function mesesAPartirDe(mes: string, n: number): string[] {
   }
   return saida;
 }
+
+// ------------------------------------------------------------------ ações na agenda
+
+/**
+ * Peças que o agente vai apagar ou mudar de data (anexo "acao_agenda" de
+ * planejar_mes). Nada muda até a equipe confirmar (executar_acao_agenda), e
+ * dá para desfazer (desfazer_acao_agenda).
+ */
+export interface ItemDaAcaoNaAgenda {
+  task_id: string;
+  titulo: string;
+  data: string | null;
+  formato: string;
+  para?: string;
+}
+
+export interface ResultadoDaAcaoNaAgenda {
+  task_id: string;
+  titulo: string;
+  ok: boolean;
+  motivo?: string;
+  de?: string | null;
+  para?: string;
+}
+
+export interface AcaoNaAgenda {
+  tipo: "acao_agenda";
+  resumo: string;
+  mes?: string;
+  apagar: ItemDaAcaoNaAgenda[];
+  mudar_data: ItemDaAcaoNaAgenda[];
+  ignorados?: string[];
+  executada_em?: string;
+  descartada_em?: string;
+  desfeita_em?: string;
+  resultados?: ResultadoDaAcaoNaAgenda[];
+  mudancas?: ResultadoDaAcaoNaAgenda[];
+}
+
+/** Anexo de ação na agenda numa mensagem do agente, ou null. */
+export function acaoNaAgendaDaMensagem(anexos: unknown[] | null | undefined): AcaoNaAgenda | null {
+  for (const a of anexos || []) {
+    const o = a && typeof a === "object" ? (a as Record<string, unknown>) : null;
+    if (o && o.tipo === "acao_agenda") {
+      return {
+        ...(o as unknown as AcaoNaAgenda),
+        apagar: Array.isArray(o.apagar) ? (o.apagar as ItemDaAcaoNaAgenda[]) : [],
+        mudar_data: Array.isArray(o.mudar_data) ? (o.mudar_data as ItemDaAcaoNaAgenda[]) : [],
+      };
+    }
+  }
+  return null;
+}
+
+export const executarAcaoNaAgenda = (mensagemId: string, descartar = false) =>
+  chamarFuncao<any>("agente-calendario", descartar ? { acao: "executar_acao_agenda", mensagem_id: mensagemId, descartar: true } : { acao: "executar_acao_agenda", mensagem_id: mensagemId });
+
+export const desfazerAcaoNaAgenda = (mensagemId: string) =>
+  chamarFuncao<any>("agente-calendario", { acao: "desfazer_acao_agenda", mensagem_id: mensagemId });
+
+/**
+ * Pedido de mexer na agenda já gravada (apagar, limpar, remover, excluir,
+ * mudar a data, mover). No modo "Criar conteúdos" ele vai para o agente que
+ * planeja o mês, que é quem lê a agenda e prepara a lista para confirmar.
+ */
+const PEDIDO_DE_AGENDA = /(^|[^a-zà-ú])(apag|limp[ae]|remov|exclu|delet|mud[ae]\S* (a |as )?datas?|mov[ae] )/i;
+
+export const ehPedidoNaAgenda = (mensagem: string) => PEDIDO_DE_AGENDA.test(String(mensagem || ""));
