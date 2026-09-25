@@ -804,7 +804,7 @@ Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexual
     const kits = ((kitsQ.data as { id: string; nome: string; variante: string | null; tipo: string; invariantes: string[] | null }[] | null) ?? []).filter((k) => k.tipo !== "pessoa");
     // Clone de pessoa real (migration 04) não se mistura com persona sintética: fica fora da lista do agente.
     const personas = ((personasQ.data as { id: string; nome: string; status: string; origem?: string | null }[] | null) ?? [])
-      .filter((p) => p.origem !== "clone" && personaUsavel(p.status).ok);
+      .filter((p) => p.origem !== "clone_de_foto_real" && personaUsavel(p.status).ok);
     const nomeDoNo = (n: NoCanvas) => {
       if (n.tipo === "produto") return kits.find((k) => k.id === n.dados.kit_id)?.nome || limpo(n.dados.titulo, 80) || "produto";
       if (n.tipo === "modelo") return personas.find((p) => p.id === n.dados.modelo_id)?.nome ?? (limpo(n.dados.titulo, 80) || "pessoa real");
