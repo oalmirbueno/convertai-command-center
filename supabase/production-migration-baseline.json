@@ -1137,6 +1137,22 @@
       "remote_name": "cliente_marcas_acerbi_cme",
       "remote_statements_sha256": "35a447d758314b93ef449569bdc399564623f566445ff3f04f964d85be0efeb4",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925183539",
+      "path": "supabase/migrations/20260925183539_ia_modelos_4k_so_nos_preview.sql",
+      "local_sha256": "bb0cbd0a26aded078953d33e8af808ae5a443b9551943b1855943ac70999b8b7",
+      "remote_name": "ia_modelos_4k_so_nos_preview",
+      "remote_statements_sha256": "cb031f783ca28010d5d26c2c6e8f41138167ea811274239545ee6dfbdc5468a0",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925195654",
+      "path": "supabase/migrations/20260925195654_mesa_foto_book.sql",
+      "local_sha256": "d6ea7e2b7e8d74da55cdab2f76f221ecae8ef27d5c7069fe1d2a7e46098c4269",
+      "remote_name": "mesa_foto_book",
+      "remote_statements_sha256": "8a2adb78e6fada8ec25f9b09e480f4b3b90d5950dfa025a6781ffe392d3cf3e8",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
