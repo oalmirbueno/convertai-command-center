@@ -732,11 +732,14 @@ export async function logoLimpa(bytes: Uint8Array, opcoes: { aparar?: boolean } 
   const l = fonte.width > 512 || fonte.height > 512 ? fonte.clone().contain(512, 512) : fonte.clone();
   const W = l.width, H = l.height, b = l.bitmap;
   // Cor do fundo pela borda: a média dos pixels opacos, claros e sem cor da moldura.
-  let sr = 0, sg = 0, sb = 0, nClaros = 0, nBorda = 0;
+  let sr = 0, sg = 0, sb = 0, nClaros = 0, nBorda = 0, nTransparentes = 0;
   const olharBorda = (p: number) => {
     const i = p * 4;
     nBorda++;
-    if (b[i + 3] < 16) return;
+    if (b[i + 3] < 16) {
+      nTransparentes++;
+      return;
+    }
     const mx = Math.max(b[i], b[i + 1], b[i + 2]), mn = Math.min(b[i], b[i + 1], b[i + 2]);
     if (mn >= 180 && mx - mn <= 30) {
       sr += b[i];
@@ -752,6 +755,13 @@ export async function logoLimpa(bytes: Uint8Array, opcoes: { aparar?: boolean } 
   for (let y = 1; y < H - 1; y++) {
     olharBorda(y * W);
     olharBorda(y * W + W - 1);
+  }
+  // PNG já transparente na borda (dono, 26/09: a logo saía só "iq"): o fundo é o
+  // alfa, e o branco é desenho. O preenchimento a partir da borda atravessava a
+  // transparência e apagava as letras brancas encostadas nela ("Aceler").
+  if (nTransparentes >= nBorda * 0.5) {
+    if (fonte === img && l.width === img.width && l.height === img.height) return bytes;
+    return await l.encode(1);
   }
   const temCorDeFundo = nClaros > 0 && nClaros >= nBorda * 0.35;
   const cor = temCorDeFundo ? [sr / nClaros, sg / nClaros, sb / nClaros] : [255, 255, 255];
