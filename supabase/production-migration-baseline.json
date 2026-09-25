@@ -1121,6 +1121,22 @@
       "remote_name": "mesa_foto_clones",
       "remote_statements_sha256": "417f355368bca8892d3ed73b14abaa56d7fa2019b97993a02079d6501f7cd96b",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925174450",
+      "path": "supabase/migrations/20260925174450_cliente_marcas_por_projeto.sql",
+      "local_sha256": "bc1a1394d76519ae46d235fd3b6aa89870972d20e4a342c4bdeb3837ec2429d6",
+      "remote_name": "cliente_marcas_por_projeto",
+      "remote_statements_sha256": "13955f0350b245a46821efc25b94d000bce3ab1c48dab5d3107f8581401be4da",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925174500",
+      "path": "supabase/migrations/20260925174500_cliente_marcas_acerbi_cme.sql",
+      "local_sha256": "a2eb92e1f3b614b3e0b9606a21c88168eb264e7d8f7538fda1212d7a2e2c67f8",
+      "remote_name": "cliente_marcas_acerbi_cme",
+      "remote_statements_sha256": "35a447d758314b93ef449569bdc399564623f566445ff3f04f964d85be0efeb4",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
