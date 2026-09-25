@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Check, Copy, Download, ExternalLink, ImageIcon, Loader2, Search, Sparkles, Star, ZoomIn } from "lucide-react";
 import { toast } from "sonner";
@@ -8,19 +8,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Ampliar, type ImagemAmpliavel } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
-import { padraoPara } from "@/lib/mesa/api";
+import { padraoPara, usd } from "@/lib/mesa/api";
 import { Cartao, Moldura, Pilulas, Vazio } from "./Comuns";
 import {
   buscarReferencias,
   CATEGORIAS_DA_BIBLIOTECA,
   chaveDaBiblioteca,
+  estimarExemplosDaBiblioteca,
   gerarExemploDaBiblioteca,
+  gerarProximoExemplo,
+  limparExemplosDaBiblioteca,
   importarReferencia,
   partesDoExemplo,
   rotuloDaCategoriaDaBiblioteca,
   salvarNaBiblioteca,
   useBiblioteca,
+  type EstimativaDosExemplos,
   type ItemDaBiblioteca,
+  type LimpezaDaBiblioteca,
   type ReferenciaEncontrada,
 } from "./fotoApi";
 
@@ -421,7 +426,7 @@ export function filtrarBiblioteca(itens: ItemDaBiblioteca[], tipo: TipoFiltro, c
 }
 
 export default function EtapaBiblioteca() {
-  const { clientId } = useMesa();
+  const { clientId, isAdmin } = useMesa();
   const biblioteca = useBiblioteca(clientId);
   const { salvar, salvando } = useSalvarComoMeu();
   const [tipo, setTipo] = useState<TipoFiltro>("todos");
@@ -501,8 +506,201 @@ export default function EtapaBiblioteca() {
         </section>
       )}
 
+      {isAdmin && <ExemplosDaBiblioteca />}
       <BuscaPublica categoriaInicial={categoria} />
       <Ampliar imagens={ampliada ? [ampliavelDoItem(ampliada)] : []} indice={ampliada ? 0 : null} onFechar={() => setAmpliada(null)} />
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ exemplos pelo próprio prompt (admin, 25/09)
+
+/**
+ * Pedido do dono (25/09): "as fotos da biblioteca de prompt não têm nada a ver
+ * com o prompt". Os exemplos vieram do Openverse por busca de palavras. Aqui
+ * o admin limpa esses exemplos (todos ou só os que o Jev diz que não batem) e
+ * gera o exemplo de cada prompt com o PRÓPRIO prompt, uma imagem por chamada,
+ * com o total à vista antes e a carteira do cliente aberto.
+ */
+export function ExemplosDaBiblioteca() {
+  const { clientId, clientName, atualizarCusto } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const [previa, setPrevia] = useState<LimpezaDaBiblioteca | null>(null);
+  const [modo, setModo] = useState<"openverse" | "nao_batem">("openverse");
+  const [ocupado, setOcupado] = useState<string | null>(null);
+  const [estimativa, setEstimativa] = useState<EstimativaDosExemplos | null>(null);
+  const [andamento, setAndamento] = useState<{ feitos: number; total: number; custo: number } | null>(null);
+  const parar = useRef(false);
+  const atualizar = () => void queryClient.invalidateQueries({ queryKey: chaveDaBiblioteca(clientId) });
+
+  const verPrevia = async (m: "openverse" | "nao_batem") => {
+    setOcupado("previa");
+    setModo(m);
+    try {
+      const r = await limparExemplosDaBiblioteca({ modo: m, confirmar: false, clientId });
+      setPrevia(r);
+      if (r.custo_usd) atualizarCusto();
+    } catch (e) {
+      avisarErro(e, "Não deu para conferir os exemplos");
+    } finally {
+      setOcupado(null);
+    }
+  };
+  const limpar = async (m: "openverse" | "nao_batem") => {
+    setOcupado("limpar");
+    try {
+      const r = await limparExemplosDaBiblioteca({ modo: m, confirmar: true, clientId });
+      toast.success(`${r.limpos} ${r.limpos === 1 ? "exemplo limpo" : "exemplos limpos"}`, { description: "Os prompts ficaram sem foto até gerar o exemplo pelo próprio prompt." });
+      setPrevia(null);
+      setEstimativa(null);
+      atualizar();
+      if (r.custo_usd) atualizarCusto();
+    } catch (e) {
+      avisarErro(e, "Exemplos não limpos");
+    } finally {
+      setOcupado(null);
+    }
+  };
+  const calcular = async () => {
+    setOcupado("estimar");
+    try {
+      setEstimativa(await estimarExemplosDaBiblioteca(clientId));
+    } catch (e) {
+      avisarErro(e, "Custo não calculado");
+    } finally {
+      setOcupado(null);
+    }
+  };
+  const gerarTodos = async () => {
+    if (!estimativa || !estimativa.pendentes) return {};
+    parar.current = false;
+    let feitos = 0;
+    let custo = 0;
+    const total = estimativa.pendentes;
+    setAndamento({ feitos, total, custo });
+    try {
+      for (let volta = 0; volta < total + 2 && !parar.current; volta++) {
+        const r = await gerarProximoExemplo(clientId);
+        if (!r.item && r.acabou) break;
+        feitos++;
+        custo += r.custo_usd;
+        setAndamento({ feitos, total, custo });
+        if (r.acabou) break;
+      }
+      toast.success(`${feitos} ${feitos === 1 ? "exemplo gerado" : "exemplos gerados"}`, { description: `Custo real: ${usd(custo)}.` });
+    } catch (e) {
+      avisarErro(e, "A geração parou");
+    } finally {
+      setAndamento(null);
+      setEstimativa(null);
+      atualizar();
+      atualizarCusto();
+    }
+    return {};
+  };
+
+  return (
+    <Cartao
+      titulo="Exemplos dos prompts (admin)"
+      dica="As fotos do Openverse vieram por busca de palavras e não mostram a direção do prompt. Limpe e gere o exemplo de cada prompt com o próprio prompt."
+    >
+      <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="min-w-0 space-y-2" data-limpar-openverse="">
+          <p className="text-[12px] font-medium">1. Limpar os exemplos do Openverse</p>
+          <div className="flex min-w-0 flex-wrap items-center">
+            <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" disabled={!!ocupado} onClick={() => void verPrevia("openverse")}>
+              {ocupado === "previa" && modo === "openverse" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />} Ver quantos são
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mb-1.5 mr-1.5 h-8 text-[12px]"
+              disabled={!!ocupado}
+              onClick={() => void verPrevia("nao_batem")}
+              title="O Jev compara o título e a busca da foto com o prompt. Cobra centavos no cliente aberto."
+            >
+              {ocupado === "previa" && modo === "nao_batem" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />} Conferir quais não batem
+            </Button>
+          </div>
+          {previa && (
+            <div className="rounded-lg border border-border bg-background p-2 text-[12px]" data-previa-da-limpeza="">
+              <p>
+                {previa.encontrados} {previa.encontrados === 1 ? "exemplo veio" : "exemplos vieram"} do Openverse
+                {modo === "nao_batem" ? `; ${previa.a_limpar} não ${previa.a_limpar === 1 ? "bate" : "batem"} com o prompt` : ""}.
+              </p>
+              {modo === "nao_batem" && previa.itens.length > 0 && (
+                <ul className="mt-1 max-h-40 overflow-y-auto text-[11.5px] text-muted-foreground">
+                  {previa.itens.slice(0, 60).map((i) => (
+                    <li key={i.id} className="truncate">
+                      {i.titulo}
+                      {i.bate != null ? ` (bate ${Math.round(i.bate * 100)}%)` : " (não conferido)"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {previa.aviso && <p className="mt-1 text-warning">{previa.aviso}</p>}
+              <div className="mt-2 flex flex-wrap">
+                {previa.encontrados > 0 && (
+                  <Button type="button" size="sm" className="mb-1 mr-1.5 h-8 text-[12px]" disabled={!!ocupado} onClick={() => void limpar("openverse")}>
+                    Limpar todos do Openverse ({previa.encontrados})
+                  </Button>
+                )}
+                {modo === "nao_batem" && previa.a_limpar > 0 && (
+                  <Button type="button" size="sm" variant="outline" className="mb-1 h-8 text-[12px]" disabled={!!ocupado} onClick={() => void limpar("nao_batem")}>
+                    Limpar só os que não batem ({previa.a_limpar})
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 space-y-2" data-gerar-exemplos="">
+          <p className="text-[12px] font-medium">2. Gerar o exemplo com o próprio prompt</p>
+          <p className="text-[11.5px] leading-snug text-muted-foreground">
+            Uma imagem por prompt, no gerador mais barato de boa qualidade. Cobra na carteira de {clientName || "o cliente aberto"}.
+          </p>
+          {!estimativa ? (
+            <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" disabled={!!ocupado} onClick={() => void calcular()}>
+              {ocupado === "estimar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null} Calcular o custo total
+            </Button>
+          ) : (
+            <div className="rounded-lg border border-border bg-background p-2 text-[12px]" data-estimativa-dos-exemplos="">
+              <p>
+                {estimativa.pendentes} {estimativa.pendentes === 1 ? "prompt sem exemplo" : "prompts sem exemplo"}: ~{usd(estimativa.total_usd || 0)} no total
+                {estimativa.por_imagem_usd != null ? ` (~${usd(estimativa.por_imagem_usd)} cada)` : ""}, com {estimativa.rotulo || estimativa.modelo_imagem_id}.
+              </p>
+              {andamento ? (
+                <div className="mt-2 flex flex-wrap items-center">
+                  <span className="mr-2 inline-flex items-center">
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> {andamento.feitos} de {andamento.total} · {usd(andamento.custo)}
+                  </span>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 text-[11.5px]" onClick={() => (parar.current = true)}>
+                    Parar
+                  </Button>
+                </div>
+              ) : (
+                estimativa.pendentes > 0 && (
+                  <BotaoComCusto
+                    rotulo={
+                      <>
+                        <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Gerar os {estimativa.pendentes} exemplos
+                      </>
+                    }
+                    titulo="Exemplos da biblioteca"
+                    descricao="Uma imagem por chamada; o que sair fica salvo mesmo se parar no meio."
+                    className="mt-2 h-8 text-[12px]"
+                    fecharAoConfirmar
+                    partes={() => [{ modeloId: estimativa.modelo_imagem_id || null, tipo: "imagem", imagens: 1, qualidade: "media", tokensEntrada: 200, vezes: estimativa.pendentes }]}
+                    executar={() => gerarTodos()}
+                  />
+                )
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </Cartao>
   );
 }

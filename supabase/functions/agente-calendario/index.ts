@@ -34,6 +34,20 @@
  * - arquivar_item_agenda / restaurar_item_agenda { client_id, task_id, ... }:
  *   tira da agenda um conteudo gravado (deleted_at, com desfazer), nunca o
  *   aprovado, agendado ou publicado; com arte feita pede confirmar_arte.
+ * - conteudo_rapido { client_id, pedido, campanha_id?, data?, formato?, tipo?,
+ *   framework? } (25/09): uma chamada rápida escreve UM conteúdo e ele já entra
+ *   no dia do calendário (gravar), com direção pronta no Estúdio.
+ * - editar_item { proposta_id, tema_id, campos }: a equipe muda um conteúdo da
+ *   proposta à mão (sem IA); o que já está na agenda não muda.
+ * - campanha_conteudos { campanha_id, quantidade?, tipos?, frameworks?,
+ *   formato? }: os conteúdos da campanha na hora, em lotes paralelos, pelo
+ *   arco da campanha; a equipe escolhe e manda para a agenda (gravar com tema_ids).
+ * - gravar aceita tema_ids (só os escolhidos) e grava os itens em paralelo.
+ *
+ * Velocidade (25/09): raciocínio padrão medium (era o mais alto, max), temas em
+ * três frentes paralelas (uma por fase), detalhar em lotes de 2 com 8 ao mesmo
+ * tempo e gravação a cada lote, contexto em JSON compacto e enxuto onde só se
+ * escreve. As respostas trazem tempos_ms de cada etapa.
  *
  * Regras: contexto so com dado real (nunca inventar); toda leitura e escrita
  * presa ao client_id da proposta; nenhuma falha responde 200.
@@ -57,6 +71,23 @@ import { aplicarFotosDoPlano, pecasDoPlanoGravado } from "../_shared/fotos-do-pl
 export { aplicarFotosDoPlano, pecasDoPlanoGravado };
 import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import {
+  AGENTE_ESCOLHE,
+  arcoDaCampanha,
+  BASE_DO_ESTRATEGISTA,
+  blocoDaEscolhaEditorial,
+  escolhaVazia,
+  estruturaDoConteudo,
+  IDS_DOS_FRAMEWORKS,
+  IDS_DOS_TIPOS,
+  lerEscolhaEditorial,
+  normalizarFramework,
+  normalizarTipo,
+  REGRA_DO_CARROSSEL,
+  REGRA_DO_ESTATICO,
+  rotuloEditorial,
+  type EscolhaEditorial,
+} from "../_shared/conhecimento-conteudo.ts";
 
 /**
  * Tempo limite de cada chamada de texto do calendário: propor temas e detalhar o
@@ -64,6 +95,21 @@ import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
  * Dezembro caíram em 504 em 24/09/2026). A função responde com fôlego.
  */
 const TIMEOUT_CALENDARIO_MS = 300_000;
+
+/**
+ * Orçamento de uma ação longa (25/09): a plataforma mata a função no relógio
+ * de 400 s e, antes, o detalhar só gravava no fim; um mês com raciocínio máximo
+ * passava do relógio e NADA entrava no mês. Agora cada lote grava ao terminar e,
+ * depois deste tempo, nenhum lote novo começa: a resposta volta com `faltam` e a
+ * próxima chamada faz só o resto.
+ */
+const ORCAMENTO_DA_ACAO_MS = 200_000;
+
+/** Raciocínio padrão sem escolha da equipe (25/09): medium escreve igual e responde várias vezes mais rápido que max. */
+const RACIOCINIO_PADRAO = "medium";
+
+/** Conteúdo rápido: uma chamada, raciocínio baixo. */
+const RACIOCINIO_RAPIDO = "low";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -86,9 +132,14 @@ const REF_TIPO = "calendario_proposta";
 // fica no registro de auditoria (mcp_audit_log).
 export const PRINCIPAL_MESA = "mesa:agente-calendario";
 
-// Tema por lote no detalhamento e quantos lotes rodam ao mesmo tempo.
-const TEMAS_POR_LOTE = 3;
-const LOTES_EM_PARALELO = 5;
+// Tema por lote no detalhamento e quantos lotes rodam ao mesmo tempo. Dois
+// temas por lote e oito ao mesmo tempo (25/09): um mês de até 16 temas sai numa
+// onda só, e cada chamada escreve metade do que escrevia (resposta mais curta).
+const TEMAS_POR_LOTE = 2;
+const LOTES_EM_PARALELO = 8;
+
+// Gravar na agenda: itens em paralelo (antes, um por vez).
+const GRAVACOES_EM_PARALELO = 5;
 
 // Limite da descricao do item editorial (createEditorialItemSchema).
 const LIMITE_DESCRICAO = 4000;
@@ -131,6 +182,9 @@ type Tema = {
   data_sazonal: string | null;
   jev: { aderencia: number | null; potencial: number | null } | null;
   escolhido: boolean;
+  /** Tipo de conteúdo e framework (_shared/conhecimento-conteudo.ts); "" quando o modelo não declarou. */
+  tipo_editorial?: string;
+  framework?: string;
 };
 
 type Card = { ordem: number; funcao: string; texto: string; ilustracao: string; estilo: string };
@@ -160,6 +214,13 @@ type Item = {
   task_id?: string | null;
   /** Campanha (mesa_campanhas) a que o conteúdo pertence; o Estúdio segue a identidade dela. */
   campanha_id?: string | null;
+  /** Tipo de conteúdo e framework que o roteiro segue. */
+  tipo_editorial?: string;
+  framework?: string;
+  /** Instrução de arte da equipe (ex.: "troque o céu por pôr do sol"); vai para a direção do Estúdio. */
+  instrucao_arte?: string;
+  /** Etapa da campanha (aquecimento, lançamento...), só em conteúdo de campanha. */
+  etapa?: string;
 };
 
 type Proposta = {
@@ -318,7 +379,32 @@ export function normalizarItem(bruto: unknown, uteis: string[], dataPadrao?: str
     tipo_conteudo: tipo,
     carrossel_infinito: formato === "carrossel" && o.carrossel_infinito === true,
     cards,
+    tipo_editorial: normalizarTipo(o.tipo_editorial),
+    framework: normalizarFramework(o.framework),
+    ...(texto(o.instrucao_arte, 600) ? { instrucao_arte: texto(o.instrucao_arte, 600) } : {}),
+    ...(texto(o.etapa, 60) ? { etapa: texto(o.etapa, 60) } : {}),
   };
+}
+
+/**
+ * O que a equipe já pôs no item e o modelo não reescreve: a tarefa da agenda,
+ * a campanha e a instrução de arte seguem pelo tema_id quando o item volta de
+ * uma conversa.
+ */
+export function manterDoAnterior(itens: Item[], anteriores: Item[]): Item[] {
+  const porTema = new Map(anteriores.map((i) => [i.tema_id, i]));
+  return itens.map((i) => {
+    const a = porTema.get(i.tema_id);
+    if (!a) return i;
+    const out: Item = { ...i };
+    if (!out.task_id && a.task_id) out.task_id = a.task_id;
+    if (!out.campanha_id && a.campanha_id) out.campanha_id = a.campanha_id;
+    if (!out.instrucao_arte && a.instrucao_arte) out.instrucao_arte = a.instrucao_arte;
+    if (!out.etapa && a.etapa) out.etapa = a.etapa;
+    if (!out.tipo_editorial && a.tipo_editorial) out.tipo_editorial = a.tipo_editorial;
+    if (!out.framework && a.framework) out.framework = a.framework;
+    return out;
+  });
 }
 
 function normalizarTema(bruto: unknown, id: string, anterior?: Tema): Tema {
@@ -336,6 +422,8 @@ function normalizarTema(bruto: unknown, id: string, anterior?: Tema): Tema {
     data_sazonal: typeof o.data_sazonal === "string" && DATA.test(o.data_sazonal) ? o.data_sazonal : null,
     jev: anterior?.jev ?? null,
     escolhido: typeof o.escolhido === "boolean" ? o.escolhido : anterior?.escolhido ?? false,
+    tipo_editorial: normalizarTipo(o.tipo_editorial) || anterior?.tipo_editorial || "",
+    framework: normalizarFramework(o.framework) || anterior?.framework || "",
   };
 }
 
@@ -360,6 +448,8 @@ const ESQUEMA_TEMA = obj({
   formato_sugerido: S("string", { enum: [...FORMATOS] }),
   sazonal: S("boolean"),
   data_sazonal: S(["string", "null"]),
+  tipo_editorial: S("string", { enum: [...IDS_DOS_TIPOS] }),
+  framework: S("string", { enum: [...IDS_DOS_FRAMEWORKS] }),
 });
 
 const ESQUEMA_CARD = obj({
@@ -390,6 +480,8 @@ const ESQUEMA_ITEM = obj({
   tipo_conteudo: S("string", { enum: ["principal", "extra_sazonal"] }),
   carrossel_infinito: S("boolean"),
   cards: { type: "array", items: ESQUEMA_CARD },
+  tipo_editorial: S("string", { enum: [...IDS_DOS_TIPOS] }),
+  framework: S("string", { enum: [...IDS_DOS_FRAMEWORKS] }),
 });
 
 export const ESQUEMA_TEMAS = {
@@ -462,7 +554,7 @@ async function exigirAcessoAoCliente(chamador: Chamador, clientId: string) {
  */
 function diasUteisDaProposta(p: Proposta): string[] {
   const origem = String((p.parametros ?? {}).origem ?? "");
-  if (origem !== "pedido_livre") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
+  if (origem !== "pedido_livre" && origem !== "conteudo_rapido") return diasUteisDoPeriodo(p.periodo_inicio, p.periodo_fim);
   const hoje = hojeSaoPaulo();
   const inicio = p.periodo_inicio < hoje ? p.periodo_inicio : hoje;
   const fimBase = p.periodo_fim > hoje ? p.periodo_fim : hoje;
@@ -662,7 +754,9 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
     throw new ErroHttp(409, "prompt_global_ausente", "Não há prompt global ativo do estrategista em agente_prompts.");
   }
   const complemento = linhasPrompt.find((l) => l.client_id === clientId)?.conteudo?.trim();
-  const prompt = complemento ? `${global}\n\nCOMPLEMENTO DESTE CLIENTE:\n${complemento}` : global;
+  // A base de técnica (tipos, frameworks, ganchos, ângulos, provas, CTA) soma ao
+  // prompt do banco; nenhuma regra do prompt global nem do complemento sai.
+  const prompt = `${complemento ? `${global}\n\nCOMPLEMENTO DESTE CLIENTE:\n${complemento}` : global}\n\n${BASE_DO_ESTRATEGISTA}`;
 
   // Metricas de post: melhores e piores, so dos posts que tem o numero.
   type Post = { media_type: string | null; caption: string | null; permalink: string | null; posted_at: string | null; like_count: number | null; comments_count: number | null; reach: number | null; saved: number | null; shares: number | null; total_interactions: number | null };
@@ -726,7 +820,14 @@ async function montarContexto(servico: SupabaseClient, clientId: string, inicio:
   };
 }
 
-function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parametros: Record<string, unknown> }): string {
+/**
+ * Contexto do cliente no pedido. JSON compacto (sem recuo: o recuo era ~15% dos
+ * tokens de entrada). `enxuto` (detalhar, conteúdo rápido, lotes da campanha):
+ * o que escrever um post precisa, sem os 150 movimentos e com o dossiê menor;
+ * o diagnóstico feito nos temas vai junto no pedido.
+ */
+function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parametros: Record<string, unknown> }, opcoes: { enxuto?: boolean } = {}): string {
+  const enxuto = opcoes.enxuto === true;
   const dados = {
     cliente: ctx.cliente.nome,
     instagram: ctx.cliente.instagram,
@@ -735,16 +836,36 @@ function contextoEmTexto(ctx: Contexto, p: { inicio: string; fim: string; parame
     objetivo_principal: p.parametros.objetivo ?? null,
     oferta_principal: p.parametros.oferta ?? null,
     regiao: p.parametros.regiao ?? null,
-    dossie_geral_atual: ctx.dossie,
-    movimentos_ultimos_60_dias: ctx.movimentos,
-    metricas_instagram: ctx.metricas,
+    dossie_geral_atual: enxuto && ctx.dossie ? ctx.dossie.slice(0, 6000) : ctx.dossie,
+    movimentos_ultimos_60_dias: enxuto ? ctx.movimentos.slice(0, 25) : ctx.movimentos,
+    metricas_instagram: enxuto
+      ? { posts: { melhores_por_salvamento_e_compartilhamento: ctx.metricas.posts.melhores_por_salvamento_e_compartilhamento.slice(0, 3), total_lidos: ctx.metricas.posts.total_lidos } }
+      : ctx.metricas,
     agenda_ja_existente_no_periodo: ctx.agenda_no_periodo,
-    titulos_publicados_ou_planejados_nos_ultimos_60_dias: ctx.titulos_recentes,
+    titulos_publicados_ou_planejados_nos_ultimos_60_dias: enxuto ? ctx.titulos_recentes.slice(0, 30) : ctx.titulos_recentes,
     kit_de_marca: ctx.kit_marca,
     memoria_do_estrategista: ctx.memoria,
     planos_combinados_com_a_equipe: ctx.planos,
   };
-  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados, null, 1)}`;
+  return `DADOS REAIS DO CLIENTE (JSON, lidos do painel agora; campo vazio ou null significa que o dado não existe no painel):\n${JSON.stringify(dados)}`;
+}
+
+/** Relógio simples das etapas de uma ação (vai na resposta como tempos_ms e no log). */
+function relogio() {
+  const inicio = Date.now();
+  const marcas: Record<string, number> = {};
+  let ultimo = inicio;
+  return {
+    marcar(etapa: string) {
+      const agora = Date.now();
+      marcas[etapa] = (marcas[etapa] ?? 0) + (agora - ultimo);
+      ultimo = agora;
+    },
+    decorrido: () => Date.now() - inicio,
+    tempos(): Record<string, number> {
+      return { ...marcas, total: Date.now() - inicio };
+    },
+  };
 }
 
 const REGRAS_DE_SAIDA = `
@@ -755,32 +876,98 @@ REGRAS DESTA EXECUÇÃO NO PAINEL:
 - Evite repetir temas que já estão na agenda do período ou nos títulos recentes.
 - Siga a memória do estrategista (preferências, aprendizados e o que evitar).
 - Português do Brasil, sem travessões.
+- Todo tema e todo conteúdo declara tipo_editorial e framework (ids da base de técnica) e o roteiro segue a estrutura do framework.
 - Responda somente com o JSON pedido.`;
+
+/** Frentes do propor_temas em paralelo: uma por fase, com a parte de temas de cada uma. */
+const FRENTES_DE_TEMAS: Array<{ fase: "1" | "2" | "3"; parte: number }> = [
+  { fase: "1", parte: 0.3 },
+  { fase: "2", parte: 0.4 },
+  { fase: "3", parte: 0.3 },
+];
+
+/** Quantos temas cada frente propõe (a fase 2 fica com o resto, para somar exato). */
+export function temasPorFrente(maximo: number, minimo = 8): Array<{ fase: "1" | "2" | "3"; min: number; max: number }> {
+  const m1 = Math.max(2, Math.floor(maximo * FRENTES_DE_TEMAS[0].parte));
+  const m3 = Math.max(2, Math.floor(maximo * FRENTES_DE_TEMAS[2].parte));
+  const m2 = Math.max(2, maximo - m1 - m3);
+  const n1 = Math.max(2, Math.floor(minimo * FRENTES_DE_TEMAS[0].parte));
+  const n3 = Math.max(2, Math.floor(minimo * FRENTES_DE_TEMAS[2].parte));
+  const n2 = Math.max(2, minimo - n1 - n3);
+  return [
+    { fase: "1", min: Math.min(n1, m1), max: m1 },
+    { fase: "2", min: Math.min(n2, m2), max: m2 },
+    { fase: "3", min: Math.min(n3, m3), max: m3 },
+  ];
+}
+
+/** Pool simples: roda `tarefas` com até `limite` ao mesmo tempo; `parar` impede começar novas. */
+async function emParalelo<T>(
+  total: number,
+  limite: number,
+  tarefa: (i: number) => Promise<T>,
+  parar: () => boolean = () => false,
+): Promise<Array<PromiseSettledResult<T> | undefined>> {
+  const resultados: Array<PromiseSettledResult<T> | undefined> = new Array(total);
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < total) {
+      if (parar()) return;
+      const i = proximo++;
+      try {
+        resultados[i] = { status: "fulfilled", value: await tarefa(i) };
+      } catch (reason) {
+        resultados[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, total) }, trabalhador));
+  return resultados;
+}
 
 // ------------------------------------------------------------ modelo e erros
 
 /**
- * Raciocinio padrao quando o usuario nao escolhe: o mais alto aceito pelo
- * modelo; com pesquisa na web, high (max com pesquisa arrisca estourar os
- * 120 s do motor). A escolha explicita do usuario sempre prevalece.
+ * Raciocinio padrao quando o usuario nao escolhe (25/09): medium, com ou sem
+ * pesquisa na web. Antes era o mais alto aceito (max no GPT-6 Sol): cada lote
+ * do detalhar levava minutos e o mes inteiro passava do relogio da funcao.
+ * Modelo sem medium fica no nivel aceito mais perto de baixo para cima; a
+ * escolha explicita do usuario sempre prevalece.
  */
-export function raciocinioPadrao(aceitos: string[], pesquisaWeb: boolean): string | undefined {
-  if (pesquisaWeb && aceitos.includes("high")) return "high";
-  return aceitos[aceitos.length - 1] || undefined;
+export function raciocinioPadrao(aceitos: string[], _pesquisaWeb = false, preferido: string = RACIOCINIO_PADRAO): string | undefined {
+  if (!aceitos.length) return undefined;
+  if (aceitos.includes(preferido)) return preferido;
+  const ordem = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+  const alvo = ordem.indexOf(preferido);
+  const acima = aceitos.filter((n) => ordem.indexOf(n) >= alvo).sort((a, b) => ordem.indexOf(a) - ordem.indexOf(b));
+  return acima[0] || aceitos[aceitos.length - 1] || undefined;
 }
 
 async function resolverModelo(
   modeloId: unknown,
   raciocinio: unknown,
-  opcoes: { pesquisaWeb?: boolean } = {},
+  opcoes: { pesquisaWeb?: boolean; preferido?: string } = {},
 ): Promise<{ modelo: ModeloIa; raciocinio: string | undefined; raciocinioExplicito: boolean }> {
   let modelo: ModeloIa | null;
   if (typeof modeloId === "string" && modeloId.trim()) modelo = await carregarModelo(modeloId.trim(), "texto");
   else modelo = await modeloPadrao(AGENTE);
   if (!modelo) throw new ErroHttp(409, "sem_modelo_padrao", "Nenhum modelo do catálogo está marcado como padrão do estrategista.");
   const explicito = typeof raciocinio === "string" && raciocinio.trim() ? raciocinio.trim() : null;
-  const r = explicito ?? raciocinioPadrao(modelo.raciocinio ?? [], opcoes.pesquisaWeb === true);
+  const r = explicito ?? raciocinioPadrao(modelo.raciocinio ?? [], opcoes.pesquisaWeb === true, opcoes.preferido);
   return { modelo, raciocinio: r || undefined, raciocinioExplicito: explicito !== null };
+}
+
+/**
+ * Modelo do conteúdo rápido: o padrão "estrategista_rapido" do catálogo quando
+ * existir (docs/mesa/migrations/20260925150000_mesa_modelo_rapido.sql); sem
+ * ele, o do estrategista. Raciocínio baixo (o nível aceito mais perto).
+ */
+async function resolverModeloRapido(modeloId: unknown): Promise<{ modelo: ModeloIa; raciocinio: string | undefined }> {
+  let modelo: ModeloIa | null = null;
+  if (typeof modeloId === "string" && modeloId.trim()) modelo = await carregarModelo(modeloId.trim(), "texto");
+  if (!modelo) modelo = (await modeloPadrao("estrategista_rapido")) ?? (await modeloPadrao(AGENTE));
+  if (!modelo) throw new ErroHttp(409, "sem_modelo_padrao", "Nenhum modelo do catálogo está marcado como padrão do estrategista.");
+  return { modelo, raciocinio: raciocinioPadrao(modelo.raciocinio ?? [], false, RACIOCINIO_RAPIDO) };
 }
 
 // Mensagens claras para os erros de dinheiro e chave. Nunca 200.
@@ -887,6 +1074,7 @@ async function pontuarTemasComJev(
 // ------------------------------------------------------------ acoes
 
 async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const tempo = relogio();
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
   const inicio = String(corpo.periodo_inicio ?? "");
@@ -910,8 +1098,15 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     projectId = String(corpo.project_id);
     await exigirProjetoDoCliente(servico, projectId, clientId);
   }
+  // A tela pode mandar o id da proposta para acompanhar os temas chegando.
+  const idPedido = typeof corpo.proposta_id === "string" && UUID.test(corpo.proposta_id) ? corpo.proposta_id : null;
+  if (idPedido) {
+    const { data: ja } = await servico.from("calendario_propostas").select("id").eq("id", idPedido).maybeSingle();
+    if (ja) throw new ErroHttp(409, "proposta_ja_existe", "Esta proposta já foi criada. Atualize a tela.");
+  }
+  const escolha = lerEscolhaEditorial(corpo);
 
-  // Com pesquisa na web o padrao e high; a escolha explicita prevalece.
+  // Com pesquisa na web o padrao e medium; a escolha explicita prevalece.
   const { modelo, raciocinio, raciocinioExplicito } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, { pesquisaWeb: true });
   const parametros: Record<string, unknown> = {
     frequencia: Math.round(frequencia),
@@ -923,19 +1118,45 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     // etapa (com ou sem pesquisa) e decidido de novo em cada chamada.
     raciocinio: raciocinioExplicito ? raciocinio : null,
     raciocinio_temas: raciocinio ?? null,
+    tipos: escolha.tipos,
+    frameworks: escolha.frameworks,
   };
 
   const ctx = await montarContexto(servico, clientId, inicio, fim);
+  tempo.marcar("contexto");
 
-  // A proposta e a conversa nascem com ids conhecidos antes da chamada, para o
-  // uso de IA ja ficar ligado a proposta.
-  const propostaId = crypto.randomUUID();
+  // A proposta e a conversa nascem antes das chamadas: o uso de IA ja fica
+  // ligado a proposta e a tela acompanha os temas chegando (status temas).
+  const propostaId = idPedido ?? crypto.randomUUID();
   const { data: conversa, error: erroConversa } = await servico
     .from("agente_conversas")
     .insert({ client_id: clientId, agente: AGENTE, referencia_tipo: REF_TIPO, referencia_id: propostaId, criado_por: chamador.userId })
     .select("id")
     .single();
   if (erroConversa || !conversa) throw new ErroHttp(500, "conversa_nao_criada", "Não foi possível abrir a conversa do agente.");
+  const { error: erroNova } = await servico.from("calendario_propostas").insert({
+    id: propostaId,
+    client_id: clientId,
+    project_id: projectId,
+    periodo_inicio: inicio,
+    periodo_fim: fim,
+    parametros: { ...parametros, gerando_temas: true },
+    status: "temas",
+    diagnostico: null,
+    temas: [],
+    itens: [],
+    conversa_id: conversa.id,
+    criado_por: chamador.userId,
+  });
+  if (erroNova) {
+    await servico.from("agente_conversas").delete().eq("id", conversa.id).eq("client_id", clientId);
+    throw new ErroHttp(500, "proposta_nao_salva", "Não foi possível abrir a proposta.");
+  }
+  const desfazer = async () => {
+    // Sem nenhum tema, a proposta e a conversa abertas ficam orfas: apaga (so as desta chamada).
+    await servico.from("calendario_propostas").delete().eq("id", propostaId).eq("client_id", clientId);
+    await servico.from("agente_conversas").delete().eq("id", conversa.id).eq("client_id", clientId);
+  };
 
   // Temas pela frequência pedida: meta de mais de 15 posts no mês não cabia em 15 temas.
   const maxTemas = Math.min(30, Math.max(15, Math.round(Number(parametros.frequencia) || 0)));
@@ -944,48 +1165,102 @@ async function proporTemas(servico: SupabaseClient, chamador: Chamador, corpo: R
     + (parametros.oferta ? ` Oferta principal: ${parametros.oferta}.` : "")
     + (parametros.regiao ? ` Região: ${parametros.regiao}.` : "");
 
-  const instrucao = `${contextoEmTexto(ctx, { inicio, fim, parametros })}
+  // Três frentes em paralelo (uma por fase), cada uma com a sua parte dos
+  // temas: cada resposta é um terço do tamanho e as três correm juntas.
+  const frentes = temasPorFrente(maxTemas);
+  const contexto = contextoEmTexto(ctx, { inicio, fim, parametros });
+  const blocoEditorial = blocoDaEscolhaEditorial(escolha);
+  const instrucaoDa = (f: { fase: string; min: number; max: number }, principal: boolean) => `${contexto}
 
 TAREFA: ${pedido}${blocoDoPlano(ctx, inicio)}
-Antes, pesquise na web dúvidas, buscas, comportamentos, datas sazonais e oportunidades do nicho e da região deste cliente.
+ESTA CHAMADA cuida só da ${ROTULO_FASE[f.fase]}. Outras duas chamadas, ao mesmo tempo, cuidam das outras fases: proponha de ${f.min} a ${f.max} temas (mire ${f.max}) só desta fase, todos com fase ${f.fase}.
+Antes, pesquise na web dúvidas, buscas, comportamentos, datas sazonais e oportunidades do nicho e da região deste cliente que sirvam a esta fase.
 Devolva:
-- diagnostico: diagnóstico resumido a partir dos dados reais (melhores e piores conteúdos, o que as métricas mostram, o que falta).
+- diagnostico: ${principal ? "diagnóstico resumido a partir dos dados reais (melhores e piores conteúdos, o que as métricas mostram, o que falta)." : "no máximo 2 frases (a chamada da fase 1 faz o diagnóstico completo)."}
 - publicos_prioritarios e pilares.
-- pesquisa: o que a pesquisa na web trouxe de útil, com as fontes (links) usadas.
+- pesquisa: o que a pesquisa na web trouxe de útil para esta fase, com as fontes (links) usadas.
 - hipoteses: o que precisou ser suposto por falta de dado.
-- temas: de 8 a ${maxTemas}, cada um com id (t1, t2, ...), tema, pilar, fase (1, 2 ou 3), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel ou estatico), sazonal e data_sazonal (AAAA-MM-DD ou null).`;
+- temas: cada um com id (t1, t2, ...), tema, pilar, fase (${f.fase}), objetivo (um só), por_que (ligado a dado real ou à pesquisa), formato_sugerido (carrossel ou estatico; estático para aviso, oferta e prova), sazonal, data_sazonal (AAAA-MM-DD ou null), tipo_editorial e framework.
+Varie tipo, framework, gancho e ângulo entre os temas; nada genérico que serviria para qualquer empresa.
 
-  let saida;
-  try {
-    saida = await chamarTexto({
+${blocoEditorial}`;
+
+  // Temas que chegam, na ordem das fases; a proposta mostra conforme chegam.
+  const porFase = new Map<string, Tema[]>();
+  const brutosPorFase = new Map<string, Record<string, unknown>>();
+  const usos: string[] = [];
+  let custo = 0;
+  let saldo: number | null = null;
+  let reserva: string | null = null;
+  let fila: Promise<unknown> = Promise.resolve();
+  const juntar = () => frentes.flatMap((f) => porFase.get(f.fase) ?? []).map((t, i) => ({ ...t, id: `t${i + 1}` }));
+  const mostrarParcial = () => {
+    const temasAgora = juntar();
+    const r1 = brutosPorFase.get("1") ?? brutosPorFase.values().next().value ?? {};
+    fila = fila.then(() => servico.from("calendario_propostas").update({ temas: temasAgora, diagnostico: texto(r1.diagnostico, 6000) || null })
+      .eq("id", propostaId).eq("client_id", clientId)).catch(() => undefined);
+    return fila;
+  };
+
+  const resultados = await Promise.allSettled(frentes.map(async (f, k) => {
+    const saida = await chamarTexto({
       clientId,
       tarefa: "calendario",
       agente: AGENTE,
       modeloId: modelo.id,
-    timeoutMs: TIMEOUT_CALENDARIO_MS,
+      timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
-      mensagens: [{ papel: "usuario", conteudo: instrucao }],
+      mensagens: [{ papel: "usuario", conteudo: instrucaoDa(f, k === 0) }],
       raciocinio,
       pesquisaWeb: true,
       esquemaJson: ESQUEMA_TEMAS,
       referencia: { tipo: REF_TIPO, id: propostaId },
       criadoPor: chamador.userId,
     });
-  } catch (err) {
-    // Sem proposta, a conversa aberta fica orfa: apaga (so a desta chamada).
-    await servico.from("agente_conversas").delete().eq("id", conversa.id).eq("client_id", clientId);
-    throw err;
+    usos.push(saida.usoId);
+    custo += saida.custoUsd;
+    saldo = saida.saldoUsd;
+    if (saida.reservaUsada) reserva = saida.reservaUsada;
+    const r = (saida.json ?? {}) as Record<string, unknown>;
+    brutosPorFase.set(f.fase, r);
+    const brutos = Array.isArray(r.temas) ? r.temas : [];
+    porFase.set(f.fase, brutos.slice(0, f.max).map((t, i) => ({ ...normalizarTema(t, `t${i + 1}`), fase: f.fase })).filter((t) => t.tema));
+    await mostrarParcial();
+  }));
+  tempo.marcar("temas");
+  await fila;
+
+  const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (porFase.size === 0 || juntar().length === 0) {
+    await desfazer();
+    if (falhas[0]) throw falhas[0].reason;
+    throw new ErroHttp(502, "temas_vazios", "O estrategista não devolveu temas. Tente de novo.");
   }
 
-  const r = (saida.json ?? {}) as Record<string, unknown>;
-  const temasBrutos = Array.isArray(r.temas) ? r.temas : [];
-  let temas = temasBrutos.slice(0, maxTemas).map((t, i) => normalizarTema(t, `t${i + 1}`)).filter((t) => t.tema);
+  let temas = juntar();
+  // Diagnóstico da fase 1 (a completa); públicos, pilares, pesquisa e hipóteses das três, sem repetir.
+  const principal = brutosPorFase.get("1") ?? brutosPorFase.values().next().value ?? {};
+  const juntos = (campo: string) => {
+    const vistos: string[] = [];
+    for (const f of frentes) {
+      const r = brutosPorFase.get(f.fase);
+      for (const v of Array.isArray(r?.[campo]) ? (r?.[campo] as unknown[]) : []) {
+        const s = String(v ?? "").trim();
+        if (s && vistos.indexOf(s) < 0) vistos.push(s);
+      }
+    }
+    return vistos;
+  };
+  const pesquisas = frentes.map((f) => texto(brutosPorFase.get(f.fase)?.pesquisa, 1600)).filter(Boolean);
+  const publicos = juntos("publicos_prioritarios");
+  const pilares = juntos("pilares");
+  const hipoteses = juntos("hipoteses");
   const diagnostico = [
-    texto(r.diagnostico, 6000),
-    Array.isArray(r.publicos_prioritarios) && r.publicos_prioritarios.length ? `Públicos prioritários: ${r.publicos_prioritarios.map(String).join("; ")}.` : "",
-    Array.isArray(r.pilares) && r.pilares.length ? `Pilares: ${r.pilares.map(String).join("; ")}.` : "",
-    texto(r.pesquisa, 4000) ? `Pesquisa: ${texto(r.pesquisa, 4000)}` : "",
-    Array.isArray(r.hipoteses) && r.hipoteses.length ? `Hipóteses (dado indisponível): ${r.hipoteses.map(String).join("; ")}.` : "",
+    texto(principal.diagnostico, 6000),
+    publicos.length ? `Públicos prioritários: ${publicos.join("; ")}.` : "",
+    pilares.length ? `Pilares: ${pilares.join("; ")}.` : "",
+    pesquisas.length ? `Pesquisa: ${pesquisas.join("\n").slice(0, 4000)}` : "",
+    hipoteses.length ? `Hipóteses (dado indisponível): ${hipoteses.join("; ")}.` : "",
   ].filter(Boolean).join("\n\n");
 
   const jev = await pontuarTemasComJev(temas, {
@@ -995,40 +1270,40 @@ Devolva:
     regiao: parametros.regiao,
     diagnostico,
   }, { clientId, propostaId, criadoPor: chamador.userId });
+  tempo.marcar("jev");
   temas = jev.temas;
   if (jev.jev_erro) parametros.jev_erro = jev.jev_erro;
-  if (temas.length < 8) parametros.aviso = `O modelo devolveu ${temas.length} temas (o pedido era de 8 a ${maxTemas}).`;
+  const avisos: string[] = [];
+  if (temas.length < 8) avisos.push(`O modelo devolveu ${temas.length} temas (o pedido era de 8 a ${maxTemas}).`);
+  if (falhas.length) {
+    const fases = frentes.filter((f) => !porFase.has(f.fase)).map((f) => f.fase).join(" e ");
+    avisos.push(`A frente da fase ${fases} falhou; os temas das outras fases ficaram. Peça mais temas na conversa se precisar.`);
+  }
+  if (avisos.length) parametros.aviso = avisos.join(" ");
+  parametros.tempos_ms = tempo.tempos();
 
   const { data: proposta, error } = await servico
     .from("calendario_propostas")
-    .insert({
-      id: propostaId,
-      client_id: clientId,
-      project_id: projectId,
-      periodo_inicio: inicio,
-      periodo_fim: fim,
-      parametros,
-      status: "temas",
-      diagnostico,
-      temas,
-      itens: [],
-      conversa_id: conversa.id,
-      criado_por: chamador.userId,
-    })
+    .update({ parametros, status: "temas", diagnostico, temas })
+    .eq("id", propostaId)
+    .eq("client_id", clientId)
     .select("*")
     .single();
-  if (error || !proposta) throw new ErroHttp(500, "proposta_nao_salva", "Os temas foram gerados, mas a proposta não foi salva.", { uso_id: saida.usoId });
+  if (error || !proposta) throw new ErroHttp(500, "proposta_nao_salva", "Os temas foram gerados, mas a proposta não foi salva.", { uso_id: usos[0] ?? null });
 
   await registrarMensagens(servico, conversa.id, clientId, [
     { papel: "usuario", conteudo: pedido },
     {
       papel: "agente",
-      conteudo: `${diagnostico}\n\nTemas:\n${temas.map((t) => `${t.id}. ${t.tema} (${ROTULO_OBJETIVO[t.objetivo]}, fase ${t.fase})`).join("\n")}`,
-      uso_id: saida.usoId,
+      conteudo: `${diagnostico}\n\nTemas:\n${temas.map((t) => `${t.id}. ${t.tema} (${ROTULO_OBJETIVO[t.objetivo]}, fase ${t.fase}${t.tipo_editorial || t.framework ? `, ${rotuloEditorial(t.tipo_editorial ?? "", t.framework ?? "")}` : ""})`).join("\n")}`,
+      uso_id: usos[0] ?? null,
+      anexos: usos.slice(1).map((id) => ({ uso_id: id })),
     },
   ]);
+  const tempos = tempo.tempos();
+  console.log("[agente-calendario] propor_temas", { proposta_id: propostaId, temas: temas.length, raciocinio, tempos_ms: tempos });
 
-  return json({ proposta, custo_usd: Math.round((saida.custoUsd + jev.custo) * 1e6) / 1e6, saldo_usd: saida.saldoUsd, jev_erro: jev.jev_erro, reserva_usada: saida.reservaUsada ?? null });
+  return json({ proposta, custo_usd: Math.round((custo + jev.custo) * 1e6) / 1e6, saldo_usd: saldo, jev_erro: jev.jev_erro, reserva_usada: reserva, tempos_ms: tempos, frentes_com_falha: falhas.length });
 }
 
 async function escolherTemas(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -1055,6 +1330,7 @@ async function escolherTemas(servico: SupabaseClient, chamador: Chamador, corpo:
 }
 
 async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const tempo = relogio();
   const p = await carregarProposta(servico, corpo.proposta_id);
   await exigirAcessoAoCliente(chamador, p.client_id);
   exigirEditavel(p);
@@ -1067,6 +1343,7 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
     corpo.modelo_id ?? p.parametros.modelo,
     corpo.raciocinio ?? p.parametros.raciocinio,
   );
+  tempo.marcar("contexto");
 
   // Datas calculadas no codigo, em ordem de fase: so segunda a sexta.
   const ordenados = [...escolhidos].sort((a, b) => a.fase.localeCompare(b.fase));
@@ -1086,13 +1363,14 @@ async function detalhar(servico: SupabaseClient, chamador: Chamador, corpo: Reco
   const lotes: Tema[][] = [];
   for (let i = 0; i < pendentes.length; i += TEMAS_POR_LOTE) lotes.push(pendentes.slice(i, i + TEMAS_POR_LOTE));
 
-  const base = `${contextoEmTexto(ctx, { inicio: p.periodo_inicio, fim: p.periodo_fim, parametros: p.parametros })}${blocoDoPlano(ctx, p.periodo_inicio)}
+  // Contexto enxuto: o diagnóstico dos temas já leu o contexto inteiro e vai junto.
+  const base = `${contextoEmTexto(ctx, { inicio: p.periodo_inicio, fim: p.periodo_fim, parametros: p.parametros }, { enxuto: true })}${blocoDoPlano(ctx, p.periodo_inicio)}
 
 DIAGNÓSTICO JÁ FEITO:
 ${p.diagnostico ?? ""}
 
 TODOS OS TEMAS ESCOLHIDOS (para não repetir estrutura nem gancho entre eles):
-${ordenados.map((t) => `${t.id}. ${t.tema} (fase ${t.fase}, ${ROTULO_OBJETIVO[t.objetivo]})`).join("\n")}
+${ordenados.map((t) => `${t.id}. ${t.tema} (fase ${t.fase}, ${ROTULO_OBJETIVO[t.objetivo]}${t.tipo_editorial || t.framework ? `, ${rotuloEditorial(t.tipo_editorial ?? "", t.framework ?? "")}` : ""})`).join("\n")}
 
 TEMAS DESCARTADOS PELA EQUIPE (não usar):
 ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "- nenhum"}`;
@@ -1101,14 +1379,27 @@ ${p.temas.filter((t) => !t.escolhido).map((t) => `- ${t.tema}`).join("\n") || "-
   let custo = 0;
   let saldo: number | null = null;
 
+  // Cada lote grava ao terminar (em fila, sem um apagar o outro): o que ficou
+  // pronto entra na proposta mesmo se a função cair no relógio de 400 s.
+  const prontos = new Map<string, Item>(jaFeitos);
+  let fila: Promise<unknown> = Promise.resolve();
+  const gravarParcial = () => {
+    const agora = [...prontos.values()].sort((a, b) => a.data.localeCompare(b.data));
+    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", p.id).eq("client_id", p.client_id)).catch(() => undefined);
+    return fila;
+  };
+
   const rodarLote = async (lote: Tema[]) => {
     const pedido = `${base}
 
 TAREFA: detalhe uma publicação para cada tema abaixo, com todos os campos do calendário.
-${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato sugerido ${t.formato_sugerido} | data ${dataDoTema.get(t.id)} | por que: ${t.por_que}`).join("\n")}
+${lote.map((t) => `- tema_id ${t.id}: "${t.tema}" | pilar ${t.pilar} | fase ${t.fase} | objetivo ${t.objetivo} | formato sugerido ${t.formato_sugerido} | data ${dataDoTema.get(t.id)} | tipo_editorial ${t.tipo_editorial || AGENTE_ESCOLHE} | framework ${t.framework || AGENTE_ESCOLHE} | por que: ${t.por_que}\n  Estrutura: ${estruturaDoConteudo(t.tipo_editorial ?? "", t.framework ?? "", t.formato_sugerido)}`).join("\n")}
 Regras dos itens:
 - formato: carrossel ou estatico. Estático tem exatamente 1 card.
 - cards: roteiro de cada card em ordem (ordem, funcao como capa, desenvolvimento ou CTA final, texto exato do card, ilustracao que acompanha, estilo visual respeitando o kit de marca). A história é uma só: a capa abre uma tensão com um gancho forte, cada card avança um passo e prepara o próximo com texto corrido e conectivos, nunca frases soltas; o CTA fecha a história. As ilustracoes formam UMA série: a mesma protagonista, o mesmo cenário e a mesma luz do começo ao fim (descreva a protagonista igual em todos os cards), variando só a pose, o gesto e o enquadramento (nunca a mesma pose em dois cards seguidos); prefira foto real do cliente quando o contexto tiver. Quantidade de cards pelo conteúdo: o mínimo que conta a história, em geral 4 a 6; 7 ou mais só quando o conteúdo pede. Nunca escreva o nome da marca no texto dos cards. Não repita tema, gancho nem imagem de posts recentes.
+- tipo_editorial e framework: os do tema (ou, com "${AGENTE_ESCOLHE}", o que mais serve); a funcao de cada card nomeia o passo do framework (ex.: "capa: atenção", "desejo", "CTA").
+- ${REGRA_DO_CARROSSEL}
+- ${REGRA_DO_ESTATICO}
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua (o fundo atravessa os cards e o último se liga ao primeiro) e isso fizer sentido para o tema.
 - copy: a legenda completa do post.
 - data: use exatamente a data indicada para o tema.
@@ -1119,7 +1410,7 @@ Regras dos itens:
       tarefa: "calendario",
       agente: AGENTE,
       modeloId: modelo.id,
-    timeoutMs: TIMEOUT_CALENDARIO_MS,
+      timeoutMs: TIMEOUT_CALENDARIO_MS,
       sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
       mensagens: [{ papel: "usuario", conteudo: pedido }],
       raciocinio,
@@ -1138,30 +1429,25 @@ Regras dos itens:
       const item = normalizarItem(bruto, uteis, dataDoTema.get(t.id));
       item.tema_id = t.id;
       if (!item.tema) item.tema = t.tema;
+      if (!item.tipo_editorial) item.tipo_editorial = t.tipo_editorial ?? "";
+      if (!item.framework) item.framework = t.framework ?? "";
       novos.push(item);
+      prontos.set(item.tema_id, item);
     }
+    if (novos.length) await gravarParcial();
     return novos;
   };
 
-  // Pool simples: ate LOTES_EM_PARALELO chamadas ao mesmo tempo.
-  const resultados: PromiseSettledResult<Item[]>[] = new Array(lotes.length);
-  let proximo = 0;
-  const trabalhador = async () => {
-    while (proximo < lotes.length) {
-      const i = proximo++;
-      try {
-        resultados[i] = { status: "fulfilled", value: await rodarLote(lotes[i]) };
-      } catch (reason) {
-        resultados[i] = { status: "rejected", reason };
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(LOTES_EM_PARALELO, lotes.length) }, trabalhador));
+  // Pool: ate LOTES_EM_PARALELO chamadas ao mesmo tempo; depois do orçamento, nenhum lote novo começa.
+  const resultados = await emParalelo(lotes.length, LOTES_EM_PARALELO, (i) => rodarLote(lotes[i]), () => tempo.decorrido() > ORCAMENTO_DA_ACAO_MS);
+  await fila;
+  tempo.marcar("lotes");
 
-  const novos = resultados.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
-  const falha = resultados.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+  const novos = resultados.flatMap((r) => (r && r.status === "fulfilled" ? r.value : []));
+  const falha = resultados.find((r) => r && r.status === "rejected") as PromiseRejectedResult | undefined;
+  const parouPeloTempo = resultados.some((r) => r === undefined);
 
-  const itens = [...jaFeitos.values(), ...novos]
+  const itens = [...prontos.values()]
     .map((i) => ({ ...i, data: normalizarDataUtil(i.data, uteis) }))
     .sort((a, b) => a.data.localeCompare(b.data));
   const faltam = ordenados.filter((t) => !itens.some((i) => i.tema_id === t.id)).map((t) => t.id);
@@ -1177,14 +1463,16 @@ Regras dos itens:
       anexos: usos.slice(1).map((id) => ({ uso_id: id })),
     },
   ]);
+  const tempos = tempo.tempos();
+  console.log("[agente-calendario] detalhar", { proposta_id: p.id, lotes: lotes.length, novos: novos.length, faltam: faltam.length, raciocinio, tempos_ms: tempos });
 
   if (falha) {
     // Parte ficou salva; a proxima chamada so refaz o que falta. Nunca 200.
     const resposta = respostaDeErro(falha.reason);
     const corpoErro = await resposta.json();
-    return json({ ...corpoErro, proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo }, resposta.status);
+    return json({ ...corpoErro, proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo, tempos_ms: tempos }, resposta.status);
   }
-  return json({ proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo });
+  return json({ proposta: atualizada, faltam, custo_usd: custo, saldo_usd: saldo, tempos_ms: tempos, parou_pelo_tempo: parouPeloTempo });
 }
 
 async function conversar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
@@ -1285,7 +1573,7 @@ Datas só de segunda a sexta entre ${p.periodo_inicio} e ${p.periodo_fim}. Forma
       if (original && original !== item.data) ajustes.push(`"${item.tema}" foi de ${original} para ${item.data} (só segunda a sexta dentro do período).`);
       return item;
     }).filter((i) => i.tema);
-    campos.itens = itens.sort((a, b) => a.data.localeCompare(b.data));
+    campos.itens = manterDoAnterior(itens, p.itens).sort((a, b) => a.data.localeCompare(b.data));
     // Pedido livre: o período acompanha as datas dos itens (a data pode ter mudado).
     if (String(p.parametros.origem ?? "") === "pedido_livre" && itens.length) {
       campos.periodo_inicio = (campos.itens as Item[])[0].data;
@@ -1335,7 +1623,11 @@ export function descricaoDoItem(item: Item, propostaId: string, indice: number, 
     `Palavra-chave: ${item.palavra_chave}`,
   ];
   if (item.termo_regional) linhas.push(`Termo regional: ${item.termo_regional}`);
+  const editorial = rotuloEditorial(item.tipo_editorial ?? "", item.framework ?? "");
+  if (editorial) linhas.push(`Tipo e framework: ${editorial}`);
+  if (item.etapa) linhas.push(`Etapa da campanha: ${item.etapa}`);
   linhas.push("", `Gancho: ${item.gancho}`, "", `Resumo: ${item.resumo}`);
+  if (item.instrucao_arte) linhas.push("", `Instrução de arte da equipe: ${item.instrucao_arte}`);
   if (campanha && campanha.linhas.length) linhas.push("", ...campanha.linhas);
   linhas.push("", "Roteiro dos cards:");
   for (const c of item.cards) {
@@ -1364,6 +1656,11 @@ export function itensComTaskId(itens: Item[], resultado: Array<{ indice: number;
   return itens.map((item, i) => ({ ...item, task_id: porIndice.get(i) ?? item.task_id ?? null }));
 }
 
+/**
+ * gravar { proposta_id, project_id?, tema_ids? }: sem tema_ids grava tudo o que
+ * falta; com tema_ids grava só os escolhidos (campanha: "Mandar para a
+ * agenda"). A proposta só vira gravada quando todos os itens têm tarefa.
+ */
 async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const p = await carregarProposta(servico, corpo.proposta_id);
   await exigirAcessoAoCliente(chamador, p.client_id);
@@ -1374,17 +1671,36 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   const projectId = String(corpo.project_id ?? p.project_id ?? "");
   await exigirProjetoDoCliente(servico, projectId, p.client_id);
   if (p.itens.length === 0) throw new ErroHttp(409, "proposta_sem_itens", "A proposta não tem itens para gravar.");
+  const temaIds = Array.isArray(corpo.tema_ids) ? corpo.tema_ids.map((x) => String(x ?? "")).filter(Boolean) : null;
+  const r = await gravarItens(servico, chamador, p, projectId, temaIds);
+  return json(r.corpo, r.status);
+}
 
+/** Grava os itens (todos, ou os de temaIds) na agenda pelo serviço do MCP. */
+async function gravarItens(
+  servico: SupabaseClient,
+  chamador: Chamador,
+  p: Proposta,
+  projectId: string,
+  temaIds: string[] | null,
+): Promise<{ status: number; corpo: Record<string, unknown> }> {
+  const tempo = relogio();
   const uteis = diasUteisDaProposta(p);
+  const alvo = temaIds && temaIds.length ? new Set(temaIds) : null;
+  const indices = p.itens.map((_, i) => i).filter((i) => !alvo || alvo.has(p.itens[i].tema_id));
+  if (!indices.length) throw new ErroHttp(400, "nenhum_item_escolhido", "Escolha ao menos um conteúdo desta proposta.");
 
   // Itens que ja existem na agenda do cliente (mesmo titulo na mesma data) nao
-  // sao recriados: preserva o que existe.
+  // sao recriados: preserva o que existe. A janela cobre as datas dos itens.
+  const datasDosItens = indices.map((i) => normalizarDataUtil(p.itens[i].data, uteis)).sort();
+  const deData = datasDosItens[0] < p.periodo_inicio ? datasDosItens[0] : p.periodo_inicio;
+  const ateData = datasDosItens[datasDosItens.length - 1] > p.periodo_fim ? datasDosItens[datasDosItens.length - 1] : p.periodo_fim;
   const { data: projetos } = await servico.from("projects").select("id").eq("client_id", p.client_id).is("deleted_at", null).limit(200);
   const projectIds = (projetos ?? []).map((x: { id: string }) => x.id);
   const { data: existentes } = projectIds.length
     ? await servico.from("tasks").select("id, title, due_date")
       .in("project_id", projectIds).is("deleted_at", null)
-      .gte("due_date", p.periodo_inicio).lte("due_date", p.periodo_fim).limit(1000)
+      .gte("due_date", deData).lte("due_date", ateData).limit(1000)
     : { data: [] as Array<{ id: string; title: string; due_date: string }> };
   const jaNaAgenda = (existentes ?? []) as Array<{ id: string; title: string; due_date: string }>;
 
@@ -1407,18 +1723,25 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
   const campanhaNoItem = campanhaDaProposta && campanhaDaProposta.client_id === p.client_id
     ? await campanhaNaAgenda(servico, campanhaDaProposta).catch(() => null)
     : null;
+  tempo.marcar("leituras");
 
-  for (let i = 0; i < p.itens.length; i++) {
+  const gravarUm = async (i: number) => {
     const item = p.itens[i];
-    const data = normalizarDataUtil(item.data, uteis);
     const titulo = (item.tema || `Publicação ${i + 1}`).slice(0, 200);
-    const idempotencyKey = `mesa-cal:${p.id}:${i}`;
+    // Já está na agenda (gravado antes, inclusive por seleção): não mexe.
+    if (item.task_id) {
+      resultado.push({ indice: i, tema: titulo, data: item.data, task_id: item.task_id, situacao: "ja_gravado" });
+      return;
+    }
+    const data = normalizarDataUtil(item.data, uteis);
+    // Chave pelo tema (estável quando a equipe muda datas e a ordem dos itens).
+    const idempotencyKey = `mesa-cal:${p.id}:${item.tema_id || i}`;
     const idPrevisto = await deterministicEditorialTaskId(PRINCIPAL_MESA, idempotencyKey);
 
     const duplicado = jaNaAgenda.find((t) => t.id !== idPrevisto && t.due_date === data && tituloNormal(t.title) === tituloNormal(titulo));
     if (duplicado) {
       resultado.push({ indice: i, tema: titulo, data, task_id: duplicado.id, situacao: "ja_existia" });
-      continue;
+      return;
     }
 
     const correlationId = crypto.randomUUID();
@@ -1466,7 +1789,11 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
         errorCode: conflito ? "conflict" : "handler_error", errorMessage: msg,
       });
     }
-  }
+  };
+  // Em paralelo (cada item tem a sua chave): antes era um de cada vez.
+  await emParalelo(indices.length, GRAVACOES_EM_PARALELO, (k) => gravarUm(indices[k]));
+  resultado.sort((a, b) => a.indice - b.indice);
+  tempo.marcar("agenda");
 
   const erros = resultado.filter((r) => r.situacao === "erro");
   // Pulados por ja existirem tambem entram: o estudio usa a tarefa existente.
@@ -1479,36 +1806,68 @@ async function gravar(servico: SupabaseClient, chamador: Chamador, corpo: Record
     // Parcial: guarda o que entrou e continua pronta para nova tentativa
     // (idempotente). Nunca 200.
     const atualizada = await salvarProposta(servico, p, { task_ids: todos, itens: itensComTarefa, project_id: projectId });
-    return json({
-      error: "gravacao_parcial",
-      mensagem: `${erros.length} de ${p.itens.length} itens não entraram na agenda. Tente gravar de novo; o que já entrou não duplica.`,
-      proposta: atualizada,
-      itens: resultado,
-    }, erros.length === p.itens.length ? 500 : 409);
+    return {
+      status: erros.length === indices.length ? 500 : 409,
+      corpo: {
+        error: "gravacao_parcial",
+        mensagem: `${erros.length} de ${indices.length} itens não entraram na agenda. Tente gravar de novo; o que já entrou não duplica.`,
+        proposta: atualizada,
+        itens: resultado,
+      },
+    };
   }
 
+  // Gravada só quando todo item tem tarefa; com seleção, o resto espera na proposta.
+  const faltamNaAgenda = itensComTarefa.filter((i) => !i.task_id).length;
+  const completa = faltamNaAgenda === 0;
   const atualizada = await salvarProposta(servico, p, {
     task_ids: todos,
     itens: itensComTarefa,
     project_id: projectId,
-    status: "gravada",
-    gravada_em: p.gravada_em ?? new Date().toISOString(),
+    ...(completa ? { status: "gravada", gravada_em: p.gravada_em ?? new Date().toISOString() } : {}),
   });
 
-  await registrarMemoriaDaEscolha(servico, p);
-  if (typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id)) {
+  if (!completa) {
+    // Gravação por seleção: o Estúdio (estudio-arte) e a Agenda do mês acham o
+    // roteiro em proposta gravada que contém o task_id. Os itens que entraram
+    // agora ganham um espelho gravado; a proposta original segue pronta, com o
+    // resto esperando a equipe.
+    const entraram = itensComTarefa.filter((it, k) => it.task_id && indices.indexOf(k) >= 0);
+    if (entraram.length) {
+      const { error: erroEspelho } = await servico.from("calendario_propostas").insert({
+        client_id: p.client_id,
+        project_id: projectId,
+        periodo_inicio: entraram.map((i) => i.data).sort()[0],
+        periodo_fim: entraram.map((i) => i.data).sort()[entraram.length - 1],
+        parametros: { ...p.parametros, origem: `${String(p.parametros.origem ?? "estrategista")}_gravada`, espelho_de: p.id },
+        status: "gravada",
+        diagnostico: null,
+        temas: [],
+        itens: entraram,
+        task_ids: entraram.map((i) => i.task_id),
+        criado_por: chamador.userId,
+        gravada_em: new Date().toISOString(),
+      });
+      if (erroEspelho) console.error("[agente-calendario] espelho gravado nao criado", { proposta_id: p.id, code: erroEspelho.code });
+    }
+  }
+  if (completa) await registrarMemoriaDaEscolha(servico, p);
+  if (completa && typeof p.parametros.campanha_id === "string" && UUID.test(p.parametros.campanha_id)) {
     await servico.from("mesa_campanhas").update({ status: "gravada" }).eq("id", p.parametros.campanha_id).eq("client_id", p.client_id);
   }
   // Cada item com roteiro já chega dirigido no Estúdio (sem custo de IA).
   const direcoes = await criarDirecoesDoRoteiro(servico, p.client_id, itensComTarefa, chamador.userId);
+  tempo.marcar("direcoes");
 
   const conversaId = await garantirConversa(servico, atualizada, chamador.userId);
   const criados = resultado.filter((r) => r.situacao === "criado").length;
   await registrarMensagens(servico, conversaId, p.client_id, [
-    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m). ${direcoes} com direção de arte pronta no Estúdio.` },
+    { papel: "sistema", conteudo: `Gravado na agenda: ${criados} criado(s), ${resultado.length - criados} já existia(m). ${direcoes} com direção de arte pronta no Estúdio.${faltamNaAgenda ? ` ${faltamNaAgenda} ainda na proposta.` : ""}` },
   ]);
+  const tempos = tempo.tempos();
+  console.log("[agente-calendario] gravar", { proposta_id: p.id, itens: indices.length, criados, tempos_ms: tempos });
 
-  return json({ proposta: atualizada, itens: resultado, direcoes_prontas: direcoes });
+  return { status: 200, corpo: { proposta: atualizada, itens: resultado, direcoes_prontas: direcoes, faltam_na_agenda: faltamNaAgenda, tempos_ms: tempos } };
 }
 
 /** Memoria do estrategista: o que a equipe escolheu e o que descartou. Uma vez por proposta. */
@@ -1592,10 +1951,16 @@ async function criarDirecoesDoRoteiro(
     const tipo = formato.get(item.task_id!);
     if (!tipo || !FORMATOS_COM_ARTE.has(tipo) || jaTem.has(item.task_id!)) continue;
     const campanha = item.campanha_id ? campanhas.get(item.campanha_id) : undefined;
-    const direcao = direcaoDoRoteiro(item.cards, marca, {
+    // A instrução de arte da equipe (ex.: trocar o céu) entra no conceito e,
+    // no estático, no estilo da lâmina: o Estúdio já nasce com ela.
+    const instrucao = texto(item.instrucao_arte, 600);
+    const cardsDoRoteiro = instrucao && tipo !== "carousel"
+      ? item.cards.map((c, i) => (i === 0 ? { ...c, estilo: [c.estilo, `Instrução da equipe: ${instrucao}`].filter(Boolean).join("; ") } : c))
+      : item.cards;
+    const direcao = direcaoDoRoteiro(cardsDoRoteiro, marca, {
       postUnico: tipo !== "carousel",
       carrosselInfinito: !!item.carrossel_infinito,
-      conceito: `${item.tema}. ${item.resumo}${campanha ? ` Campanha "${campanha.nome}": ${String(campanha.identidade?.tema_visual ?? "")}` : ""}`.slice(0, 900),
+      conceito: `${instrucao ? `Instrução de arte da equipe: ${instrucao}. ` : ""}${item.tema}. ${item.resumo}${campanha ? ` Campanha "${campanha.nome}": ${String(campanha.identidade?.tema_visual ?? "")}` : ""}`.slice(0, 900),
       levaLogo: (ordem, total) => ordem === 1 || ordem === total,
     });
     if (!direcao.cards.length) continue;
@@ -2334,7 +2699,10 @@ const REGRAS_DOS_ITENS = `Regras dos itens:
 - carrossel_infinito: true quando o carrossel for uma cena panorâmica contínua e isso fizer sentido.
 - copy: a legenda completa do post.
 - tipo_conteudo: principal (ou extra_sazonal para data comemorativa).
-- status: planejado.`;
+- status: planejado.
+- tipo_editorial e framework: um de cada, pela base de técnica; a funcao de cada card nomeia o passo do framework.
+- ${REGRA_DO_CARROSSEL}
+- ${REGRA_DO_ESTATICO}`;
 
 const ESQUEMA_PEDIDO = {
   nome: "pedido_do_mes",
@@ -2362,6 +2730,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
 
   const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
   if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
+  const escolhaDoPedido = lerEscolhaEditorial(corpo);
 
   const [ctx, anexos, projectId, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, clientId, inicio, fim),
@@ -2386,7 +2755,7 @@ async function pedidoLivre(servico: SupabaseClient, chamador: Chamador, corpo: R
   const pedido = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} })}
 ${campanha ? `\nCAMPANHA DESTES CONTEÚDOS (siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas e tom; quando a campanha tiver imagens, a ilustracao da lâmina que usa uma delas começa com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
 PEDIDO DA EQUIPE: ${mensagem}
-${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
+${escolhaVazia(escolhaDoPedido) ? "" : `\n${blocoDaEscolhaEditorial(escolhaDoPedido)}\n`}${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns) (prints, fotos ou referências). Use o conteúdo delas com fidelidade: depoimento ou avaliação vira texto transcrito exatamente como está (com o nome ou a inicial do autor quando aparecer), sem inventar nem melhorar a fala; foto do cliente vira indicação de uso da foto real na ilustracao.` : ""}
 
 TAREFA: faça exatamente o que o pedido diz.
 - Quantidade: a pedida (se não disser, 1 conteúdo).
@@ -2443,6 +2812,429 @@ ${REGRAS_DOS_ITENS}`;
     { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: proposta.id }] },
   ]);
   return json({ proposta, resposta, conversa_id: conversaId, project_id: projectId, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd, reserva_usada: s.reservaUsada ?? null });
+}
+
+// ------------------------------------------------ conteúdo rápido (25/09)
+
+const ESQUEMA_RAPIDO = {
+  nome: "conteudo_rapido",
+  schema: obj({ resposta: S("string"), item: ESQUEMA_ITEM }),
+};
+
+/** Próximo dia útil a partir de `desde` (inclusive) sem item na agenda; sem nenhum livre, o próximo útil. */
+export function proximoDiaLivre(desde: string, ocupados: Set<string>): string {
+  const uteis = diasUteisDoPeriodo(desde, somarDias(desde, 45));
+  return uteis.find((d) => !ocupados.has(d)) ?? uteis[0] ?? desde;
+}
+
+/** A data do conteúdo rápido: a pedida (nunca no passado), "livre" ou hoje; sempre de segunda a sexta. */
+export function dataDoConteudoRapido(pedida: unknown, hoje: string, uteis: string[], ocupados: Set<string>): string {
+  const s = String(pedida ?? "hoje").trim();
+  if (DATA.test(s)) return normalizarDataUtil(s < hoje ? hoje : s, uteis);
+  if (s === "livre") return proximoDiaLivre(hoje, ocupados);
+  return normalizarDataUtil(hoje, uteis);
+}
+
+/**
+ * conteudo_rapido { client_id, pedido, campanha_id?, data? ("hoje" | "livre" |
+ * AAAA-MM-DD), formato? (carrossel | estatico), tipo?, framework?, modelo_id? }:
+ * a equipe escreve ou dita o pedido ("o cliente pediu uma arte da promoção de
+ * sexta") e UMA chamada rápida (modelo rápido, raciocínio baixo, contexto
+ * enxuto) escreve o conteúdo com o roteiro das lâminas. Ele já entra no dia
+ * do calendário pelo mesmo gravar (direção pronta no Estúdio) e a resposta traz
+ * o task_id para "Abrir no Estúdio". Sem projeto de social, volta a proposta
+ * pronta e sem_projeto: true (a tela pede o projeto e grava).
+ * Resposta: { proposta, item, task_id, data, mes, project_id, sem_projeto,
+ * direcoes_prontas, resposta, custo_usd, saldo_usd, reserva_usada, tempos_ms }.
+ */
+async function conteudoRapido(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const tempo = relogio();
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const pedidoTexto = texto(corpo.pedido ?? corpo.mensagem, 3000);
+  if (!pedidoTexto) throw new ErroHttp(400, "pedido_vazio", "Escreva o que o conteúdo precisa dizer.");
+  const campanha = corpo.campanha_id ? await carregarCampanha(servico, corpo.campanha_id) : null;
+  if (campanha && campanha.client_id !== clientId) throw new ErroHttp(403, "campanha_de_outro_cliente", "A campanha não é deste cliente.");
+  const formatoPedido: Formato | null = corpo.formato === "carrossel" || corpo.formato === "estatico" ? corpo.formato : null;
+  const tipo = normalizarTipo(corpo.tipo);
+  const framework = normalizarFramework(corpo.framework);
+
+  const hoje = hojeSaoPaulo();
+  const pedida = String(corpo.data ?? "");
+  const fimJanela = DATA.test(pedida) && pedida > somarDias(hoje, 45) ? somarDias(pedida, 7) : somarDias(hoje, 45);
+  const [ctx, projectId, conversaId, fotosDaCamp, rapido] = await Promise.all([
+    montarContexto(servico, clientId, hoje, fimJanela),
+    projetoSocialDoCliente(servico, clientId),
+    conversaDoAgenteDoMes(servico, clientId, chamador.userId),
+    campanha ? fotosDaCampanha(servico, campanha) : Promise.resolve([]),
+    resolverModeloRapido(corpo.modelo_id),
+  ]);
+  tempo.marcar("contexto");
+  const uteis = diasUteisDoPeriodo(hoje, fimJanela);
+  if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "Não há dia de segunda a sexta na janela.");
+  const data = dataDoConteudoRapido(corpo.data, hoje, uteis, ctx.datasOcupadas);
+
+  const pedido = `${contextoEmTexto(ctx, { inicio: data, fim: data, parametros: {} }, { enxuto: true })}
+${campanha ? `\nCAMPANHA DESTE CONTEÚDO (siga o conceito, a identidade e o briefing; lâmina com foto da campanha começa a ilustracao com "Foto real: <nome da imagem>"):\n${JSON.stringify(resumoDaCampanha(campanha, fotosDaCamp))}\n` : ""}
+PEDIDO RÁPIDO DA EQUIPE: ${pedidoTexto}
+
+TAREFA: UM conteúdo só, pronto para o Estúdio, para ${data}. Faça exatamente o que o pedido diz, sem enrolar.
+- formato: ${formatoPedido ?? "escolha: estático para aviso, oferta, novidade ou prova (mensagem única); carrossel para ensinar, contar história ou comparar"}.
+- tipo_editorial: ${tipo || "o que mais serve ao pedido"}; framework: ${framework || "o que mais serve ao pedido"}.
+- Estrutura: ${estruturaDoConteudo(tipo, framework, formatoPedido ?? "")}.
+- data: ${data}.
+- resposta: 1 frase com o que você preparou.
+${REGRAS_DOS_ITENS}`;
+
+  const s = await chamarTexto({
+    clientId,
+    tarefa: "calendario",
+    agente: AGENTE,
+    modeloId: rapido.modelo.id,
+    timeoutMs: TIMEOUT_CALENDARIO_MS,
+    sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+    mensagens: [{ papel: "usuario", conteudo: pedido }],
+    raciocinio: rapido.raciocinio,
+    esquemaJson: ESQUEMA_RAPIDO,
+    referencia: { tipo: REF_AGENTE_DO_MES, id: conversaId },
+    criadoPor: chamador.userId,
+  });
+  tempo.marcar("ia");
+  const r = (s.json ?? {}) as Record<string, unknown>;
+  const item = normalizarItem(r.item, uteis, data);
+  item.tema_id = "r1";
+  if (formatoPedido && item.formato !== formatoPedido) {
+    item.formato = formatoPedido;
+    if (formatoPedido === "estatico") {
+      item.cards = item.cards.slice(0, 1);
+      item.carrossel_infinito = false;
+    }
+  }
+  if (!item.tipo_editorial && tipo) item.tipo_editorial = tipo;
+  if (!item.framework && framework) item.framework = framework;
+  if (campanha) item.campanha_id = campanha.id;
+  if (!item.tema) item.tema = pedidoTexto.slice(0, 120);
+  if (!item.cards.length) throw new ErroHttp(502, "rapido_sem_roteiro", "O agente não devolveu o roteiro. Tente de novo.", { uso_id: s.usoId });
+
+  const { data: criada, error } = await servico
+    .from("calendario_propostas")
+    .insert({
+      client_id: clientId,
+      project_id: projectId,
+      periodo_inicio: data,
+      periodo_fim: data,
+      parametros: { origem: "conteudo_rapido", mensagem: pedidoTexto, campanha_id: campanha?.id ?? null, modelo: rapido.modelo.id, raciocinio: rapido.raciocinio ?? null },
+      status: "pronta",
+      diagnostico: null,
+      temas: [],
+      itens: [item],
+      task_ids: [],
+      conversa_id: conversaId,
+      criado_por: chamador.userId,
+    })
+    .select("*")
+    .single();
+  if (error || !criada) throw new ErroHttp(503, "proposta_nao_gravada", "O conteúdo foi escrito, mas não foi possível guardar. Tente de novo.", { uso_id: s.usoId });
+  const resposta = texto(r.resposta, 1000) || `Conteúdo pronto para ${data}.`;
+  await registrarMensagens(servico, conversaId, clientId, [
+    { papel: "usuario", conteudo: `Conteúdo rápido: ${pedidoTexto}` },
+    { papel: "agente", conteudo: resposta, uso_id: s.usoId, anexos: [{ proposta_id: (criada as Proposta).id }] },
+  ]);
+
+  const base = {
+    item,
+    data,
+    mes: `${data.slice(0, 7)}-01`,
+    project_id: projectId,
+    resposta,
+    custo_usd: s.custoUsd,
+    saldo_usd: s.saldoUsd,
+    reserva_usada: s.reservaUsada ?? null,
+  };
+  if (!projectId) {
+    return json({ ...base, proposta: criada, task_id: null, sem_projeto: true, direcoes_prontas: 0, tempos_ms: tempo.tempos() });
+  }
+  // Entra no dia do calendário pelo mesmo gravar (direção pronta no Estúdio).
+  const p = criada as Proposta;
+  p.temas = [];
+  p.itens = [item];
+  p.task_ids = [];
+  p.parametros = (p.parametros ?? {}) as Record<string, unknown>;
+  const g = await gravarItens(servico, chamador, p, projectId, null);
+  const tempos = tempo.tempos();
+  console.log("[agente-calendario] conteudo_rapido", { client_id: clientId, raciocinio: rapido.raciocinio, modelo: rapido.modelo.id, tempos_ms: tempos });
+  if (g.status !== 200) return json({ ...base, ...g.corpo, sem_projeto: false, tempos_ms: tempos }, g.status);
+  const gravado = (Array.isArray(g.corpo.itens) ? g.corpo.itens : []) as Array<{ task_id: string | null }>;
+  return json({
+    ...base,
+    proposta: g.corpo.proposta,
+    task_id: gravado[0]?.task_id ?? null,
+    sem_projeto: false,
+    direcoes_prontas: g.corpo.direcoes_prontas ?? 0,
+    tempos_ms: tempos,
+  });
+}
+
+// ------------------------------------------------ editar um conteúdo à mão
+
+const LIMITES_DO_EDITAR: Record<string, number> = { tema: 200, gancho: 400, copy: 2200, cta: 300, resumo: 1200 };
+
+/** Aplica a edição da equipe no item (sem IA). Datas só de segunda a sexta na janela da proposta. */
+export function editarUmItem(antigo: Item, campos: Record<string, unknown>, uteis: string[]): { item: Item; avisos: string[] } {
+  const novo: Item = { ...antigo, cards: antigo.cards.map((x) => ({ ...x })) };
+  const avisos: string[] = [];
+  if (typeof campos.data === "string" && DATA.test(campos.data)) {
+    novo.data = normalizarDataUtil(campos.data, uteis);
+    if (novo.data !== campos.data) avisos.push(`A data foi para ${novo.data} (só segunda a sexta dentro do período).`);
+  }
+  if (campos.formato === "carrossel" || campos.formato === "estatico") {
+    novo.formato = campos.formato;
+    if (novo.formato === "estatico") {
+      if (novo.cards.length > 1) avisos.push("No estático fica só a primeira lâmina.");
+      novo.cards = novo.cards.slice(0, 1);
+      novo.carrossel_infinito = false;
+    }
+  }
+  for (const k of ["tema", "gancho", "copy", "cta", "resumo"] as const) {
+    if (typeof campos[k] === "string") {
+      const v = texto(campos[k], LIMITES_DO_EDITAR[k]);
+      if (v) novo[k] = v;
+    }
+  }
+  if (typeof campos.instrucao_arte === "string") {
+    const v = texto(campos.instrucao_arte, 600);
+    if (v) novo.instrucao_arte = v;
+    else delete novo.instrucao_arte;
+  }
+  if (campos.tipo_editorial !== undefined) novo.tipo_editorial = normalizarTipo(campos.tipo_editorial);
+  if (campos.framework !== undefined) novo.framework = normalizarFramework(campos.framework);
+  if (Array.isArray(campos.cards)) {
+    for (const x of campos.cards) {
+      const o = (x ?? {}) as Record<string, unknown>;
+      const card = novo.cards.find((k) => k.ordem === Number(o.ordem));
+      if (!card) continue;
+      if (typeof o.texto === "string" && o.texto.trim()) card.texto = texto(o.texto, 1200);
+      if (typeof o.ilustracao === "string") card.ilustracao = texto(o.ilustracao, 800);
+    }
+  }
+  return { item: novo, avisos };
+}
+
+/**
+ * editar_item { proposta_id, tema_id, campos: { data?, formato?, tema?, gancho?,
+ * copy?, cta?, resumo?, instrucao_arte?, tipo_editorial?, framework?,
+ * cards?: [{ ordem, texto?, ilustracao? }] } }: a equipe muda um conteúdo à mão,
+ * sem IA e sem custo. O que já está na agenda não muda por aqui (ajuste no
+ * Estúdio). Resposta: { proposta, item, avisos }.
+ */
+async function editarItem(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const p = await carregarProposta(servico, corpo.proposta_id);
+  await exigirAcessoAoCliente(chamador, p.client_id);
+  if (p.status === "descartada") throw new ErroHttp(409, "proposta_descartada", "Esta proposta foi descartada.");
+  const temaId = texto(corpo.tema_id, 40);
+  const indice = p.itens.findIndex((i) => i.tema_id === temaId);
+  if (!temaId || indice < 0) throw new ErroHttp(404, "item_inexistente", "Este conteúdo não está mais na proposta. Atualize a tela.");
+  if (p.itens[indice].task_id) {
+    throw new ErroHttp(409, "item_na_agenda", "Este conteúdo já está na agenda: ajuste pelo Estúdio.");
+  }
+  const campos = (corpo.campos && typeof corpo.campos === "object" ? corpo.campos : {}) as Record<string, unknown>;
+  const { item, avisos } = editarUmItem(p.itens[indice], campos, diasUteisDaProposta(p));
+  const itens = p.itens.map((i, k) => (k === indice ? item : i)).sort((a, b) => a.data.localeCompare(b.data));
+  const mudancas: Record<string, unknown> = { itens };
+  const origem = String(p.parametros.origem ?? "");
+  if (origem === "pedido_livre" || origem === "conteudo_rapido") {
+    mudancas.periodo_inicio = itens[0].data;
+    mudancas.periodo_fim = itens[itens.length - 1].data;
+  }
+  const atualizada = await salvarProposta(servico, p, mudancas);
+  return json({ proposta: atualizada, item, avisos, custo_usd: 0 });
+}
+
+// ------------------------------------------------ conteúdos da campanha na hora
+
+const MAX_CONTEUDOS_POR_VEZ = 8;
+const CONTEUDOS_POR_LOTE = 2;
+
+/**
+ * campanha_conteudos { campanha_id, quantidade?, tipos?, frameworks?, formato?,
+ * modelo_id?, raciocinio? }: gera os conteúdos da campanha na hora, em lotes
+ * paralelos de 2, seguindo o arco da campanha (aquecimento, lançamento, prova,
+ * objeção, urgência, último chamado) com o briefing, as imagens e a
+ * identidade. Datas calculadas aqui (segunda a sexta, de hoje em diante, dias
+ * livres primeiro). Os conteúdos entram na proposta da campanha (criada se não
+ * houver) e esperam a equipe escolher e mandar para a agenda (gravar com
+ * tema_ids). Cada lote grava ao terminar. Resposta: { campanha, proposta,
+ * novos, faltam, custo_usd, saldo_usd, tempos_ms }.
+ */
+async function campanhaConteudos(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const tempo = relogio();
+  const c = await carregarCampanha(servico, corpo.campanha_id);
+  await exigirAcessoAoCliente(chamador, c.client_id);
+  const pedidoQtd = Math.round(Number(corpo.quantidade));
+  const escolha = lerEscolhaEditorial(corpo);
+  const formatoPedido: Formato | null = corpo.formato === "carrossel" || corpo.formato === "estatico" ? corpo.formato : null;
+
+  const hoje = hojeSaoPaulo();
+  const inicio = c.periodo_inicio && c.periodo_inicio > hoje ? c.periodo_inicio : hoje;
+  let fim = c.periodo_fim && c.periodo_fim >= inicio ? c.periodo_fim : somarDias(inicio, 21);
+  if (diasEntre(inicio, fim) < 5) fim = somarDias(inicio, 14);
+  const uteis = diasUteisDoPeriodo(inicio, fim);
+  if (!uteis.length) throw new ErroHttp(400, "periodo_sem_dia_util", "O período da campanha não tem dia de segunda a sexta.");
+
+  const propostaAntiga = c.proposta_id ? await carregarProposta(servico, c.proposta_id).catch(() => null) : null;
+  const proposta0 = propostaAntiga && propostaAntiga.status !== "descartada" ? propostaAntiga : null;
+  const existentes = proposta0?.itens ?? [];
+  const quantidade = Number.isFinite(pedidoQtd) && pedidoQtd >= 1 ? Math.min(MAX_CONTEUDOS_POR_VEZ, pedidoQtd) : existentes.length ? 3 : 5;
+
+  const [ctx, fotosDaCamp, projectId] = await Promise.all([
+    montarContexto(servico, c.client_id, inicio, fim),
+    fotosDaCampanha(servico, c),
+    projetoSocialDoCliente(servico, c.client_id),
+  ]);
+  const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio);
+  tempo.marcar("contexto");
+
+  // Arco da história; a escolha da equipe troca tipo, framework e formato.
+  const arco = arcoDaCampanha(quantidade).map((e, k) => ({
+    ...e,
+    tipo: escolha.tipos.length ? escolha.tipos[k % escolha.tipos.length] : e.tipo,
+    framework: escolha.frameworks.length ? escolha.frameworks[k % escolha.frameworks.length] : e.framework,
+    formato: formatoPedido ?? e.formato,
+  }));
+  const ocupados = new Set<string>([...ctx.datasOcupadas, ...existentes.map((i) => i.data)]);
+  const datas = distribuirDatas(arco.length, uteis, ocupados);
+  let seq = Math.max(0, ...existentes.map((i) => Number(String(i.tema_id).replace(/\D/g, "")) || 0));
+  const vagas = arco.map((e, k) => ({ ...e, tema_id: `c${++seq}`, data: datas[k] }));
+
+  // A proposta da campanha nasce agora quando não existe (a tela acompanha os conteúdos chegando).
+  let proposta: Proposta;
+  if (proposta0) {
+    proposta = proposta0;
+  } else {
+    const { data: nova, error } = await servico
+      .from("calendario_propostas")
+      .insert({
+        client_id: c.client_id,
+        project_id: projectId,
+        periodo_inicio: inicio,
+        periodo_fim: fim,
+        parametros: { origem: "campanha", campanha_id: c.id, modelo: modelo.id },
+        status: "detalhando",
+        diagnostico: c.conceito ?? null,
+        temas: [],
+        itens: [],
+        task_ids: [],
+        criado_por: chamador.userId,
+      })
+      .select("*")
+      .single();
+    if (error || !nova) throw new ErroHttp(503, "proposta_nao_gravada", "Não foi possível abrir os conteúdos da campanha. Tente de novo.");
+    proposta = { ...(nova as Proposta), temas: [], itens: [], task_ids: [], parametros: (nova as Proposta).parametros ?? {} };
+    await servico.from("mesa_campanhas").update({ proposta_id: proposta.id }).eq("id", c.id).eq("client_id", c.client_id);
+  }
+
+  const base = `${contextoEmTexto(ctx, { inicio, fim, parametros: {} }, { enxuto: true })}
+
+CAMPANHA (JSON; siga o conceito, a identidade e o briefing: produto em foco, oferta, mensagem central, público, provas, tom e CTA):
+${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), pedido_original: c.pedido })}
+${existentes.length ? `\nCONTEÚDOS QUE A CAMPANHA JÁ TEM (não repita tema, gancho nem estrutura):\n${existentes.map((i) => `- ${i.data}: ${i.tema}${i.etapa ? ` (${i.etapa})` : ""}`).join("\n")}\n` : ""}${fotosDaCamp.length ? '\nQuando uma lâmina usar uma foto da campanha, a ilustracao dela começa com "Foto real: <nome da foto>" e diz o enquadramento.\n' : ""}`;
+
+  const lotes: typeof vagas[] = [];
+  for (let i = 0; i < vagas.length; i += CONTEUDOS_POR_LOTE) lotes.push(vagas.slice(i, i + CONTEUDOS_POR_LOTE));
+  const usos: string[] = [];
+  let custo = 0;
+  let saldo: number | null = null;
+  const novos = new Map<string, Item>();
+  let fila: Promise<unknown> = Promise.resolve();
+  const gravarParcial = () => {
+    const agora = existentes.concat([...novos.values()]).sort((a, b) => a.data.localeCompare(b.data));
+    fila = fila.then(() => servico.from("calendario_propostas").update({ itens: agora }).eq("id", proposta.id).eq("client_id", c.client_id)).catch(() => undefined);
+    return fila;
+  };
+
+  const rodarLote = async (lote: typeof vagas) => {
+    const pedido = `${base}
+TAREFA: escreva ${lote.length === 1 ? "o conteúdo" : `os ${lote.length} conteúdos`} abaixo desta campanha, completos, cada um mostrando o produto em foco e servindo à mensagem central.
+${lote.map((v) => `- tema_id ${v.tema_id} | etapa ${v.etapa}: ${v.objetivo} | data ${v.data} | formato ${v.formato} | tipo_editorial ${v.tipo} | framework ${v.framework}\n  Estrutura: ${estruturaDoConteudo(v.tipo, v.framework, v.formato)}`).join("\n")}
+- data: exatamente a indicada. tema: título curto do conteúdo (não o nome da campanha).
+${REGRAS_DOS_ITENS}`;
+    const s = await chamarTexto({
+      clientId: c.client_id,
+      tarefa: "calendario",
+      agente: AGENTE,
+      modeloId: modelo.id,
+      timeoutMs: TIMEOUT_CALENDARIO_MS,
+      sistema: `${ctx.prompt}\n${REGRAS_DE_SAIDA}`,
+      mensagens: [{ papel: "usuario", conteudo: pedido }],
+      raciocinio,
+      esquemaJson: ESQUEMA_ITENS,
+      referencia: { tipo: REF_CAMPANHA, id: c.id },
+      criadoPor: chamador.userId,
+    });
+    usos.push(s.usoId);
+    custo += s.custoUsd;
+    saldo = s.saldoUsd;
+    const brutos = Array.isArray((s.json as Record<string, unknown>)?.itens) ? (s.json as { itens: unknown[] }).itens : [];
+    lote.forEach((v, k) => {
+      const bruto = brutos.find((b) => String((b as Record<string, unknown>)?.tema_id ?? "") === v.tema_id) ?? brutos[k];
+      if (!bruto) return;
+      const item = normalizarItem(bruto, uteis, v.data);
+      item.tema_id = v.tema_id;
+      item.campanha_id = c.id;
+      item.etapa = v.etapa;
+      if (!item.tipo_editorial) item.tipo_editorial = v.tipo;
+      if (!item.framework) item.framework = v.framework;
+      if (formatoPedido && item.formato !== formatoPedido) {
+        item.formato = formatoPedido;
+        if (formatoPedido === "estatico") {
+          item.cards = item.cards.slice(0, 1);
+          item.carrossel_infinito = false;
+        }
+      }
+      if (item.tema && item.cards.length) novos.set(item.tema_id, item);
+    });
+    await gravarParcial();
+  };
+
+  const resultados = await emParalelo(lotes.length, LOTES_EM_PARALELO, (i) => rodarLote(lotes[i]), () => tempo.decorrido() > ORCAMENTO_DA_ACAO_MS);
+  await fila;
+  tempo.marcar("lotes");
+  const falha = resultados.find((r) => r && r.status === "rejected") as PromiseRejectedResult | undefined;
+
+  const itens = existentes.concat([...novos.values()]).sort((a, b) => a.data.localeCompare(b.data));
+  const faltam = vagas.filter((v) => !novos.has(v.tema_id)).map((v) => v.tema_id);
+  const atualizada = await salvarProposta(servico, proposta, {
+    itens,
+    // Conteúdo novo espera a equipe mandar para a agenda.
+    status: itens.some((i) => !i.task_id) ? "pronta" : proposta.status === "detalhando" ? "pronta" : proposta.status,
+  });
+  if (novos.size) await somarCustoDaCampanha(servico, c.id, c.client_id, custo);
+  const { data: campanhaFinal } = await servico.from("mesa_campanhas").select("*").eq("id", c.id).eq("client_id", c.client_id).maybeSingle();
+
+  try {
+    const conversaId = await conversaDaCampanha(servico, c, chamador.userId);
+    await registrarMensagens(servico, conversaId, c.client_id, [
+      {
+        papel: "agente",
+        conteudo: novos.size
+          ? `Gerei ${novos.size} conteúdo(s): ${[...novos.values()].map((i) => `${i.etapa ? `${i.etapa}: ` : ""}${i.tema} (${i.data})`).join("; ")}. Revise, escolha e mande para a agenda.`
+          : "Não consegui gerar os conteúdos agora.",
+        uso_id: usos[0] ?? null,
+        anexos: [{ proposta_id: proposta.id }, ...usos.slice(1).map((id) => ({ uso_id: id }))],
+      },
+    ]);
+  } catch (e) {
+    console.error("[agente-calendario] conversa da campanha sem registro dos conteudos", { campanha_id: c.id, erro: String(e) });
+  }
+  const tempos = tempo.tempos();
+  console.log("[agente-calendario] campanha_conteudos", { campanha_id: c.id, vagas: vagas.length, novos: novos.size, raciocinio, tempos_ms: tempos });
+
+  if (falha && !novos.size) {
+    const resposta = respostaDeErro(falha.reason);
+    const corpoErro = await resposta.json();
+    return json({ ...corpoErro, campanha: campanhaFinal ?? c, proposta: atualizada, faltam, custo_usd: custo, tempos_ms: tempos }, resposta.status);
+  }
+  return json({ campanha: campanhaFinal ?? c, proposta: atualizada, novos: novos.size, faltam, custo_usd: Math.round(custo * 1e6) / 1e6, saldo_usd: saldo, tempos_ms: tempos });
 }
 
 // ------------------------------------------------------------------ hypes
@@ -2960,7 +3752,8 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
   const inicio = c.periodo_inicio ?? hojeSaoPaulo();
   const fim = c.periodo_fim ?? somarDias(inicio, 21);
   const uteis = diasUteisDoPeriodo(inicio, fim);
-  const podeMudarItens = !!proposta && proposta.status !== "gravada" && proposta.status !== "descartada";
+  // Com o que já está na agenda protegido item a item, a conversa pode mudar e acrescentar o resto.
+  const podeMudarItens = !!proposta && proposta.status !== "descartada";
 
   const [ctx, anexos, conversaId, fotosDaCamp] = await Promise.all([
     montarContexto(servico, c.client_id, inicio, fim),
@@ -2986,8 +3779,8 @@ async function campanhaConversar(servico: SupabaseClient, chamador: Chamador, co
 CAMPANHA ATUAL (JSON):
 ${JSON.stringify({ ...resumoDaCampanha(c, fotosDaCamp), status: c.status })}
 
-CONTEÚDOS DA CAMPANHA (JSON${podeMudarItens ? "" : "; JÁ GRAVADOS NA AGENDA, NÃO MUDE"}):
-${JSON.stringify(proposta?.itens ?? [])}
+CONTEÚDOS DA CAMPANHA (JSON; os com "na_agenda": true já estão na agenda e NÃO MUDAM):
+${JSON.stringify((proposta?.itens ?? []).map((i) => ({ ...i, na_agenda: !!i.task_id, task_id: undefined })))}
 
 PEDIDO DA EQUIPE: ${mensagem}
 ${anexos.imagens.length ? `\nA equipe anexou ${anexos.imagens.length} imagem(ns); use o conteúdo com fidelidade.\n` : ""}
@@ -2995,7 +3788,7 @@ ${fotosDaCamp.length ? `Os conteúdos seguem o briefing e usam as imagens da cam
 ` : ""}Aplique o pedido. Devolva:
 - resposta: o que você mudou ou respondeu, em até 4 frases.
 - campanha: a campanha COMPLETA atualizada (nome, objetivo, conceito, identidade, briefing) só se algo dela mudou; senão null. As imagens da campanha a equipe escolhe na tela (seção Imagens): se o pedido for trocar imagem, diga isso na resposta.
-- itens: ${podeMudarItens ? `a lista COMPLETA de conteúdos atualizada só se algum conteúdo mudou, entrou ou saiu (mantenha tema_id dos que ficam; novo recebe tema_id novo); senão null. Datas só de segunda a sexta entre ${inicio} e ${fim}.` : "sempre null (os conteúdos já estão na agenda; se o pedido for sobre eles, diga na resposta para ajustar no Estúdio)."}
+- itens: ${podeMudarItens ? `a lista COMPLETA de conteúdos atualizada só se algum conteúdo mudou, entrou ou saiu (mantenha tema_id dos que ficam; novo recebe tema_id novo; os que estão na agenda voltam iguais); senão null. Datas só de segunda a sexta entre ${inicio} e ${fim}.` : "sempre null (os conteúdos já estão na agenda; se o pedido for sobre eles, diga na resposta para ajustar no Estúdio)."}
 ${REGRAS_DOS_ITENS}`;
 
   const s = await chamarTexto({
@@ -3051,8 +3844,12 @@ ${REGRAS_DOS_ITENS}`;
       item.campanha_id = c.id;
       if (tarefaDoTema.has(item.tema_id)) item.task_id = tarefaDoTema.get(item.tema_id) ?? null;
       return item;
-    }).filter((i) => i.tema).sort((a, b) => a.data.localeCompare(b.data));
-    if (itens.length) propostaFinal = await salvarProposta(servico, proposta, { itens });
+    }).filter((i) => i.tema);
+    // O que já foi mandado para a agenda não muda nem sai por aqui (ajuste no Estúdio).
+    const naAgenda = proposta.itens.filter((i) => i.task_id);
+    const livres = manterDoAnterior(itens.filter((i) => !naAgenda.some((a) => a.tema_id === i.tema_id)), proposta.itens);
+    const final = naAgenda.concat(livres).sort((a, b) => a.data.localeCompare(b.data));
+    if (livres.length) propostaFinal = await salvarProposta(servico, proposta, { itens: final, status: "pronta" });
   }
 
   const resposta = texto(r.resposta, 2000) || "Campanha atualizada.";
@@ -3943,10 +4740,13 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   conversar,
   gravar,
   completar_itens: completarItens,
+  conteudo_rapido: conteudoRapido,
+  editar_item: editarItem,
+  campanha_conteudos: campanhaConteudos,
 };
 
 /** Ações com IA: a resposta começa na hora para a plataforma não derrubar com 504 aos 150 s. */
-const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens"]);
+const ACOES_LONGAS = new Set(["planejar_mes", "pedido_livre","buscar_hypes", "campanha_criar", "campanha_ajustar", "campanha_conversar", "campanha_plano_imagens", "propor_temas", "detalhar", "conversar", "gravar", "completar_itens", "conteudo_rapido", "campanha_conteudos"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

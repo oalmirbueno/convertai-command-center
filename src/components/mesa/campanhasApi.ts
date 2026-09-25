@@ -333,6 +333,29 @@ export const campanhaSalvar = (c: CorpoDoSalvar) =>
 export const campanhaPlanoImagens = (campanhaId: string) =>
   chamarFuncao<any>("agente-calendario", { acao: "campanha_plano_imagens", campanha_id: campanhaId });
 
+/**
+ * campanha_conteudos { campanha_id, quantidade?, tipos?, frameworks?, formato? }
+ *   -> { campanha, proposta, novos, faltam, custo_usd, saldo_usd, tempos_ms }
+ * Os conteúdos da campanha na hora, pelo arco da campanha, em lotes paralelos.
+ */
+export interface CorpoDosConteudos {
+  campanhaId: string;
+  quantidade?: number;
+  formato?: "estatico" | "carrossel" | null;
+  escolha?: { tipos: string[]; frameworks: string[] } | null;
+}
+
+export function corpoDosConteudosDaCampanha(c: CorpoDosConteudos): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "campanha_conteudos", campanha_id: c.campanhaId };
+  if (c.quantidade) corpo.quantidade = Math.max(1, Math.min(8, Math.round(c.quantidade)));
+  if (c.formato) corpo.formato = c.formato;
+  if (c.escolha && c.escolha.tipos.length) corpo.tipos = c.escolha.tipos.slice(0, 9);
+  if (c.escolha && c.escolha.frameworks.length) corpo.frameworks = c.escolha.frameworks.slice(0, 10);
+  return corpo;
+}
+
+export const campanhaConteudos = (c: CorpoDosConteudos) => chamarFuncao<any>("agente-calendario", corpoDosConteudosDaCampanha(c));
+
 /** Plano de imagens: uma chamada do estrategista com as imagens à vista (o Jev custa centavos). */
 export const partesDoPlanoDeImagens = (catalogo: ModeloIa[], imagens: number, conteudos: number): ParteDaEstimativa[] => {
   const m = padraoPara(catalogo, "estrategista");

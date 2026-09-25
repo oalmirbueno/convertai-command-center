@@ -28,7 +28,7 @@ import { novoId } from "@/components/mesa/EstudioFotos";
 
 export type TipoDoKit = "produto" | "pessoa" | "alimento" | "bebida" | "cosmetico" | "moda" | "tecnologia" | "outro";
 export type PapelDaRef = "identidade" | "detalhe" | "embalagem" | "verso" | "rotulo" | "rosto" | "corpo" | "pose" | "estilo" | "cenario";
-export type ModoDaFoto = "preservar" | "luz_cor" | "cenario" | "angulo" | "ensaio" | "canvas" | "detalhe";
+export type ModoDaFoto = "preservar" | "luz_cor" | "cenario" | "angulo" | "ensaio" | "canvas" | "detalhe" | "clone";
 export type ModoDePreparo = "fundo_branco" | "fundo_transparente" | "cenario" | "luz_cor" | "limpar";
 export type ClasseDaFoto = "original" | "derivada" | "gerada";
 export type Enquadramento = "detalhe" | "medio" | "aberto";
@@ -306,6 +306,7 @@ export const MODOS_DA_FOTO: Record<ModoDaFoto, { rotulo: string; dica: string }>
   ensaio: { rotulo: "Ensaio", dica: "Tomada gerada a partir do kit." },
   canvas: { rotulo: "Canvas", dica: "Gerada no Canvas: produto, persona e ambiente juntos." },
   detalhe: { rotulo: "Detalhe 4K", dica: "Re-renderizada em 4K: versão nova, pode mexer em traço fino." },
+  clone: { rotulo: "Clone", dica: "Pessoa real recriada por IA a partir das fotos dela, com autorização." },
 };
 
 export const rotuloDoModo = (m?: string | null) => (m && (MODOS_DA_FOTO as any)[m] ? MODOS_DA_FOTO[m as ModoDaFoto].rotulo : m ? String(m) : "");
@@ -325,9 +326,9 @@ export const MODOS_DE_PREPARO: { valor: ModoDePreparo; rotulo: string; muda: str
   },
   {
     valor: "fundo_transparente",
-    rotulo: "Fundo transparente",
-    muda: "O fundo sai (PNG com transparência).",
-    fica: "O assunto recortado, sem retoque.",
+    rotulo: "Tirar fundo",
+    muda: "O fundo sai (PNG com transparência). Do gerador vem só o contorno.",
+    fica: "O assunto com os pixels originais da foto, sem retoque.",
   },
   {
     valor: "cenario",
@@ -618,7 +619,7 @@ export function listaDeTextos(v: unknown): string[] {
   return saida;
 }
 
-const MODOS_VALIDOS: ModoDaFoto[] = ["preservar", "luz_cor", "cenario", "angulo", "ensaio", "canvas", "detalhe"];
+const MODOS_VALIDOS: ModoDaFoto[] = ["preservar", "luz_cor", "cenario", "angulo", "ensaio", "canvas", "detalhe", "clone"];
 const TIPOS_VALIDOS = TIPOS_DE_KIT.map((t) => t.valor);
 const PAPEIS_VALIDOS = PAPEIS_DA_REF.map((p) => p.valor);
 
@@ -669,7 +670,7 @@ export const normalizarFotos = (lista: unknown): FotoDoAcervo[] => {
 
 /** Original, derivada (tratada a partir de outra) ou gerada (sintética). */
 export function classeDaFoto(f: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo">): ClasseDaFoto {
-  if (f.gerada || f.modo === "angulo" || f.modo === "ensaio" || f.modo === "canvas" || f.modo === "detalhe") return "gerada";
+  if (f.gerada || f.modo === "angulo" || f.modo === "ensaio" || f.modo === "canvas" || f.modo === "detalhe" || f.modo === "clone") return "gerada";
   if (f.derivada_de) return "derivada";
   return "original";
 }
@@ -2702,4 +2703,82 @@ export function fotoDaVersao(fotos: FotoDoAcervo[], v: Pick<VersaoDaTomada, "ima
     if (achada) return achada;
   }
   return v.storage_path ? fotos.find((f) => f.storage_path === v.storage_path) || null : null;
+}
+
+// ------------------------------------------------------------------ tirar fundo (25/09)
+
+/**
+ * "Tirar fundo" direto da foto (acervo e Preparar): preparar modo
+ * fundo_transparente. O recorte preserva os pixels originais do assunto (do
+ * gerador vem só a máscara, alinhada à foto) e a derivada fica no acervo com
+ * o selo "sem fundo". Mesmo contrato que o Estúdio chama.
+ */
+export async function tirarFundo(clientId: string, imagemId: string): Promise<{ imagem: FotoDoAcervo | null; custo_usd?: number; aviso: string | null }> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "preparar", client_id: clientId, imagem_id: imagemId, modo: "fundo_transparente" });
+  return { imagem: normalizarFoto(data && data.imagem), custo_usd: data && data.custo_usd, aviso: data && typeof data.aviso === "string" ? data.aviso : null };
+}
+
+/** Foto que já é o recorte sem fundo (a derivada do Tirar fundo). */
+export const ehSemFundo = (f: Pick<FotoDoAcervo, "tags">) => f.tags.indexOf("sem_fundo") >= 0 || f.tags.indexOf("preparo:fundo_transparente") >= 0;
+
+/** Pode tirar o fundo: não é referência da internet nem já é recorte. */
+export const podeTirarFundo = (f: Pick<FotoDoAcervo, "tags" | "referencia_web">) => !f.referencia_web && !ehSemFundo(f);
+
+/** Foto real que pode virar clone ("Variações desta pessoa"): original, não gerada, não da internet. */
+export const podeVirarClone = (f: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "referencia_web">) => !f.referencia_web && classeDaFoto(f) === "original";
+
+// ------------------------------------------------------------------ biblioteca: exemplos em lote (admin, 25/09)
+
+export interface EstimativaDosExemplos {
+  pendentes: number;
+  por_imagem_usd: number | null;
+  total_usd: number | null;
+  modelo_imagem_id: string;
+  rotulo: string;
+}
+
+export async function estimarExemplosDaBiblioteca(clientId: string, refazerGerados = false): Promise<EstimativaDosExemplos> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "biblioteca_exemplos_estimar", client_id: clientId, refazer_gerados: refazerGerados });
+  return {
+    pendentes: Number(data && data.pendentes) || 0,
+    por_imagem_usd: numeroOuNulo(data && data.por_imagem_usd),
+    total_usd: numeroOuNulo(data && data.total_usd),
+    modelo_imagem_id: texto(data && data.modelo_imagem_id),
+    rotulo: texto(data && data.rotulo),
+  };
+}
+
+export async function gerarProximoExemplo(clientId: string, refazerGerados = false): Promise<{ item: ItemDaBiblioteca | null; pendentes: number; acabou: boolean; custo_usd: number }> {
+  const data = await chamarFuncao<any>("mesa-foto", { acao: "biblioteca_exemplo_proximo", client_id: clientId, refazer_gerados: refazerGerados });
+  return {
+    item: normalizarItemDaBiblioteca(data && data.item),
+    pendentes: Number(data && data.pendentes) || 0,
+    acabou: !!(data && data.acabou),
+    custo_usd: Number(data && data.custo_usd) || 0,
+  };
+}
+
+export interface LimpezaDaBiblioteca {
+  encontrados: number;
+  limpos: number;
+  a_limpar: number;
+  confirmado: boolean;
+  itens: { id: string; titulo: string; bate: number | null }[];
+  aviso: string | null;
+  custo_usd: number;
+}
+
+export async function limparExemplosDaBiblioteca(p: { modo: "openverse" | "nao_batem"; confirmar: boolean; clientId?: string }): Promise<LimpezaDaBiblioteca> {
+  const corpo: Record<string, unknown> = { acao: "biblioteca_limpar_exemplos", modo: p.modo, confirmar: p.confirmar };
+  if (p.clientId) corpo.client_id = p.clientId;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  return {
+    encontrados: Number(data && data.encontrados) || 0,
+    limpos: Number(data && data.limpos) || 0,
+    a_limpar: Number(data && data.a_limpar) || 0,
+    confirmado: !!(data && data.confirmado),
+    itens: (data && Array.isArray(data.itens) ? data.itens : []).map((i: any) => ({ id: texto(i.id), titulo: texto(i.titulo), bate: numeroOuNulo(i.bate) })),
+    aviso: data && typeof data.aviso === "string" ? data.aviso : null,
+    custo_usd: Number(data && data.custo_usd) || 0,
+  };
 }

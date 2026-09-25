@@ -11,6 +11,64 @@ import { enviarParaAprovacao, type ParteDaEstimativa, type Qualidade, type Resul
 /** Quantidades de lâminas que a tela oferece antes da direção (Automático = o diretor decide). */
 export const QUANTIDADES_DE_LAMINAS = [3, 4, 5, 6, 7, 8];
 
+/**
+ * Formatos do post orgânico (espelho de FORMATOS_DO_POST em
+ * supabase/functions/_shared/direcao-arte.ts). 3:4 (1080 x 1440) é o retrato
+ * que o Instagram passou a aceitar em 2025, o mesmo recorte da grade do perfil.
+ */
+export type FormatoDoPost = "feed_4x5" | "retrato_3x4" | "quadrado_1x1" | "stories_9x16";
+
+export const FORMATOS_DO_POST: { valor: FormatoDoPost; rotulo: string; tamanho: string; dica: string; proporcao: number }[] = [
+  { valor: "feed_4x5", rotulo: "4:5", tamanho: "1080 x 1350", dica: "Retrato do feed, o padrão", proporcao: 0.8 },
+  { valor: "retrato_3x4", rotulo: "3:4", tamanho: "1080 x 1440", dica: "Retrato novo do Instagram: o mais alto do feed e inteiro na grade do perfil", proporcao: 0.75 },
+  { valor: "quadrado_1x1", rotulo: "1:1", tamanho: "1080 x 1080", dica: "Quadrado", proporcao: 1 },
+  { valor: "stories_9x16", rotulo: "9:16", tamanho: "1080 x 1920", dica: "Stories e capa de Reels", proporcao: 0.5625 },
+];
+
+/** O formato do trabalho, lido com cuidado (sem formato: 4:5, como sempre foi). */
+export function formatoDoTrabalho(direcao: { formato?: unknown } | null | undefined): FormatoDoPost {
+  const f = direcao ? direcao.formato : null;
+  return FORMATOS_DO_POST.some((x) => x.valor === f) ? (f as FormatoDoPost) : "feed_4x5";
+}
+
+/** Largura dividida pela altura do formato (0,8 no 4:5). */
+export function proporcaoDoFormato(f: FormatoDoPost): number {
+  const achado = FORMATOS_DO_POST.filter((x) => x.valor === f)[0];
+  return achado ? achado.proporcao : 0.8;
+}
+
+/** A versão nasceu em outro formato que o do conjunto (a entrega pede gerar de novo). Versão antiga sem a marca é 4:5. */
+export function versaoForaDoFormato(versao: { formato_post?: unknown } | null | undefined, formato: FormatoDoPost): boolean {
+  if (!versao) return false;
+  const nasceu = FORMATOS_DO_POST.some((x) => x.valor === versao.formato_post) ? (versao.formato_post as FormatoDoPost) : "feed_4x5";
+  return nasceu !== formato;
+}
+
+/** Carrossel contínuo (panorama) só existe no 4:5: nos outros formatos as lâminas saem uma a uma, em série. */
+export const AVISO_CONTINUO_FORA_DO_4X5 = "O carrossel contínuo (panorama) só existe no 4:5. Neste formato as lâminas saem uma a uma, seguindo a capa como série.";
+
+/** Reabre um trabalho entregue para corrigir (estudio-arte "reabrir"): mesmas lâminas e versões, nova rodada de entrega. */
+export function corpoDoReabrir(trabalhoId: string, motivo?: string): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "reabrir", trabalho_id: trabalhoId };
+  const m = (motivo || "").trim();
+  if (m) corpo.motivo = m.slice(0, 1000);
+  return corpo;
+}
+
+/**
+ * Corpo do "Tirar fundo" (mesa-foto preparar, modo fundo_transparente): a
+ * derivada sem fundo vai para o acervo e a tela põe na lâmina como elemento.
+ */
+export function corpoDoTirarFundo(clientId: string, imagemId: string): Record<string, unknown> {
+  return { acao: "preparar", client_id: clientId, imagem_id: imagemId, modo: "fundo_transparente" };
+}
+
+/** A foto do acervo já é um recorte sem fundo (preparada na Mesa Foto). */
+export function jaSemFundo(imagem: { tags?: string[] | null; modo?: string | null } | null | undefined): boolean {
+  if (!imagem) return false;
+  return (imagem.tags || []).indexOf("preparo:fundo_transparente") >= 0 || imagem.modo === "recorte" || imagem.modo === "sem_fundo";
+}
+
 export interface EscolhasDoPreparo {
   /** "roteiro": direção do roteiro do estrategista, sem custo. "diretor": diretor de arte, com custo. */
   modo: "roteiro" | "diretor";
@@ -20,6 +78,8 @@ export interface EscolhasDoPreparo {
   continuo: boolean;
   /** Pedido livre para o diretor (ex.: use fotos reais, capa centralizada). */
   pedido: string;
+  /** Formato do post (4:5 quando não vem). */
+  formato?: FormatoDoPost;
 }
 
 /**
@@ -36,6 +96,7 @@ export function corpoDoPreparar(
   if (extra.modeloImagemId) corpo.modelo_imagem_id = extra.modeloImagemId;
   if (extra.qualidade) corpo.qualidade = extra.qualidade;
   if (extra.trabalhoId) corpo.trabalho_id = extra.trabalhoId;
+  if (e.formato && e.formato !== "feed_4x5") corpo.formato = e.formato;
   if (!extra.postUnico) {
     corpo.carrossel_infinito = !!e.continuo;
     const n = Number(e.laminas);

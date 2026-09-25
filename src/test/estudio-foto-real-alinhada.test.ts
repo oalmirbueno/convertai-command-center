@@ -57,11 +57,10 @@ describe("foto real: recorte pelo foco e logo pelo código", () => {
   it("a logo oficial é aplicada pelo código na lâmina com foto real fixa", () => {
     // Com referência escolhida a lâmina replica a referência (foto recomposta), então a foto fixa sai de cena.
     expect(gerar).toContain("const fotoFixa = !!baseFoto && !panorama && !elementos.length && !replicar;");
-    // Foto real fixa ou panorama: a logo entra pelo código (25/09).
-    expect(gerar).toContain("if ((fotoFixa || panorama) && tomDaLogo) {");
-    expect(gerar).toContain("logoNoCodigo = logo.bytes;");
-    expect(gerar).toContain("final = await aplicarLogo(final, logoNoCodigo,");
-    expect(gerar).toContain("logoNoCodigo: !!logoNoCodigo,");
+    // Desde 25/09 a logo entra pelo código em todos os modos (acabamento da lâmina), limpa e na versão que contrasta.
+    expect(gerar).toContain("logosNoCodigo = daMarca.logos;");
+    expect(gerar).toContain("const fim = await acabar(final);");
+    expect(gerar).toContain("      logoNoCodigo,\n");
     // Halo do valor oposto só quando falta contraste, sem caixa e sem escurecer a foto.
     expect(imagem).toContain("const poucoContraste = clara ? fundo > 150 : fundo < 95;");
   });

@@ -7,7 +7,7 @@ import { textoDoErro, usd } from "@/lib/mesa/api";
 import { Ampliar } from "./Ampliar";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
-import { BlocoDaProposta, CartaoDoConteudo } from "./ConteudosPropostos";
+import CampanhaConteudos from "./CampanhaConteudos";
 import CampanhaReferencias, { MAX_REFERENCIAS, ReferenciasEscolhidas } from "./CampanhaReferencias";
 import { Cronometro } from "./Cronometro";
 import {
@@ -39,7 +39,8 @@ import CampanhaPlanoDeImagens from "./CampanhaPlanoDeImagens";
  * A campanha aberta, no centro da aba: seções claras e recolhíveis (visão
  * geral, identidade do tema com o selo grande, referências e conteúdos). Os
  * ajustes são pedidos ao agente da campanha, ao lado; aqui ficam as ações
- * diretas: desenhar o selo, escolher referências, gravar tudo na agenda e
+ * diretas: gerar os conteúdos na hora, editar cada um, escolher e mandar para
+ * a agenda (CampanhaConteudos.tsx), desenhar o selo, escolher referências e
  * abrir no Estúdio.
  */
 
@@ -242,7 +243,12 @@ export default function CampanhaDetalhe({
       ? "desatualizado"
       : `${plano.pecas.filter((p) => !!p.imagem_id).length} lâmina(s) com foto`;
 
-  const conteudosResumo = proposta.isLoading ? "lendo…" : itens.length ? `${itens.length} conteúdo(s)${gravada ? ", na agenda" : ""}` : "nenhum ainda";
+  const naAgenda = itens.filter((i) => !!i.task_id).length;
+  const conteudosResumo = proposta.isLoading
+    ? "lendo…"
+    : itens.length
+      ? `${itens.length} conteúdo(s)${naAgenda ? `, ${naAgenda} na agenda` : ""}`
+      : "nenhum ainda";
 
   return (
     <div className="min-w-0 space-y-3">
@@ -319,6 +325,19 @@ export default function CampanhaDetalhe({
             </div>
           )}
         </dl>
+      </Secao>
+
+      {/* Conteúdos logo depois da visão geral: gerar na hora, editar, escolher e mandar para a agenda. */}
+      <Secao titulo="Conteúdos" resumo={conteudosResumo} aberta={aberta("conteudos")} onAlternar={() => alternar("conteudos")}>
+        <CampanhaConteudos
+          campanha={campanha}
+          proposta={proposta.data || null}
+          carregando={!!campanha.proposta_id && proposta.isLoading}
+          erro={proposta.isError ? proposta.error : null}
+          projetoSugerido={projetoSugerido || null}
+          onAbrirNoEstudio={onAbrirNoEstudio}
+          onPedirAoAgente={onPedirAoAgente ? pedir : undefined}
+        />
       </Secao>
 
       {/* Briefing: produto em foco, oferta, mensagem, público, provas, tom e CTA. */}
@@ -446,44 +465,6 @@ export default function CampanhaDetalhe({
         )}
       </Secao>
 
-      {/* Conteúdos. */}
-      <Secao titulo="Conteúdos" resumo={conteudosResumo} aberta={aberta("conteudos")} onAlternar={() => alternar("conteudos")}>
-        {proposta.isLoading && <div className="h-24 animate-pulse rounded-lg bg-muted" />}
-        {proposta.isError && <AvisoDeErro erro={proposta.error} />}
-        {!campanha.proposta_id && (
-          <div className="flex min-w-0 flex-wrap items-center">
-            <p className="mr-3 min-w-0 flex-1 text-[12.5px] text-muted-foreground">Esta campanha ainda não tem conteúdos.</p>
-            {onPedirAoAgente && (
-              <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => pedir("Crie os conteúdos desta campanha: ")}>
-                Pedir ao agente
-              </Button>
-            )}
-          </div>
-        )}
-        {proposta.data && (
-          <div className="min-w-0 space-y-3">
-            {/* A barra primeiro (gravar tudo, ajustar, abrir no Estúdio); depois os cartões. */}
-            <BlocoDaProposta
-              proposta={proposta.data}
-              projetoSugerido={projetoSugerido || null}
-              rotuloGravar="Gravar tudo na agenda"
-              rotuloAjustar="Ajustar com o agente"
-              onAjustar={onPedirAoAgente ? () => pedir("Nos conteúdos, ") : undefined}
-              onAbrirNoEstudio={onAbrirNoEstudio}
-              compacto
-            />
-            {itensOrdenados.length > 0 ? (
-              <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
-                {itensOrdenados.map((it, i) => (
-                  <CartaoDoConteudo key={it.tema_id || i} item={it} onAbrir={onAbrirNoEstudio} />
-                ))}
-              </div>
-            ) : (
-              <p className="text-[12.5px] text-muted-foreground">A proposta está sem conteúdos. Peça ao agente para acrescentar.</p>
-            )}
-          </div>
-        )}
-      </Secao>
 
       {campanha.selo_path && (
         <Ampliar

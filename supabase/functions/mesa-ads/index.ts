@@ -42,6 +42,19 @@
  * - pacote_enviar { client_id, plano_id?, criativo_ids?, criar_tarefa? }:
  *   Markdown em Arquivos (Criativos de anúncio) e tarefa do gestor de tráfego.
  *
+ * Mesa Ads v4, frente E (pedido do dono em 25/09/2026; SQL em
+ * docs/mesa-ads/v4/migrations/01_contas_metricas_evolucao.sql, que só amplia):
+ * - conta_ao_vivo aceita dias 7 a 90 ou inicio/fim, e devolve também o saldo
+ *   e a situação da conta (contas), a comparação com o período anterior, a
+ *   série diária, os conjuntos e o resultado certo para o objetivo de cada
+ *   campanha (tráfego, alcance, mensagens, cadastros, compras...).
+ * - desempenho_cliente { client_id, dias? }: orgânico do Instagram + anúncios
+ *   num lugar só, somados onde faz sentido. Grátis.
+ * - evolucao { client_id, dias?, explicar?, gravar? }: vencedores, manter,
+ *   descartar (com motivo e número), próximos testes e aprendizados, em
+ *   código (_shared/evolucao.ts); a IA só explica. Os aprendizados vão para
+ *   agente_memoria (estrategista_ads e estrategista).
+ *
  * Mesa Ads v3 (pedido do dono em 25/09/2026; sem SQL novo):
  * - oferta_do_contexto { client_id, gravar?, forcar? }: sem IA e grátis; monta a
  *   oferta em rascunho com o contexto do cliente (briefing de ads, contexto
@@ -81,6 +94,27 @@ import { jevPerguntar, JevErro, notaScore, probabilidadeNoul, type PerguntaJev }
 import { direcaoDoRoteiro, resumoDaComposicao, type BlocoTexto, type CardDirecao, type LayoutLamina, type MarcaParaDirecao } from "../_shared/direcao-arte.ts";
 import { lerContextoConsolidado, lerDocumentosDeMarca, lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { respostaComFolego } from "../_shared/resposta-com-folego.ts";
+import {
+  AGENTE_DO_CANAL,
+  chaveDaMemoria,
+  compararPeriodos,
+  type LeituraDeEvolucao,
+  lerDesempenhoDoCliente,
+  lerDiariasAds,
+  lerEvolucao,
+  lerSaldosDasContas,
+  type LinhaDiariaAds,
+  mediasPorTipo,
+  metricasCompletas,
+  periodoDoPedido,
+  PREFIXO_DA_MEMORIA,
+  type SaldoDaConta,
+  serieDaConta,
+  textoDaMemoria,
+  tipoDoBriefing,
+  type TipoDeResultado,
+  tiposPorAnuncio,
+} from "../_shared/evolucao.ts";
 import {
   CONHECIMENTO_AGRESSIVO,
   CONHECIMENTO_ESTRATEGISTA_ADS,
@@ -3951,70 +3985,152 @@ async function ofertaListar(servico: SupabaseClient, chamador: Chamador, corpo: 
 
 // ------------------------------------------------------------ conta ao vivo
 
-const DIAS_CONTA = [7, 14, 30];
+/** Períodos da conta: 7 a 90 dias (a coleta guarda 90 dias por anúncio desde a v4). */
+const DIAS_CONTA = [7, 14, 30, 60, 90];
+
+/**
+ * Métricas do anúncio (ou da campanha) como a tela lê: as de sempre
+ * (calculos.ts) com o resultado certo para o OBJETIVO da campanha. Antes o
+ * resultado só contava mensagem, cadastro e compra, e campanha de tráfego ou
+ * de reconhecimento aparecia com zero resultado e sinal de "pausar".
+ */
+type MetricasDaConta = Metricas & {
+  resultado_tipo: TipoDeResultado | null;
+  resultado_rotulo: string;
+  alcance: number | null;
+  ctr: number | null;
+  cpc_link: number | null;
+  valor_conversao: number | null;
+  roas: number | null;
+  acoes: Record<TipoDeResultado, number>;
+};
+
+function metricasDaConta(linhas: Diaria[], tipo: TipoDeResultado | null | Map<string, TipoDeResultado | null>, objetivos?: Map<string, string | null>): MetricasDaConta {
+  const base = somarMetricas(linhas);
+  const c = metricasCompletas(linhas as LinhaDiariaAds[], tipo, objetivos);
+  const porTipo: Record<string, number> = { ...base.resultados_por_tipo };
+  for (const t of ["visitas", "cliques_link", "engajamento", "video"] as TipoDeResultado[]) if (c.acoes[t] > 0) porTipo[t] = c.acoes[t];
+  return {
+    ...base,
+    resultados: c.resultados,
+    resultados_por_tipo: porTipo,
+    custo_por_resultado: c.custo_por_resultado,
+    resultado_tipo: c.resultado_tipo,
+    resultado_rotulo: c.resultado_rotulo,
+    alcance: c.alcance_aprox,
+    ctr: c.ctr,
+    cpc_link: c.cpc_link,
+    valor_conversao: c.valor_conversao,
+    roas: c.roas,
+    acoes: c.acoes,
+  };
+}
+
+/** Anúncio com o `raw` da Meta só para os que vão para a tela (o raw é pesado). */
+async function lerRawDosAnuncios(servico: SupabaseClient, clientId: string, adIds: string[]): Promise<Map<string, Record<string, unknown> | null>> {
+  const mapa = new Map<string, Record<string, unknown> | null>();
+  for (let i = 0; i < adIds.length; i += 100) {
+    const { data } = await servico.from("ads_creatives").select("ad_id, raw").eq("client_id", clientId).in("ad_id", adIds.slice(i, i + 100));
+    for (const r of (data as { ad_id: string; raw: Record<string, unknown> | null }[] | null) ?? []) mapa.set(r.ad_id, r.raw ?? null);
+  }
+  return mapa;
+}
 
 /** Conta do cliente no período, tudo em código (métricas, tendência, sinal e diagnóstico). */
-async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBruto: unknown) {
-  const dias = DIAS_CONTA.includes(Number(diasBruto)) ? Number(diasBruto) : 14;
-  const fim = hojeSaoPaulo();
-  const inicio = somarDias(fim, -(dias - 1));
-  const [contas, campanhasQ, anuncios, diarias, briefing, refsQ] = await Promise.all([
+async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBruto: unknown, extra: { inicio?: unknown; fim?: unknown } = {}) {
+  const periodo = periodoDoPedido({ dias: diasBruto, inicio: extra.inicio, fim: extra.fim }, DIAS_CONTA, 14, hojeSaoPaulo());
+  const { inicio, fim } = periodo;
+  const antesFim = somarDias(inicio, -1);
+  const antesInicio = somarDias(inicio, -periodo.dias);
+  const [contas, campanhasQ, anuncios, diariasBrutas, anterioresBrutas, briefing, refsQ, saldos] = await Promise.all([
     servico.from("external_accounts").select("id, status").eq("client_id", clientId).eq("platform", "meta_ads"),
-    servico.from("ads_campaigns").select("campaign_id, name, effective_status, objective, daily_budget, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(300),
-    lerAnunciosDoCliente(servico, clientId, true),
-    lerDiarias(servico, clientId, { desde: inicio, ate: fim }),
+    servico.from("ads_campaigns").select("campaign_id, name, effective_status, objective, daily_budget, lifetime_budget, updated_at").eq("client_id", clientId).order("updated_at", { ascending: false }).limit(300),
+    lerAnunciosDoCliente(servico, clientId, false),
+    lerDiariasAds(servico, clientId, inicio, fim).catch(() => { throw new ErroHttp(503, "metricas_indisponiveis", "Não foi possível ler as métricas dos anúncios."); }),
+    lerDiariasAds(servico, clientId, antesInicio, antesFim).catch(() => [] as LinhaDiariaAds[]),
     carregarBriefing(servico, clientId).catch(() => null),
     servico.from("ads_referencias").select("id, ad_id, storage_path").eq("client_id", clientId).not("ad_id", "is", null),
+    lerSaldosDasContas(servico, clientId).catch(() => ({ contas: [] as SaldoDaConta[], disponivel: false })),
   ]);
   if (campanhasQ.error) throw new ErroHttp(503, "campanhas_indisponiveis", "Não foi possível ler as campanhas do cliente.");
-  const campanhasLidas = (campanhasQ.data as { campaign_id: string; name: string | null; effective_status: string | null; objective: string | null; daily_budget: number | string | null; updated_at: string | null }[] | null) ?? [];
+  const diarias = diariasBrutas as unknown as Diaria[];
+  const campanhasLidas = (campanhasQ.data as { campaign_id: string; name: string | null; effective_status: string | null; objective: string | null; daily_budget: number | string | null; lifetime_budget: number | string | null; updated_at: string | null }[] | null) ?? [];
   const refs = (refsQ.data as { id: string; ad_id: string; storage_path: string | null }[] | null) ?? [];
   const refPorAd = new Map(refs.map((r) => [r.ad_id, r]));
   const conectada = ((contas.data as unknown[] | null) ?? []).length > 0 || anuncios.length > 0 || campanhasLidas.length > 0;
-  const datas = [...anuncios.map((a) => a.updated_at), ...campanhasLidas.map((c) => c.updated_at)].filter((x): x is string => !!x).sort();
-  const totais = somarMetricas(diarias);
+  const datas = [...anuncios.map((a) => a.updated_at), ...campanhasLidas.map((c) => c.updated_at), ...saldos.contas.map((c) => c.coletado_em)].filter((x): x is string => !!x).sort();
+  const objetivos = new Map<string, string | null>(campanhasLidas.map((c) => [c.campaign_id, c.objective]));
+  const tipos = tiposPorAnuncio([...anterioresBrutas, ...diariasBrutas], objetivos);
+  const totais = metricasDaConta(diarias, tipos, objetivos);
+  const anteriores = metricasCompletas(anterioresBrutas, tipos, objetivos);
   const tolera = numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl);
-  const custoReferencia = tolera ?? totais.custo_por_resultado;
+  const tipoTolera = tipoDoBriefing(String((briefing?.objetivo ?? {}).acao ?? ""));
   const porAd = porAnuncio(diarias);
+  // Custo de referência POR TIPO de resultado: comparar custo por conversa com custo por clique não diz nada.
+  const mediasTipo = mediasPorTipo([...porAd.entries()].map(([adId, linhas]) => ({
+    ad_id: adId, nome: adId, campanha: null, imagem_url: null, formato: null, cta: null,
+    metricas: metricasCompletas(linhas as LinhaDiariaAds[], tipos.get(adId) ?? null, objetivos),
+  })));
+  const referenciaDoTipo = (t: TipoDeResultado | null) => (tolera && t && t === tipoTolera ? tolera : t ? mediasTipo[t] ?? null : null);
+  const custoReferenciaConta = referenciaDoTipo(totais.resultado_tipo) ?? totais.custo_por_resultado;
   const nomeCampanha = new Map(campanhasLidas.map((c) => [c.campaign_id, c.name]));
   const campanhaDoAd = new Map(anuncios.map((a) => [a.ad_id, a.campaign_id]));
   const porCampanha = new Map<string, Diaria[]>();
-  for (const l of diarias) {
+  const porConjunto = new Map<string, { nome: string | null; campaign_id: string | null; linhas: Diaria[] }>();
+  for (const l of diariasBrutas) {
     const cid = l.campaign_id ?? campanhaDoAd.get(l.ad_id) ?? null;
-    if (!cid) continue;
-    const lista = porCampanha.get(cid) ?? [];
-    lista.push(l);
-    porCampanha.set(cid, lista);
+    if (cid) porCampanha.set(cid, [...(porCampanha.get(cid) ?? []), l as unknown as Diaria]);
+    if (l.adset_id) {
+      const c = porConjunto.get(l.adset_id) ?? { nome: l.adset_name ?? null, campaign_id: cid, linhas: [] };
+      c.linhas.push(l as unknown as Diaria);
+      porConjunto.set(l.adset_id, c);
+    }
   }
   const idsCampanha = [...new Set([...campanhasLidas.filter((c) => c.effective_status === "ACTIVE").map((c) => c.campaign_id), ...porCampanha.keys()])];
   const campanhaLida = new Map(campanhasLidas.map((c) => [c.campaign_id, c]));
   const campanhas = idsCampanha.map((id) => {
     const c = campanhaLida.get(id);
+    const linhas = porCampanha.get(id) ?? [];
     return {
       campaign_id: id,
       nome: c?.name ?? null,
       status: c?.effective_status ?? null,
       objetivo: c?.objective ?? null,
       orcamento_diario: c?.daily_budget != null ? Number(c.daily_budget) : null,
-      metricas: somarMetricas(porCampanha.get(id) ?? []),
+      orcamento_total: c?.lifetime_budget != null ? Number(c.lifetime_budget) : null,
+      metricas: metricasDaConta(linhas, tipos, objetivos),
     };
   }).sort((a, b) => b.metricas.gasto - a.metricas.gasto);
+  const conjuntos = [...porConjunto.entries()].map(([adsetId, c]) => ({
+    adset_id: adsetId,
+    nome: c.nome,
+    campaign_id: c.campaign_id,
+    campanha: c.campaign_id ? nomeCampanha.get(c.campaign_id) ?? null : null,
+    metricas: metricasDaConta(c.linhas, tipos, objetivos),
+  })).sort((a, b) => b.metricas.gasto - a.metricas.gasto);
 
   const adsNoPeriodo = new Set(porAd.keys());
   const alvo = anuncios.filter((a) => a.effective_status === "ACTIVE" || adsNoPeriodo.has(a.ad_id)).slice(0, 200);
-  const assinadas = await assinarCaminhos(servico, alvo.map((a) => refPorAd.get(a.ad_id)?.storage_path ?? "").filter((c) => c.startsWith(`${clientId}/`)));
+  const [assinadas, raws] = await Promise.all([
+    assinarCaminhos(servico, alvo.map((a) => refPorAd.get(a.ad_id)?.storage_path ?? "").filter((c) => c.startsWith(`${clientId}/`))),
+    lerRawDosAnuncios(servico, clientId, alvo.map((a) => a.ad_id)),
+  ]);
   const lista = alvo.map((a) => {
     const linhas = porAd.get(a.ad_id) ?? [];
-    const metricas = somarMetricas(linhas);
+    const metricas = metricasDaConta(linhas, tipos.get(a.ad_id) ?? null, objetivos);
     const tendencia = tendenciaDoAnuncio(linhas);
-    const copy = extrairCopyDoRaw(a.raw, a);
+    const copy = extrairCopyDoRaw(raws.get(a.ad_id) ?? null, a);
     const ref = refPorAd.get(a.ad_id) ?? null;
+    const custoReferencia = referenciaDoTipo(metricas.resultado_tipo);
+    const conjunto = linhas.length ? (linhas[linhas.length - 1] as unknown as LinhaDiariaAds).adset_name ?? null : null;
     return {
       ad_id: a.ad_id,
       nome: a.ad_name,
       status: a.effective_status,
       campaign_id: a.campaign_id,
       campanha: a.campaign_id ? nomeCampanha.get(a.campaign_id) ?? null : null,
+      conjunto,
+      formato: copy.video_id || a.video_id ? "video" : "imagem",
       imagem_url: (ref?.storage_path && assinadas.get(ref.storage_path)) || copy.imagem_url || copy.miniatura_url,
       titulo: copy.titulo,
       corpo: copy.corpo,
@@ -4022,7 +4138,7 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
       cta: copy.cta,
       destino: copy.destino,
       metricas,
-      diagnostico: diagnosticar(metricas, linhas, tolera),
+      diagnostico: diagnosticar(metricas, linhas, tolera && metricas.resultado_tipo === tipoTolera ? tolera : null),
       tendencia,
       sinal: sinalDoAnuncio(metricas, tendencia, custoReferencia),
       referencia_id: ref?.id ?? null,
@@ -4031,23 +4147,33 @@ async function lerContaAoVivo(servico: SupabaseClient, clientId: string, diasBru
   return {
     conectada,
     atualizado_em: datas[datas.length - 1] ?? null,
-    periodo: { inicio, fim },
+    periodo: { inicio, fim, dias: periodo.dias },
     totais,
-    custo_referencia: { valor: custoReferencia, fonte: tolera ? "briefing" : totais.custo_por_resultado != null ? "media_da_conta" : null },
+    comparacao: compararPeriodos(metricasCompletas(diariasBrutas, tipos, objetivos), anteriores),
+    serie: serieDaConta(diariasBrutas, objetivos),
+    resultado_principal: { tipo: totais.resultado_tipo, rotulo: totais.resultado_rotulo },
+    custo_referencia: {
+      valor: custoReferenciaConta,
+      fonte: tolera && totais.resultado_tipo === tipoTolera ? "briefing" : custoReferenciaConta != null ? "media_da_conta" : null,
+      por_tipo: mediasTipo,
+    },
+    contas: saldos.contas,
     campanhas,
+    conjuntos,
     anuncios: lista,
   };
 }
 
 /**
- * conta_ao_vivo { client_id, dias?: 7 | 14 | 30 (padrão 14) }
- * -> { conectada, atualizado_em, periodo, totais, custo_referencia, campanhas, anuncios, custo_usd: 0 }
- * Grátis e sem IA: sinal, tendência e diagnóstico em código (calculos.ts).
+ * conta_ao_vivo { client_id, dias?: 7 | 14 | 30 | 60 | 90 (padrão 14), inicio?, fim? }
+ * -> { conectada, atualizado_em, periodo, totais, comparacao, serie, resultado_principal,
+ *      custo_referencia, contas (saldo, gasto total, limite), campanhas, conjuntos, anuncios, custo_usd: 0 }
+ * Grátis e sem IA: sinal, tendência e diagnóstico em código (calculos.ts e _shared/evolucao.ts).
  */
 async function contaAoVivo(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
   const clientId = String(corpo.client_id ?? "");
   await exigirAcessoAoCliente(chamador, clientId);
-  return json({ ...(await lerContaAoVivo(servico, clientId, corpo.dias)), custo_usd: 0 });
+  return json({ ...(await lerContaAoVivo(servico, clientId, corpo.dias, { inicio: corpo.inicio, fim: corpo.fim })), custo_usd: 0 });
 }
 
 /** conta_sincronizar { client_id } -> o que collect_ads_now() devolveu ({ campanhas, criativos }) + custo_usd: 0. */
@@ -4073,7 +4199,7 @@ async function contaAnalisar(servico: SupabaseClient, chamador: Chamador, corpo:
   const comDados = conta.anuncios.filter((a) => a.metricas.impressoes > 0).slice(0, 40);
   if (!comDados.length) throw new ErroHttp(409, "sem_dados_de_conta", "Nenhum anúncio com entrega no período. Sincronize a conta ou escolha um período maior.");
   const briefing = await carregarBriefing(servico, clientId).catch(() => null);
-  const m = (x: Metricas) => ({ gasto: x.gasto, impressoes: x.impressoes, ctr_saida_pct: x.ctr_saida_pct, cpm: x.cpm, cpc: x.cpc, frequencia_media: x.frequencia_media, resultados: x.resultados, resultados_por_tipo: x.resultados_por_tipo, custo_por_resultado: x.custo_por_resultado });
+  const m = (x: MetricasDaConta) => ({ gasto: x.gasto, impressoes: x.impressoes, ctr_saida_pct: x.ctr_saida_pct, cpm: x.cpm, cpc: x.cpc, frequencia_media: x.frequencia_media, resultado: x.resultado_rotulo, resultados: x.resultados, resultados_por_tipo: x.resultados_por_tipo, custo_por_resultado: x.custo_por_resultado, roas: x.roas });
   const dados = {
     periodo: conta.periodo,
     totais: m(conta.totais),
@@ -4152,6 +4278,163 @@ Período curto ou pouco volume: diga que é inconclusivo em vez de decidir.`,
     .single();
   if (error || !data) throw new ErroHttp(503, "analise_nao_salva", "A análise foi feita, mas não foi salva.", { analise, uso_id: s.usoId, custo_usd: s.custoUsd });
   return json({ analise, analise_id: (data as { id: string }).id, custo_usd: s.custoUsd, saldo_usd: s.saldoUsd });
+}
+
+// ------------------------------------------------------------ desempenho e evolução (v4)
+
+const DIAS_DESEMPENHO = [7, 14, 30, 60, 90];
+
+/**
+ * desempenho_cliente { client_id, dias?: 7 | 14 | 30 | 60 | 90 (padrão 30), inicio?, fim? }
+ * -> { periodo, organico, anuncios, somado, custo_usd: 0 }
+ * A visão única do cliente: perfil do Instagram (semanas, posts, seguidores)
+ * e anúncios (investimento, resultado pelo objetivo, saldo da conta) no mesmo
+ * período, somados onde a soma faz sentido. Grátis e sem IA.
+ */
+async function desempenhoCliente(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const periodo = periodoDoPedido(corpo, DIAS_DESEMPENHO, 30, hojeSaoPaulo());
+  const { _anuncios: _a, _posts: _p, ...desempenho } = await lerDesempenhoDoCliente(servico, clientId, periodo);
+  return json({ ...desempenho, custo_usd: 0 });
+}
+
+const ESQUEMA_EVOLUCAO = {
+  nome: "explicacao_da_evolucao",
+  schema: obj({
+    resumo: S("string"),
+    por_item: lista(obj({ id: S("string"), explicacao: S("string") })),
+    atencao: lista(S("string")),
+  }),
+};
+
+/** Memórias de evolução ativas por agente: no máximo esta quantidade (as mais antigas saem). */
+const MAX_MEMORIAS_DE_EVOLUCAO = 15;
+
+/**
+ * Grava os aprendizados em agente_memoria (origem 'metrica'): anúncios para o
+ * estrategista de ads, orgânico para o estrategista da Mesa. Não repete o que
+ * já está ativo (a chave vai no texto) e mantém só as 15 mais novas por agente.
+ */
+async function gravarAprendizados(servico: SupabaseClient, clientId: string, leitura: LeituraDeEvolucao) {
+  if (!leitura.aprendizados.length) return { gravadas: 0, repetidas: 0, erro: null as string | null };
+  const agentes = [...new Set(leitura.aprendizados.map((a) => AGENTE_DO_CANAL[a.canal]))];
+  const { data: ativas, error: erroLeitura } = await servico.from("agente_memoria")
+    .select("id, agente, texto, criado_em").eq("client_id", clientId).eq("ativa", true).eq("origem", "metrica")
+    .in("agente", agentes).like("texto", `${PREFIXO_DA_MEMORIA}%`).order("criado_em", { ascending: false }).limit(200);
+  if (erroLeitura) return { gravadas: 0, repetidas: 0, erro: "Não foi possível ler a memória dos agentes." };
+  const existentes = (ativas as { id: string; agente: string; texto: string }[] | null) ?? [];
+  const chaves = new Set(existentes.map((m) => `${m.agente}|${chaveDaMemoria(m.texto)}`));
+  const novas = leitura.aprendizados
+    .filter((a) => !chaves.has(`${AGENTE_DO_CANAL[a.canal]}|${a.chave}`))
+    .slice(0, 8)
+    .map((a) => ({
+      client_id: clientId,
+      agente: AGENTE_DO_CANAL[a.canal],
+      tipo: a.tipo === "evitar" ? "evitar" : "aprendizado",
+      origem: "metrica",
+      texto: textoDaMemoria(a, leitura.periodo),
+    }));
+  if (novas.length) {
+    const { error } = await servico.from("agente_memoria").insert(novas);
+    if (error) return { gravadas: 0, repetidas: leitura.aprendizados.length - novas.length, erro: "A memória dos agentes recusou o aprendizado." };
+  }
+  // Teto por agente: a memória é para lembrar o que importa, não para acumular.
+  for (const agente of agentes) {
+    const { data } = await servico.from("agente_memoria").select("id").eq("client_id", clientId).eq("agente", agente)
+      .eq("ativa", true).eq("origem", "metrica").like("texto", `${PREFIXO_DA_MEMORIA}%`)
+      .order("criado_em", { ascending: false }).range(MAX_MEMORIAS_DE_EVOLUCAO, MAX_MEMORIAS_DE_EVOLUCAO + 100);
+    const velhas = ((data as { id: string }[] | null) ?? []).map((m) => m.id);
+    if (velhas.length) await servico.from("agente_memoria").update({ ativa: false }).eq("client_id", clientId).in("id", velhas);
+  }
+  return { gravadas: novas.length, repetidas: leitura.aprendizados.length - novas.length, erro: null as string | null };
+}
+
+/**
+ * evolucao { client_id, dias?: 7 | 14 | 30 | 60 | 90 (padrão 30), inicio?, fim?, explicar?, gravar?, modelo_id?, raciocinio? }
+ * -> { leitura: { vencedores, manter, descartar, observar, conteudo, proximos_testes, aprendizados, base, limites, regras },
+ *      explicacao: { resumo, por_item, atencao } | null, memorias: { gravadas, repetidas, erro },
+ *      somado, leitura_id, custo_usd, saldo_usd }
+ * A decisão é regra em código (_shared/evolucao.ts). Com explicar=true, o
+ * estrategista escreve o porquê em linguagem de gente, uma chamada só, sem
+ * mexer em número nem em grupo (sem laço de correção).
+ */
+async function evolucao(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const periodo = periodoDoPedido(corpo, DIAS_DESEMPENHO, 30, hojeSaoPaulo());
+  const [d, briefing] = await Promise.all([
+    lerDesempenhoDoCliente(servico, clientId, periodo),
+    carregarBriefing(servico, clientId).catch(() => null),
+  ]);
+  const leitura = lerEvolucao({
+    periodo: { inicio: periodo.inicio, fim: periodo.fim },
+    anuncios: d._anuncios,
+    posts: d._posts,
+    custoToleravel: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+    tipoToleravel: tipoDoBriefing(String((briefing?.objetivo ?? {}).acao ?? "")),
+  });
+
+  let explicacao: { resumo: string; por_item: { id: string; explicacao: string }[]; atencao: string[] } | null = null;
+  let custo = 0;
+  let saldo: number | null = null;
+  if (corpo.explicar === true) {
+    const itens = [...leitura.vencedores, ...leitura.manter, ...leitura.descartar, ...leitura.conteudo.destaques, ...leitura.conteudo.abaixo, ...leitura.conteudo.sinais];
+    if (itens.length || leitura.aprendizados.length) {
+      const ids = new Set(itens.map((i) => i.id));
+      const { modelo, raciocinio } = await resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista", "low");
+      const s = await chamarTexto({
+        timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+        clientId,
+        tarefa: TAREFA,
+        agente: AGENTE,
+        modeloId: modelo.id,
+        sistema: sistemaDoEstrategista(),
+        mensagens: [{
+          papel: "usuario",
+          conteudo: `LEITURA DE EVOLUÇÃO DO CLIENTE (calculada pelo painel; os grupos e os números são DEFINITIVOS, não mude nenhum):
+${JSON.stringify({ periodo: leitura.periodo, base: leitura.base, vencedores: leitura.vencedores, manter: leitura.manter, descartar: leitura.descartar, conteudo: leitura.conteudo, proximos_testes: leitura.proximos_testes, aprendizados: leitura.aprendizados, limites: leitura.limites })}
+
+TAREFA: explique a leitura para a equipe, em português simples e sem travessão.
+- resumo: até 5 frases com o que está funcionando e o que não está, citando só números acima.
+- por_item: para cada id dos grupos (anúncios e posts), uma frase do PORQUÊ provável (gancho, formato, oferta, público, momento), como hipótese, nunca como certeza.
+- atencao: até 3 cuidados (volume baixo, período curto, dado que falta).
+Não invente número, não mude grupo, não crie item novo.`,
+        }],
+        raciocinio,
+        esquemaJson: ESQUEMA_EVOLUCAO,
+        referencia: { tipo: REF_CLIENTE, id: clientId },
+        criadoPor: chamador.userId,
+      });
+      const r = (s.json ?? {}) as Record<string, unknown>;
+      explicacao = {
+        resumo: texto(r.resumo, 2500),
+        por_item: (Array.isArray(r.por_item) ? r.por_item as Record<string, unknown>[] : [])
+          .filter((x) => ids.has(String(x.id))).map((x) => ({ id: String(x.id), explicacao: texto(x.explicacao, 600) })).filter((x) => x.explicacao),
+        atencao: (Array.isArray(r.atencao) ? r.atencao : []).map((x) => texto(x, 400)).filter(Boolean).slice(0, 3),
+      };
+      custo = s.custoUsd;
+      saldo = s.saldoUsd;
+    }
+  }
+
+  const memorias = corpo.gravar === false
+    ? { gravadas: 0, repetidas: 0, erro: null as string | null }
+    : await gravarAprendizados(servico, clientId, leitura);
+  let leituraId: string | null = null;
+  const { data: salva, error: erroSalvar } = await servico.from("evolucao_leituras").insert({
+    client_id: clientId,
+    periodo_inicio: periodo.inicio,
+    periodo_fim: periodo.fim,
+    leitura,
+    explicacao,
+    memorias_gravadas: memorias.gravadas,
+    custo_usd: custo,
+    criado_por: chamador.userId,
+  }).select("id").single();
+  // Sem a tabela nova (SQL da v4 ainda não aplicado), a leitura volta igual; só não fica no histórico.
+  if (!erroSalvar && salva) leituraId = (salva as { id: string }).id;
+  return json({ leitura, explicacao, memorias, somado: d.somado, leitura_id: leituraId, custo_usd: custo, saldo_usd: saldo });
 }
 
 // ------------------------------------------------------------ biblioteca do nicho
@@ -4719,6 +5002,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   // v3 (pedido do dono em 25/09/2026)
   oferta_do_contexto: ofertaDoContexto,
   referencia_para_estudio: referenciaParaEstudio,
+  // v4, frente E (contas de anúncio, métricas e evolução; docs/mesa-ads/v4)
+  desempenho_cliente: desempenhoCliente,
+  evolucao,
 };
 
 /**
@@ -4729,6 +5015,7 @@ const ACOES_LONGAS = new Set([
   "briefing_sugerir", "referencia_ler", "referencias_importar_proprias", "plano_gerar", "plano_conversar",
   "criativos_produzir", "copy_variar", "oferta_conversar", "conta_sincronizar", "conta_analisar",
   "referencia_abrir", "referencia_importar_url", "biblioteca_do_nicho", "copy_pacote", "pacote_enviar",
+  "evolucao", "desempenho_cliente",
   "referencia_para_estudio",
 ]);
 

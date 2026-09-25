@@ -629,7 +629,7 @@ describe("função mesa-foto (contrato pelo código)", () => {
   it("preparar preserva: recorte com pixels originais, áreas protegidas de volta e erro explícito sem fundo transparente", () => {
     const p = corpoDe(fonte, "preparar");
     for (const trecho of [
-      'fundo: "transparente"', "aceitaFundoTransparente(mImg)", '"fundo_transparente_nao_suportado"', "recorteComPixelsOriginais(", "devolverOriginalNasAreas(",
+      'fundo: "transparente"', "aceitaFundoTransparente(mImg)", '"fundo_transparente_nao_suportado"', "recortePreservandoOriginal(o, g, volta.tela)", "devolverOriginalNasAreas(",
       "mascaraProtegendo(", '"recorte_ou_area_necessaria"', '"fundo_nao_veio_transparente"', "tamanhoFixo: true", "derivada_de: imagem.id",
     ]) expect(p, trecho).toContain(trecho);
     expect(imagemFonte).toContain("devolverOriginalForaDasAreas(original, gerado, complementoDasAreas(protegidas)");
@@ -721,7 +721,8 @@ describe("SQL da Mesa Foto", () => {
 
 describe("a tela (frente B) só pede o que a função e o banco têm", () => {
   const tela = ler("src/components/mesa-foto/fotoApi.ts");
-  const mapa = fonte.slice(fonte.indexOf("const ACOES:"), fonte.indexOf("const ACOES_LONGAS"));
+  // As áreas novas registram as ações por arquivo (index só espalha: ...CLONES.acoes, ...BIBLIOTECA_EM_LOTE.acoes).
+  const mapa = fonte.slice(fonte.indexOf("const ACOES:"), fonte.indexOf("const ACOES_LONGAS")) + ler("supabase/functions/mesa-foto/biblioteca-lote.ts");
 
   it("toda ação chamada pela tela existe na função, inclusive acervo_decidir e tomada_editar", () => {
     const chamadas = Array.from(new Set(Array.from(tela.matchAll(/acao: "(\w+)"/g)).map((m) => m[1])));
@@ -1682,5 +1683,185 @@ describe("ligada à Mesa: persona sugerida pelo brief (modelo_sugerir)", () => {
     const vazia = fichaSugerida({});
     expect(vazia.ficha.idade_aparente).toBe(30);
     expect(() => normalizarFicha(vazia.ficha)).not.toThrow();
+  });
+});
+
+// ================================================================== 25/09, frente D: clones, tirar fundo, biblioteca, diretor atual
+
+import {
+  alertasDoClone,
+  autorizacaoValida,
+  garantirPermitidoNoClone,
+  identidadesDoClone,
+  lerAutorizacaoDoClone,
+  lerFotosReais,
+  lerPedidoDeVariacao,
+  MOTOR_PADRAO_DO_CLONE,
+  promptDaFolhaDoClone,
+  promptDaVariacaoDoClone,
+  statusDoClone,
+} from "../../supabase/functions/mesa-foto/clones-regras";
+import { ESTETICA_NO_PROMPT, preencherLacunasDoPrompt } from "../../supabase/functions/mesa-foto/calculos";
+
+const AUT_OK = { confirmada: true, quem: "A própria pessoa", data: "2026-09-20", forma: "termo_assinado", finalidade: "posts da clínica", sabe_que_e_ia: true, adulta: true };
+const ID = (n: number) => `aaaaaaaa-0000-4000-8000-00000000000${n}`;
+
+describe("clones: autorização e regras duras", () => {
+  it("sem autorização completa não existe clone; validade vencida e revogação bloqueiam", () => {
+    expect(() => lerAutorizacaoDoClone({}, "2026-09-25")).toThrow(/Clone só com autorização/);
+    expect(() => lerAutorizacaoDoClone({ ...AUT_OK, sabe_que_e_ia: false }, "2026-09-25")).toThrow(/geradas por IA/);
+    expect(() => lerAutorizacaoDoClone({ ...AUT_OK, adulta: false }, "2026-09-25")).toThrow(/18 anos/);
+    expect(() => lerAutorizacaoDoClone({ ...AUT_OK, validade: "2026-01-01" }, "2026-09-25")).toThrow(/venceu/);
+    const a = lerAutorizacaoDoClone({ ...AUT_OK, data: "20/09/2026" }, "2026-09-25");
+    expect(a).toMatchObject({ confirmada: true, data: "2026-09-20", forma: "termo_assinado", sabe_que_e_ia: true, adulta: true });
+    expect(autorizacaoValida(a, "2026-09-25").ok).toBe(true);
+    expect(autorizacaoValida({ ...a, revogada_em: "2026-09-24" }, "2026-09-25").ok).toBe(false);
+    expect(autorizacaoValida(null).ok).toBe(false);
+  });
+
+  it("o texto não muda a identidade, não pede sósia nem pessoa conhecida; a palavra clone é permitida", () => {
+    expect(() => garantirPermitidoNoClone("clone da Paula em outra roupa")).not.toThrow();
+    expect(() => garantirPermitidoNoClone("deixe mais jovem")).toThrow(/não mudam/);
+    expect(() => garantirPermitidoNoClone("parecida com a Anitta")).toThrow();
+    expect(() => garantirPermitidoNoClone("igual à Taylor Swift")).toThrow();
+    expect(() => lerPedidoDeVariacao({ roupa: "lingerie sensual" })).toThrow();
+    expect(() => lerPedidoDeVariacao({})).toThrow(/Diga o que muda/);
+    const p = lerPedidoDeVariacao({ preset: "lifestyle_rua", roupa: "jaqueta jeans" });
+    expect(p).toMatchObject({ preset: "lifestyle_rua", roupa: "jaqueta jeans", enquadramento: "meio_corpo" });
+    expect(p.cenario).toContain("rua");
+  });
+
+  it("de 1 a 4 fotos reais; identidade vai com as reais primeiro e a folha aprovada mais perto do ângulo", () => {
+    expect(() => lerFotosReais([])).toThrow(/de 1 a 4/);
+    expect(() => lerFotosReais([ID(1), ID(2), ID(3), ID(4), ID(5)])).toThrow(/No máximo 4/);
+    const reais = [{ id: "r1", tipo: "real" as const, vista: null }, { id: "r2", tipo: "real" as const, vista: null, principal: true }];
+    const folha = [{ id: "f-perfil", tipo: "folha" as const, vista: "perfil_esq" }, { id: "f-frente", tipo: "folha" as const, vista: "frente" }];
+    const ids = identidadesDoClone(reais, folha, "frente", 14).map((x) => x.id);
+    expect(ids).toEqual(["r2", "r1", "f-frente", "f-perfil"]);
+    expect(identidadesDoClone(reais, folha, "frente", 3)).toHaveLength(3);
+    expect(identidadesDoClone(reais, [], null, 2).map((x) => x.id)).toEqual(["r2", "r1"]);
+  });
+
+  it("prompts citam as fotos por índice, repetem o que não muda e não espelham; sem travessão", () => {
+    const fontes = [{ id: "r1", tipo: "real" as const, vista: null, principal: true }, { id: "f1", tipo: "folha" as const, vista: "tres_quartos_esq" }];
+    const folha = promptDaFolhaDoClone({ nome: "Paula", vista: "perfil_esq", fontes, invariantes: ["pinta acima do lábio"] });
+    expect(folha).toContain("Imagem 1: FOTO REAL da pessoa (a principal)");
+    expect(folha).toContain("Imagem 2: vista aprovada da folha");
+    expect(folha).toContain("TRAÇOS QUE NÃO MUDAM: pinta acima do lábio");
+    expect(folha).toContain("fundo cinza claro liso");
+    expect(folha).toContain("nunca espelhe");
+    const v = promptDaVariacaoDoClone({ nome: "Paula", fontes, invariantes: [], pedido: lerPedidoDeVariacao({ preset: "cafe" }), formato: "4:5" });
+    expect(v).toContain("MESMO rosto");
+    expect(v).toContain("O QUE MUDA NESTA FOTO");
+    expect(v).toContain("sem fundo degradê");
+    expect(v).toContain("Nunca escureça a foto");
+    for (const t of [folha, v]) expect(t).not.toMatch(/[—–]/);
+  });
+
+  it("status pronto pede a frente aprovada e mais duas; a conferência é só aviso e sem biometria", () => {
+    expect(statusDoClone("rascunho", [])).toBe("rascunho");
+    const vistas = (aprovadas: string[]) => ["frente", "tres_quartos_esq", "perfil_esq"].map((v, i) => ({ id: `v${i}`, papel: "vista", vista: v, aprovada: aprovadas.includes(v) }));
+    expect(statusDoClone("rascunho", vistas(["tres_quartos_esq", "perfil_esq"]))).toBe("folha");
+    expect(statusDoClone("folha", vistas(["frente", "tres_quartos_esq", "perfil_esq"]))).toBe("pronta");
+    expect(statusDoClone("arquivada", vistas(["frente", "tres_quartos_esq", "perfil_esq"]))).toBe("arquivada");
+    const iguais = alertasDoClone([{ traco: "nariz", escolha: "igual", confianca: 0.9, probabilidades: { igual: 0.9, pequena_diferenca: 0.1 } }], 0.1, 0.05);
+    expect(iguais.alertas).toEqual([]);
+    expect(iguais.semelhanca).toBeGreaterThan(0.9);
+    const outra = alertasDoClone([{ traco: "olhos", escolha: "diferente", confianca: 0.8, probabilidades: { diferente: 0.8, igual: 0.1 } }], 0.7, 0.6);
+    expect(outra.alertas[0]).toMatch(/não parecer a mesma pessoa/);
+    expect(outra.alertas.join(" ")).toMatch(/Olhos parece diferente/);
+    expect(outra.alertas.join(" ")).toMatch(/espelhada/);
+    expect(MOTOR_PADRAO_DO_CLONE.modelo_imagem_id).toBe("openrouter:google/gemini-3-pro-image");
+  });
+
+  it("a função: autorização exigida, foto gerada não vira identidade, motor preso, variação no acervo marcada, Jev só aviso", () => {
+    const c = ler("supabase/functions/mesa-foto/clones.ts");
+    expect(c).toContain("lerAutorizacaoDoClone(mesclada)");
+    expect(c).toContain('"foto_nao_e_real"');
+    expect(c).toContain("garantirGeravel(c);");
+    expect(c).toContain('"motor_do_clone"');
+    expect(c).toContain("mesmoModelo: true");
+    expect(c).toContain('modo: "clone"');
+    expect(c).toContain("gerada: true,");
+    expect(c).toContain('"pessoa_real_autorizada"');
+    expect(c).toContain("Não identifique a pessoa");
+    expect(c).toContain("Só aviso, sem biometria");
+    expect(c).toContain('formato: "aceleriq.clone.v1"');
+    expect(c).not.toMatch(/[—–]/);
+    const mapa = fonte.slice(fonte.indexOf("const ACOES:"), fonte.indexOf("const ACOES_LONGAS"));
+    expect(mapa).toContain("...CLONES.acoes");
+    expect(mapa).toContain("...BIBLIOTECA_EM_LOTE.acoes");
+    const longas = fonte.slice(fonte.indexOf("const ACOES_LONGAS"), fonte.indexOf("Deno.serve"));
+    expect(longas).toContain("...ACOES_LONGAS_DE_CLONES");
+    expect(c).toMatch(/ACOES_LONGAS_DE_CLONES = \[[^\]]*"clone_folha_gerar"[^\]]*"clone_variacao_gerar"[^\]]*"clone_conferir"/);
+    // Persona sintética e clone não se misturam.
+    expect(modelosFonte).toContain("recusarClone(p);");
+    expect(modelosFonte).toContain("p.origem !== ORIGEM_CLONE");
+  });
+
+  it("migration 04: clone só com autorização e de um cliente, modo clone no acervo, idempotente e não aplicada", () => {
+    const sql4 = ler("docs/mesa-foto/migrations/04_clones.sql");
+    expect(sql4).toContain("NÃO APLICADA");
+    expect(sql4).toContain("ADD COLUMN IF NOT EXISTS origem text NOT NULL DEFAULT 'sintetica'");
+    expect(sql4).toContain("(autorizacao ->> 'confirmada') = 'true'");
+    expect(sql4).toContain("jsonb_array_length(identidade_real) BETWEEN 1 AND 4");
+    expect(sql4).toContain("'detalhe', 'clone'");
+    expect(sql4).not.toMatch(/CREATE TABLE (?!IF NOT EXISTS)/);
+    expect(sql4).not.toMatch(/[—–]/);
+  });
+});
+
+describe("tirar fundo: pixels originais com o alfa alinhado", () => {
+  it("o recorte usa só o alfa do gerador, alinhado, na foto original, e erra explícito quando não serve", () => {
+    const r = ler("supabase/functions/mesa-foto/recorte.ts");
+    expect(r).toContain('from "../_shared/imagem-local.ts"');
+    expect(r).toContain("ob[i + 3] = final;");
+    expect(r).not.toMatch(/ob\[i\] = |ob\[i \+ 1\] = |ob\[i \+ 2\] = /);
+    expect(r).toContain("export const LADO_DO_RECORTE = 1600;");
+    const p = corpoDe(fonte, "preparar");
+    for (const t of ['"recorte_vazio"', '"recorte_desalinhado"', '"fundo_nao_veio_transparente"', "LADO_DO_RECORTE", '"sem_fundo"']) expect(p, t).toContain(t);
+    // Contrato que o Estúdio chama: preparar { client_id, imagem_id, modo } -> { imagem, custo_usd }.
+    expect(p).toContain("imagem: await comUrl(data as LinhaImagem)");
+    expect(p).toContain("custo_usd: arred6(custo)");
+  });
+});
+
+describe("biblioteca: exemplo gerado pelo próprio prompt", () => {
+  it("as lacunas viram valores concretos e genéricos; o prompt do item vai inteiro", () => {
+    expect(preencherLacunasDoPrompt("[Product] on a [light brand color, e.g. #F3EEE8] backdrop", "produto")).toBe("a generic unbranded product (a neutral colored box or bottle) on a #F3EEE8 backdrop");
+    expect(preencherLacunasDoPrompt("gradient from [color 1] to [color 2]", "cosmetico")).toBe("gradient from soft sage green (#B7C4A8) to warm sand (#E6D5B8)");
+    expect(preencherLacunasDoPrompt("[occasion: Christmas, Mother's Day]", "produto")).toBe("Christmas");
+    expect(preencherLacunasDoPrompt("[Garment] on a hanger", "moda")).toBe("a generic unbranded garment on a hanger");
+    const p = promptDoExemplo({ categoria: "bebida", titulo: "Lata no gelo", prompt_en: "[Beverage can] half buried in crushed ice, solid [brand color, HEX] background", negativo: "watermark" });
+    expect(p).toContain("PROMPT (siga à risca");
+    expect(p).toContain("a generic unbranded beverage can half buried in crushed ice");
+    expect(p).not.toContain("[");
+  });
+
+  it("ações de admin: limpar Openverse (prévia antes), estimar o total e gerar um por chamada no gerador barato", () => {
+    const b = ler("supabase/functions/mesa-foto/biblioteca-lote.ts");
+    expect(b).toContain('export const MOTORES_DO_EXEMPLO = ["openrouter:microsoft/mai-image-2.6", "openrouter:bytedance-seed/seedream-4.5"]');
+    expect(b).toContain("if (corpo.confirmar !== true)");
+    expect(b).toContain("await garantirAdmin(ch);");
+    expect(b).toContain("prompt_origem");
+    expect(b).toContain('type: "noul"');
+    expect(b).toContain("pelo_proprio_prompt: true");
+    expect(b).toContain('ACOES_LONGAS_DA_BIBLIOTECA = ["biblioteca_limpar_exemplos", "biblioteca_exemplo_proximo"]');
+    expect(b).not.toMatch(/[—–]/);
+  });
+});
+
+describe("diretor de fotografia atual (2025/2026)", () => {
+  it("o sistema traz a estética atual com exemplos e os clichês antigos a evitar, sem perder as regras", () => {
+    const e = fonte.slice(fonte.indexOf("const ESTETICA_ATUAL"), fonte.indexOf("const SISTEMA_LEITOR"));
+    for (const t of ["Luz natural suave", "UGC autêntico", "EXEMPLOS DE DIREÇÃO", "fundo degradê", "vinheta", "HDR", "bokeh exagerado", "${ESTETICA_ATUAL}"]) expect(e, t).toContain(t);
+    expect(fonte).toContain("Nunca escurecer a foto para dar destaque");
+    for (const s of ["SISTEMA_DIRETOR", "SISTEMA_AGENTE", "SISTEMA_VARIACOES", "SISTEMA_CAMPANHA"]) {
+      const corpo = fonte.slice(fonte.indexOf(`const ${s} =`), fonte.indexOf("`;", fonte.indexOf(`const ${s} =`)));
+      expect(corpo, s).toContain("${PADRAO_PUBLICITARIO}");
+    }
+    expect(ESTETICA_NO_PROMPT).toContain("sem fundo degradê");
+    expect(calculosFonte.split("linhas.push(ESTETICA_NO_PROMPT);").length - 1).toBe(2);
+    expect(ler("supabase/functions/mesa-foto/receitas.ts")).not.toContain("gradiente");
   });
 });

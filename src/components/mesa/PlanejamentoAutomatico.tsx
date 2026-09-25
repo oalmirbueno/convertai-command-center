@@ -23,7 +23,10 @@ import {
 } from "@/lib/mesa/api";
 import { AvisoDeErro, BotaoComCusto } from "./Custo";
 import { useMesa } from "./MesaContexto";
-import { atualizarAgenda } from "./mesaV4Api";
+import { atualizarAgenda, novoIdDaProposta } from "./mesaV4Api";
+import MesEscolhaEditorial from "./MesEscolhaEditorial";
+import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, type EscolhaEditorial } from "./MesConhecimento";
+import { useKitDoCliente } from "./contextoDoCliente";
 import { chavesDoPlano, lerPlanosCombinados } from "./planoDoMes";
 import { Campo, SeletorDeModelo, SeletorDeRaciocinio } from "./Seletores";
 
@@ -51,6 +54,8 @@ interface EstadoDoMes {
   custo: number;
   itens: number | null;
   erro: unknown;
+  /** Id da proposta que o propor_temas está criando (a linha acompanha os temas chegando). */
+  acompanhar?: string | null;
 }
 
 interface ConfigDoPlano {
@@ -60,6 +65,7 @@ interface ConfigDoPlano {
   modeloId: string;
   raciocinio?: string;
   projetoId: string;
+  escolha?: EscolhaEditorial;
 }
 
 interface Execucao {
@@ -211,11 +217,22 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
   mudarMes(f.clientId, mes, { erro: null });
   try {
     let estado = execucoes[f.clientId]!.linhas[mes];
+    // A tentativa anterior caiu no meio mas os temas ficaram gravados: aproveita, sem pagar de novo.
+    if (!estado.propostaId && estado.acompanhar) {
+      const anterior = await temasDaProposta(estado.acompanhar).catch(() => [] as TemaDaProposta[]);
+      if (anterior.length >= Math.min(estado.alvo, 8)) {
+        temas = anterior;
+        mudarMes(f.clientId, mes, { propostaId: estado.acompanhar });
+      }
+    }
+    estado = execucoes[f.clientId]!.linhas[mes];
     if (!estado.propostaId) {
-      mudarMes(f.clientId, mes, { fase: "temas" });
+      const acompanhar = novoIdDaProposta();
+      mudarMes(f.clientId, mes, { fase: "temas", acompanhar });
       const d = await chamarFuncao<any>("agente-calendario", {
         acao: "propor_temas",
         client_id: f.clientId,
+        proposta_id: acompanhar,
         periodo_inicio: periodo.inicio,
         periodo_fim: periodo.fim,
         frequencia: estado.alvo,
@@ -223,6 +240,7 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
         oferta: cfg.oferta,
         modelo_id: cfg.modeloId,
         raciocinio: cfg.raciocinio,
+        ...corpoDaEscolha(cfg.escolha),
       });
       const c = custoDaResposta(d) || 0;
       custo += c;
@@ -246,16 +264,29 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
     estado = execucoes[f.clientId]!.linhas[mes];
     if (!estado.detalhou) {
       mudarMes(f.clientId, mes, { fase: "detalhando" });
-      const d = await chamarFuncao<any>("agente-calendario", {
-        acao: "detalhar",
-        proposta_id: propostaId,
-        modelo_id: cfg.modeloId || undefined,
-        raciocinio: cfg.raciocinio || undefined,
-      });
-      const c = custoDaResposta(d) || 0;
-      custo += c;
-      mudarMes(f.clientId, mes, { detalhou: true, custo: execucoes[f.clientId]!.linhas[mes].custo + c });
-      f.atualizarCusto();
+      // Antes (bug do "conteúdo não entra no mês"): o detalhar voltava 200 com
+      // temas faltando, o mês marcava "detalhou" e o gravar recusava a proposta
+      // não pronta para sempre, até na nova tentativa. Agora só marca com tudo
+      // detalhado; o que faltou é pedido mais uma vez (só o resto).
+      let faltam: unknown[] = [];
+      for (let passada = 0; passada < 2; passada++) {
+        const d = await chamarFuncao<any>("agente-calendario", {
+          acao: "detalhar",
+          proposta_id: propostaId,
+          modelo_id: cfg.modeloId || undefined,
+          raciocinio: cfg.raciocinio || undefined,
+        });
+        const c = custoDaResposta(d) || 0;
+        custo += c;
+        mudarMes(f.clientId, mes, { custo: execucoes[f.clientId]!.linhas[mes].custo + c });
+        f.atualizarCusto();
+        faltam = d && Array.isArray(d.faltam) ? d.faltam : [];
+        if (!faltam.length) break;
+      }
+      if (faltam.length) {
+        throw new Error(`Faltou detalhar ${faltam.length} tema(s) deste mês. O que ficou pronto está guardado: tente este mês de novo para fazer só o resto.`);
+      }
+      mudarMes(f.clientId, mes, { detalhou: true });
     }
 
     mudarMes(f.clientId, mes, { fase: "gravando" });
@@ -277,7 +308,13 @@ async function rodarMes(f: Ferramentas, mes: string): Promise<{ ok: boolean; par
   }
 }
 
-/** Roda os meses que faltam, um por vez, até acabar ou até pedirem para parar. */
+/**
+ * Meses ao mesmo tempo (25/09): antes era um por vez e 4 meses levavam 4 vezes
+ * o tempo de um. Cada mês grava assim que termina, então a agenda vai enchendo.
+ */
+export const MESES_EM_PARALELO = 3;
+
+/** Roda os meses que faltam, até MESES_EM_PARALELO de cada vez, até acabar ou até pedirem para parar. */
 async function rodarFila(f: Ferramentas, meses: string[]): Promise<{ custo_usd: number; gravados: number; falhas: number }> {
   const ex = execucoes[f.clientId];
   if (!ex || ex.rodando) return { custo_usd: 0, gravados: 0, falhas: 0 };
@@ -292,22 +329,26 @@ async function rodarFila(f: Ferramentas, meses: string[]): Promise<{ custo_usd: 
   let gravados = 0;
   let falhas = 0;
   try {
-    for (let i = 0; i < meses.length; i++) {
-      const m = meses[i];
-      if (execucoes[f.clientId] !== ex) break;
-      if (ex.parar) {
-        for (const resto of meses.slice(i)) {
-          if (ex.linhas[resto] && ex.linhas[resto].fase === "espera") mudarMes(f.clientId, resto, { fase: "parado" });
+    let proximo = 0;
+    const trabalhador = async () => {
+      while (proximo < meses.length) {
+        if (execucoes[f.clientId] !== ex) return;
+        if (ex.parar) {
+          for (const resto of meses.slice(proximo)) {
+            if (ex.linhas[resto] && ex.linhas[resto].fase === "espera") mudarMes(f.clientId, resto, { fase: "parado" });
+          }
+          return;
         }
-        break;
+        const m = meses[proximo++];
+        if (ex.linhas[m] && ex.linhas[m].fase === "gravado") continue;
+        const r = await rodarMes(f, m);
+        custo += r.custo;
+        if (r.ok) gravados++;
+        else falhas++;
+        if (r.parar) ex.parar = true;
       }
-      if (ex.linhas[m] && ex.linhas[m].fase === "gravado") continue;
-      const r = await rodarMes(f, m);
-      custo += r.custo;
-      if (r.ok) gravados++;
-      else falhas++;
-      if (r.parar) ex.parar = true;
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(MESES_EM_PARALELO, meses.length) }, trabalhador));
   } finally {
     ex.rodando = false;
     avisar(f.clientId);
@@ -372,6 +413,21 @@ function LinhaDoMes({
 }) {
   const f = estado.fase;
   const rodando = f === "temas" || f === "escolhendo" || f === "detalhando" || f === "gravando";
+  const idAcompanhado = estado.propostaId || estado.acompanhar || "";
+  // Resultado parcial: temas e conteúdos aparecem conforme o estrategista grava.
+  const parcial = useQuery({
+    queryKey: ["mesa", "proposta-parcial", idAcompanhado],
+    enabled: rodando && !!idAcompanhado && (f === "temas" || f === "detalhando"),
+    refetchInterval: 4000,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from("calendario_propostas").select("temas, itens").eq("id", idAcompanhado).maybeSingle();
+      if (error) throw error;
+      return {
+        temas: data && Array.isArray(data.temas) ? data.temas.length : 0,
+        itens: data && Array.isArray(data.itens) ? data.itens.length : 0,
+      };
+    },
+  });
   return (
     <li className="min-w-0 space-y-2 px-3.5 py-3">
       <div className="flex min-w-0 flex-wrap items-center">
@@ -392,6 +448,8 @@ function LinhaDoMes({
         <span className="text-[11.5px] text-muted-foreground">
           {estado.alvo} {estado.alvo === 1 ? "publicação" : "publicações"}
           {estado.itens !== null ? ` · ${estado.itens} na agenda` : ""}
+          {rodando && parcial.data && f === "temas" && parcial.data.temas > 0 ? ` · ${parcial.data.temas} temas chegaram` : ""}
+          {rodando && parcial.data && f === "detalhando" ? ` · ${parcial.data.itens} de ${estado.alvo} detalhados` : ""}
           {estado.custo > 0 ? ` · ${usd(estado.custo)}` : ""}
         </span>
         {f === "gravado" && (
@@ -447,15 +505,24 @@ export default function PlanejamentoAutomatico() {
   const [modeloId, setModeloId] = useState("");
   const [raciocinio, setRaciocinio] = useState("");
   const [projetoId, setProjetoId] = useState("");
+  const [escolha, setEscolha] = useState<EscolhaEditorial>(escolhaLivre);
 
   useEffect(() => {
     if (modeloId || !catalogo.length) return;
     const padrao = padraoPara(catalogo, "estrategista");
     if (!padrao) return;
     setModeloId(padrao.id);
-    const niveis = padrao.raciocinio || [];
-    setRaciocinio(niveis.length ? niveis[niveis.length - 1] : "");
+    // Medium por padrão (25/09): o mais alto deixava cada mês lento demais.
+    setRaciocinio(raciocinioPadraoDaTela(padrao.raciocinio));
   }, [catalogo, modeloId]);
+
+  // Contexto facilita o mês: objetivo e oferta já vêm do contexto do cliente (só se o campo estiver vazio).
+  const kit = useKitDoCliente(clientId);
+  useEffect(() => {
+    const c = kit.data && kit.data.contexto;
+    if (!c) return;
+    if (c.oferta && typeof c.oferta === "string") setOferta((v) => v || String(c.oferta).slice(0, 200));
+  }, [kit.data]);
 
   const projetos = useQuery({
     queryKey: ["mesa", "projetos-social", clientId],
@@ -498,8 +565,7 @@ export default function PlanejamentoAutomatico() {
 
   const trocarModelo = (id: string) => {
     setModeloId(id);
-    const niveis = catalogo.find((m) => m.id === id)?.raciocinio || [];
-    setRaciocinio(niveis.length ? niveis[niveis.length - 1] : "");
+    setRaciocinio(raciocinioPadraoDaTela(catalogo.find((m) => m.id === id)?.raciocinio));
   };
 
   const ferramentas: Ferramentas = { clientId, queryClient, atualizarCusto: mesa.atualizarCusto };
@@ -521,6 +587,7 @@ export default function PlanejamentoAutomatico() {
         modeloId,
         raciocinio: raciocinio || undefined,
         projetoId,
+        escolha,
       },
       rodando: false,
       parar: false,
@@ -558,7 +625,7 @@ export default function PlanejamentoAutomatico() {
             <CalendarRange className="mr-1.5 h-4 w-4 text-primary" /> Planejar e preencher a agenda
           </p>
           <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-            Para cada mês do período, o estrategista propõe os temas, a Mesa escolhe os melhores pela nota do Jev, detalha e grava na agenda. Você acompanha mês a mês e pode parar entre um mês e outro.
+            Para cada mês do período, o estrategista propõe os temas, a Mesa escolhe os melhores pela nota do Jev, detalha e grava na agenda. Até três meses correm ao mesmo tempo e cada um entra na agenda assim que fica pronto; você pode parar a qualquer hora (o que já começou termina).
           </p>
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -604,6 +671,7 @@ export default function PlanejamentoAutomatico() {
             </Select>
           </Campo>
         </div>
+        <MesEscolhaEditorial valor={escolha} onChange={setEscolha} disabled={rodando} />
         <div className="flex flex-col border-t border-border pt-3 sm:flex-row sm:items-center">
           <p className="min-w-0 flex-1 text-[12px] text-muted-foreground sm:mr-3">
             {meses.length} {meses.length === 1 ? "mês" : "meses"} · cerca de {totalPublicacoes} publicações
@@ -632,7 +700,7 @@ export default function PlanejamentoAutomatico() {
                 }}
               >
                 <Square className="mr-1.5 h-3.5 w-3.5" />
-                {execucao && execucao.parar ? "Vai parar depois deste mês" : "Parar depois deste mês"}
+                {execucao && execucao.parar ? "Vai parar depois dos meses em andamento" : "Parar depois dos meses em andamento"}
               </Button>
             )}
             <BotaoComCusto

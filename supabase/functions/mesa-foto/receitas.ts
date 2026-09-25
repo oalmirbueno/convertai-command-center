@@ -222,8 +222,8 @@ export const RECEITAS: Receita[] = [
     nome: "Tecnologia e acessórios",
     tipos_de_kit: ["tecnologia", "produto"],
     direcao: "Superfícies limpas, reflexos controlados, sensação de precisão.",
-    luz: "Luz lateral suave com difusor grande, bandeiras pretas para desenhar reflexos controlados nas superfícies brilhantes, gradiente suave no corpo do aparelho e recorte frio discreto nas bordas.",
-    cenario: "Superfície neutra fosca e fundo com gradiente suave, sem objetos que disputem atenção.",
+    luz: "Luz lateral suave com difusor grande, bandeiras pretas para desenhar reflexos controlados nas superfícies brilhantes, brilho suave e contínuo no corpo do aparelho e recorte discreto nas bordas.",
+    cenario: "Superfície fosca em tom sólido (off-white, areia ou cinza quente) e fundo liso do mesmo tom, com sombra natural macia; sem objetos que disputem atenção.",
     tomadas: [
       { id: "principal", nome: "Principal em três quartos", objetivo: "Foto principal do aparelho.", camera: c("a45-e30-dmedio") },
       { id: "frente", nome: "Frente", objetivo: "Frente comercial.", camera: c("a0-e0-dmedio") },
@@ -337,7 +337,7 @@ export const RECEITAS: Receita[] = [
     tipos_de_kit: ["bebida", "alimento"],
     direcao: "Reflexos controlados, líquido com cor real e escala fiel do recipiente.",
     luz: "Contraluz para a transparência do líquido, faixas de luz laterais para desenhar o contorno do vidro, reflexos controlados; gotas e gelo só quando documentados.",
-    cenario: "Superfície neutra, fundo limpo com gradiente suave.",
+    cenario: "Superfície neutra e fundo limpo em tom sólido (off-white ou areia), sombra natural macia.",
     tomadas: [
       { id: "principal", nome: "Embalagem principal", objetivo: "Foto principal.", camera: c("a0-e0-dmedio") },
       {
@@ -530,7 +530,7 @@ export const RECEITAS: Receita[] = [
     direcao:
       "O produto em si, fora da caixa, recriado a partir das fotos do produto (reais ou referências oficiais da internet), nunca da arte impressa na embalagem. Sem foto do produto, a embalagem vira o assunto.",
     luz: "Softbox grande como chave a 45 graus e um pouco acima, rebatedor branco do lado oposto, recorte suave por trás para separar as bordas; reflexos desenhados com bandeiras nas partes brilhantes. Balanço de branco neutro.",
-    cenario: "Superfície neutra e limpa, fundo com gradiente suave na paleta da marca, sem objetos que disputem atenção.",
+    cenario: "Superfície limpa e fundo em papel de cor sólida da paleta da marca (tom suave, sem degradê), sombra natural macia; sem objetos que disputem atenção.",
     tomadas: [
       { id: "heroi", nome: "Herói fora da caixa", objetivo: "O produto sozinho, inteiro, como página de loja premium.", camera: c("a45-e30-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "fora_da_caixa" },
       { id: "frente", nome: "Frente limpa", objetivo: "Frente comercial do produto fora da caixa.", camera: c("a0-e0-dmedio"), foco: "fora_da_embalagem", tipo_variacao: "fundo_branco" },
@@ -604,7 +604,7 @@ export const TIPOS_DE_VARIACAO: TipoDeVariacao[] = [
     direcao: "Foto herói de anúncio: o assunto grande, imponente e centralizado sobre cor sólida da marca.",
     cameras: [c("a45-e-30-dmedio"), c("a0-e0-dmedio")],
     cenario: "Fundo contínuo de papel sem costura em cor sólida saturada da paleta da marca, piso da mesma cor, sem objetos.",
-    luz: "Softbox grande a 45 graus como chave, rebatedor branco do lado oposto, recorte por trás desenhando o contorno, leve gradiente de luz no fundo atrás do assunto.",
+    luz: "Softbox grande a 45 graus como chave, rebatedor branco do lado oposto, recorte por trás desenhando o contorno, fundo iluminado de forma uniforme e suave, sem degradê.",
     props: [],
     formato: "4:5",
     foco: "produto",
@@ -693,7 +693,7 @@ export const TIPOS_DE_VARIACAO: TipoDeVariacao[] = [
     nome: "Fora da caixa",
     direcao: "O produto em si, fora da embalagem, inteiro e nítido, recriado das fotos do produto (nunca da arte da caixa).",
     cameras: [c("a45-e30-dmedio"), c("a315-e30-dmedio")],
-    cenario: "Superfície neutra e limpa com gradiente suave na paleta da marca, sem a caixa.",
+    cenario: "Superfície limpa e fundo em tom sólido da paleta da marca (sem degradê), sombra natural macia, sem a caixa.",
     luz: "Softbox grande a 45 graus, rebatedor do lado oposto, recorte por trás, reflexos controlados nas partes brilhantes.",
     props: [],
     formato: "4:5",

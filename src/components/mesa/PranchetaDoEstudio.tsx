@@ -117,8 +117,10 @@ type Props = {
   /** ordem -> etapa e início (fila, geração, ajuste, conferência). */
   andamento: Record<number, AndamentoDaLamina>;
   infinito: boolean;
-  /** Largura de cada lâmina em px (a altura é 1,25 vez). */
+  /** Largura de cada lâmina em px (a altura é 1,25 vez no 4:5). */
   largura: number;
+  /** Largura dividida pela altura do formato do post (0,8 no 4:5, 0,75 no 3:4, 1 no 1:1, 0,5625 no 9:16). */
+  proporcao?: number;
   /** "vertical": coluna ao lado da lâmina grande (computador). */
   orientacao?: "horizontal" | "vertical";
   podeReordenar: boolean;
@@ -290,6 +292,7 @@ function Lamina({
   onVersoes,
   onAjustar,
   largura,
+  proporcao = 0.8,
   arrastavel,
   avisoDaOrdem,
   colado,
@@ -308,6 +311,7 @@ function Lamina({
   onVersoes?: () => void;
   onAjustar?: () => void;
   largura: number;
+  proporcao?: number;
   arrastavel: boolean;
   avisoDaOrdem?: string;
   colado: boolean;
@@ -321,7 +325,7 @@ function Lamina({
   const alvo = useDroppable({ id });
   const deslocamento = arrasto.transform ? `translate3d(${arrasto.transform.x}px, ${arrasto.transform.y}px, 0)` : undefined;
   const funcao = funcaoDaLamina(card);
-  const altura = Math.round(largura * 1.25);
+  const altura = Math.round(largura / (proporcao > 0 ? proporcao : 0.8));
   const cantos = colado ? `${primeira ? "rounded-l-lg" : ""} ${ultima ? "rounded-r-lg" : ""}` : "rounded-lg border";
   const trabalhando = !!andamento && andamento.etapa !== "fila";
   const espaco = colado ? "" : vertical ? (ultima ? "" : "mb-3") : "mr-3";
@@ -429,6 +433,7 @@ export default function PranchetaDoEstudio({
   andamento,
   infinito,
   largura,
+  proporcao = 0.8,
   orientacao = "horizontal",
   podeReordenar,
   avisoDaOrdem,
@@ -472,6 +477,7 @@ export default function PranchetaDoEstudio({
           onVersoes={onVersoes ? () => onVersoes(c.ordem) : undefined}
           onAjustar={onAjustar ? () => onAjustar(c.ordem) : undefined}
           largura={largura}
+          proporcao={proporcao}
           arrastavel={podeArrastar}
           avisoDaOrdem={avisoDaOrdem}
           colado={colado}

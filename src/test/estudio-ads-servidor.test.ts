@@ -190,8 +190,8 @@ describe("Estúdio Ads: zona segura", () => {
 
   it("as áreas da máscara da foto real seguem o formato e o prompt do gerador recebe o anúncio", () => {
     const areas = corpoDe("areasDeDesenho");
-    expect(areas).toContain("caixaDaZona(zona, capa, total > 1, formato)");
-    expect(areas).toContain("caixaDaLogo(zona, capa, formato)");
+    expect(areas).toContain("caixaDaZona(zona, capa, total > 1, formato, post)");
+    expect(areas).toContain("caixaDaLogo(zona, capa, formato, post)");
     expect(corpoDe("gerarCard")).toContain("anuncio: quadro.formato ? { formato: quadro.formato } : null,");
   });
 });
@@ -224,9 +224,9 @@ describe("Estúdio Ads: sem panorama nem série", () => {
     expect(corpoDe("usaPanorama")).toContain("if (ehAds(t)) return false;");
     const g = corpoDe("gerarCard");
     expect(g).toContain("const infinito = !ads && !!t.direcao.carrossel_infinito;");
-    // Ligação da última com a capa só no contínuo sem panorama (nunca no anúncio); a tela dupla saiu em 25/09.
+    // A tela dupla saiu em 25/09; a capa guia a série (fora do replicar), no post e no carrossel de anúncio.
     expect(g).not.toContain("const continuar =");
-    expect(g).toContain("if (infinito && !panorama && ordem === total && ordem > 2) {");
+    expect(g).toContain("if (capa && ordem > 2 && !replicar) {");
     expect(g).toContain("carrosselInfinito: infinito && !panorama,");
     expect(corpoDe("regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t)");
     expect(corpoDe("configurar")).toContain("carrossel_infinito: infinito && cards.length > 1 && !ehAds(x)");
@@ -289,7 +289,7 @@ describe("Estúdio Ads: post (social) inalterado", () => {
   it("o trabalho social tem quadro 1088 x 1360 e tamanho TAMANHO_GERADOR", () => {
     expect(estudio).toContain("const TAMANHO_GERADOR = TAMANHO_4X5;");
     expect(corpoDe("quadroDoCard")).toMatch(
-      /if \(!ehAds\(t\)\) \{\s*return \{\s*formato: null,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,\s*final: \{ largura: LARGURA_FINAL, altura: ALTURA_FINAL \},\s*proporcao: "4:5",\s*fixo: false,/,
+      /return \{\s*formato: null,\s*post,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,\s*final: \{ largura: LARGURA_FINAL, altura: ALTURA_FINAL \},\s*proporcao: "4:5",\s*fixo: false,/,
     );
     expect(imagemLocal).toContain("export const LARGURA_LAMINA = 1088;");
     expect(imagemLocal).toContain("export const ALTURA_LAMINA = 1360;");

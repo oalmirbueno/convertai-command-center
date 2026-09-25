@@ -317,12 +317,12 @@ describe("front: confere e corrige antes de revelar", () => {
 describe("correção só na área do texto e refazer diferente (24/09/2026)", () => {
   it("corrigir_card abre só as áreas de texto e logo; o ajuste devolve o original fora delas", () => {
     const c = corpoDe("corrigirCard");
-    expect(c).toContain("areasDeDesenho(card, totalCards(t), levaLogo(t, ordem), quadroDoCard(t, card))");
+    expect(c).toContain("areasDeDesenho(card, totalCards(t), levaLogo(t, ordem) && !logoDoCodigo, quadroDoCard(t, card))");
     expect(c).toContain("areas: areasDaCorrecao");
     expect(corpoDe("ajustarCard")).toContain("auto ? (auto.areas ?? []) : normalizarAreas(corpo.areas)");
   });
   it("refazer pede outra composição e as regras fixas cobram anatomia e nada de moldura", () => {
-    expect(estudio).toContain("blocoDeVariacao(versoesAntes, !!baseFoto, replicar)");
+    expect(estudio).toContain("blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1)");
     expect(estudio).toContain("NÃO repita a composição da versão anterior");
     expect(estudio).toContain("mãos com cinco dedos");
     expect(estudio).toContain("Sem moldura, borda, contorno ou cantos arredondados");

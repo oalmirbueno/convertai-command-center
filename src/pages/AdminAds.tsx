@@ -30,6 +30,7 @@ import {
   collectAdsMetricsNow,
   useAdsCreatives,
   connectAdsAccount,
+  ContaDeOutroCliente,
   saveMetaAdsToken,
   useAdsCampaigns,
   useAdsConnection,
@@ -276,7 +277,43 @@ function ClientAdsDetail({
 }
 
 /** Ligar a conta de anúncios: o token da agência e o número de cada conta. */
-type ContaDaMeta = { numero: string; nome: string | null };
+type ContaDaMeta = {
+  numero: string;
+  nome: string | null;
+  status_rotulo?: string | null;
+  utilizavel?: boolean;
+  moeda?: string | null;
+  empresa?: string | null;
+  gasto_total?: number | null;
+};
+
+/**
+ * Liga a conta e já pede a primeira leitura. Antes a tela dizia "chega em
+ * alguns minutos" e a conta sem gasto nunca mostrava nada: parecia que ligar
+ * não tinha funcionado. Conta que já é de outro cliente pede confirmação.
+ */
+async function ligarEPuxar(input: { clientId: string; actId: string; displayName: string }) {
+  let resultado;
+  try {
+    resultado = await connectAdsAccount(input);
+  } catch (erro) {
+    if (!(erro instanceof ContaDeOutroCliente)) throw erro;
+    if (!window.confirm(erro.message + "\n\nLigar mesmo assim?")) return null;
+    resultado = await connectAdsAccount({ ...input, confirmarOutroCliente: true });
+  }
+  try {
+    await collectAdsMetricsNow();
+  } catch {
+    // A leitura agendada roda de 10 em 10 minutos; ligar já valeu.
+  }
+  return resultado;
+}
+
+const MENSAGEM_DA_LIGACAO = {
+  nova: "Conta ligada. A leitura da Meta já foi pedida; saldo, gasto e campanhas aparecem em instantes.",
+  ja_ligada: "Esta conta já estava ligada a este cliente. Pedimos uma leitura nova.",
+  reativada: "Conta religada a este cliente. A leitura da Meta já foi pedida.",
+} as const;
 
 /** Onde a lista de contas devolvida pela Meta descansa entre recarregamentos. */
 const CONTAS_DA_META = "aceleriq-contas-da-meta";
@@ -394,12 +431,13 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
     }
     setLigandoNumero(conta.numero);
     try {
-      await connectAdsAccount({
+      const r = await ligarEPuxar({
         clientId: cliente,
         actId: conta.numero,
         displayName: conta.nome || `Conta ${conta.numero}`,
       });
-      toast.success("Conta ligada. A primeira leitura chega em alguns minutos.");
+      if (!r) return;
+      toast.success(MENSAGEM_DA_LIGACAO[r.situacao]);
       onDone();
     } catch (error: unknown) {
       toast.error((error as { message?: string })?.message || "Não foi possível ligar a conta.");
@@ -411,10 +449,11 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
   const ligarConta = async () => {
     setSalvando(true);
     try {
-      await connectAdsAccount({ clientId, actId, displayName: nome });
+      const r = await ligarEPuxar({ clientId, actId, displayName: nome });
+      if (!r) return;
       setActId("");
       setNome("");
-      toast.success("Conta ligada. A primeira leitura chega em alguns minutos.");
+      toast.success(MENSAGEM_DA_LIGACAO[r.situacao]);
       onDone();
     } catch (error: unknown) {
       toast.error((error as { message?: string })?.message || "Não foi possível ligar a conta.");
@@ -510,7 +549,22 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
                     <p className="truncate text-xs font-medium text-foreground">
                       {conta.nome || `Conta ${conta.numero}`}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">act_{conta.numero}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {[
+                        `act_${conta.numero}`,
+                        conta.empresa,
+                        conta.moeda,
+                        conta.status_rotulo,
+                        conta.gasto_total != null ? `gasto total ${dinheiro(conta.gasto_total)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {conta.utilizavel === false && (
+                      <p className="text-[10px] text-warning">
+                        A Meta diz que esta conta está {conta.status_rotulo || "inativa"}: ligar não traz números.
+                      </p>
+                    )}
                   </div>
 
                   {jaLigada ? (
@@ -572,9 +626,23 @@ function ConexaoAds({ onDone }: { onDone: () => void }) {
                 key={conta.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/40 px-3 py-2"
               >
-                <div>
-                  <p className="text-xs font-medium text-foreground">{conta.display_name}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-foreground">{conta.display_name}</p>
                   <p className="text-[10px] text-muted-foreground">act_{conta.external_id}</p>
+                  {(conta.saldo_disponivel != null || conta.gasto_total != null) && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {[
+                        conta.saldo_disponivel != null ? `Saldo ${dinheiro(conta.saldo_disponivel)}` : null,
+                        conta.gasto_total != null ? `gasto total ${dinheiro(conta.gasto_total)}` : null,
+                        conta.limite_de_gasto != null ? `limite ${dinheiro(conta.limite_de_gasto)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                  {conta.erro && (
+                    <p className="text-[10px] text-destructive">A Meta recusou a leitura: {conta.erro}</p>
+                  )}
                 </div>
                 <p className="text-[10px] text-muted-foreground">
                   {conta.ultima_coleta
@@ -640,6 +708,11 @@ export default function AdminAds() {
   const { data: campaigns } = useAdsCampaigns();
   const { data: clients } = useClients();
   const { data: conexao } = useAdsConnection();
+  const saldoDoCliente = (clientId: string) => {
+    const contas = (conexao?.contas || []).filter((c) => c.client_id === clientId && c.status === "active");
+    const comSaldo = contas.filter((c) => c.saldo_disponivel != null);
+    return comSaldo.length ? comSaldo.reduce((t, c) => t + Number(c.saldo_disponivel || 0), 0) : null;
+  };
 
   const nomes = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -656,10 +729,15 @@ export default function AdminAds() {
       lista.push(row);
       mapa.set(row.client_id, lista);
     }
+    // Conta ligada sem gasto nos 30 dias também é cliente de anúncios: antes
+    // ela sumia do hub e parecia que ligar não tinha funcionado.
+    for (const conta of conexao?.contas || []) {
+      if (conta.status === "active" && !mapa.has(conta.client_id)) mapa.set(conta.client_id, []);
+    }
     return [...mapa.entries()].sort(
       (a, b) => summarizeAccount(b[1]).investido - summarizeAccount(a[1]).investido,
     );
-  }, [rows]);
+  }, [rows, conexao]);
 
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -814,8 +892,10 @@ export default function AdminAds() {
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
                   </div>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {carteira.campanhas} {carteira.campanhas === 1 ? "campanha" : "campanhas"} ·
-                    últimos 30 dias
+                    {lista.length === 0
+                      ? "Conta ligada · sem gasto nos últimos 30 dias"
+                      : `${carteira.campanhas} ${carteira.campanhas === 1 ? "campanha" : "campanhas"} · últimos 30 dias`}
+                    {saldoDoCliente(clientId) != null ? ` · saldo ${dinheiro(saldoDoCliente(clientId))}` : ""}
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Numero rotulo="Investido" valor={dinheiro(carteira.investido)} />

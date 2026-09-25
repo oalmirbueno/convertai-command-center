@@ -144,6 +144,7 @@ describe("o dossiê do MCP entrega resultado, não só trabalho", () => {
     expect(naFerramenta).toBeTruthy();
     expect(noMetadata).toBeTruthy();
     expect(`${naFerramenta![1]}.${naFerramenta![2]}.${naFerramenta![3]}`).toBe(noMetadata![1]);
-    expect(Number(naFerramenta![2])).toBeGreaterThanOrEqual(14);
+    // Maior e menor juntos: só o menor quebrava na virada 1.46 para 2.3.
+    expect(Number(naFerramenta![1]) * 1000 + Number(naFerramenta![2])).toBeGreaterThanOrEqual(1014);
   });
 });

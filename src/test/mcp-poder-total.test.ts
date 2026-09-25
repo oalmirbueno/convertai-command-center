@@ -96,7 +96,8 @@ describe("criar projeto tem fronteira de dinheiro nos dois servidores", () => {
     // fica com painel-conversa.test.ts).
     const versao = MCP_VERSION.match(/(\d+)\.(\d+)\.\d+/);
     expect(versao).toBeTruthy();
-    expect(Number(versao![2])).toBeGreaterThanOrEqual(15);
+    // Maior e menor juntos: só o menor quebrava na virada 1.46 para 2.3.
+    expect(Number(versao![1]) * 1000 + Number(versao![2])).toBeGreaterThanOrEqual(1015);
   });
 });
 

@@ -77,7 +77,7 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
   });
 
   it("refazer replicando mantém a estrutura da referência", () => {
-    expect(estudio).toContain("export function blocoDeVariacao(versoesAntes: number, cenaFixa: boolean, replicar = false): string {");
+    expect(estudio).toContain("export function blocoDeVariacao(versoesAntes: number, cenaFixa: boolean, replicar = false, ordem = 1, serie = false): string {");
     expect(estudio).toContain("continue seguindo a referência escolhida de perto, com a mesma estrutura de layout");
   });
 

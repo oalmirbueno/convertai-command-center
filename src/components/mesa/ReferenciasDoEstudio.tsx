@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
@@ -47,8 +47,13 @@ export default function ReferenciasDoEstudio({
   aba,
   onAba,
   onAtualizar,
+  entregue = false,
+  onReabrir,
 }: {
   trabalho: Trabalho;
+  /** Trabalho entregue: a escolha não salva até reabrir (antes a tela marcava e o servidor recusava calado). */
+  entregue?: boolean;
+  onReabrir?: () => void;
   cardSelecionado: CardDaDirecao | null;
   alvo: AlvoDasReferencias;
   onAlvo: (a: AlvoDasReferencias) => void;
@@ -79,6 +84,13 @@ export default function ReferenciasDoEstudio({
 
   /** Grava a lista inteira; as gravações seguem em fila, a última vence. */
   const gravar = (lista: string[]) => {
+    if (entregue) {
+      toast.error("Trabalho entregue: as referências não mudam", {
+        description: "Reabra para corrigir; a entrega anterior fica no histórico.",
+        ...(onReabrir ? { action: { label: "Reabrir", onClick: onReabrir } } : {}),
+      });
+      return;
+    }
     setRascunho(lista);
     const alvoDaVez = alvoReal;
     const ordem = cardSelecionado ? cardSelecionado.ordem : null;
@@ -119,6 +131,17 @@ export default function ReferenciasDoEstudio({
 
   return (
     <div className="min-w-0 space-y-4">
+      {entregue && (
+        <div className="flex min-w-0 items-start rounded-lg border border-warning/50 bg-warning/10 px-3 py-2.5 text-[12px] leading-snug" role="status">
+          <Lock className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+          <span className="min-w-0 flex-1">Trabalho entregue: as referências não mudam. Reabra para corrigir.</span>
+          {onReabrir && (
+            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[11.5px]" onClick={onReabrir}>
+              Reabrir
+            </Button>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background p-1">
         <button
           type="button"

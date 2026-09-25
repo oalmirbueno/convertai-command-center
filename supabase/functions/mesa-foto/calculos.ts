@@ -1389,9 +1389,17 @@ export function promptDaTomada(e: EntradaPromptTomada): string {
   if (e.guiaTexto) linhas.push(`DIREÇÃO DE ESTILO: ${e.guiaTexto} Esta direção não muda as invariantes nem as proibições acima.`);
   const variacao = blocoDeVariacao(e.versoesAntes, e.rejeicoes);
   if (variacao) linhas.push(variacao);
+  linhas.push(ESTETICA_NO_PROMPT);
   linhas.push(`FORMATO ${tomada.formato}. Fotografia realista de campanha profissional, câmera full frame, nitidez onde importa, cor fiel, sem aparência de ilustração, 3D ou banco de imagens genérico.`);
   return semTravessao(linhas.join("\n"));
 }
+
+/**
+ * Estética atual no pedido ao gerador (dono, 25/09: "está muito antigo").
+ * Não muda fidelidade, invariantes nem a regra de nunca escurecer a foto.
+ */
+export const ESTETICA_NO_PROMPT =
+  "ESTÉTICA ATUAL: fotografia de marca contemporânea (2025/2026), editorial limpo, luz natural suave com direção e sombras macias reais, paleta atual (neutros quentes, sálvia, oliva, terracota suave, acento da marca), superfícies e materiais reais; sem fundo degradê, sem vinheta, sem HDR, sem bokeh exagerado, sem saturação alta, sem cara de banco de imagem.";
 
 /** Enquadramento da campanha em palavras (a pessoa define o quadro). */
 function enquadramentoDaCampanha(camera: Camera, comPessoa: boolean): string {
@@ -1452,6 +1460,7 @@ export function promptDaCampanha(e: EntradaPromptTomada): string {
   if (e.guiaTexto) linhas.push(`DIREÇÃO DE ESTILO: ${e.guiaTexto} Esta direção não muda as invariantes nem as proibições acima.`);
   const variacao = blocoDeVariacao(e.versoesAntes, e.rejeicoes);
   if (variacao) linhas.push(variacao);
+  linhas.push(ESTETICA_NO_PROMPT);
   linhas.push(`FORMATO ${tomada.formato}. Fotografia realista de campanha editorial, câmera full frame, pele e tecidos com textura real, sem aparência de ilustração, 3D ou banco de imagens genérico.`);
   return semTravessao(linhas.join("\n"));
 }
@@ -1782,20 +1791,79 @@ const GENERICO_DA_CATEGORIA: Record<string, string> = {
   cenario: "um objeto genérico de cor neutra no cenário",
 };
 
+/** O mesmo assunto genérico em inglês (o prompt do exemplo vai em inglês quando o item tem prompt_en). */
+const GENERICO_EM_INGLES: Record<string, string> = {
+  produto: "a generic unbranded product (a neutral colored box or bottle)",
+  alimento: "a simple, well plated dish",
+  bebida: "a glass or an unlabeled glass bottle with a drink",
+  cosmetico: "an unlabeled serum or cream bottle",
+  moda: "an unbranded bag or sneaker",
+  tecnologia: "a generic unbranded headphone or mouse",
+  pessoa: "a synthetic adult person who does not exist and does not resemble anyone known",
+  ambiente: "a simple, well lit interior",
+  estilo: "a generic neutral colored object",
+  composicao: "three generic neutral colored objects",
+  luz: "a generic sphere or bottle that shows the light well",
+  cenario: "a generic neutral colored object in the setting",
+};
+
+/** Cores concretas para as lacunas de cor dos prompts (paleta atual, clara e sem gradiente). */
+const COR_DA_LACUNA: [RegExp, string][] = [
+  [/soft dark|escura suave|dark/i, "deep olive green (#3F4A3C)"],
+  [/light|clara/i, "warm off-white (#F3EEE8)"],
+  [/\b2\b/, "warm sand (#E6D5B8)"],
+  [/\b1\b/, "soft sage green (#B7C4A8)"],
+];
+const COR_PADRAO_DA_LACUNA = "soft terracotta (#C9785B)";
+
 /**
- * Prompt do exemplo da biblioteca: o prompt do item aplicado a um produto
- * genérico da categoria, sem marca e sem texto, para a equipe ver como fica.
+ * Preenche as lacunas entre colchetes do prompt ([Product], [color],
+ * [e.g. ...]) com valores concretos e genéricos: o exemplo tem que mostrar
+ * EXATAMENTE o que o prompt descreve (pedido do dono, 25/09: as fotos do
+ * Openverse não batiam com o prompt). Exemplo dado na lacuna vence; cor vira
+ * uma cor da paleta; o assunto vira o genérico da categoria, sem marca.
+ */
+export function preencherLacunasDoPrompt(texto: string, categoria: string | null | undefined, ingles = true): string {
+  const generico = ingles
+    ? GENERICO_EM_INGLES[String(categoria ?? "")] ?? GENERICO_EM_INGLES.produto
+    : GENERICO_DA_CATEGORIA[String(categoria ?? "")] ?? GENERICO_DA_CATEGORIA.produto;
+  return String(texto ?? "").replace(/\[([^\]]{1,120})\]/g, (_m, bruto: string) => {
+    const c = bruto.trim();
+    const exemplo = c.match(/(?:e\.g\.|ex\.:?|por exemplo)\s*(.+)$/i);
+    if (exemplo && exemplo[1].trim()) return exemplo[1].trim();
+    if (/\b(color|colour|cor|hex)\b/i.test(c)) {
+      const achada = COR_DA_LACUNA.find(([re]) => re.test(c));
+      return achada ? achada[1] : COR_PADRAO_DA_LACUNA;
+    }
+    const opcoes = c.match(/^[^:]{1,40}:\s*(.+)$/);
+    if (opcoes) return opcoes[1].split(",")[0].trim();
+    if (/^(left or right|esquerda ou direita)$/i.test(c)) return ingles ? "left" : "esquerda";
+    if (/^(number|n[uú]mero)$/i.test(c)) return ingles ? "three" : "três";
+    if (/^(names?|nomes?)$/i.test(c)) return ingles ? "no legible name" : "sem nome legível";
+    if (/^(subject|product|produto|assunto)$/i.test(c)) return generico;
+    if (c.indexOf(" or ") > 0) return c.split(" or ")[0].trim();
+    if (c.indexOf(" ou ") > 0) return c.split(" ou ")[0].trim();
+    return ingles ? `a generic unbranded ${c.toLowerCase()}` : `${c.toLowerCase()} genérico, sem marca`;
+  });
+}
+
+/**
+ * Prompt do exemplo da biblioteca: o PRÓPRIO prompt do item, com as lacunas
+ * preenchidas por valores genéricos, para a imagem mostrar exatamente a
+ * direção do prompt (luz, cenário, composição, clima). Sem marca e sem texto.
  */
 export function promptDoExemplo(item: { categoria?: string | null; titulo: string; prompt_pt?: string | null; prompt_en?: string | null; negativo?: string | null }): string {
   const generico = GENERICO_DA_CATEGORIA[String(item.categoria ?? "")] ?? GENERICO_DA_CATEGORIA.produto;
-  const base = (item.prompt_en || item.prompt_pt || "").trim();
+  const ingles = !!(item.prompt_en || "").trim();
+  const base = preencherLacunasDoPrompt((item.prompt_en || item.prompt_pt || "").trim(), item.categoria, ingles);
   return semTravessao([
-    `EXEMPLO ILUSTRATIVO do prompt "${limpo(item.titulo, 160)}" da biblioteca da agência, para a equipe ver como a direção fica numa foto.`,
-    `ASSUNTO: ${generico}. Sem marca, sem logotipo, sem texto legível, sem embalagem de marca real.`,
-    `DIREÇÃO (siga fielmente a luz, o cenário, a composição e o clima): ${base.slice(0, 3000)}`,
+    `EXEMPLO ILUSTRATIVO do prompt "${limpo(item.titulo, 160)}" da biblioteca da agência: a foto tem que mostrar exatamente o que o prompt descreve.`,
+    `PROMPT (siga à risca a luz, o cenário, a câmera, a composição e o clima): ${base.slice(0, 3000)}`,
+    `ASSUNTO quando o prompt não define: ${generico}. Sem marca, sem logotipo, sem texto legível, sem embalagem de marca real.`,
+    "Referência ou foto enviada citada no prompt não existe neste exemplo: use o assunto genérico.",
     item.negativo ? `EVITE: ${limpo(item.negativo, 800)}.` : "",
     item.categoria === "pessoa" ? `PESSOA: ${PROIBICOES_PESSOA_SINTETICA.join("; ")}.` : "",
-    "Fotografia realista de estúdio profissional, câmera full frame, cor fiel, sem aparência de ilustração ou 3D, sem texto sobreposto e sem marca d'água.",
+    "Fotografia realista, câmera full frame, cor fiel, estética atual e limpa, sem aparência de ilustração ou 3D, sem texto sobreposto e sem marca d'água.",
   ].filter(Boolean).join("\n"));
 }
 

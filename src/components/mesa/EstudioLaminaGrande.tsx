@@ -34,21 +34,25 @@ export function QuadroQueCabe({
   children,
   maximo = LARGURA_MAXIMA_DA_LAMINA,
   soPelaLargura = false,
+  proporcao = 0.8,
 }: {
   children: (largura: number) => ReactNode;
   maximo?: number;
+  /** Largura dividida pela altura do formato (0,8 no 4:5). */
+  proporcao?: number;
   /** Na página que rola (celular), a altura não limita: vale só a largura. */
   soPelaLargura?: boolean;
 }) {
   const [ref, area] = useTamanho<HTMLDivElement>();
-  const pelaAltura = soPelaLargura ? Infinity : Math.floor(area.altura * 0.8);
-  // Na página que rola, a lâmina não passa de 520 px de largura (650 de altura).
-  const teto = soPelaLargura ? Math.min(maximo, 520) : maximo;
+  const r = proporcao > 0 ? proporcao : 0.8;
+  const pelaAltura = soPelaLargura ? Infinity : Math.floor(area.altura * r);
+  // Na página que rola, a lâmina não passa de 650 px de altura.
+  const teto = soPelaLargura ? Math.min(maximo, Math.round(650 * r)) : maximo;
   const largura = Math.max(0, Math.floor(Math.min(area.largura, pelaAltura, teto)));
   return (
     <div ref={ref} className={`flex min-h-0 min-w-0 flex-1 items-start justify-center ${soPelaLargura ? "" : "min-h-[320px]"}`}>
       {largura > 0 && (
-        <div className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm" style={{ width: largura, height: Math.round(largura * 1.25) }}>
+        <div className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-secondary shadow-sm" style={{ width: largura, height: Math.round(largura / r) }}>
           {children(largura)}
         </div>
       )}
@@ -70,6 +74,8 @@ export default function EstudioLaminaGrande({
   onAmpliar,
   soPelaLargura,
   faixa,
+  proporcao = 0.8,
+  aviso,
 }: {
   card: CardDaDirecao;
   total: number;
@@ -89,6 +95,10 @@ export default function EstudioLaminaGrande({
   soPelaLargura?: boolean;
   /** Faixa logo abaixo do título: a foto e as referências da próxima geração (EstudioBaseDaLamina). */
   faixa?: ReactNode;
+  /** Largura dividida pela altura do formato do post (0,8 no 4:5). */
+  proporcao?: number;
+  /** Aviso acima da faixa (ex.: trabalho entregue, com o botão de reabrir). */
+  aviso?: ReactNode;
 }) {
   const ordenadas = versoes.slice().sort((a, b) => a.versao - b.versao);
   const ultima = ordenadas[ordenadas.length - 1] || null;
@@ -129,8 +139,9 @@ export default function EstudioLaminaGrande({
           </Button>
         )}
       </div>
+      {aviso}
       {faixa}
-      <QuadroQueCabe soPelaLargura={soPelaLargura}>
+      <QuadroQueCabe soPelaLargura={soPelaLargura} proporcao={proporcao}>
         {(largura) =>
           desenhandoAreas && ultima ? (
             <SeletorDeAreas caminho={ultima.storage_path} areas={areas} onMudar={onAreas} disabled={ocupado} />

@@ -16,11 +16,11 @@
  * de cada prompt de imagem e no sistema do ajuste de lâmina.
  */
 
-export const VERSAO_CONHECIMENTO = "2026-09-23.5";
+export const VERSAO_CONHECIMENTO = "2026-09-25.1";
 
 export const CONHECIMENTO_DIRETOR = `BASE DE CONHECIMENTO DO DIRETOR DE ARTE (versão ${VERSAO_CONHECIMENTO})
 
-Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px. O gerador de imagem desenha a lâmina inteira, texto incluído, a partir da sua direção. Ele não entende nome de princípio ("use Gestalt", "aplique contraste"); entende posição, proporção, plano, escala, cor em hex e relação entre elementos. Cada regra abaixo vira algo que você escreve na direção e que alguém confere olhando a imagem pronta.
+Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px, por padrão; a equipe pode escolher 3:4 (1080 x 1440, o retrato mais alto do feed e o mesmo recorte da grade do perfil desde 2025), 1:1 (1080 x 1080) ou 9:16 (1080 x 1920, Stories e capa de Reels). Os números em px abaixo são do 4:5; nos outros formatos valem as mesmas margens em px e as mesmas proporções, e o estúdio manda o quadro certo no prompt. O gerador de imagem desenha a lâmina inteira, texto incluído, a partir da sua direção. Ele não entende nome de princípio ("use Gestalt", "aplique contraste"); entende posição, proporção, plano, escala, cor em hex e relação entre elementos. Cada regra abaixo vira algo que você escreve na direção e que alguém confere olhando a imagem pronta.
 
 0. PRIORIDADES E DESEMPATES
 - Quando duas regras brigam, vale esta ordem: (1) kit da marca do cliente (cores em hex, fontes, logo, regras); (2) leitura no celular (tamanho, contraste, pouco texto); (3) função da lâmina; (4) as demais regras desta base; (5) gosto e tendência.
@@ -216,7 +216,29 @@ Formato: post e carrossel do Instagram em 4:5, 1080 x 1350 px. O gerador de imag
 - Foto real do cliente, quando escolhida, é usada como está: o gerador só desenha o texto e o acabamento na área reservada, sem refazer a foto.
 
 14. NOME DA MARCA
-- Nunca escreva o nome da marca ou da empresa como texto na arte. A marca aparece só pela logo oficial anexada (quando houver) ou pela própria identidade visual. Só entra por escrito se estiver no texto exato da lâmina.`;
+- Nunca escreva o nome da marca ou da empresa como texto na arte. A marca aparece só pela logo oficial anexada (quando houver) ou pela própria identidade visual. Só entra por escrito se estiver no texto exato da lâmina.
+
+15. LOGO SEM CAIXA (dono, 25/09: "a logo tem que seguir a logo mesmo")
+- A logo é só o desenho dela: nunca caixa branca, cartão, faixa ou mancha clara para ela; fundo branco ou xadrez do arquivo não é logo.
+- Contraste pelo lugar onde pousa (logo escura em parte clara da arte, clara em parte escura; com versão alternativa no kit, a que contrasta). Halo suave no desenho só quando nada contrasta.
+- Reserve o canto da logo como área calma do próprio fundo, sem texto nem forma: o estúdio aplica a logo oficial por código.
+
+16. SÉRIE A PARTIR DA CAPA (dono, 25/09: "reconhecer a capa e continuar; não reinventar, acompanhar")
+- A capa é a folha de estilos do carrossel: da lâmina 2 em diante repita grid, margens, linhas, fios e formas (mesmo traço, espessura, cantos e cor), tipografia, paleta e tratamento de foto.
+- Muda só o conteúdo: texto, imagem, zona do bloco no mesmo grid, escala e enquadramento. Nada de elemento, fonte ou cor que a capa não tem.
+- Escreva esse sistema no fio_visual em frases concretas ("fio de 3 px na cor de destaque sob a headline", "cantos retos", "foto em duotone").
+- A última lâmina fecha voltando à capa (mesma dominante, elemento ou enquadramento). Série não depende do carrossel contínuo.
+
+17. PESSOA OU PRODUTO SEM FUNDO
+- O recorte entra na cena com a mesma luz, sombra de contato suave e escala coerente, sem halo, contorno ou caixa; fica do lado oposto ao texto e nada passa por cima dele. Silhueta sobre cor chapada da paleta é o recurso mais premium quando o fundo original é ruim.
+
+18. TÉCNICA E VARIEDADE SEM PERDER A ESSÊNCIA
+- Entre conteúdos do mesmo cliente, varie a técnica protagonista (escala dramática, recorte sangrando, cor seletiva, painel no grid, grid visível, número gigante, texto atrás do sujeito, silhueta, planos, máscara), sempre dentro do kit; dentro do carrossel, uma técnica só.
+- Nova versão pedida muda a composição de verdade (plano, ângulo, zona, hierarquia), mantendo marca, texto exato e sistema da série.
+- Em 3 segundos quem olha diz o ponto focal, a frase e o que fazer; se não diz, simplifique antes de enfeitar. Escala antes de cor, cor antes de efeito. Sem boa foto, a tipografia em escala máxima vira a imagem.
+
+19. O QUE O CLIENTE JÁ PEDIU
+- Regras aprendidas com o cliente (ajustes da equipe, reprovações) valem como regra da marca: acima desta base, abaixo do texto exato, da paleta e da logo. Aplique sem que peçam de novo.`;
 
 /** Regras curtas que acompanham todo prompt de imagem (o gerador lê isso por último). */
 export const PADRAO_NA_IMAGEM = [
@@ -229,8 +251,8 @@ export const PADRAO_NA_IMAGEM = [
   "- Letras nítidas e íntegras, no máximo 2 famílias, sem esticar, sem contorno, sem sombra pesada; ortografia e acentos do português exatos (ã, õ, ç, é, ê, á, ó).",
   "- Escreva só o texto entre aspas, com as quebras de linha indicadas; nenhuma palavra sozinha na última linha, nenhum acento encostando na linha de cima.",
   "- Paleta da marca em 60-30-10 com uma única cor de destaque (até 10% da área), só na palavra-chave, no número ou no CTA.",
-  "- Foto e texto na mesma cena: planos de profundidade (fundo, texto, sujeito), recorte intencional, uma luz coerente e cores da foto puxadas para a paleta.",
+  "- Foto e texto na mesma cena: planos de profundidade (fundo, texto, sujeito), recorte intencional, uma luz coerente e cores da foto puxadas para a paleta; recorte sem fundo com sombra de contato, sem halo nem caixa, e nada por cima dele.",
   "- Acabamento de agência premium: foto real do nicho, pele, mãos e rostos naturais, sombras coerentes, grão sutil só se o estilo pedir.",
-  "- Nunca escreva o nome da marca ou da empresa na arte (ela aparece só pela logo anexada); nenhum texto além do pedido.",
+  "- Nunca escreva o nome da marca ou da empresa na arte (ela aparece só pela logo); nenhum texto além do pedido. Logo sem caixa, cartão ou fundo branco: o canto dela fica limpo.",
   "- Evite: tudo centralizado e do mesmo tamanho, texto sobre área carregada, faixa preta genérica, gradiente roxo-azul, neon, brilho, 3D plástico, ícones de banco, logo redesenhada.",
 ].join("\n");

@@ -147,7 +147,7 @@ describe("campanha completa: imagens, briefing e plano de imagens", () => {
     expect(a).toContain("card.imagens_ids = [foto.id];");
     expect(a).toContain('card.fotos_livres = [{ caminho: foto.storage_path, papel: "elemento"');
     expect(corpoDe(calendario, "criarDirecoesDoRoteiro")).toContain("aplicarFotosDoPlano(direcao, item.tema_id");
-    expect(corpoDe(calendario, "gravar")).toContain("descricaoDoItem({ ...item, data }, p.id, i, campanhaNoItem)");
+    expect(corpoDe(calendario, "gravarItens")).toContain("descricaoDoItem({ ...item, data }, p.id, i, campanhaNoItem)");
     expect(calendario).toContain("linhas.push(`  Foto da campanha: ${foto}`)");
   });
 

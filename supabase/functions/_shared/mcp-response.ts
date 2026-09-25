@@ -302,3 +302,62 @@ export function prefersSse(req: Request): boolean {
   // missing initialize/tools-list payloads while still allowing SSE-only callers.
   return accepted.sse && !accepted.json;
 }
+
+/**
+ * Resposta com fôlego para tools/call longo (MCP 2.3, ações nas mesas).
+ *
+ * A plataforma derruba com 504 a função que não começa a responder em 150 s,
+ * e uma ação com IA na mesa pode levar alguns minutos. Então a resposta
+ * começa na hora e respira até o resultado chegar:
+ * - JSON: espaços antes do objeto JSON-RPC (espaço à esquerda é JSON válido);
+ * - SSE: comentários ": folego" (linhas que começam com ":" são ignoradas
+ *   pelo leitor de SSE) e, no fim, o evento message de sempre.
+ * O status HTTP já saiu 200; o erro da ferramenta vai no próprio JSON-RPC,
+ * como em qualquer tools/call.
+ */
+export const MCP_FOLEGO_MS = 10_000;
+
+export function folegoResponse(
+  trabalho: () => Promise<JsonRpcResponse | null>,
+  sse: boolean,
+  id: JsonRpcId,
+  intervaloMs = MCP_FOLEGO_MS,
+): Response {
+  const codificar = new TextEncoder();
+  let relogio: ReturnType<typeof setInterval> | undefined;
+  const respiro = sse ? ': folego\n\n' : ' ';
+  const corpo = new ReadableStream<Uint8Array>({
+    async start(controle) {
+      const soltar = (texto: string) => {
+        try {
+          controle.enqueue(codificar.encode(texto));
+        } catch { /* o cliente fechou a conexão */ }
+      };
+      soltar(respiro);
+      relogio = setInterval(() => soltar(respiro), intervaloMs);
+      let final: JsonRpcResponse;
+      try {
+        final = (await trabalho()) ?? rpcError(id, RpcErrors.internalError, 'Empty response');
+      } catch (e) {
+        final = rpcError(id, RpcErrors.internalError, (e as Error)?.message ?? 'Internal error');
+      } finally {
+        if (relogio !== undefined) clearInterval(relogio);
+      }
+      soltar(sse ? `event: message\ndata: ${JSON.stringify(final)}\n\n` : JSON.stringify(final));
+      try {
+        controle.close();
+      } catch { /* já fechado */ }
+    },
+    cancel() {
+      if (relogio !== undefined) clearInterval(relogio);
+    },
+  });
+  return new Response(corpo, {
+    status: 200,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': sse ? 'text/event-stream; charset=utf-8' : 'application/json',
+      'Cache-Control': 'no-cache, no-transform',
+    },
+  });
+}

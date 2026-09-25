@@ -97,7 +97,17 @@ export interface AdsConnectionStatus {
     status: string;
     token_proprio: boolean;
     ultima_coleta: string | null;
+    /** Da ficha da conta (docs/mesa-ads/v4); antes do SQL novo, ausentes. */
+    moeda?: string | null;
+    account_status?: number | null;
+    gasto_total?: number | null;
+    saldo_disponivel?: number | null;
+    limite_de_gasto?: number | null;
+    pagamento?: string | null;
+    erro?: string | null;
   }>;
+  /** Um token por perfil da Meta que conectou (docs/mesa-ads/v4). */
+  perfis?: Array<{ label: string; saved_at: string; contas: number }>;
 }
 
 export function useAdsConnection() {
@@ -251,16 +261,43 @@ export async function saveMetaAdsToken(token: string, label: string) {
  * A conta entra na MESMA tabela das contas de Instagram e Facebook, com
  * platform 'meta_ads'. Nada de cadastro paralelo: o que já existe de permissão
  * e de tela de conexão passa a valer para anúncios sem alteração.
+ *
+ * O bug relatado em 25/09: ligar de novo uma conta já ligada (ou desligada)
+ * devolvia o erro cru do banco ("duplicate key value..."), e a conta ligada
+ * ao cliente errado não era avisada. Agora: já ligada devolve a mesma conta,
+ * desligada volta a valer, e conta de outro cliente só com confirmação.
  */
 export async function connectAdsAccount(input: {
   clientId: string;
   actId: string;
   displayName: string;
-}) {
+  confirmarOutroCliente?: boolean;
+}): Promise<{ id: string; situacao: "nova" | "ja_ligada" | "reativada" }> {
   // A pessoa cola "act_123456" ou só "123456"; a Graph API quer o número.
-  const numero = String(input.actId).trim().replace(/^act_/i, "");
-  if (!/^\d{5,}$/.test(numero)) {
+  const numero = numeroDaConta(input.actId);
+  if (!numero) {
     throw new Error("O número da conta de anúncios deve ter só dígitos (ex.: 123456789012345).");
+  }
+  const { data: existentes, error: erroLeitura } = await (supabase as any)
+    .from("external_accounts")
+    .select("id, client_id, status")
+    .eq("platform", "meta_ads")
+    .eq("external_id", numero);
+  if (erroLeitura) throw erroLeitura;
+  const lista = (existentes || []) as { id: string; client_id: string; status: string }[];
+  const doCliente = lista.find((c) => c.client_id === input.clientId);
+  if (doCliente) {
+    if (doCliente.status === "active") return { id: doCliente.id, situacao: "ja_ligada" };
+    const { error } = await (supabase as any)
+      .from("external_accounts")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("id", doCliente.id);
+    if (error) throw error;
+    return { id: doCliente.id, situacao: "reativada" };
+  }
+  const deOutro = lista.find((c) => c.client_id !== input.clientId && c.status === "active");
+  if (deOutro && !input.confirmarOutroCliente) {
+    throw new ContaDeOutroCliente();
   }
   const { data, error } = await (supabase as any)
     .from("external_accounts")
@@ -273,6 +310,26 @@ export async function connectAdsAccount(input: {
     })
     .select("id")
     .single();
-  if (error) throw error;
-  return data as { id: string };
+  if (error) {
+    if (String(error.code) === "23505") throw new Error("Esta conta já está ligada a este cliente.");
+    if (String(error.code) === "42501") throw new Error("Você não tem permissão para ligar contas deste cliente.");
+    throw error;
+  }
+  return { id: (data as { id: string }).id, situacao: "nova" };
+}
+
+/** Conta ligada a outro cliente: pede confirmação antes de somar o investimento em dois relatórios. */
+export class ContaDeOutroCliente extends Error {
+  constructor() {
+    super("Esta conta de anúncios já está ligada a outro cliente. Confirme se ela é mesmo deste cliente.");
+    this.name = "ContaDeOutroCliente";
+  }
+}
+
+/** "act_123", "123" ou o link do Gerenciador (act=123): devolve só o número, ou null. */
+export function numeroDaConta(bruto: string): string | null {
+  const t = String(bruto || "").trim();
+  const doLink = t.match(/[?&]act=(\d+)/);
+  const numero = (doLink ? doLink[1] : t).replace(/^act_/i, "").replace(/\s+/g, "");
+  return /^\d{5,}$/.test(numero) ? numero : null;
 }

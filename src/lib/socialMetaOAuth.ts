@@ -50,7 +50,21 @@ export interface FinishMetaOAuthInput {
 
 export type AdsOAuthResult = {
   ok: true;
-  contas: Array<{ numero: string; nome: string | null }>;
+  /**
+   * Contas que o perfil enxerga. Os campos além de número e nome vêm da
+   * função nova (status, moeda, empresa, gasto total); a antiga só mandava
+   * os dois primeiros, por isso são opcionais.
+   */
+  contas: Array<{
+    numero: string;
+    nome: string | null;
+    status?: number | null;
+    status_rotulo?: string | null;
+    utilizavel?: boolean;
+    moeda?: string | null;
+    empresa?: string | null;
+    gasto_total?: number | null;
+  }>;
 };
 
 export type MetaOAuthPopupMessage =

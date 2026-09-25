@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarCheck2, CalendarRange, Check, ChevronDown, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X } from "lucide-react";
+import { CalendarCheck2, CalendarRange, Check, ChevronDown, Loader2, MessageSquare, MessagesSquare, Plus, Send, Sparkles, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
@@ -27,7 +27,11 @@ import AgendaDoMes from "./AgendaDoMes";
 import AgenteDoMes, { type PedidoEmAndamento } from "./AgenteDoMes";
 import HypesDaSemana from "./HypesDaSemana";
 import PlanejamentoAutomatico from "./PlanejamentoAutomatico";
-import { atualizarAgenda, type ItemProposto } from "./mesaV4Api";
+import { atualizarAgenda, novoIdDaProposta, type ItemProposto } from "./mesaV4Api";
+import MesConteudoRapido from "./MesConteudoRapido";
+import MesEscolhaEditorial from "./MesEscolhaEditorial";
+import { corpoDaEscolha, escolhaLivre, raciocinioPadraoDaTela, rotuloEditorial, type EscolhaEditorial } from "./MesConhecimento";
+import { Cronometro } from "./Cronometro";
 import { BotaoDeApagar, useApagarConteudo, type ResultadoDoApagar } from "./ApagarConteudo";
 import {
   chavesDoPlano,
@@ -66,6 +70,8 @@ interface Tema {
   por_que?: string;
   jev?: { aderencia?: number; potencial?: number } | null;
   escolhido?: boolean;
+  tipo_editorial?: string;
+  framework?: string;
 }
 
 interface CardDoRoteiro {
@@ -93,6 +99,8 @@ interface Item {
   objetivo?: string;
   carrossel_infinito?: boolean;
   cards?: CardDoRoteiro[];
+  tipo_editorial?: string;
+  framework?: string;
 }
 
 interface Proposta {
@@ -153,6 +161,9 @@ function CartaoDeTema({ tema, marcado, onToggle }: { tema: Tema; marcado: boolea
       <p className="text-[11px] text-muted-foreground">
         {[tema.pilar, tema.fase ? `fase ${tema.fase}` : null, tema.objetivo].filter(Boolean).join(" · ")}
       </p>
+      {rotuloEditorial(tema.tipo_editorial, tema.framework) && (
+        <p className="text-[11px] font-medium text-primary">{rotuloEditorial(tema.tipo_editorial, tema.framework)}</p>
+      )}
       {tema.por_que && <p className="text-[12px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">{tema.por_que}</p>}
       {(aderencia !== null || potencial !== null) && (
         <div className="mt-auto flex flex-wrap pt-1">
@@ -185,7 +196,7 @@ function LinhaDoItem({ item, apagar }: { item: Item; apagar?: (confirmarExtra: b
       <CollapsibleContent className="space-y-3 border-t border-border px-3.5 py-3">
         {texto && <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{texto}</p>}
         <p className="text-[11.5px] text-muted-foreground">
-          {[item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}
+          {[rotuloEditorial(item.tipo_editorial, item.framework) || null, item.pilar, item.fase ? `fase ${item.fase}` : null, item.objetivo, item.cta ? `CTA: ${item.cta}` : null, item.carrossel_infinito ? "carrossel infinito" : null].filter(Boolean).join(" · ")}
         </p>
         {(item.cards || []).length > 0 && (
           <ol className="space-y-2">
@@ -305,9 +316,14 @@ function PlanejarComEstrategista() {
   const [projetoId, setProjetoId] = useState("");
   const [gravando, setGravando] = useState(false);
   const [conversaAberta, setConversaAberta] = useState(false);
+  const [escolha, setEscolha] = useState<EscolhaEditorial>(escolhaLivre);
+  // Proposta que o estrategista está escrevendo agora (temas ou detalhe): a
+  // lista relê a cada 3 s e o que já chegou aparece na tela.
+  const [acompanhando, setAcompanhando] = useState<{ id: string; desde: number; etapa: "temas" | "detalhe" } | null>(null);
 
   const propostas = useQuery({
     queryKey: ["mesa", "propostas", clientId],
+    refetchInterval: acompanhando ? 3000 : false,
     queryFn: async (): Promise<Proposta[]> => {
       const { data, error } = await (supabase as any)
         .from("calendario_propostas")
@@ -326,7 +342,9 @@ function PlanejarComEstrategista() {
 
   const proposta: Proposta | null = nova
     ? null
-    : (propostas.data || []).find((p) => p.id === propostaId) || (propostas.data || [])[0] || null;
+    : acompanhando
+      ? (propostas.data || []).find((p) => p.id === acompanhando.id) || null
+      : (propostas.data || []).find((p) => p.id === propostaId) || (propostas.data || [])[0] || null;
 
   const projetos = useQuery({
     queryKey: ["mesa", "projetos", clientId],
@@ -351,8 +369,8 @@ function PlanejarComEstrategista() {
     const id = String(p.modelo_id || p.modelo || padrao?.id || "");
     setModeloId(id);
     const m = catalogo.find((x) => x.id === id);
-    const niveis = m?.raciocinio || [];
-    setRaciocinio(String(p.raciocinio || niveis[niveis.length - 1] || ""));
+    // Sem escolha gravada, medium (25/09): o mais alto deixava o mês lento demais.
+    setRaciocinio(String(p.raciocinio || raciocinioPadraoDaTela(m?.raciocinio)));
     if (proposta) {
       setInicio(proposta.periodo_inicio);
       setFim(proposta.periodo_fim);
@@ -363,6 +381,10 @@ function PlanejarComEstrategista() {
       setOferta(String(p.oferta || ""));
       setEscolhidos(new Set((proposta.temas || []).filter((t) => t.escolhido).map((t) => t.id)));
       setProjetoId(proposta.project_id || "");
+      setEscolha({
+        tipos: Array.isArray(p.tipos) ? p.tipos.map(String) : [],
+        frameworks: Array.isArray(p.frameworks) ? p.frameworks.map(String) : [],
+      });
     }
   }, [proposta?.id, catalogo.length]);
 
@@ -374,8 +396,7 @@ function PlanejarComEstrategista() {
 
   const trocarModelo = (id: string) => {
     setModeloId(id);
-    const niveis = catalogo.find((m) => m.id === id)?.raciocinio || [];
-    setRaciocinio(niveis.length ? niveis[niveis.length - 1] : "");
+    setRaciocinio(raciocinioPadraoDaTela(catalogo.find((m) => m.id === id)?.raciocinio));
   };
 
   const itensPrevistos = useMemo(() => Math.max(1, Number(frequencia) || 3) * semanas(inicio, fim), [frequencia, inicio, fim]);
@@ -440,6 +461,7 @@ function PlanejarComEstrategista() {
         <SeletorDeModelo catalogo={catalogo} tipo="texto" valor={modeloId} onChange={trocarModelo} rotulo="Modelo do estrategista" />
         <SeletorDeRaciocinio modelo={modelo} valor={raciocinio} onChange={setRaciocinio} />
       </div>
+      <MesEscolhaEditorial valor={escolha} onChange={setEscolha} />
       {planoDoPeriodo && (
         <p className="flex items-start rounded-lg bg-success/10 px-3 py-2 text-[12px] leading-relaxed">
           <Check className="mr-1.5 mt-0.5 h-3.5 w-3.5 shrink-0 text-success" />
@@ -455,22 +477,38 @@ function PlanejarComEstrategista() {
         <BotaoComCusto
           rotulo="Propor temas"
           titulo="Propor temas do período"
-          descricao="O estrategista lê o dossiê, os movimentos, as métricas, o kit e a memória do cliente, pesquisa na web e traz de 8 a 15 temas com nota do Jev."
+          descricao="O estrategista lê o dossiê, os movimentos, as métricas, o kit e a memória do cliente, pesquisa na web e traz de 8 a 15 temas com nota do Jev. As três fases correm juntas e os temas aparecem conforme chegam."
           disabled={!podeProporTemas}
-          partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada, tokensSaida: saidaPorRaciocinio(raciocinio), buscasWeb: TAMANHOS.proporTemas.buscasWeb }]}
-          executar={() =>
-            chamarFuncao("agente-calendario", {
-              acao: "propor_temas",
-              client_id: clientId,
-              periodo_inicio: inicio,
-              periodo_fim: fim,
-              frequencia: parametros.frequencia,
-              objetivo: parametros.objetivo,
-              oferta: parametros.oferta,
-              modelo_id: modeloId,
-              raciocinio: parametros.raciocinio,
-            })
-          }
+          // Três frentes em paralelo (uma por fase), cada uma com pesquisa na web.
+          partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.proporTemas.entrada * 3, tokensSaida: saidaPorRaciocinio(raciocinio) * 2, buscasWeb: TAMANHOS.proporTemas.buscasWeb * 3 }]}
+          executar={async () => {
+            // O id nasce aqui: a tela troca para a proposta e acompanha os temas chegando.
+            const id = novoIdDaProposta();
+            setAcompanhando({ id, desde: Date.now(), etapa: "temas" });
+            setNova(false);
+            setPropostaId(id);
+            try {
+              return await chamarFuncao("agente-calendario", {
+                acao: "propor_temas",
+                client_id: clientId,
+                proposta_id: id,
+                periodo_inicio: inicio,
+                periodo_fim: fim,
+                frequencia: parametros.frequencia,
+                objetivo: parametros.objetivo,
+                oferta: parametros.oferta,
+                modelo_id: modeloId,
+                raciocinio: parametros.raciocinio,
+                ...corpoDaEscolha(escolha),
+              });
+            } catch (e) {
+              setPropostaId(null);
+              throw e;
+            } finally {
+              setAcompanhando(null);
+              atualizar();
+            }
+          }}
           aoConcluir={(data) => {
             setNova(false);
             setPropostaId(idDaProposta(data));
@@ -483,6 +521,13 @@ function PlanejarComEstrategista() {
 
   if (propostas.isLoading) return <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />Lendo propostas…</p>;
   if (propostas.isError) return <AvisoDeErro erro={propostas.error} />;
+  if (acompanhando && !proposta) {
+    return (
+      <div className="rounded-xl border border-border bg-card px-3.5 py-3">
+        <Cronometro desde={acompanhando.desde} rotulo="O estrategista está pesquisando e propondo os temas das três fases" previsao="~1 min" />
+      </div>
+    );
+  }
   if (!proposta) return formulario;
 
   const temas = proposta.temas || [];
@@ -547,11 +592,16 @@ function PlanejarComEstrategista() {
                 descricao="O estrategista escreve cada publicação: data, formato, gancho, copy e o roteiro de cada card."
                 partes={() => [{ modeloId, tipo: "texto", tokensEntrada: TAMANHOS.detalhar.entrada, tokensSaida: itensPrevistos * TAMANHOS.detalhar.saidaPorItem + saidaPorRaciocinio(raciocinio) }]}
                 executar={async () => {
+                  setAcompanhando({ id: proposta.id, desde: Date.now(), etapa: "detalhe" });
                   try {
                     await chamarFuncao("agente-calendario", { acao: "escolher_temas", proposta_id: proposta.id, temas: Array.from(escolhidos) });
-                    return await chamarFuncao("agente-calendario", { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined });
+                    const corpoDoDetalhar = { acao: "detalhar", proposta_id: proposta.id, modelo_id: modeloId || undefined, raciocinio: raciocinio || undefined };
+                    const d = await chamarFuncao<any>("agente-calendario", corpoDoDetalhar);
+                    // Se o modelo pulou algum tema, pede só os que faltam mais uma vez (não é correção: é o resto).
+                    return d && Array.isArray(d.faltam) && d.faltam.length ? await chamarFuncao<any>("agente-calendario", corpoDoDetalhar) : d;
                   } finally {
                     // Detalhar parcial devolve erro com o que já ficou pronto: relê igual.
+                    setAcompanhando(null);
                     atualizar();
                   }
                 }}
@@ -560,8 +610,24 @@ function PlanejarComEstrategista() {
             </div>
           )}
 
-          {proposta.status === "detalhando" && itens.length === 0 && (
-            <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />O estrategista está detalhando. Atualize em instantes.</p>
+          {acompanhando ? (
+            <div className="rounded-xl border border-border bg-card px-3.5 py-2.5">
+              <Cronometro
+                desde={acompanhando.desde}
+                rotulo={
+                  acompanhando.etapa === "temas"
+                    ? `Temas chegando: ${temas.length} até agora`
+                    : `Detalhando em paralelo: ${itens.length} de ${escolhidos.size} prontos`
+                }
+              />
+            </div>
+          ) : (
+            proposta.status === "detalhando" && itens.length === 0 && (
+              <p className="text-[12.5px] text-muted-foreground"><Loader2 className="mr-1.5 inline h-4 w-4 animate-spin" />O estrategista está detalhando. Atualize em instantes.</p>
+            )
+          )}
+          {!acompanhando && proposta.parametros && proposta.parametros.aviso && (
+            <p className="rounded-lg bg-muted px-3 py-2 text-[12px] text-muted-foreground [overflow-wrap:anywhere]">{String(proposta.parametros.aviso)}</p>
           )}
 
           {itens.length > 0 && (
@@ -638,7 +704,15 @@ const MES_VALIDO = /^\d{4}-\d{2}-01$/;
  * caminhos com o agente (planejar conversando ou criar conteúdos), mais o
  * estado dos próximos meses. Poucos cliques, sem poluir.
  */
-function PlanoDoMesEmDestaque({ mes, onConversar }: { mes: string; onConversar: (modo: ModoDoAgente, mes: string) => void }) {
+function PlanoDoMesEmDestaque({
+  mes,
+  onConversar,
+  onRapido,
+}: {
+  mes: string;
+  onConversar: (modo: ModoDoAgente, mes: string) => void;
+  onRapido?: () => void;
+}) {
   const { clientId } = useMesa();
   const planos = useQuery({ queryKey: chavesDoPlano.planos(clientId), queryFn: () => lerPlanosCombinados(clientId) });
   const [aberto, setAberto] = useState(false);
@@ -675,7 +749,13 @@ function PlanoDoMesEmDestaque({ mes, onConversar }: { mes: string; onConversar: 
           )}
         </div>
         <div className="mt-3 flex shrink-0 flex-wrap items-center sm:mt-0 sm:justify-end">
-          <Button type="button" size="sm" className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
+          {onRapido && (
+            <Button type="button" size="sm" className="mb-1 mr-1.5 h-9" onClick={onRapido}>
+              <Zap className="mr-1.5 h-4 w-4" />
+              Conteúdo rápido
+            </Button>
+          )}
+          <Button type="button" size="sm" variant={onRapido ? "outline" : "default"} className="mb-1 mr-1.5 h-9" onClick={() => onConversar("planejar", mes)}>
             <MessagesSquare className="mr-1.5 h-4 w-4" />
             {doMes ? "Conversar sobre o plano" : "Planejar com o agente"}
           </Button>
@@ -734,9 +814,32 @@ export default function AbaMes({
   onAbrirNoEstudio?: (taskId: string, mes: string) => void;
   onCriarCampanha?: (hypeIndice: number) => void;
 } = {}) {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const mesDaUrl = params.get("mes") || "";
   const mes = MES_VALIDO.test(mesDaUrl) ? mesDaUrl : inicioDoMes();
+  const [rapidoAberto, setRapidoAberto] = useState(false);
+
+  /** Abrir no Estúdio: pela aba-mãe quando ela manda; senão pela URL, igual à Agenda do mês. */
+  const abrirNoEstudio = (taskId: string, mesAlvo: string) => {
+    if (onAbrirNoEstudio) {
+      onAbrirNoEstudio(taskId, mesAlvo);
+      return;
+    }
+    const next = new URLSearchParams(params);
+    next.set("aba", "estudio");
+    next.set("task", taskId);
+    if (MES_VALIDO.test(mesAlvo)) next.set("mes", mesAlvo);
+    setParams(next, { replace: false });
+  };
+
+  const verNoMes = (mesAlvo: string) => {
+    if (!MES_VALIDO.test(mesAlvo)) return;
+    const next = new URLSearchParams(params);
+    next.set("mes", mesAlvo);
+    setParams(next, { replace: true });
+    const agenda = typeof document !== "undefined" ? document.getElementById("agenda-do-mes") : null;
+    if (agenda && typeof agenda.scrollIntoView === "function") agenda.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const [modo, setModo] = useState<ModoDePlanejar>(lerModo);
   const [agenteAberto, setAgenteAberto] = useState(false);
@@ -762,7 +865,9 @@ export default function AbaMes({
   return (
     // Espaço no fim para o botão flutuante nunca cobrir o último conteúdo.
     <div className="min-w-0 space-y-6 pb-28" data-agente="pop-up">
-      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} />
+      <PlanoDoMesEmDestaque mes={mes} onConversar={(m, alvo) => abrirAgente(m, alvo)} onRapido={() => setRapidoAberto(true)} />
+
+      <MesConteudoRapido aberto={rapidoAberto} onAbertoChange={setRapidoAberto} onAbrirNoEstudio={abrirNoEstudio} onVerNoMes={verNoMes} />
 
       <HypesDaSemana
         onCriarCampanha={(i) => onCriarCampanha?.(i)}
@@ -807,6 +912,16 @@ export default function AbaMes({
       {/* Botão do agente: centro da base da tela, acima da barra do celular. */}
       {!agenteAberto && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[72px] z-40 flex justify-center px-4 md:bottom-6">
+          {/* Ação rápida ao lado do agente: um pedido vira conteúdo no dia. */}
+          <button
+            type="button"
+            onClick={() => setRapidoAberto(true)}
+            className="pointer-events-auto mr-2 inline-flex h-12 shrink-0 items-center rounded-full bg-card px-4 text-[13px] font-semibold text-foreground shadow-xl ring-4 ring-background transition-transform hover:scale-[1.02]"
+            aria-label="Conteúdo rápido"
+          >
+            <Zap className="h-4 w-4 shrink-0 text-primary sm:mr-1.5" />
+            <span className="hidden sm:inline">Rápido</span>
+          </button>
           <button
             type="button"
             onClick={() => abrirAgente()}

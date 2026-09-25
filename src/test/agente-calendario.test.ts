@@ -73,15 +73,16 @@ describe("agente-calendario: propor_temas", () => {
     expect(fonte).toContain("temas: { type: \"array\", items: ESQUEMA_TEMA }");
   });
 
-  it("raciocinio pedido prevalece; sem escolha, o mais alto do modelo padrao do estrategista", () => {
+  it("raciocinio pedido prevalece; sem escolha, medium no modelo padrao do estrategista (25/09)", () => {
     const modelo = corpoDe("resolverModelo");
     expect(modelo).toContain("modeloPadrao(AGENTE)");
     expect(modelo).toContain("const r = explicito ?? raciocinioPadrao(");
-    expect(corpoDe("raciocinioPadrao")).toContain("aceitos[aceitos.length - 1]");
+    expect(fonte).toContain('const RACIOCINIO_PADRAO = "medium";');
+    expect(corpoDe("raciocinioPadrao")).toContain("if (aceitos.includes(preferido)) return preferido;");
   });
 
-  it("com pesquisa na web o padrao e high, para nao estourar os 120 s do motor", () => {
-    expect(corpoDe("raciocinioPadrao")).toContain('if (pesquisaWeb && aceitos.includes("high")) return "high";');
+  it("com ou sem pesquisa na web o padrao e medium (max deixava o mes lento demais)", () => {
+    expect(corpoDe("raciocinioPadrao")).not.toContain('return "high"');
     expect(propor).toContain("resolverModelo(corpo.modelo_id, corpo.raciocinio, { pesquisaWeb: true })");
     // Detalhar e conversar nao pesquisam: seguem o padrao sem pesquisa.
     expect(corpoDe("detalhar")).not.toContain("pesquisaWeb: true");
@@ -145,13 +146,15 @@ describe("agente-calendario: detalhar e conversar", () => {
 });
 
 describe("agente-calendario: gravar", () => {
-  const grava = corpoDe("gravar");
+  // 25/09: gravar é a porta (tema_ids opcional); o trabalho mora em gravarItens.
+  const grava = corpoDe("gravarItens");
 
   it("usa createEditorialItem do MCP com idempotencia por proposta e item", () => {
     expect(fonte).toContain('from "../_shared/mcp-write-services.ts"');
     expect(grava).toContain("await createEditorialItem(parsed, ctx)");
     expect(grava).toContain("createEditorialItemSchema.parse(entrada)");
-    expect(grava).toContain("const idempotencyKey = `mesa-cal:${p.id}:${i}`;");
+    // Chave pelo tema: estável quando a equipe muda datas e a ordem dos itens.
+    expect(grava).toContain("const idempotencyKey = `mesa-cal:${p.id}:${item.tema_id || i}`;");
     expect(grava).toContain("due_date: data");
     expect(grava).toContain("keyId: PRINCIPAL_MESA");
     expect(grava).toContain("auditLog(");
@@ -207,8 +210,8 @@ describe("agente-calendario: erros nunca respondem 200", () => {
     expect(erro).not.toMatch(/,\s*200\)/);
     expect(erro).toContain("err.status >= 400 ? err.status : 500");
     // Falha parcial tambem nao e 200.
-    expect(corpoDe("gravar")).toContain('error: "gravacao_parcial"');
-    expect(corpoDe("gravar")).toMatch(/erros\.length === p\.itens\.length \? 500 : 409/);
+    expect(corpoDe("gravarItens")).toContain('error: "gravacao_parcial"');
+    expect(corpoDe("gravarItens")).toMatch(/erros\.length === indices\.length \? 500 : 409/);
     expect(corpoDe("detalhar")).toContain("resposta.status);");
   });
 

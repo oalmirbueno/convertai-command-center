@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Bookmark, ImagePlus, TriangleAlert } from "lucide-react";
+import { Bookmark, ImagePlus, Scissors, TriangleAlert, X } from "lucide-react";
 import { fonteDaGlobal, fonteDaReferencia, PREFIXO_GLOBAL, useGlobaisPorIds, useReferenciasComDestaque } from "@/lib/mesa/referencias";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ImagemDeReferencia } from "./SeletorDeReferencias";
@@ -26,7 +26,7 @@ import { AVISO_CONTINUO_SEM_MODELO } from "./estudioUtil";
  * botão de gerar de novo.
  */
 
-export type ModoDaGeracao = "replicar_referencia" | "foto_real" | "foto_composta" | "elementos" | "continuo" | "normal";
+export type ModoDaGeracao = "replicar_referencia" | "foto_real" | "foto_composta" | "elementos" | "recorte" | "continuo" | "normal";
 
 export const AVISO_FOTO_RECOMPOSTA = "A foto é recomposta para seguir a referência; confira o rosto.";
 export const AVISO_FORA_DO_FUNDO = "Esta versão foi feita sobre um fundo contínuo que mudou depois: ela não emenda com as vizinhas. Gere de novo.";
@@ -38,6 +38,7 @@ export const DESCRICAO_DO_MODO: Record<ModoDaGeracao, string> = {
   foto_real: "Foto real fixa: o gerador só escreve o texto e a logo entra pelo sistema.",
   foto_composta: "Foto de fundo com pessoa ou objeto real composto por cima.",
   elementos: "O gerador cria a cena e põe a pessoa ou o objeto real como é.",
+  recorte: "Pessoa ou produto sem fundo: entra inteiro do lado oposto ao texto, com a cena, a referência e a identidade em volta, sem caixa.",
   continuo: "Carrossel contínuo: o fundo panorâmico manda na cena.",
   normal: "O gerador cria a lâmina inteira pela direção de arte.",
 };
@@ -70,6 +71,7 @@ export function baseDaLamina(
   const acervo = (card.imagens_ids || []).length > 0;
   const fundo = acervo || livres.some((f) => f.papel === "fundo");
   const elementos = livres.some((f) => f.papel === "elemento");
+  const recortado = livres.some((f) => f.papel === "elemento" && (f as { recortada?: boolean }).recortada === true);
   const temFoto = fundo || elementos;
   const panorama = continuo && !temFoto;
   let modo: ModoDaGeracao;
@@ -77,6 +79,7 @@ export function baseDaLamina(
   else if (referencias.length) modo = "replicar_referencia";
   else if (fundo && elementos) modo = "foto_composta";
   else if (fundo) modo = "foto_real";
+  else if (recortado) modo = "recorte";
   else if (elementos) modo = "elementos";
   else modo = "normal";
   return { modo, referencias, daLamina, temFoto, fotoRecomposta: modo === "replicar_referencia" && temFoto };
@@ -89,15 +92,58 @@ export function versaoRecompos(v: Pick<CardGerado, "modo" | "foto_recomposta"> |
 
 const LARGURA = 36;
 
-function Mini({ children, titulo }: { children: ReactNode; titulo: string }) {
+/**
+ * Miniatura com o X de tirar (pedido do dono em 25/09: "tirar imagem da
+ * lâmina fácil"). Recorte sem fundo aparece sobre o xadrez de transparência.
+ */
+const XADREZ = {
+  backgroundImage:
+    "linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%), linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%)",
+  backgroundSize: "8px 8px",
+  backgroundPosition: "0 0, 4px 4px",
+};
+
+function Removivel({
+  children,
+  titulo,
+  onTirar,
+  rotulo,
+  marca,
+  xadrez = false,
+}: {
+  children: ReactNode;
+  titulo: string;
+  onTirar?: () => void;
+  rotulo: string;
+  marca?: ReactNode;
+  xadrez?: boolean;
+}) {
   return (
-    <span className="mr-1 inline-block shrink-0 overflow-hidden rounded border border-border bg-secondary align-middle" style={{ width: LARGURA, height: LARGURA * 1.25 }} title={titulo}>
-      {children}
+    <span className="relative mr-2 inline-block shrink-0 align-middle">
+      <span
+        className="block overflow-hidden rounded border border-border bg-secondary"
+        style={xadrez ? { width: LARGURA, height: LARGURA * 1.25, ...XADREZ } : { width: LARGURA, height: LARGURA * 1.25 }}
+        title={titulo}
+      >
+        {children}
+      </span>
+      {marca && <span className="absolute bottom-0.5 left-0.5 rounded bg-background/90 p-px text-foreground">{marca}</span>}
+      {onTirar && (
+        <button
+          type="button"
+          onClick={onTirar}
+          aria-label={rotulo}
+          title={rotulo}
+          className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:text-destructive"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
     </span>
   );
 }
 
-function MiniDaReferencia({ id }: { id: string }) {
+function MiniDaReferencia({ id, onTirar }: { id: string; onTirar?: () => void }) {
   const { clientId } = useMesa();
   const global = id.indexOf(PREFIXO_GLOBAL) === 0;
   const refs = useReferenciasComDestaque(clientId, !global);
@@ -107,9 +153,9 @@ function MiniDaReferencia({ id }: { id: string }) {
   const fonte = g ? fonteDaGlobal(g) : r ? fonteDaReferencia(r) : null;
   const nome = g ? g.titulo || "Banco da agência" : r ? r.nome : "Referência";
   return (
-    <Mini titulo={nome}>
+    <Removivel titulo={nome} onTirar={onTirar} rotulo={`Tirar a referência ${nome} desta lâmina`}>
       <ImagemDeReferencia fonte={fonte} alt={nome} largura={120} className="h-full w-full" />
-    </Mini>
+    </Removivel>
   );
 }
 
@@ -125,6 +171,10 @@ export default function EstudioBaseDaLamina({
   versao,
   onAbrirFotos,
   onAbrirReferencias,
+  onTirarFoto,
+  onTirarFotoDoAcervo,
+  onTirarReferencia,
+  bloqueado = false,
 }: {
   card: CardDaDirecao;
   refsDoConjunto: string[] | null | undefined;
@@ -140,6 +190,14 @@ export default function EstudioBaseDaLamina({
   versao: VersaoNaTela | null;
   onAbrirFotos: () => void;
   onAbrirReferencias: () => void;
+  /** Tira da lâmina uma foto trazida (pelo caminho), sem abrir a ferramenta. */
+  onTirarFoto?: (caminho: string) => void;
+  /** Tira a foto do acervo (modo antigo, imagens_ids). */
+  onTirarFotoDoAcervo?: () => void;
+  /** Tira uma referência da lâmina (as do conjunto saem pela ferramenta Referências). */
+  onTirarReferencia?: (id: string) => void;
+  /** Trabalho entregue ou lâmina ocupada: sem os botões de tirar. */
+  bloqueado?: boolean;
 }) {
   const base = baseDaLamina(card, refsDoConjunto, continuo);
   const foraDaEmenda = !!versao && versao.modo === "panorama" && versao.fora_da_emenda === true;
@@ -151,34 +209,52 @@ export default function EstudioBaseDaLamina({
   return (
     <div className="mb-2 min-w-0 shrink-0 rounded-lg border border-border bg-background px-2.5 py-2" aria-label="Base da próxima geração">
       <div className="flex min-w-0 flex-wrap items-center">
-        <button type="button" onClick={onAbrirFotos} className="mb-1 mr-3 flex min-w-0 items-center rounded-md py-0.5 pr-1 text-left hover:bg-secondary" title="Escolher a foto desta lâmina">
-          <span className="mr-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Foto</span>
+        {/* Foto: o rótulo abre a ferramenta; cada miniatura tem o X para tirar da lâmina na hora. */}
+        <div className="mb-1 mr-3 flex min-w-0 items-center">
+          <button type="button" onClick={onAbrirFotos} className="mr-1.5 rounded-md px-0.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground" title="Escolher a foto desta lâmina">
+            Foto
+          </button>
           {fotoDoAcervo && (
-            <Mini titulo={fotoDoAcervo.nome}>
+            <Removivel titulo={fotoDoAcervo.nome} onTirar={!bloqueado && onTirarFotoDoAcervo ? onTirarFotoDoAcervo : undefined} rotulo="Tirar a foto do acervo desta lâmina">
               <ImagemDaMesa caminho={fotoDoAcervo.storage_path} bucket={fotoDoAcervo.storage_bucket || "mesa"} alt={fotoDoAcervo.nome} className="h-full w-full" />
-            </Mini>
+            </Removivel>
           )}
-          {livres.map((f) => (
-            <Mini key={f.caminho} titulo={f.papel === "fundo" ? "Fundo" : "Elemento"}>
-              <ImagemDaMesa caminho={f.caminho} alt={f.papel === "fundo" ? "Foto de fundo" : "Elemento real"} className="h-full w-full" />
-            </Mini>
-          ))}
+          {livres.map((f) => {
+            const recortada = (f as { recortada?: boolean }).recortada === true;
+            const titulo = f.papel === "fundo" ? "Fundo" : recortada ? "Elemento sem fundo" : "Elemento";
+            return (
+              <Removivel
+                key={f.caminho}
+                titulo={titulo}
+                onTirar={!bloqueado && onTirarFoto ? () => onTirarFoto(f.caminho) : undefined}
+                rotulo={`Tirar da lâmina: ${titulo.toLowerCase()}`}
+                marca={recortada ? <Scissors className="h-2.5 w-2.5" /> : null}
+                xadrez={recortada}
+              >
+                <ImagemDaMesa caminho={f.caminho} alt={titulo} className="h-full w-full" />
+              </Removivel>
+            );
+          })}
           {!base.temFoto && (
-            <span className="inline-flex items-center text-[12px] text-muted-foreground">
+            <button type="button" onClick={onAbrirFotos} className="inline-flex items-center rounded-md px-1 py-0.5 text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground">
               <ImagePlus className="mr-1 h-3.5 w-3.5" /> escolher
-            </span>
+            </button>
           )}
-        </button>
-        <button type="button" onClick={onAbrirReferencias} className="mb-1 flex min-w-0 items-center rounded-md py-0.5 pr-1 text-left hover:bg-secondary" title="Escolher 1 ou 2 referências para esta lâmina">
-          <span className="mr-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referência</span>
-          {base.referencias.map((id) => <MiniDaReferencia key={id} id={id} />)}
+        </div>
+        <div className="mb-1 flex min-w-0 items-center">
+          <button type="button" onClick={onAbrirReferencias} className="mr-1.5 rounded-md px-0.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground" title="Escolher 1 ou 2 referências para esta lâmina">
+            Referência
+          </button>
+          {base.referencias.map((id) => (
+            <MiniDaReferencia key={id} id={id} onTirar={!bloqueado && base.daLamina && onTirarReferencia ? () => onTirarReferencia(id) : undefined} />
+          ))}
           {base.referencias.length > 0 && !base.daLamina && <span className="mr-1 text-[11px] text-muted-foreground">(do conjunto)</span>}
           {!base.referencias.length && (
-            <span className="inline-flex items-center text-[12px] text-muted-foreground">
+            <button type="button" onClick={onAbrirReferencias} className="inline-flex items-center rounded-md px-1 py-0.5 text-[12px] text-muted-foreground hover:bg-secondary hover:text-foreground">
               <Bookmark className="mr-1 h-3.5 w-3.5" /> escolher
-            </span>
+            </button>
           )}
-        </button>
+        </div>
       </div>
       <p className="text-[11.5px] leading-snug text-muted-foreground">{DESCRICAO_DO_MODO[base.modo]}</p>
       {continuoSemModelo && (

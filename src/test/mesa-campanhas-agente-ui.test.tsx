@@ -233,7 +233,7 @@ describe("aba Campanhas, mesa de trabalho", () => {
       expect(screen.getByRole("button", { name: new RegExp(secao) })).toHaveAttribute("aria-expanded", "true");
     }
     expect(await screen.findByText("Teaser do amor")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Gravar tudo na agenda/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ })).toBeTruthy();
 
     const agente = screen.getByRole("complementary", { name: "Agente da campanha" });
     fireEvent.change(within(agente).getByLabelText("Pedido ao agente da campanha"), { target: { value: "Mude o nome e acrescente um depoimento" } });

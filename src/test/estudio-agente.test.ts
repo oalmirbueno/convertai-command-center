@@ -258,7 +258,7 @@ describe("aplicar na direção", () => {
 
 describe("estudio-arte: ações conversar e aplicar_mudancas", () => {
   it("estão no roteador; conversar é longa (resposta com fôlego), aplicar não", () => {
-    expect(estudio).toContain("  conversar,\n  aplicar_mudancas: aplicarMudancas,\n};");
+    expect(estudio).toContain("  conversar,\n  aplicar_mudancas: aplicarMudancas,\n  reabrir,\n};");
     const longas = estudio.slice(estudio.indexOf("const ACOES_LONGAS"), estudio.indexOf("\n", estudio.indexOf("const ACOES_LONGAS")));
     expect(longas).toContain('"conversar"');
     expect(longas).not.toContain("aplicar_mudancas");
@@ -297,7 +297,8 @@ describe("estudio-arte: ações conversar e aplicar_mudancas", () => {
     expect(c).not.toContain("chamarImagem");
     expect(c).toContain("normalizarMudancas(brutas");
     expect(c).toContain("aplicarNaDirecao<Direcao>(x.direcao, mudancas)");
-    expect(c).toContain('"trabalho_entregue"');
+    expect(c).toContain("if (estaEntregue(t)) {");
+    expect(c).toContain("throw erroTrabalhoEntregue();");
     expect(c).toContain("custo_usd: 0");
     expect(c).toContain("regerar");
     expect(c).toContain('.from("agente_memoria").insert(');

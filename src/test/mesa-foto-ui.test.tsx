@@ -77,6 +77,9 @@ import EtapaBiblioteca from "@/components/mesa-foto/EtapaBiblioteca";
 import AgenteDiretor from "@/components/mesa-foto/AgenteDiretor";
 import EtapaCampanha from "@/components/mesa-foto/EtapaCampanha";
 import EtapaModelos from "@/components/mesa-foto/EtapaModelos";
+import EtapaClones from "@/components/mesa-foto/EtapaClones";
+import { cloneComAFoto, corpoDoClone, normalizarClone, problemasDoClone, rascunhoDoClone } from "@/components/mesa-foto/clonesApi";
+import { normalizarFoto as normalizarFotoD, podeTirarFundo, podeVirarClone } from "@/components/mesa-foto/fotoApi";
 import { esquecerTodosOsLotes } from "@/components/mesa-foto/lote";
 import { enderecoDaMesa } from "@/components/mesa-foto/TrocaDeMesas";
 import {
@@ -374,11 +377,11 @@ describe("rota, casca e troca entre mesas", () => {
     const botoes = within(nav).getAllByRole("button");
     // Pedido do dono (25/09, "não tem um processo mais simples"): 1 Fotos (o produto é identificado ali),
     // 2 Criar, 3 Usar (com a revisão dentro); Biblioteca, Modelos e Canvas como ferramentas de apoio.
-    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Canvas"]);
-    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "canvas"]);
+    expect(botoes.map((b) => b.textContent)).toEqual(["1Fotos", "2Criar", "3Usar", "Biblioteca", "Modelos", "Clones", "Canvas"]);
+    expect(ETAPAS_DA_MESA_FOTO.map((e) => e.valor)).toEqual(["acervo", "kits", "criar", "ensaio", "campanha", "preparar", "revisar", "usar", "biblioteca", "modelos", "clones", "canvas"]);
     expect(PASSOS_PRINCIPAIS.map((p) => p.inclui)).toEqual([["acervo", "kits"], ["criar", "ensaio", "campanha", "preparar"], ["usar", "revisar"]]);
     // Modelos e Canvas já têm tela: aparecem como abas avançadas.
-    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["canvas", true]]);
+    expect(ABAS_FUTURAS.map((a) => [a.etapa, a.disponivel])).toEqual([["modelos", true], ["clones", true], ["canvas", true]]);
     // Celular: o caminho principal em 3 colunas e as de apoio quebram a linha, sem rolagem lateral.
     const caminho = nav.querySelector("[data-caminho-principal]") as HTMLElement;
     expect(caminho.className).toContain("grid-cols-3");
@@ -1644,7 +1647,18 @@ describe("25/09: passo 1 mais claro (selos simples, menu por foto, produto ident
     // Menu da foto original: mandar ao cliente não pede aprovação da equipe.
     fireEvent.click(screen.getByRole("button", { name: "Ações de mouse-frente.jpg" }));
     const itens = (await screen.findAllByRole("menuitem")).map((i) => i.textContent);
-    expect(itens).toEqual(["Ver grande", "Detalhes e leitura", "Preparar (fundo, luz, cenário)", "Usar na Mesa (Estúdio)", "Usar na Mesa Ads", "Baixar", "Mandar para aprovação", "Enviar para Arquivos"]);
+    expect(itens).toEqual([
+      "Ver grande",
+      "Detalhes e leitura",
+      "Tirar fundo",
+      "Variações desta pessoa (clone)",
+      "Preparar (fundo, luz, cenário)",
+      "Usar na Mesa (Estúdio)",
+      "Usar na Mesa Ads",
+      "Baixar",
+      "Mandar para aprovação",
+      "Enviar para Arquivos",
+    ]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Preparar (fundo, luz, cenário)" }));
     expect(irPara).toHaveBeenCalledWith("preparar", { imagem: F1 });
 
@@ -1828,5 +1842,141 @@ describe("25/09: biblioteca reconhecível e persona pelo brief", () => {
     // A declaração ética é sempre da equipe: a sugestão não marca, e nada foi criado.
     expect((screen.getByLabelText("Declaração ética") as HTMLInputElement).checked).toBe(false);
     expect(chamadasDe("modelo_criar")).toHaveLength(0);
+  });
+});
+
+// ================================================================== 25/09, frente D: clones, tirar fundo, biblioteca, modelos
+
+const CL = "dddddddd-0000-4000-8000-000000000001";
+
+const CLONE_LIDO = {
+  clone: {
+    id: CL,
+    client_id: CLIENTE,
+    nome: "Dra. Paula",
+    status: "rascunho",
+    versao: 1,
+    invariantes: ["pinta acima do lábio"],
+    motor_preferido_id: null,
+    identidade_real: [{ imagem_id: F1, principal: true }],
+    autorizacao: { confirmada: true, quem: "Paula", data: "2026-09-20", forma: "termo_assinado", finalidade: "posts da clínica", sabe_que_e_ia: true, adulta: true },
+  },
+  autorizacao_valida: { ok: true, motivo: null },
+  reais: [{ ...fotoBruta(F1, { nome: "paula-frente.jpg" }), principal: true }],
+  imagens: [],
+  folha: { vistas: [], aprovadas: 0, total: 6, pronto: false, frente_aprovada: false },
+  variacoes: [],
+  motores: [{ modelo_imagem_id: "openrouter:google/gemini-3-pro-image", rotulo: "Nano Banana Pro 2K", nota: "", padrao: true, disponivel: true, estimativa_usd: 0.14 }],
+  presets: [{ id: "lifestyle_rua", rotulo: "Na rua", roupa: "jaqueta leve", cenario: "rua arborizada", pose: "caminhando", expressao: "natural", luz: "fim de tarde", enquadramento: "meio_corpo" }],
+};
+
+describe("25/09: Tirar fundo e Variações desta pessoa no acervo", () => {
+  it("a foto aberta tem Tirar fundo (preparar fundo_transparente, custo antes) e Variações desta pessoa leva aos Clones", async () => {
+    respostas.preparar = { imagem: fotoBruta(F2, { nome: "sem fundo.png", derivada_de: F1, modo: "preservar", tags: ["sem_fundo"] }), custo_usd: 0.04, aviso: null };
+    const irPara = vi.fn();
+    montar(h(EtapaAcervo), { imagemId: F1, irPara });
+    const detalhe = await screen.findByRole("region", { name: /Foto mouse-frente.jpg/ });
+    fireEvent.click(within(detalhe).getByRole("button", { name: /Variações desta pessoa/ }));
+    expect(irPara).toHaveBeenCalledWith("clones", { imagem: F1 });
+    const tirar = within(detalhe).getByRole("button", { name: /Tirar fundo/ });
+    await esperarPreco(tirar);
+    fireEvent.click(tirar);
+    await waitFor(() => expect(chamadasDe("preparar")).toEqual([{ acao: "preparar", client_id: CLIENTE, imagem_id: F1, modo: "fundo_transparente" }]));
+  });
+
+  it("foto gerada não oferece clone; o selo da derivada sem fundo diz sem fundo", () => {
+    expect(podeVirarClone(normalizarFotoD(FOTOS[2])!)).toBe(false);
+    expect(podeVirarClone(normalizarFotoD(FOTOS[0])!)).toBe(true);
+    const semFundo = normalizarFotoD(fotoBruta(F2, { derivada_de: F1, modo: "preservar", tags: ["sem_fundo"] }))!;
+    expect(podeTirarFundo(semFundo)).toBe(false);
+    expect(ler("src/components/mesa-foto/Comuns.tsx")).toContain('"sem fundo"');
+  });
+});
+
+describe("25/09: aba Clones (pessoa real com autorização)", () => {
+  it("vindo do acervo, abre o clone novo com a foto e não cria sem a autorização completa", async () => {
+    respostas.clones_listar = { clones: [] };
+    respostas.clone_criar = { clone: { ...CLONE_LIDO.clone }, custo_usd: 0 };
+    montar(h(EtapaClones), { imagemId: F1 });
+    await screen.findByLabelText("Nome do clone");
+    expect(document.querySelector(`[data-foto-real="${F1}"]`)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Nome do clone"), { target: { value: "Dra. Paula" } });
+    fireEvent.click(screen.getByRole("button", { name: /Criar clone/ }));
+    expect(await screen.findByText("Diga quem autorizou o uso da imagem.")).toBeTruthy();
+    expect(chamadasDe("clone_criar")).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("Quem autorizou"), { target: { value: "A própria Paula" } });
+    fireEvent.change(screen.getByLabelText("Data da autorização"), { target: { value: "20/09/2026" } });
+    fireEvent.change(screen.getByLabelText("Finalidade"), { target: { value: "posts e anúncios da clínica" } });
+    for (const caixa of screen.getAllByRole("checkbox")) fireEvent.click(caixa);
+    fireEvent.click(screen.getByRole("button", { name: /Criar clone/ }));
+    await waitFor(() => expect(chamadasDe("clone_criar")).toHaveLength(1));
+    const corpo = chamadasDe("clone_criar")[0];
+    expect(corpo.imagem_ids).toEqual([F1]);
+    expect(corpo.principal_id).toBe(F1);
+    expect(corpo.autorizacao).toMatchObject({ confirmada: true, quem: "A própria Paula", data: "2026-09-20", forma: "termo_assinado", sabe_que_e_ia: true, adulta: true });
+  });
+
+  it("clone aberto: fotos reais, folha e variações lado a lado; variação pronta gera uma chamada por foto", async () => {
+    respostas.clones_listar = { clones: [{ ...CLONE_LIDO.clone, capa_url: null, autorizacao_valida: { ok: true, motivo: null } }] };
+    respostas.clone_ler = CLONE_LIDO;
+    respostas.clone_variacao_gerar = { imagem: fotoBruta(F3, { gerada: true, modo: "clone", tags: [`clone:${CL}`] }), custo_usd: 0.14 };
+    montar(h(EtapaClones));
+    await screen.findByText(/Folha de identidade/);
+    expect(document.querySelector(`[data-clone-aberto="${CL}"]`)).toBeTruthy();
+    expect(screen.getByText(/pessoa real autorizada/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Gerar a folha/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "Na rua" }));
+    expect((screen.getByLabelText("Cenário") as HTMLInputElement).value).toBe("rua arborizada");
+    const gerar = screen.getByRole("button", { name: /Gerar 2 variações/ });
+    fireEvent.click(gerar);
+    await waitFor(() => expect(gerar.textContent).toMatch(/clique de novo|US\$|Gerar/));
+    if (chamadasDe("clone_variacao_gerar").length === 0) fireEvent.click(gerar);
+    await waitFor(() => expect(chamadasDe("clone_variacao_gerar")).toHaveLength(2));
+    expect(chamadasDe("clone_variacao_gerar")[0]).toMatchObject({ modelo_id: CL, formato: "4:5", pedido: { preset: "lifestyle_rua", cenario: "rua arborizada" } });
+  });
+
+  it("regras da tela: o que falta na autorização e o clone que já usa a foto", () => {
+    const r = rascunhoDoClone([F1]);
+    const p = problemasDoClone(r);
+    expect(p).toEqual(expect.arrayContaining(["Diga quem autorizou o uso da imagem.", "Confirme que a pessoa sabe que as imagens serão geradas por IA."]));
+    const c = normalizarClone({ ...CLONE_LIDO.clone })!;
+    expect(cloneComAFoto([c], F1)!.id).toBe(CL);
+    expect(cloneComAFoto([c], F2)).toBeNull();
+    expect(corpoDoClone(CLIENTE, { ...r, nome: "X", autorizacao: { ...r.autorizacao, data: "20/09/2026" } }).autorizacao.data).toBe("2026-09-20");
+  });
+
+  it("a tela dos Clones segue as regras da casa (sem travessão, sem CSS moderno, nada escurece a foto)", () => {
+    for (const arq of ["src/components/mesa-foto/EtapaClones.tsx", "src/components/mesa-foto/clonesApi.ts"]) {
+      const t = ler(arq);
+      expect(t, arq).not.toMatch(/[—–]/);
+      expect(t, arq).not.toMatch(/aspect-ratio|:has\(|\.at\(|Object\.hasOwn|\(\?<[=!a-z]/);
+      expect(t, arq).not.toMatch(/bg-black\/|brightness-/);
+    }
+  });
+});
+
+describe("25/09: biblioteca com exemplo pelo próprio prompt (admin)", () => {
+  it("mostra o total antes, lista o que veio do Openverse e não gera nada sem o clique", async () => {
+    mock.tabelas.foto_biblioteca = [];
+    respostas.biblioteca_exemplos_estimar = { pendentes: 138, por_imagem_usd: 0.0419, total_usd: 5.78, modelo_imagem_id: "openrouter:microsoft/mai-image-2.6", rotulo: "Microsoft: MAI-Image-2.6" };
+    respostas.biblioteca_limpar_exemplos = { encontrados: 120, limpos: 0, a_limpar: 120, itens: [], confirmado: false, custo_usd: 0 };
+    montar(h(EtapaBiblioteca));
+    fireEvent.click(await screen.findByRole("button", { name: /Calcular o custo total/ }));
+    expect(await screen.findByText(/138 prompts sem exemplo/)).toBeTruthy();
+    expect(screen.getByText(/MAI-Image-2.6/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Ver quantos são/ }));
+    await waitFor(() => expect(chamadasDe("biblioteca_limpar_exemplos")[0]).toMatchObject({ modo: "openverse", confirmar: false }));
+    expect(await screen.findByText(/120 exemplos vieram do Openverse/)).toBeTruthy();
+    expect(chamadasDe("biblioteca_exemplo_proximo")).toHaveLength(0);
+  });
+});
+
+describe("25/09: Modelos ocupam o espaço", () => {
+  it("persona e âncora à esquerda; rodada, folha e detalhe 4K à direita, folha e detalhe lado a lado", () => {
+    const t = ler("src/components/mesa-foto/EtapaModelos.tsx");
+    expect(t).toContain("data-persona-lateral");
+    expect(t).toContain('className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe=""');
+    expect(t).toContain("lg:col-span-4 xl:col-span-3");
+    expect(t).toContain("lg:col-span-8 xl:col-span-9");
   });
 });

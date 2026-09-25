@@ -105,10 +105,20 @@ export type LinhaPersona = {
   motor_preferido_id: string | null;
   versao: number;
   etica: Record<string, unknown>;
+  /** 'sintetica' ou 'clone_de_foto_real' (migration 04; sem a coluna, é sintética). */
+  origem?: string | null;
   criado_por: string | null;
   criado_em: string;
   atualizado_em: string;
 };
+
+/** Clone de pessoa real (aba Clones, clones.ts): as ações de persona sintética não servem para ele. */
+const ORIGEM_CLONE = "clone_de_foto_real";
+function recusarClone(p: LinhaPersona) {
+  if (p.origem === ORIGEM_CLONE) {
+    throw new ErroDeRegra(409, "e_um_clone", "Este é um clone de pessoa real: gere a folha e as variações na aba Clones (o texto de persona sintética não vale para ele).");
+  }
+}
 
 export type LinhaImagemPersona = {
   id: string;
@@ -371,7 +381,8 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     if (corpo.incluir_arquivadas !== true) q = q.neq("status", "arquivada");
     const { data, error } = await q;
     if (error) throw new ErroDeRegra(503, "modelos_indisponivel", "Não foi possível ler as personas (a migration 03 foi aplicada?).");
-    const lista = (data as LinhaPersona[] | null) ?? [];
+    // Clones de pessoa real têm aba própria (Clones): a galeria de Modelos é só de personas sintéticas.
+    const lista = ((data as LinhaPersona[] | null) ?? []).filter((p) => p.origem !== ORIGEM_CLONE);
     const ancoras = lista.map((p) => p.ancora_imagem_id).filter((x): x is string => !!x);
     const { data: imgs } = ancoras.length ? await db().from("foto_modelo_imagens").select("*").in("id", ancoras) : { data: [] };
     const porId = new Map(((imgs as LinhaImagemPersona[] | null) ?? []).map((i) => [i.id, i]));
@@ -442,6 +453,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
 
   async function modeloEditar(ch: Chamador, corpo: Record<string, unknown>) {
     const p = await personaComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    recusarClone(p);
     if (!p.client_id || corpo.escopo === "agencia") await garantirAdminDaAgencia(ch);
     const patch: Record<string, unknown> = {};
     const avisos: string[] = [];
@@ -507,6 +519,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
 
   async function modeloCandidataGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const p = await personaComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    recusarClone(p);
     if (p.status === "arquivada") throw new ErroDeRegra(409, "modelo_arquivado", "A persona está arquivada.");
     const pagador = await clienteQuePaga(ch, p, corpo.client_id);
     const motorId = limpo(corpo.modelo_imagem_id, 160);
@@ -560,6 +573,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
 
   async function modeloVistaGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const p = await personaComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    recusarClone(p);
     if (p.status === "arquivada") throw new ErroDeRegra(409, "modelo_arquivado", "A persona está arquivada.");
     const vista = lerVista(corpo.vista);
     if (!vista) throw new ErroDeRegra(400, "vista_invalida", `Vista inválida. Use: ${VISTAS_DA_PERSONA.join(", ")}.`);
@@ -646,6 +660,7 @@ export function acoesDeModelos(f: FerramentasDaMesa) {
     if (corpo.modelo_id != null && String(corpo.modelo_id).trim()) {
       // Imagem da persona: vira imagem nova da persona (papel detalhe, derivada da origem).
       const p = await personaComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+      recusarClone(p);
       if (p.status === "arquivada") throw new ErroDeRegra(409, "modelo_arquivado", "A persona está arquivada.");
       const origem = await imagemDaPersona(p.id, imagemId);
       const pagador = await clienteQuePaga(ch, p, corpo.client_id);

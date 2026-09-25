@@ -310,7 +310,7 @@ function Galeria({ personas, escolhida, onEscolher, onNova, novaAberta }: { pers
       {lista.length === 0 ? (
         <p className="mt-1 text-[12px] text-muted-foreground">{personas.length ? "Nenhuma persona neste filtro." : "Nenhuma persona ainda. Crie a primeira."}</p>
       ) : (
-        <ul className="mt-1 grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2" aria-label="Galeria de personas">
+        <ul className="mt-1 grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-3" aria-label="Galeria de personas">
           {lista.map((p) => (
             <CartaoDaPersona key={p.id} persona={p} ativa={p.id === escolhida} ancora={(ancoras.data || []).find((i) => i.id === p.ancora_imagem_id) || null} onAbrir={() => onEscolher(p.id)} />
           ))}
@@ -930,6 +930,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
 
   return (
     <Cartao
+      className="h-full"
       titulo={`2. Folha de 6 vistas · ${resumo.vistasProntas} de 6`}
       dica={semAncora ? "Escolha a âncora na rodada primeiro: a folha parte dela." : `A mesma pessoa em 6 vistas, com o motor da âncora (${rotuloDoMotor(catalogo, motorId)}). Trocar de motor aumenta a deriva do rosto.`}
       acao={
@@ -953,7 +954,7 @@ function Folha({ persona, imagens }: { persona: Persona; imagens: ImagemDaPerson
       <div className="mb-2 w-full sm:w-56">
         <SeletorDeQualidade valor={qualidade} onChange={setQualidade} disabled={semAncora} />
       </div>
-      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Vistas da folha">
+      <ul className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-3" aria-label="Vistas da folha">
         {VISTAS_DA_FOLHA.map((v) => {
           const img = resumo.vistas[v.valor];
           const a = andamentos[chaveDoAndamento(persona.id, "vista", v.valor)];
@@ -1034,11 +1035,11 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
   const servidor = usePrecoNoServidor(clientId, "modelo_detalhar", extrasDaEstimativaDoDetalhe(motorId), !!fonte);
 
   return (
-    <Cartao titulo="3. Detalhar em 4K" dica="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino.">
+    <Cartao className="h-full" titulo="3. Detalhar em 4K" dica="Re-renderiza em 4K para ganhar poro, cabelo e tecido. É geração nova: vira versão marcada, com antes e depois; pode mexer em traço fino.">
       {!fonte ? (
         <p className="text-[12px] text-muted-foreground">Escolha a âncora primeiro.</p>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <div className="min-w-0">
             <p className="mb-1 text-[11.5px] text-muted-foreground">Imagem para detalhar</p>
             <ul className="flex min-w-0 flex-wrap" aria-label="Imagem para detalhar">
@@ -1095,7 +1096,12 @@ function Detalhar({ persona, imagens }: { persona: Persona; imagens: ImagemDaPer
 
 // ------------------------------------------------------------------ persona aberta
 
-function PersonaAberta({ persona }: { persona: Persona }) {
+/**
+ * Coluna da esquerda da persona aberta (pedido do dono, 25/09: "ocupe os
+ * espaços, está tudo muito para baixo"): a âncora grande, a ficha curta e as
+ * ações. A rodada, a folha e o detalhe 4K ficam à direita.
+ */
+function PersonaLateral({ persona }: { persona: Persona }) {
   const { clientId } = useMesa();
   const { irPara } = useMesaFoto();
   const imagensQ = useImagensDaPersona(persona.id);
@@ -1103,48 +1109,88 @@ function PersonaAberta({ persona }: { persona: Persona }) {
   const resumo = resumoDaPersona(persona, imagens);
   const status = STATUS_DA_PERSONA[persona.status];
   const f = persona.ficha;
-  const tracos = [f.idade_aparente ? `${f.idade_aparente} anos` : "", f.tom_de_pele, f.cabelo, f.rosto, f.estilo].filter(Boolean).join(" · ");
+  const tracos = [f.tom_de_pele, f.cabelo, f.rosto, f.olhos, f.estilo].filter(Boolean);
+  const [ampliada, setAmpliada] = useState<number | null>(null);
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-3" data-persona-lateral={persona.id} aria-label={`Persona ${persona.nome}`}>
+      <div className="grid min-w-0 grid-cols-[96px_minmax(0,1fr)] gap-3 lg:grid-cols-1">
+        <Moldura proporcao={resumo.ancora ? proporcaoDaImagem(resumo.ancora) : 0.8} className="border border-border">
+          {resumo.ancora ? (
+            <button type="button" className="block h-full w-full cursor-zoom-in" aria-label="Ver a âncora grande" onClick={() => setAmpliada(0)}>
+              <ImagemDaPersonaNaTela imagem={resumo.ancora} alt={persona.nome} />
+            </button>
+          ) : (
+            <span className="flex h-full w-full flex-col items-center justify-center px-2 text-center text-[11px] text-muted-foreground">
+              <UserRound className="mb-1 h-6 w-6" /> Sem âncora: gere a rodada e escolha a mais real.
+            </span>
+          )}
+          {resumo.ancora && <SeloGerada />}
+        </Moldura>
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center">
+            <p className="mr-2 truncate text-[16px] font-semibold">{persona.nome}</p>
+            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>
+          </div>
+          <span className="mt-1 inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary" data-selo="gerada">
+            <Sparkles className="mr-0.5 h-2.5 w-2.5" /> pessoa sintética
+          </span>
+          <dl className="mt-2 space-y-0.5 text-[11.5px] leading-snug">
+            {f.idade_aparente ? (
+              <div className="flex min-w-0">
+                <dt className="mr-1 text-muted-foreground">Idade:</dt>
+                <dd>{f.idade_aparente} anos</dd>
+              </div>
+            ) : null}
+            {tracos.length > 0 && (
+              <div className="min-w-0">
+                <dt className="text-muted-foreground">Traços:</dt>
+                <dd className="[overflow-wrap:anywhere]">{tracos.join(" · ")}</dd>
+              </div>
+            )}
+            <div className="flex min-w-0">
+              <dt className="mr-1 text-muted-foreground">Folha:</dt>
+              <dd>{resumo.vistasProntas} de 6 vistas</dd>
+            </div>
+            <div className="flex min-w-0 flex-wrap text-muted-foreground">
+              {persona.client_id ? "Deste cliente" : "Da agência"} · versão {persona.versao}
+              {persona.custo_usd ? ` · ${usd(persona.custo_usd)} gasto` : ""}
+            </div>
+          </dl>
+          {resumo.ancora && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2 h-8 w-full text-[12px] sm:w-auto lg:w-full"
+              onClick={() => {
+                pedirAoCanvas(clientId, persona.id);
+                irPara("canvas");
+              }}
+            >
+              <Workflow className="mr-1.5 h-3.5 w-3.5" /> Usar no Canvas
+            </Button>
+          )}
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">Pessoa sintética. Ao publicar, ligue o rótulo de IA do Instagram.</p>
+      {resumo.ancora && (
+        <Ampliar imagens={[ampliavel(resumo.ancora, `${persona.nome}, âncora`)]} indice={ampliada} onFechar={() => setAmpliada(null)} />
+      )}
+    </section>
+  );
+}
 
+function PersonaAberta({ persona }: { persona: Persona }) {
+  const imagensQ = useImagensDaPersona(persona.id);
+  const imagens = imagensQ.data || [];
   return (
     <div className="min-w-0 space-y-4" data-persona-aberta={persona.id}>
-      <div className="flex min-w-0 flex-wrap items-center rounded-xl border border-border bg-card p-3">
-        <span className="mr-3 w-12 shrink-0">
-          <Moldura proporcao={0.8}>{resumo.ancora ? <ImagemDaPersonaNaTela imagem={resumo.ancora} alt={persona.nome} /> : <span className="flex h-full w-full items-center justify-center text-muted-foreground"><UserRound className="h-5 w-5" /></span>}</Moldura>
-        </span>
-        <div className="mr-auto min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center">
-            <p className="mr-2 truncate text-[15px] font-semibold">{persona.nome}</p>
-            <span className={`mr-1.5 rounded-full px-1.5 py-px text-[10.5px] font-medium ${status.cor}`}>{status.rotulo}</span>
-            <span className="inline-flex items-center rounded-full border border-primary/30 bg-card px-1.5 py-px text-[10.5px] font-semibold text-primary" data-selo="gerada">
-              <Sparkles className="mr-0.5 h-2.5 w-2.5" /> pessoa sintética
-            </span>
-          </div>
-          <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{tracos || "Ficha curta."}</p>
-          <p className="text-[11px] text-muted-foreground">
-            {persona.client_id ? "Deste cliente" : "Da agência"} · versão {persona.versao}
-            {persona.custo_usd ? ` · ${usd(persona.custo_usd)} gasto` : ""}
-          </p>
-        </div>
-        {resumo.ancora && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mt-2 h-8 text-[12px] sm:mt-0"
-            onClick={() => {
-              pedirAoCanvas(clientId, persona.id);
-              irPara("canvas");
-            }}
-          >
-            <Workflow className="mr-1.5 h-3.5 w-3.5" /> Usar no Canvas
-          </Button>
-        )}
-      </div>
       {imagensQ.isError && <AvisoDeErro erro={imagensQ.error} />}
       <Rodada persona={persona} imagens={imagens} />
-      <Folha persona={persona} imagens={imagens} />
-      <Detalhar persona={persona} imagens={imagens} />
-      <p className="text-[11px] leading-snug text-muted-foreground">Pessoa sintética. Ao publicar, ligue o rótulo de IA do Instagram.</p>
+      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2" data-folha-e-detalhe="">
+        <Folha persona={persona} imagens={imagens} />
+        <Detalhar persona={persona} imagens={imagens} />
+      </div>
     </div>
   );
 }
@@ -1173,10 +1219,11 @@ export default function EtapaModelos() {
     <div className="min-w-0 pb-24">
       {personasQ.isError && <AvisoDeErro erro={personasQ.error} className="mb-3" />}
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-4">
+        <div className="min-w-0 space-y-4 lg:col-span-4 xl:col-span-3">
+          {!nova && aberta && <PersonaLateral key={`lateral-${aberta.id}`} persona={aberta} />}
           <Galeria personas={personas} escolhida={aberta ? aberta.id : null} onEscolher={escolher} onNova={() => setNova(true)} novaAberta={nova} />
         </div>
-        <div className="min-w-0 lg:col-span-8">
+        <div className="min-w-0 lg:col-span-8 xl:col-span-9">
           {nova ? (
             <NovaPersona
               onCancelar={() => setNova(false)}

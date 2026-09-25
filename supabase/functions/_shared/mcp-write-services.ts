@@ -70,7 +70,7 @@ async function getWritableProject(projectId: string, ctx: WriteCtx) {
 // We only match successful prior calls with the same tool + principal +
 // idempotency_key, within the TTL window, and recover __result_ref. API keys
 // use key_id; OAuth uses the sanitized __principal metadata.
-async function findIdempotentResult(
+export async function findIdempotentResult(
   toolName: string,
   keyId: string,
   idempotencyKey: string,

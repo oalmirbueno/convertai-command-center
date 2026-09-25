@@ -15,12 +15,14 @@ import AreasNaFoto from "./AreasNaFoto";
 import { Cartao, MiniaturaDaFoto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import SeletorDeFotos from "./SeletorDeFotos";
 import SeletorDeGuia from "./SeletorDeGuia";
+import { BotaoTirarFundo } from "./EtapaAcervo";
 import {
   acrescentarFotos,
   classeDaFoto,
   invalidarFotos,
   MODOS_DE_PREPARO,
   partesDoPreparo,
+  podeTirarFundo,
   prepararFoto,
   useFotos,
   type Area,
@@ -238,7 +240,10 @@ export default function EtapaPreparar() {
         </Cartao>
 
         <div className="min-w-0 space-y-4">
-          <Cartao titulo="O que fazer com a foto">
+          <Cartao
+            titulo="O que fazer com a foto"
+            acao={podeTirarFundo(foto) ? <BotaoTirarFundo foto={foto} onPronta={(id) => setDepoisId(id)} /> : undefined}
+          >
             <div role="radiogroup" aria-label="Modo de preparo" className="space-y-1.5">
               {MODOS_DE_PREPARO.map((m) => (
                 <button

@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { Check, ClipboardPaste, ImagePlus, Images, Loader2, RefreshCw, Sparkles, Upload, X } from "lucide-react";
+import { Check, ClipboardPaste, ImagePlus, Images, Loader2, Lock, RefreshCw, Scissors, Sparkles, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { textoDoErro } from "@/lib/mesa/api";
+import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { Ampliar } from "./Ampliar";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { extensaoDoAnexo, MAX_BYTES_ANEXO } from "./mesaV4Api";
 import SeletorDoAcervo, { FotoDoAcervo, useAcervo, type ImagemDoAcervo } from "./SeletorDoAcervo";
-import type { CardDaDirecao, FotoLivre } from "./useItensDoMes";
+import { corpoDoTirarFundo, jaSemFundo } from "./estudioUtil";
+import type { CardDaDirecao, FotoLivre as FotoLivreBase } from "./useItensDoMes";
+
+/** Foto da lâmina; `recortada`: pessoa ou produto sem fundo (Tirar fundo), que entra pelo modo recorte. */
+export type FotoLivre = FotoLivreBase & { recortada?: boolean };
 
 /**
  * Ferramenta "Fotos" da lâmina: a FOTO DESTA LÂMINA, num lugar só (pedido do
@@ -36,6 +40,19 @@ import type { CardDaDirecao, FotoLivre } from "./useItensDoMes";
  * Foto do bucket `mesa` na pasta do cliente (Mesa Foto, enviadas) entra pelo
  * próprio caminho, sem cópia; a de outro bucket (Workspace, Arquivos) é
  * copiada para `<client_id>/estudio/fotos/`, porque o gerador lê só do mesa.
+ *
+ * Correção de 25/09 (dono: "não consigo escolher as imagens nem abrir as
+ * pastas; clico e não funciona"): com o trabalho entregue ou a lâmina cheia,
+ * o acervo inteiro ficava com pointer-events-none, então nem as pastas
+ * abriam, e a foto já usada ficava desabilitada sem dizer por quê. Agora as
+ * pastas sempre abrem, o clique explica o que impede (e o trabalho entregue
+ * mostra "Reabrir para corrigir") e clicar numa foto já na lâmina tira ela.
+ *
+ * Tirar fundo (25/09: "seleciono uma foto, quero essa foto sem o fundo; ele já
+ * entra na lâmina real"): com "Tirar fundo" ligado, a foto escolhida passa pela
+ * Mesa Foto (preparar, modo fundo_transparente), a derivada vai para o acervo e
+ * entra na lâmina como ELEMENTO recortado: o estúdio põe a pessoa ou o produto
+ * inteiro do lado oposto ao texto, sem caixa, com a referência e a marca em volta.
  *
  * O Ctrl+V só é interceptado quando há ARQUIVO de imagem na área de
  * transferência: colar texto em qualquer campo continua normal. Imagem com
@@ -87,7 +104,10 @@ export function fotosParaSalvar(lista: FotoLivre[]): FotoLivre[] {
     if (f.papel === "fundo") fundos++;
     else elementos++;
     const nota = (f.nota || "").trim().slice(0, NOTA_MAXIMA);
-    saida.push(nota ? { caminho: f.caminho, papel: f.papel, nota } : { caminho: f.caminho, papel: f.papel });
+    const foto: FotoLivre = nota ? { caminho: f.caminho, papel: f.papel, nota } : { caminho: f.caminho, papel: f.papel };
+    // Só o elemento usa o recorte (o fundo é a foto inteira).
+    if (f.recortada && f.papel === "elemento") foto.recortada = true;
+    saida.push(foto);
   }
   return saida;
 }
@@ -287,7 +307,7 @@ function RotuloDaFotoDaMesaFoto({ f }: { f: FotoDaMesaFoto }) {
   );
 }
 
-function AbaMesaFoto({ usadas, bloqueado, onUsar }: { usadas: string[]; bloqueado: boolean; onUsar: (f: FotoDaMesaFoto) => void }) {
+function AbaMesaFoto({ usadas, onUsar, onTirar }: { usadas: string[]; onUsar: (f: FotoDaMesaFoto) => void; onTirar: (caminho: string) => void }) {
   const { clientId } = useMesa();
   const fotos = useFotosDaMesaFoto();
   const lista = fotos.data || [];
@@ -340,11 +360,11 @@ function AbaMesaFoto({ usadas, bloqueado, onUsar }: { usadas: string[]; bloquead
               <li key={f.id} className="min-w-0">
                 <button
                   type="button"
-                  onClick={() => onUsar(f)}
-                  disabled={bloqueado || usada}
-                  title={f.descricao || f.nome}
-                  aria-label={`Usar nesta lâmina: ${f.nome}`}
-                  className={`relative block w-full rounded-lg p-0.5 text-left transition-colors disabled:cursor-default ${usada ? "bg-primary" : "hover:bg-primary/30"}`}
+                  onClick={() => (usada ? onTirar(f.storage_path) : onUsar(f))}
+                  title={usada ? "Já está na lâmina: clique para tirar" : f.descricao || f.nome}
+                  aria-label={usada ? `Tirar da lâmina: ${f.nome}` : `Usar nesta lâmina: ${f.nome}`}
+                  aria-pressed={usada}
+                  className={`relative block w-full rounded-lg p-0.5 text-left transition-colors ${usada ? "bg-primary" : "hover:bg-primary/30"}`}
                 >
                   <FotoDoAcervo imagem={f} />
                   <RotuloDaFotoDaMesaFoto f={f} />
@@ -389,13 +409,19 @@ function MiniaturaDaFoto({ foto, indice, onAmpliar }: { foto: FotoLivre; indice:
 export default function EstudioFotos({
   card,
   ocupado,
+  entregue = false,
+  onReabrir,
   temArte,
   onSalvar,
   onTirarFotoAntiga,
 }: {
   card: CardDaDirecao;
-  /** A lâmina está gerando ou ajustando, ou já foi entregue. */
+  /** A lâmina está gerando ou ajustando (ou o trabalho foi entregue). */
   ocupado: boolean;
+  /** Trabalho entregue: nada muda até reabrir (a tela diz isso em vez de travar calada). */
+  entregue?: boolean;
+  /** "Reabrir para corrigir" (estudio-arte reabrir). */
+  onReabrir?: () => void;
   /** A lâmina já tem arte (a foto nova vale na próxima geração). */
   temArte: boolean;
   /** Grava as fotos na lâmina (configurar { card: { ordem, fotos_livres } }). */
@@ -403,8 +429,10 @@ export default function EstudioFotos({
   /** Tira a foto do acervo ligada no modo antigo (imagens_ids). */
   onTirarFotoAntiga?: () => Promise<void>;
 }) {
-  const { clientId } = useMesa();
-  const salvas = fotosParaSalvar(card.fotos_livres || []);
+  const mesa = useMesa();
+  const { clientId } = mesa;
+  const queryClient = useQueryClient();
+  const salvas = fotosParaSalvar((card.fotos_livres || []) as FotoLivre[]);
   const chaveSalvas = JSON.stringify(salvas);
   const [lista, setLista] = useState<FotoLivre[]>(salvas);
   const [enviando, setEnviando] = useState(0);
@@ -412,6 +440,9 @@ export default function EstudioFotos({
   const [arrastando, setArrastando] = useState(false);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [tirandoAntiga, setTirandoAntiga] = useState(false);
+  // "Tirar fundo" ligado: a próxima foto escolhida sai sem fundo e entra como elemento.
+  const [semFundo, setSemFundo] = useState(false);
+  const [tirandoFundo, setTirandoFundo] = useState(0);
   const [params, setParams] = useSearchParams();
   const daMesaFoto = (params.get("fotos") || "").split(",").map((x) => x.trim()).filter(Boolean);
   const [aba, setAba] = useState<AbaDasFotos>(daMesaFoto.length ? "mesa_foto" : "acervo");
@@ -430,7 +461,7 @@ export default function EstudioFotos({
 
   const cheio = papelParaNova(lista) === null;
   const antigas = card.imagens_ids || [];
-  const acervo = useAcervo(antigas.length > 0 || daMesaFoto.length > 0);
+  const acervo = useAcervo(true);
   const vindasDaMesaFoto = daMesaFoto.length ? (acervo.data || []).filter((i) => daMesaFoto.indexOf(i.id) >= 0) : [];
   const dispensarMesaFoto = () => {
     const p = new URLSearchParams(params);
@@ -465,10 +496,92 @@ export default function EstudioFotos({
     return true;
   };
 
+  /** O que impede mexer nas fotos agora (null = pode). */
+  const impedimento = (): string | null => {
+    if (entregue) return "Este trabalho já foi entregue. Use \"Reabrir para corrigir\" para trocar as fotos.";
+    if (ocupado) return "Espere a lâmina terminar para trocar as fotos.";
+    return null;
+  };
+  const avisarImpedimento = (motivo: string) => {
+    toast.error(motivo, entregue && onReabrir ? { action: { label: "Reabrir", onClick: onReabrir } } : undefined);
+  };
+
+  /** Tira da lâmina pelo caminho (miniatura marcada no acervo ou na Mesa Foto). */
+  const tirarPeloCaminho = (caminho: string) => {
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
+      return;
+    }
+    gravar(atual.current.filter((f) => f.caminho !== caminho), "Foto tirada da lâmina");
+  };
+
+  /** Elemento sem fundo na lâmina: entra como elemento (troca a mesma foto com fundo, se ela já estava). */
+  const adicionarRecorte = (caminho: string, trocar?: string) => {
+    const base = atual.current.filter((f) => f.caminho !== caminho && f.caminho !== trocar);
+    if (contar(base, "elemento") >= LIMITE_DE_ELEMENTOS) {
+      toast.error("Limite de elementos", { description: "Até 2 elementos por lâmina. Tire um para pôr a foto sem fundo." });
+      return;
+    }
+    gravar(base.concat([{ caminho, papel: "elemento", recortada: true }]), "Foto sem fundo na lâmina (elemento)");
+  };
+
+  /**
+   * Tirar o fundo de uma foto do acervo: mesa-foto preparar (fundo_transparente,
+   * custo de uma imagem). A derivada vai para o acervo (Mesa Foto / Preparadas)
+   * e entra na lâmina como elemento recortado. Foto que já é recorte entra direto.
+   */
+  const tirarFundo = async (imagem: ImagemDoAcervo & { modo?: string | null }, trocar?: string) => {
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
+      return;
+    }
+    if (jaSemFundo(imagem)) {
+      setEnviando((n) => n + 1);
+      try {
+        adicionarRecorte(await copiarDoAcervo(clientId, imagem), trocar);
+      } catch (e) {
+        toast.error("Não foi possível usar a foto", { description: textoDoErro(e) });
+      } finally {
+        setEnviando((n) => Math.max(0, n - 1));
+      }
+      return;
+    }
+    setTirandoFundo((n) => n + 1);
+    try {
+      const r = await chamarFuncao<{ imagem?: { storage_path?: string } }>("mesa-foto", corpoDoTirarFundo(clientId, imagem.id));
+      const caminho = r && r.imagem && r.imagem.storage_path;
+      if (!caminho) throw new Error("A foto sem fundo não voltou. Tente de novo.");
+      adicionarRecorte(caminho, trocar);
+      void queryClient.invalidateQueries({ queryKey: ["mesa", "acervo", clientId] });
+      void queryClient.invalidateQueries({ queryKey: chaveDaMesaFoto(clientId) });
+    } catch (e) {
+      const codigo = e && typeof e === "object" ? (e as { codigo?: string }).codigo : undefined;
+      // Já era recorte: entra do jeito que está.
+      if (codigo === "ja_e_recorte") {
+        try {
+          adicionarRecorte(await copiarDoAcervo(clientId, imagem), trocar);
+        } catch (e2) {
+          toast.error("Não foi possível usar a foto", { description: textoDoErro(e2) });
+        }
+      } else {
+        toast.error("Não foi possível tirar o fundo", { description: textoDoErro(e) });
+      }
+    } finally {
+      setTirandoFundo((n) => Math.max(0, n - 1));
+      mesa.atualizarCusto();
+    }
+  };
+
+  /** Foto da lâmina que está no acervo (para tirar o fundo dela). */
+  const doAcervoPeloCaminho = (caminho: string) => (acervo.data || []).filter((i) => (i.storage_bucket || "mesa") === "mesa" && i.storage_path === caminho)[0] || null;
+
   const adicionarArquivos = async (arquivos: File[]) => {
     if (!arquivos.length) return;
-    if (ocupado) {
-      toast.error("Espere a lâmina terminar para trocar as fotos");
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
       return;
     }
     for (const arquivo of arquivos) {
@@ -498,8 +611,19 @@ export default function EstudioFotos({
   };
 
   const usarDoAcervo = async (imagem: ImagemDoAcervo) => {
-    if (ocupado) {
-      toast.error("Espere a lâmina terminar para trocar as fotos");
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
+      return;
+    }
+    // Já na lâmina: o clique tira (antes o clique não fazia nada).
+    const naLamina = atual.current.some((f) => f.caminho === imagem.storage_path);
+    if (naLamina && (imagem.storage_bucket || "mesa") === "mesa") {
+      tirarPeloCaminho(imagem.storage_path);
+      return;
+    }
+    if (semFundo) {
+      await tirarFundo(imagem);
       return;
     }
     if (papelParaNova(atual.current) === null) {
@@ -531,6 +655,11 @@ export default function EstudioFotos({
   }, [clientId, ocupado]);
 
   const mudarPapel = (i: number, papel: FotoLivre["papel"]) => {
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
+      return;
+    }
     const nova = trocarPapel(lista, i, papel);
     if (!nova) {
       toast.error("Não cabe", { description: "Até 1 fundo e 2 elementos por lâmina." });
@@ -543,7 +672,14 @@ export default function EstudioFotos({
   const gravarNota = () => {
     if (JSON.stringify(fotosParaSalvar(atual.current)) !== chaveSalvas) gravar(atual.current);
   };
-  const remover = (i: number) => gravar(lista.filter((_, j) => j !== i), "Foto tirada da lâmina");
+  const remover = (i: number) => {
+    const motivo = impedimento();
+    if (motivo) {
+      avisarImpedimento(motivo);
+      return;
+    }
+    gravar(lista.filter((_, j) => j !== i), "Foto tirada da lâmina");
+  };
 
   const tirarAntiga = async () => {
     if (!onTirarFotoAntiga) return;
@@ -566,11 +702,24 @@ export default function EstudioFotos({
     void adicionarArquivos(arquivos);
   };
 
-  const bloqueado = ocupado || cheio || enviando > 0;
+  const bloqueado = ocupado || entregue || cheio || enviando > 0;
   const usadas = lista.map((f) => f.caminho);
+  // Ids do acervo que estão na lâmina: o seletor marca e o clique tira.
+  const idsUsados = (acervo.data || []).filter((i) => (i.storage_bucket || "mesa") === "mesa" && usadas.indexOf(i.storage_path) >= 0).map((i) => i.id);
 
   return (
     <div className="min-w-0 space-y-4">
+      {entregue && (
+        <div className="flex min-w-0 items-start rounded-lg border border-warning/50 bg-warning/10 px-3 py-2.5 text-[12px] leading-snug" role="status">
+          <Lock className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+          <span className="min-w-0 flex-1">Trabalho entregue: as fotos não mudam. Reabra para corrigir; a entrega anterior fica no histórico.</span>
+          {onReabrir && (
+            <Button type="button" size="sm" variant="outline" className="ml-2 h-7 shrink-0 px-2 text-[11.5px]" onClick={onReabrir}>
+              Reabrir
+            </Button>
+          )}
+        </div>
+      )}
       {/* Na lâmina agora: grava na hora, aparece na faixa em cima da lâmina grande. */}
       <section aria-label="Fotos desta lâmina" className="space-y-2">
         <div className="flex min-h-6 min-w-0 items-center">
@@ -585,7 +734,14 @@ export default function EstudioFotos({
           <ul className="space-y-2.5">
             {lista.map((f, i) => (
               <li key={f.caminho} className="flex min-w-0 items-start rounded-lg border border-border bg-background p-2">
-                <MiniaturaDaFoto foto={f} indice={i} onAmpliar={() => setAmpliada(i)} />
+                <div className="shrink-0">
+                  <MiniaturaDaFoto foto={f} indice={i} onAmpliar={() => setAmpliada(i)} />
+                  {f.recortada && (
+                    <span className="mt-1 flex items-center justify-center text-[10px] text-muted-foreground" title="Pessoa ou produto sem fundo: entra inteiro, do lado oposto ao texto">
+                      <Scissors className="mr-0.5 h-3 w-3" /> sem fundo
+                    </span>
+                  )}
+                </div>
                 <div className="ml-2.5 min-w-0 flex-1">
                   <div className="flex min-w-0 items-center">
                     <div className="grid grid-cols-2 gap-0.5 rounded-md border border-border p-0.5" role="radiogroup" aria-label={`Papel da foto ${i + 1}`}>
@@ -596,7 +752,6 @@ export default function EstudioFotos({
                           role="radio"
                           aria-checked={f.papel === p}
                           title={DICA_DO_PAPEL[p]}
-                          disabled={ocupado}
                           onClick={() => mudarPapel(i, p)}
                           className={`h-6 rounded px-2 text-[11px] transition-colors ${f.papel === p ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"}`}
                         >
@@ -604,10 +759,24 @@ export default function EstudioFotos({
                         </button>
                       ))}
                     </div>
+                    {!f.recortada && (() => {
+                      const doAcervo = doAcervoPeloCaminho(f.caminho);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => doAcervo && void tirarFundo(doAcervo, f.caminho)}
+                          disabled={!doAcervo || tirandoFundo > 0}
+                          title={doAcervo ? "Tirar o fundo desta foto (custo de 1 imagem): ela vira elemento sem fundo" : "Tirar fundo: escolha a foto pelo Acervo ou pela Mesa Foto"}
+                          aria-label={`Tirar o fundo da foto ${i + 1}`}
+                          className="ml-1.5 flex h-7 shrink-0 items-center rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-40"
+                        >
+                          <Scissors className="mr-1 h-3.5 w-3.5" /> Tirar fundo
+                        </button>
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={() => remover(i)}
-                      disabled={ocupado}
                       aria-label={`Remover a foto ${i + 1}`}
                       title="Tirar da lâmina"
                       className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-destructive"
@@ -623,7 +792,7 @@ export default function EstudioFotos({
                       if (e.key === "Enter") gravarNota();
                     }}
                     maxLength={NOTA_MAXIMA}
-                    disabled={ocupado}
+                    disabled={ocupado || entregue}
                     placeholder={f.papel === "fundo" ? "Opcional. Ex.: manter a luz da manhã" : "Opcional. Ex.: rosto à direita, olhando para o texto"}
                     className="mt-1.5 h-8 text-[12px]"
                     aria-label={`Como usar a foto ${i + 1}`}
@@ -658,10 +827,10 @@ export default function EstudioFotos({
                   size="sm"
                   variant="outline"
                   className="mt-1 h-7 w-full px-1 text-[11px]"
-                  disabled={bloqueado || usadas.indexOf(imagem.storage_path) >= 0}
+                  disabled={enviando > 0}
                   onClick={() => void usarDoAcervo(imagem)}
                 >
-                  Usar nesta lâmina
+                  {usadas.indexOf(imagem.storage_path) >= 0 ? "Tirar da lâmina" : semFundo ? "Usar sem fundo" : "Usar nesta lâmina"}
                 </Button>
               </li>
             ))}
@@ -688,14 +857,32 @@ export default function EstudioFotos({
             );
           })}
         </div>
-        {cheio && <p className="text-[11.5px] text-muted-foreground">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra.</p>}
-
-        {aba === "acervo" && (
-          <div className={bloqueado ? "pointer-events-none opacity-60" : ""}>
-            <SeletorDoAcervo titulo="Acervo do cliente (Workspace, Arquivos e Mesa Foto)" escolhidas={[]} onEscolher={(i) => void usarDoAcervo(i)} />
-          </div>
+        {aba !== "subir" && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={semFundo}
+            onClick={() => setSemFundo((v) => !v)}
+            className={`flex w-full min-w-0 items-center rounded-lg border px-3 py-2 text-left transition-colors ${semFundo ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/50"}`}
+            title="Ligado: a foto escolhida sai sem o fundo (custo de 1 imagem por foto) e entra na lâmina como elemento, inteira, do lado oposto ao texto"
+          >
+            <Scissors className={`mr-2 h-4 w-4 shrink-0 ${semFundo ? "text-primary" : "text-muted-foreground"}`} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[12.5px] font-medium">Tirar fundo {semFundo ? "(ligado)" : ""}</span>
+              <span className="block text-[11px] leading-snug text-muted-foreground">
+                {semFundo ? "Escolha a foto: ela sai sem fundo e entra na lâmina como elemento. Custa 1 imagem." : "Ligue e escolha a foto: pessoa ou produto entra sem fundo, integrado à lâmina."}
+              </span>
+            </span>
+            {tirandoFundo > 0 && <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin text-primary" aria-label="Tirando o fundo" />}
+          </button>
         )}
-        {aba === "mesa_foto" && <AbaMesaFoto usadas={usadas} bloqueado={bloqueado} onUsar={(f) => void usarDoAcervo(f)} />}
+        {cheio && !semFundo && <p className="text-[11.5px] text-muted-foreground">A lâmina já tem 1 fundo e 2 elementos. Tire uma foto para pôr outra (clique na marcada para tirar).</p>}
+
+        {/* As pastas sempre abrem; o que impede a escolha aparece no clique (antes o acervo inteiro ficava travado). */}
+        {aba === "acervo" && (
+          <SeletorDoAcervo titulo="Acervo do cliente (Workspace, Arquivos e Mesa Foto)" escolhidas={idsUsados} onEscolher={(i) => void usarDoAcervo(i)} />
+        )}
+        {aba === "mesa_foto" && <AbaMesaFoto usadas={usadas} onUsar={(f) => void usarDoAcervo(f)} onTirar={tirarPeloCaminho} />}
         {aba === "subir" && (
           <div
             onDragOver={(e) => { e.preventDefault(); if (!arrastando) setArrastando(true); }}
@@ -743,7 +930,7 @@ export default function EstudioFotos({
             <div className="mr-2.5 w-12 shrink-0">{fotoAntiga ? <FotoDoAcervo imagem={fotoAntiga} /> : <div className="h-12 w-12 animate-pulse rounded-md bg-secondary" />}</div>
             <p className="min-w-0 flex-1 truncate text-[12.5px]">{fotoAntiga ? fotoAntiga.nome : acervo.isLoading ? "carregando…" : "não está mais no acervo"}</p>
             {onTirarFotoAntiga && (
-              <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px] text-destructive hover:text-destructive" disabled={tirandoAntiga || ocupado} onClick={() => void tirarAntiga()}>
+              <Button type="button" size="sm" variant="ghost" className="h-8 shrink-0 px-2 text-[12px] text-destructive hover:text-destructive" disabled={tirandoAntiga || ocupado || entregue} onClick={() => void tirarAntiga()}>
                 {tirandoAntiga && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
                 Tirar
               </Button>

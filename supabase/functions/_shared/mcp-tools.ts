@@ -183,6 +183,7 @@ export type ToolScope =
   | 'contracts:write'
   | 'memory:read'
   | 'memory:propose'
+  | 'mesas:write'
   | 'admin';
 
 export const ALL_SCOPES: readonly ToolScope[] = [
@@ -211,6 +212,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'contracts:write',
   'memory:read',
   'memory:propose',
+  'mesas:write',
   'admin',
 ] as const;
 
@@ -220,7 +222,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'aceleriq:write': { title: 'Escrita operacional', description: 'Criar/atualizar tarefas, rascunhos de relatórios e ajustes de projetos.', sensitive: true },
   'aceleriq:finance': { title: 'Financeiro', description: 'Acessar informações financeiras agregadas.', sensitive: true },
   'clients:read': { title: 'Clientes — leitura', description: 'Listar e visualizar contextos de clientes.' },
-  'clients:write': { title: 'Clientes — dossiê', description: 'Atualizar o dossiê de contexto do cliente com versão e histórico. Não cria nem apaga clientes.', sensitive: true },
+  'clients:write': { title: 'Clientes — dossiê', description: 'Atualizar o dossiê de contexto do cliente com versão e histórico e registrar aprendizados no cérebro do cliente (sem duplicar). Não cria nem apaga clientes.', sensitive: true },
   'projects:read': { title: 'Projetos — leitura', description: 'Listar e detalhar projetos.' },
   'projects:write': { title: 'Projetos — escrita', description: 'Atualizar prazo, status, progresso, escopo e objetivos de projetos.', sensitive: true },
   'tasks:read': { title: 'Tarefas — leitura', description: 'Listar tarefas do Kanban.' },
@@ -241,6 +243,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'contracts:write': { title: 'Contratos — rascunhos', description: 'Criar, atualizar e cancelar somente rascunhos completamente não assinados e nunca enviados. Não permite assinar, aprovar, enviar ou publicar contratos.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro — leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
   'memory:propose': { title: 'Segundo Cérebro — propor', description: 'Criar propostas .md no inbox do OpenClaw (nunca sobrescreve arquivos).', sensitive: true },
+  'mesas:write': { title: 'Mesas: agir', description: 'Agir nas mesas com a sessão da pessoa conectada (OAuth): pedir conteúdo e gravar na agenda, criar e editar campanha, briefing e imagens, salvar oferta da Mesa Ads e mandar peça para aprovação. Cada mesa confere acesso e regra como na tela. Não publica, não agenda post e não gasta verba de anúncio.', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
 };
 
@@ -266,6 +269,9 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
     'editorial:write', 'clients:write', 'commercial:write',
+    // MCP 2.3: agir nas mesas. Só roda com sessão de pessoa (OAuth); chave
+    // de API recebe a recusa explicada na própria ferramenta.
+    'mesas:write',
   ],
 };
 
@@ -311,6 +317,17 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_ads_performance: 'reports:read',
   aceleriq_mesa_ads_contexto: 'reports:read',
   aceleriq_mesa_foto_contexto: 'files:read',
+  // MCP 2.3: cérebro do cliente e ações nas mesas
+  aceleriq_cerebro_do_cliente: 'clients:read',
+  aceleriq_cerebro_registrar: 'clients:write',
+  aceleriq_mesa_calendario_pedido: 'mesas:write',
+  aceleriq_mesa_calendario_gravar: 'mesas:write',
+  aceleriq_mesa_campanha_criar: 'mesas:write',
+  aceleriq_mesa_campanha_salvar: 'mesas:write',
+  aceleriq_mesa_ads_briefing_salvar: 'mesas:write',
+  aceleriq_mesa_ads_oferta_salvar: 'mesas:write',
+  aceleriq_mesa_ads_oferta_do_contexto: 'mesas:write',
+  aceleriq_mesa_enviar_para_aprovacao: 'mesas:write',
   aceleriq_get_report: 'reports:read',
   aceleriq_create_report_draft: 'reports:write',
   aceleriq_list_briefings: 'briefings:read',
@@ -342,6 +359,9 @@ export interface ToolDefinition {
   scopes: readonly ToolScope[]; // any-of; empty = public to authenticated
   inputSchema: Record<string, unknown>;
   annotations?: Record<string, unknown>;
+  // Ação que pode passar de 150 s (IA ou entrega de arquivo na mesa): o
+  // servidor responde com fôlego para a plataforma não derrubar com 504.
+  longRunning?: boolean;
   handler: (input: unknown, ctx: AuthContext) => Promise<unknown>;
 }
 
@@ -509,6 +529,7 @@ const capabilitiesTool: ToolDefinition = {
       editorial_read: TOOLS.filter(t => t.scopes.includes('editorial:read')).length,
       editorial_write: TOOLS.filter(t => t.scopes.includes('editorial:write')).length,
       finance: TOOLS.filter(t => t.scopes.includes('aceleriq:finance')).length,
+      mesas_write: TOOLS.filter(t => t.scopes.includes('mesas:write')).length,
       public: TOOLS.filter(t => t.scopes.length === 0).length,
     };
 
@@ -2119,6 +2140,402 @@ const mesaFotoContextoTool: ToolDefinition = {
   },
 };
 
+// ─── MCP 2.3: cérebro do cliente e ações nas mesas ────────────
+// Ler não basta: quando precisar, o agente AGE nas mesas. Cada ação chama a
+// função da mesa pelo servidor, com a sessão da pessoa conectada (OAuth), e a
+// mesa confere acesso e regra como na tela. A regra de negócio fica na mesa
+// (mcp-mesas-acoes.ts só leva o pedido e devolve o resultado com a prova).
+import {
+  adsBriefingSalvar as _adsBriefingSalvar,
+  adsOfertaDoContexto as _adsOfertaDoContexto,
+  adsOfertaSalvar as _adsOfertaSalvar,
+  calendarioGravar as _calendarioGravar,
+  calendarioPedido as _calendarioPedido,
+  campanhaCriar as _campanhaCriar,
+  campanhaSalvar as _campanhaSalvar,
+  enviarParaAprovacao as _enviarParaAprovacao,
+} from './mcp-mesas-acoes.ts';
+import { cerebroLer as _cerebroLer, cerebroRegistrar as _cerebroRegistrar } from './mcp-cerebro-services.ts';
+import { AREAS_DO_CEREBRO, CATEGORIAS_DO_CEREBRO } from './cerebro-do-cliente.ts';
+
+const MESAS_WRITE: readonly ToolScope[] = ['mesas:write'];
+const CHAVE_IDEMPOTENTE = z.string().min(8).max(128).regex(/^[A-Za-z0-9._:-]+$/, 'idempotency_key must be 8-128 chars, [A-Za-z0-9._:-]');
+const CHAVE_IDEMPOTENTE_JSON = { type: 'string', minLength: 8, maxLength: 128, description: 'Chave única da ação. Repetir a mesma chave não refaz nada (24 h, por credencial).' };
+const DATA_REAL = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealToolDate, { message: 'must be a real calendar date (YYYY-MM-DD)' });
+const COMO_AGIR =
+  ' Exige conexão OAuth: a ação roda com a sessão da pessoa conectada e grava quem fez; chave de API recebe recusa explicada. Toda resposta traz feito_por (principal, pessoa e correlation_id), e a chamada fica no log de auditoria do MCP sem segredo.';
+
+function ferramentaDeMesa(
+  name: string,
+  title: string,
+  description: string,
+  schema: z.ZodTypeAny,
+  jsonSchema: Record<string, unknown>,
+  fn: (input: any, ctx: AuthContext) => Promise<unknown>,
+  opcoes: { longa?: boolean; destrutiva?: boolean; idempotente?: boolean } = {},
+): ToolDefinition {
+  return {
+    name,
+    title,
+    description: `${description}${COMO_AGIR}`,
+    scopes: MESAS_WRITE,
+    longRunning: opcoes.longa === true,
+    annotations: { readOnlyHint: false, idempotentHint: opcoes.idempotente ?? true, destructiveHint: opcoes.destrutiva === true, openWorldHint: false },
+    inputSchema: jsonSchema,
+    handler: async (input, ctx) => {
+      const parsed = schema.safeParse(input ?? {});
+      if (!parsed.success) {
+        throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+      }
+      return await fn(parsed.data, ctx);
+    },
+  };
+}
+
+const BRIEFING_DA_CAMPANHA = z.object({
+  produtos: z.array(z.object({ nome: z.string().min(1).max(120), por_que: z.string().max(500).optional() }).strict()).max(5).optional(),
+  oferta: z.string().max(600).optional(),
+  mensagem_central: z.string().max(400).optional(),
+  publico: z.string().max(600).optional(),
+  provas: z.array(z.string().max(300)).max(6).optional(),
+  tom: z.string().max(300).optional(),
+  cta: z.string().max(200).optional(),
+}).strict();
+const BRIEFING_DA_CAMPANHA_JSON = {
+  type: 'object',
+  description: 'Briefing da campanha. Campos: produtos [{nome, por_que}] (até 5), oferta, mensagem_central, publico, provas (até 6, só provas reais), tom, cta.',
+  properties: {
+    produtos: { type: 'array', maxItems: 5, items: { type: 'object', properties: { nome: { type: 'string' }, por_que: { type: 'string' } }, required: ['nome'], additionalProperties: false } },
+    oferta: { type: 'string' }, mensagem_central: { type: 'string' }, publico: { type: 'string' },
+    provas: { type: 'array', maxItems: 6, items: { type: 'string' } }, tom: { type: 'string' }, cta: { type: 'string' },
+  },
+  additionalProperties: false,
+};
+const IMAGENS_DA_CAMPANHA = z.array(z.object({
+  imagem_id: UUID,
+  papel: z.enum(['heroi', 'apoio', 'ambiente']).optional(),
+  nota: z.string().max(400).optional(),
+}).strict()).max(12);
+const IMAGENS_DA_CAMPANHA_JSON = {
+  type: 'array',
+  maxItems: 12,
+  description: 'Fotos do acervo do cliente (ids de aceleriq_mesa_foto_contexto, fotos_aprovadas). papel: heroi, apoio ou ambiente. A lista enviada SUBSTITUI a da campanha; foto fora do acervo ativo do cliente volta em imagens_recusadas.',
+  items: {
+    type: 'object',
+    properties: { imagem_id: { type: 'string', format: 'uuid' }, papel: { type: 'string', enum: ['heroi', 'apoio', 'ambiente'] }, nota: { type: 'string', maxLength: 400 } },
+    required: ['imagem_id'],
+    additionalProperties: false,
+  },
+};
+
+const calendarioPedidoTool = ferramentaDeMesa(
+  'aceleriq_mesa_calendario_pedido',
+  'Mesa: pedir conteúdo rápido ao agente do mês',
+  'Conteúdo rápido no calendário do cliente: o estrategista do mês (a mesma IA do botão da Mesa) recebe o pedido em linguagem livre ("três conteúdos para a campanha X", "a agenda de hoje") e devolve uma PROPOSTA com os itens prontos (tema, data útil, formato, roteiro dos cards, legenda e CTA), usando o contexto real do cliente, o dossiê, o cérebro e a campanha se informada. Nada entra na agenda ainda: grave com aceleriq_mesa_calendario_gravar depois de revisar. Gasta crédito de IA: exige confirmar_custo=true. Pode levar alguns minutos.',
+  z.object({
+    client_id: UUID,
+    mensagem: z.string().min(3).max(4000),
+    data_inicio: DATA_REAL.optional(),
+    campanha_id: UUID.optional(),
+    confirmar_custo: z.literal(true),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      mensagem: { type: 'string', minLength: 3, maxLength: 4000, description: 'O pedido, como a equipe escreveria na Mesa.' },
+      data_inicio: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'A partir de quando (padrão hoje). Só dias úteis.' },
+      campanha_id: { type: 'string', format: 'uuid', description: 'Campanha da Mesa a que os conteúdos pertencem.' },
+      confirmar_custo: { type: 'boolean', const: true, description: 'Tem que ser true: a ação usa IA paga.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'mensagem', 'confirmar_custo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar_custo: _c, ...input }, ctx) => _calendarioPedido(input, ctx),
+  { longa: true, idempotente: false },
+);
+
+const calendarioGravarTool = ferramentaDeMesa(
+  'aceleriq_mesa_calendario_gravar',
+  'Mesa: gravar a proposta na agenda do mês',
+  'Grava na agenda do cliente os itens de uma proposta pronta da Mesa (de aceleriq_mesa_calendario_pedido ou de uma campanha): cada item vira tarefa de produção no Kanban e no calendário editorial, com a data útil, o roteiro dos cards e a legenda na descrição; a foto da campanha de cada card segue para o Estúdio. Item que já existe na agenda (mesmo título na mesma data) não é recriado. Não aprova, não agenda post, não publica.',
+  z.object({ proposta_id: UUID, project_id: UUID.optional(), idempotency_key: CHAVE_IDEMPOTENTE }).strict(),
+  {
+    type: 'object',
+    properties: {
+      proposta_id: { type: 'string', format: 'uuid', description: 'Proposta devolvida pelo pedido ou pela campanha.' },
+      project_id: { type: 'string', format: 'uuid', description: 'Projeto do cliente onde as tarefas entram (padrão: o da proposta).' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['proposta_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  (input, ctx) => _calendarioGravar(input, ctx),
+);
+
+const campanhaCriarTool = ferramentaDeMesa(
+  'aceleriq_mesa_campanha_criar',
+  'Mesa: criar campanha com o estrategista',
+  'Cria uma campanha inteira na Mesa do cliente: o estrategista monta nome, conceito, identidade do tema com selo e os conteúdos numa proposta pronta para gravar. O briefing e as imagens enviados valem sobre o que ele sugerir. Período de até 2 meses. Gasta crédito de IA: exige confirmar_custo=true. Pode levar alguns minutos. Depois: ajuste com aceleriq_mesa_campanha_salvar e grave os conteúdos com aceleriq_mesa_calendario_gravar.',
+  z.object({
+    client_id: UUID,
+    pedido: z.string().min(3).max(4000),
+    periodo_inicio: DATA_REAL.optional(),
+    periodo_fim: DATA_REAL.optional(),
+    quantidade: limite(12),
+    briefing: BRIEFING_DA_CAMPANHA.optional(),
+    imagens: IMAGENS_DA_CAMPANHA.optional(),
+    confirmar_custo: z.literal(true),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      pedido: { type: 'string', minLength: 3, maxLength: 4000, description: 'Tema, ocasião e oferta da campanha.' },
+      periodo_inicio: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      periodo_fim: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      quantidade: { type: 'integer', minimum: 1, maximum: 12, description: 'Quantos conteúdos.' },
+      briefing: BRIEFING_DA_CAMPANHA_JSON,
+      imagens: IMAGENS_DA_CAMPANHA_JSON,
+      confirmar_custo: { type: 'boolean', const: true, description: 'Tem que ser true: a ação usa IA paga.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'pedido', 'confirmar_custo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar_custo: _c, ...input }, ctx) => _campanhaCriar(input, ctx),
+  { longa: true, idempotente: false },
+);
+
+const campanhaSalvarTool = ferramentaDeMesa(
+  'aceleriq_mesa_campanha_salvar',
+  'Mesa: editar campanha (briefing, imagens, objetivo)',
+  'Edita uma campanha da Mesa sem IA e sem custo: grava o briefing, ANEXA as imagens (fotos do acervo do cliente) e o objetivo, só o que vier (briefing e imagens podem ir em momentos diferentes sem um apagar o outro). A mesa confere cada imagem no acervo ativo do próprio cliente e nunca aceita referência da internet; a recusada volta em imagens_recusadas.',
+  z.object({
+    campanha_id: UUID,
+    briefing: BRIEFING_DA_CAMPANHA.optional(),
+    imagens: IMAGENS_DA_CAMPANHA.optional(),
+    objetivo: z.string().max(600).optional(),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict().refine((v) => v.briefing !== undefined || v.imagens !== undefined || v.objetivo !== undefined, { message: 'send briefing, imagens or objetivo' }),
+  {
+    type: 'object',
+    properties: {
+      campanha_id: { type: 'string', format: 'uuid' },
+      briefing: BRIEFING_DA_CAMPANHA_JSON,
+      imagens: IMAGENS_DA_CAMPANHA_JSON,
+      objetivo: { type: 'string', maxLength: 600 },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['campanha_id', 'idempotency_key'],
+    anyOf: [{ required: ['briefing'] }, { required: ['imagens'] }, { required: ['objetivo'] }],
+    additionalProperties: false,
+  },
+  (input, ctx) => _campanhaSalvar(input, ctx),
+);
+
+const SECAO = z.record(z.unknown());
+const adsBriefingSalvarTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_briefing_salvar',
+  'Mesa Ads: salvar briefing de anúncios',
+  'Salva uma nova versão do briefing de anúncios da Mesa Ads (a anterior vira histórico). Mande só o que mudou: cada seção enviada (oferta, publico, destino, objetivo) substitui campo a campo; listas (objecoes, provas) substituem a lista; o resto fica como estava. Campos: oferta {produto, promessa, condicao, preco_confirmado, garantia}; publico {quem, situacoes[{texto, fonte}], estagio_consciencia, motivacoes[]}; objecoes [{texto, resposta, fonte}]; provas [{tipo, texto, fonte, periodo}]; destino {tipo, url, primeira_mensagem}; objetivo {acao, metrica_principal, custo_toleravel_brl, verba_diaria_brl}; restricoes. Nada fora do briefing vira promessa nos anúncios: não invente prova, preço nem número. Autorização de depoimento e rosto é gesto humano: prova nova entra como não autorizada.',
+  z.object({
+    client_id: UUID,
+    briefing: z.object({
+      oferta: SECAO.optional(),
+      publico: SECAO.optional(),
+      objecoes: z.array(SECAO).max(20).optional(),
+      provas: z.array(SECAO).max(20).optional(),
+      destino: SECAO.optional(),
+      objetivo: SECAO.optional(),
+      restricoes: z.string().max(3000).nullable().optional(),
+    }).strict().refine((b) => Object.keys(b).length > 0, { message: 'briefing is empty' }),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      briefing: {
+        type: 'object',
+        properties: {
+          oferta: { type: 'object' }, publico: { type: 'object' },
+          objecoes: { type: 'array', maxItems: 20, items: { type: 'object' } },
+          provas: { type: 'array', maxItems: 20, items: { type: 'object' } },
+          destino: { type: 'object' }, objetivo: { type: 'object' },
+          restricoes: { type: ['string', 'null'], maxLength: 3000 },
+        },
+        additionalProperties: false,
+      },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'briefing', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  (input, ctx) => _adsBriefingSalvar(input, ctx),
+  { idempotente: false },
+);
+
+const adsOfertaSalvarTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_oferta_salvar',
+  'Mesa Ads: editar ou escolher oferta',
+  'Edita uma oferta da Mesa Ads (sem IA) e/ou muda o status: rascunho, escolhida (a que o tráfego vai usar) ou arquivada. campos aceitos: nome, para_quem, promessa, mecanismo, entregaveis[], bonus[], garantia, urgencia_real, ancoragem, cta, provas_necessarias[], riscos[]. O que não vier fica como está. Mudar o conteúdo apaga a nota do Jev daquela oferta (ficou velha). Urgência só se for real; honestidade vai em riscos e provas_necessarias.',
+  z.object({
+    client_id: UUID,
+    oferta_id: UUID,
+    campos: z.object({
+      nome: z.string().min(1).max(120).optional(),
+      para_quem: z.string().max(600).optional(),
+      promessa: z.string().max(800).optional(),
+      mecanismo: z.string().max(800).optional(),
+      entregaveis: z.array(z.string().max(300)).max(12).optional(),
+      bonus: z.array(z.string().max(300)).max(8).optional(),
+      garantia: z.string().max(400).nullable().optional(),
+      urgencia_real: z.string().max(400).nullable().optional(),
+      ancoragem: z.string().max(400).nullable().optional(),
+      cta: z.string().max(120).optional(),
+      provas_necessarias: z.array(z.string().max(300)).max(10).optional(),
+      riscos: z.array(z.string().max(300)).max(10).optional(),
+    }).strict().optional(),
+    status: z.enum(['rascunho', 'escolhida', 'arquivada']).optional(),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict().refine((v) => v.campos !== undefined || v.status !== undefined, { message: 'send campos or status' }),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      oferta_id: { type: 'string', format: 'uuid', description: 'Id da oferta (aceleriq_mesa_ads_contexto, ofertas).' },
+      campos: { type: 'object', description: 'Campos da oferta a mudar (ver descrição).' },
+      status: { type: 'string', enum: ['rascunho', 'escolhida', 'arquivada'] },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'oferta_id', 'idempotency_key'],
+    anyOf: [{ required: ['campos'] }, { required: ['status'] }],
+    additionalProperties: false,
+  },
+  (input, ctx) => _adsOfertaSalvar(input, ctx),
+);
+
+const adsOfertaDoContextoTool = ferramentaDeMesa(
+  'aceleriq_mesa_ads_oferta_do_contexto',
+  'Mesa Ads: salvar oferta montada do contexto',
+  'Salva na Mesa Ads a oferta montada em código a partir do contexto real do cliente (briefing de anúncios, contexto consolidado, brief respondido, campanhas do mês e a conta de anúncios), sem IA e sem custo, com as fontes e as lacunas. Se já houver uma oferta do contexto em uso, devolve ela; forcar=true remonta a que ainda é rascunho. Para escolher ou editar depois, use aceleriq_mesa_ads_oferta_salvar.',
+  z.object({ client_id: UUID, forcar: z.boolean().optional(), idempotency_key: CHAVE_IDEMPOTENTE }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      forcar: { type: 'boolean', description: 'Remonta a oferta do contexto que ainda é rascunho.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  (input, ctx) => _adsOfertaDoContexto(input, ctx),
+);
+
+const enviarParaAprovacaoTool = ferramentaDeMesa(
+  'aceleriq_mesa_enviar_para_aprovacao',
+  'Mesa: mandar peça do Estúdio para aprovação',
+  'Manda artes prontas do Estúdio para aprovação pelo mesmo caminho da tela: entrega em Arquivos o que ainda não foi entregue e libera para aprovação (com papel de admin ou gestor vai direto ao cliente, que é avisado; com papel de design pede antes a revisão da agência). Efeito visível ao cliente: exige confirmar=true e motivo. Criativo de anúncio não passa por aqui (segue pela Mesa Ads para o gestor). Não agenda nem publica. Até 5 trabalhos por vez; pode levar alguns minutos.',
+  z.object({
+    trabalho_ids: z.array(UUID).min(1).max(5),
+    confirmar: z.literal(true),
+    motivo: z.string().min(3).max(400),
+    idempotency_key: CHAVE_IDEMPOTENTE,
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      trabalho_ids: { type: 'array', minItems: 1, maxItems: 5, items: { type: 'string', format: 'uuid' }, description: 'Trabalhos do Estúdio (estudio_trabalhos.id) com todas as lâminas geradas.' },
+      confirmar: { type: 'boolean', const: true, description: 'Tem que ser true: o cliente pode ser avisado.' },
+      motivo: { type: 'string', minLength: 3, maxLength: 400, description: 'Por que está mandando agora (fica na auditoria).' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['trabalho_ids', 'confirmar', 'motivo', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  ({ confirmar: _c, motivo: _m, ...input }, ctx) => _enviarParaAprovacao(input, ctx),
+  { longa: true },
+);
+
+const AREA_JSON = { type: 'string', enum: [...AREAS_DO_CEREBRO], description: 'geral (vale para todos), calendario, campanha, copy (estrategista do mês), arte, foto (diretor de arte e Mesa Foto), ads, conta (estrategista de anúncios).' };
+
+const cerebroDoClienteTool: ToolDefinition = {
+  name: 'aceleriq_cerebro_do_cliente',
+  title: 'Cérebro do cliente: o que ele já ensinou',
+  description:
+    'O segundo cérebro do cliente, por área: preferências de estilo, o que evitar, ajustes pedidos (no Estúdio e pela equipe), o que foi reprovado e por quê, o que performou com número real (aprendizados E3/E4 da Mesa Ads, publicações e evolução do Instagram). Já vem deduplicado (o mesmo aprendizado repetido vira contagem de reforço), sem o que venceu, e com o RESUMO COMPACTO que entra no prompt de cada agente (teto de caracteres). Com area, devolve só aquela área mais a geral. Leia antes de propor conteúdo, arte, campanha ou anúncio: regra do dono vale sobre sugestão sua. Só leitura.',
+  scopes: ['clients:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      area: AREA_JSON,
+      limite_caracteres: { type: 'integer', minimum: 200, maximum: 6000, description: 'Teto do resumo (padrão 1800).' },
+      incluir_fatos: { type: 'boolean', description: 'Lista completa dos fatos além do resumo (padrão sim).' },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: UUID,
+      area: z.enum(AREAS_DO_CEREBRO).optional(),
+      limite_caracteres: limite(6000, 200),
+      incluir_fatos: z.boolean().optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await _cerebroLer(parsed.data as { client_id: string }, ctx);
+  },
+};
+
+const cerebroRegistrarTool: ToolDefinition = {
+  name: 'aceleriq_cerebro_registrar',
+  title: 'Cérebro do cliente: registrar aprendizado',
+  description:
+    'Ensina o cérebro do cliente: grava um aprendizado numa área (o agente daquela área passa a ler no próximo trabalho). Não duplica: texto igual vira reforço (conta quantas vezes foi pedido); com o Jev, o que diz o mesmo com outras palavras também vira reforço, e o que CONTRADIZ um aprendizado antigo aposenta o antigo (o dono mudou de ideia, vale o novo, o antigo fica no histórico). categoria: preferencia, evitar, ajuste, reprovado (diga o motivo), performou (diga a evidência: número e período), aprendizado. Validade padrão: preferência, evitar e ajuste não vencem; performou vale 180 dias; reprovado e aprendizado, 365; valido_dias muda isso. Registre só o que o dono, o cliente ou o resultado disseram, nunca palpite seu.',
+  scopes: ['clients:write'] as const,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      area: AREA_JSON,
+      categoria: { type: 'string', enum: [...CATEGORIAS_DO_CEREBRO] },
+      texto: { type: 'string', minLength: 3, maxLength: 600, description: 'O aprendizado como instrução prática ("Fundo sempre claro; o cliente reprovou fundo preto duas vezes").' },
+      motivo: { type: 'string', maxLength: 400, description: 'Por quê (obrigatório na prática para reprovado).' },
+      evidencia: { type: 'string', maxLength: 400, description: 'De onde veio: mensagem do dono, comentário do cliente, número e período.' },
+      referencia_id: { type: 'string', format: 'uuid', description: 'Id do que originou (trabalho, arquivo, criativo), quando houver.' },
+      valido_dias: { type: ['integer', 'null'], minimum: 1, maximum: 3650, description: 'Dias até vencer; null = não vence.' },
+      idempotency_key: CHAVE_IDEMPOTENTE_JSON,
+    },
+    required: ['client_id', 'area', 'categoria', 'texto', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: UUID,
+      area: z.enum(AREAS_DO_CEREBRO),
+      categoria: z.enum(CATEGORIAS_DO_CEREBRO),
+      texto: z.string().min(3).max(600),
+      motivo: z.string().max(400).optional(),
+      evidencia: z.string().max(400).optional(),
+      referencia_id: UUID.optional(),
+      valido_dias: z.number().int().min(1).max(3650).nullable().optional(),
+      idempotency_key: CHAVE_IDEMPOTENTE,
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await _cerebroRegistrar(parsed.data as Parameters<typeof _cerebroRegistrar>[0], ctx);
+  },
+};
+
 // ─── Project Memory (persistent, large context per client/project) ─────────
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
 
@@ -2959,8 +3376,10 @@ const MAPA_DO_PAINEL = [
   { area: 'Relatorios', rota: '/relatorios', para: 'Relatorios do cliente.', pelo_mcp: 'aceleriq_list_reports, aceleriq_create_report_draft' },
   { area: 'Calendario editorial', rota: '/calendario', para: 'Pautas e publicacoes.', pelo_mcp: 'aceleriq_list_editorial_calendar, aceleriq_create_editorial_item' },
   { area: 'Anuncios', rota: '/anuncios', para: 'Campanhas, criativos e desempenho de midia.', pelo_mcp: 'aceleriq_get_ads_campaigns, aceleriq_get_ads_performance, aceleriq_get_ads_creatives' },
-  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha.', pelo_mcp: 'aceleriq_mesa_ads_contexto' },
-  { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas.', pelo_mcp: 'aceleriq_mesa_foto_contexto' },
+  { area: 'Mesa Ads', rota: '/mesa-ads', para: 'Oferta, plano de teste com angulos, porques e notas do Jev, Estudio Ads, pacote de copy e envio ao gestor de trafego (com ZIP completo). Estude aqui antes de subir campanha; aja com as ferramentas de acao (OAuth).', pelo_mcp: 'aceleriq_mesa_ads_contexto (leitura), aceleriq_mesa_ads_briefing_salvar, aceleriq_mesa_ads_oferta_salvar, aceleriq_mesa_ads_oferta_do_contexto (acao)' },
+  { area: 'Mesa Foto', rota: '/mesa-foto', para: 'Estudio fotografico: acervo, kits (produto, pessoa, alimento), ensaios, versoes e fotos aprovadas. Os ids das fotos aprovadas sao os que se anexam a campanha.', pelo_mcp: 'aceleriq_mesa_foto_contexto (leitura); anexar foto a campanha: aceleriq_mesa_campanha_salvar' },
+  { area: 'Mesa do cliente', rota: '/mesa', para: 'Calendario do mes com o estrategista, campanhas (briefing, imagens, conteudos) e o Estudio de arte com entrega e aprovacao.', pelo_mcp: 'aceleriq_mesa_calendario_pedido, aceleriq_mesa_calendario_gravar, aceleriq_mesa_campanha_criar, aceleriq_mesa_campanha_salvar, aceleriq_mesa_enviar_para_aprovacao (acao, OAuth)' },
+  { area: 'Cerebro do cliente', rota: '/mesa', para: 'O que o cliente ja ensinou por area (preferencias, o que evitar, ajustes, reprovacoes com motivo, o que performou), com o resumo que entra no prompt de cada agente.', pelo_mcp: 'aceleriq_cerebro_do_cliente (leitura), aceleriq_cerebro_registrar (escrita, sem duplicar)' },
   { area: 'Metricas', rota: '/metricas', para: 'Numeros de redes sociais.', pelo_mcp: 'aceleriq_get_social_metrics' },
   { area: 'Contratos', rota: '/contratos', para: 'Contratos e termos.', pelo_mcp: 'aceleriq_list_contracts, aceleriq_create_contract' },
 ] as const;
@@ -3618,6 +4037,17 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Mesas (v1.46.0): estudar o que foi gerado antes de rodar tráfego.
   mesaAdsContextoTool,
   mesaFotoContextoTool,
+  // MCP 2.3: o agente age nas mesas e o cérebro do cliente aprende.
+  cerebroDoClienteTool,
+  cerebroRegistrarTool,
+  calendarioPedidoTool,
+  calendarioGravarTool,
+  campanhaCriarTool,
+  campanhaSalvarTool,
+  adsBriefingSalvarTool,
+  adsOfertaSalvarTool,
+  adsOfertaDoContextoTool,
+  enviarParaAprovacaoTool,
   // Files v2 (Bloco B — v1.7.0)
   ...(FILE_WRITE_ENABLED ? [
     prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,

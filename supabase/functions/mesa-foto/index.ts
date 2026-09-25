@@ -53,6 +53,11 @@
  *   grava direcao.campanha_mesa
  * - modelo_sugerir { client_id, pedido?, campanha_id? } -> { sugestao, avisos } (ficha da persona pelo brief; não grava)
  * - versao_decidir aprovando grava a foto no acervo com as tags mesa_foto, gerada e ensaio:<id> (o Estúdio acha por elas)
+ * Frente D (25/09; docs/mesa-foto/CLONES.md):
+ * - preparar modo fundo_transparente ("Tirar fundo"): só o alfa do GPT Image, alinhado à foto original (recorte.ts)
+ * - clones_listar, clone_criar, clone_ler, clone_editar, clone_folha_gerar, clone_imagem_decidir, clone_variacao_gerar,
+ *   clone_conferir, clone_pacote (clones.ts; pessoa real só com autorização) e estimar clone_folha|clone_variacao|clone_conferir
+ * - biblioteca_limpar_exemplos, biblioteca_exemplos_estimar, biblioteca_exemplo_proximo (biblioteca-lote.ts; só admin)
  *
  * Regras duras: original imutável (toda alteração é derivada com derivada_de);
  * identidade separada de estilo (referência de estilo vai depois das fontes,
@@ -183,6 +188,8 @@ import {
 import { SEMENTE_DA_BIBLIOTECA, VERSAO_DA_SEMENTE } from "./biblioteca-semente.ts";
 import { ACOES_LONGAS_DE_MODELOS, acoesDeModelos, ALVOS_DE_ESTIMATIVA_DE_MODELOS } from "./modelos.ts";
 import { ACOES_LONGAS_DO_CANVAS, acoesDoCanvas, ALVOS_DE_ESTIMATIVA_DO_CANVAS } from "./canvas.ts";
+import { ACOES_LONGAS_DE_CLONES, acoesDeClones, ALVOS_DE_ESTIMATIVA_DE_CLONES } from "./clones.ts";
+import { ACOES_LONGAS_DA_BIBLIOTECA, acoesDaBibliotecaEmLote } from "./biblioteca-lote.ts";
 import type { FerramentasDaMesa } from "./ferramentas.ts";
 import {
   AZIMUTES,
@@ -218,12 +225,11 @@ import {
   dimensoesDecodificando,
   ehRecorte,
   emPng,
-  fracaoTransparente,
   mascaraProtegendo,
-  recorteComPixelsOriginais,
   reduzir,
   telaDeTrabalho,
 } from "./imagem.ts";
+import { abrirFoto, avisoDoRecorte, fracaoTransparenteDe, LADO_DO_RECORTE, recortePreservandoOriginal, telaDoRecorte } from "./recorte.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -821,13 +827,30 @@ const REGRAS_DA_CASA = `REGRAS DA CASA (Mesa Foto):
 - A Mesa é a principal e a Mesa Foto é ferramenta dela: use o brief, a marca, a história, o porquê e o público do cliente, e a campanha que vem em cliente.campanha_escolhida (ou, sem ela, cliente.campanha_do_mes, do calendário editorial). Tema, período, oferta e identidade da campanha orientam cenário, props, paleta de apoio e clima, sempre dentro da marca; a campanha nunca muda o produto.
 - Português do Brasil, sem travessão.`;
 
+/**
+ * Estética atual (pedido do dono, 25/09: "está muito antigo; quero mais atual:
+ * as cores, ambientes diferentes"). Vale para o diretor, as variações e a
+ * campanha. Não muda nenhuma regra da casa: fidelidade, nunca escurecer,
+ * pessoa só com autorização.
+ */
+const ESTETICA_ATUAL = `ESTÉTICA ATUAL (2025/2026), o padrão de toda direção:
+- Editorial limpo e fotográfico: parece foto de marca contemporânea tirada por fotógrafo de verdade, não banco de imagem, não render 3D, não anúncio dos anos 2010.
+- Luz natural suave e com direção: janela lateral, sol de fim de tarde filtrado por cortina de linho, céu aberto na sombra, flash direto suave de editorial quando a marca pede energia. Sombras reais, macias e com forma; nada de luz chapada de estúdio antigo.
+- Paletas atuais e com intenção: neutros quentes (areia, aveia, off-white, argila, terracota suave), verdes sálvia e oliva, azul acinzentado, manteiga, cacau, e um acento de cor da marca; tons sólidos e superfícies tingidas no lugar de degradê.
+- Cenários contemporâneos e reais: cozinha com pedra natural ou microcimento, bancada de travertino, madeira clara, linho, cerâmica artesanal, papel colorido em tom sólido (papel de fundo de cor), acrílico e vidro com sombra projetada, arquitetura com sombra de janela, rua e café com luz do dia, interior com plantas e objetos de design; props poucos e com função.
+- Composição de hoje: respiro, assimetria, recorte ousado, ponto de vista de celular quando o formato é UGC, vistas de cima com sombras gráficas, close de textura; conteúdo vertical pensado para 4:5 e 9:16.
+- UGC autêntico quando o uso é Reels, Stories ou anúncio nativo: mão real, luz do ambiente, pequenas imperfeições, sem pose de catálogo.
+- EXEMPLOS DE DIREÇÃO: "sérum sobre bancada de travertino, sol das 17h entrando pela janela e desenhando sombra de folhagem, paleta areia e sálvia"; "tênis sobre papel de fundo terracota sólido, flash direto suave, sombra dura curta e gráfica"; "café na mão, mesa de madeira clara num café com janela grande, luz do dia, celular na altura do peito"; "óculos em pedestal de acrílico com sombra colorida projetada no fundo off-white, luz lateral macia".
+- EVITE (clichês antigos): fundo degradê, vinheta, HDR, bokeh exagerado, reflexo espelhado em acrílico preto, fumaça e faíscas, luz neon sem motivo, fundo preto dramático sem pedido da marca, flutuação sem motivo, saturação alta, filtro vintage pesado, cenário de banco de imagem (escritório genérico, aperto de mão, gente sorrindo para a câmera sem motivo).`;
+
 /** Linguagem de direção de arte publicitária usada pelo diretor em todo plano. */
 const PADRAO_PUBLICITARIO = `PADRÃO DE FOTOGRAFIA PUBLICITÁRIA:
 - Cada foto tem intenção: para que serve (anúncio, feed, catálogo, capa) e o que o olhar vê primeiro.
 - Luz descrita como fotógrafo: fonte e tamanho (softbox, octabox, janela, sol filtrado), direção, altura, qualidade (dura ou suave), temperatura de cor, preenchimento e recorte.
 - Cenário concreto: superfície e material, fundo, planos de profundidade, props com função (nunca aleatórios, sem marca de terceiros, sem texto), paleta do cliente no cenário e nunca no produto.
 - Variações diferentes de verdade: não repita a mesma combinação de câmera, cenário, luz e paleta; cada uma responde a um uso diferente.
-- Produto fiel: formato, cor, texto e proporções do kit; escala real em relação às mãos e ao cenário.`;
+- Produto fiel: formato, cor, texto e proporções do kit; escala real em relação às mãos e ao cenário.
+${ESTETICA_ATUAL}`;
 
 const SISTEMA_LEITOR = `Você é o assistente de estúdio fotográfico da agência Aceleriq. Olhe a foto real do cliente e descreva só o que se vê.
 - descricao: até 3 frases objetivas sobre o assunto e a foto.
@@ -1798,7 +1821,8 @@ async function estimar(ch: Chamador, corpo: Record<string, unknown>) {
   }
   if (ALVOS_DE_ESTIMATIVA_DE_MODELOS.includes(acao)) return await MODELOS.estimar(ch, corpo, acao);
   if (ALVOS_DE_ESTIMATIVA_DO_CANVAS.includes(acao)) return await CANVAS.estimar(ch, corpo);
-  throw new ErroHttp(400, "alvo_invalido", `acao_alvo: preparar, tomada_gerar, ensaio, biblioteca_exemplo, ${[...ALVOS_DE_ESTIMATIVA_DE_MODELOS, ...ALVOS_DE_ESTIMATIVA_DO_CANVAS].join(", ")}.`);
+  if (ALVOS_DE_ESTIMATIVA_DE_CLONES.includes(acao)) return await CLONES.estimar(ch, corpo, acao);
+  throw new ErroHttp(400, "alvo_invalido", `acao_alvo: preparar, tomada_gerar, ensaio, biblioteca_exemplo, ${[...ALVOS_DE_ESTIMATIVA_DE_MODELOS, ...ALVOS_DE_ESTIMATIVA_DO_CANVAS, ...ALVOS_DE_ESTIMATIVA_DE_CLONES].join(", ")}.`);
 }
 
 // ------------------------------------------------------------------ ensaio
@@ -2784,9 +2808,18 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
 
   // A derivada sai na resolução de trabalho (até 1920 px no lado maior): a foto chega reduzida
   // a 2048 px pelo Storage, o que também poupa memória da função com originais grandes.
-  const bytes = (await baixarReduzida(imagem.storage_bucket, imagem.storage_path, LADO_PREPARO, imagem.nome)).bytes;
+  // "Tirar fundo" (25/09) devolve a FOTO ORIGINAL com o alfa alinhado, até 1600 px no lado
+  // maior: decodificar JPEG é o passo mais caro e o limite é de 2 s de CPU (medido em recorte.ts).
+  const usaRecorte = modo === "fundo_transparente" || (modo === "fundo_branco" && !protegidas.length);
+  const bytes = (await baixarReduzida(imagem.storage_bucket, imagem.storage_path, usaRecorte ? LADO_DO_RECORTE : LADO_PREPARO, imagem.nome)).bytes;
   const dim = dimensoesDaImagem(bytes) ?? await dimensoesDecodificando(bytes);
-  const recorteNaEntrada = await ehRecorte(bytes);
+  // A foto é aberta uma vez só no caminho do recorte; JPEG não tem alfa (não precisa abrir para saber).
+  let aberta: Awaited<ReturnType<typeof abrirFoto>> | null = null;
+  const recorteNaEntrada = mimeDe(bytes) === "image/jpeg"
+    ? false
+    : usaRecorte
+    ? fracaoTransparenteDe(aberta = await abrirFoto(bytes)) >= 0.02
+    : await ehRecorte(bytes);
   if (modo === "fundo_transparente" && recorteNaEntrada) throw new ErroHttp(409, "ja_e_recorte", "Esta foto já está sem fundo.");
   let tamanho = tamanhoDeTrabalho(dim.largura, dim.altura);
   const qualidade = lerQualidade(corpo.qualidade);
@@ -2852,17 +2885,65 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     saldo = s.saldoUsd;
     reserva = s.reservaUsada ?? reserva;
   };
-  /** Recorte com os pixels originais (o gerador só entrega o alfa); fundo opaco na volta vira erro explícito. */
+  // Objeto (e não let): o recorte grava por dentro da função abaixo.
+  const doRecorte: { info: { alinhou: boolean; erro: number; situacao: string; aviso: string | null } | null } = { info: null };
+  /**
+   * "Tirar fundo" (dono, 25/09): o GPT Image devolve a tela com fundo
+   * transparente e só o ALFA dele é usado, alinhado à foto original
+   * (recorte.ts). A cor de cada pixel é a da foto original, na resolução em
+   * que chegou. Fundo opaco, recorte vazio ou assunto redesenhado na volta
+   * viram erro explícito (nada é gravado; a chamada já foi cobrada).
+   */
   const recortar = async (): Promise<Uint8Array> => {
-    const g = await gerar({ fundo: "transparente", protegidas: [] });
-    somar(g.saida);
-    if ((await fracaoTransparente(g.png)) < 0.02) {
-      throw new ErroHttp(502, "fundo_nao_veio_transparente", "O gerador devolveu a foto com fundo opaco. Nada foi gravado; o custo da chamada já foi cobrado.", {
-        custo_usd: arred6(custo),
-        saldo_usd: saldo,
+    const mImg = await modeloDeImagem(corpo.modelo_imagem_id);
+    if (!aceitaFundoTransparente(mImg)) {
+      throw new ErroHttp(409, "fundo_transparente_nao_suportado", `O modelo de imagem ${mImg.rotulo ?? mImg.id} não gera fundo transparente. Escolha um GPT Image ou marque a área do assunto.`, {
+        modelo_imagem_id: mImg.id,
       });
     }
-    return await recorteComPixelsOriginais(g.trabalho, g.png);
+    const o = aberta ?? await abrirFoto(bytes);
+    const prompt = promptDoPreparo({ modo: "fundo_transparente", tipo, cenario: null, instrucao, guiaTexto: null, estilos: [], temAreasProtegidas: false, entradaRecortada: false });
+    const tentar = async (t: string) => {
+      const { tela, png } = await telaDoRecorte(o, t);
+      const saida = await chamarImagem({
+        clientId,
+        modeloId: mImg.id,
+        prompt,
+        referencias: [],
+        qualidade,
+        tamanho: t,
+        tamanhoFixo: true,
+        editar: { bytes: png },
+        fundo: "transparente",
+        referencia: { tipo: REF_IMAGEM, id: imagem.id },
+        criadoPor: ch.userId,
+        tarefa: TAREFA_ESTUDIO,
+        agente: AGENTE_GERADOR,
+      });
+      return { tela, saida };
+    };
+    let volta: Awaited<ReturnType<typeof tentar>>;
+    try {
+      volta = await tentar(tamanho);
+    } catch (e) {
+      const classico = tamanhoDeTrabalhoClassico(dim.largura, dim.altura);
+      if (!(recusouTamanho(e) && classico !== tamanho)) throw e;
+      tamanho = classico;
+      volta = await tentar(classico);
+    }
+    somar(volta.saida);
+    const falhou = (codigo: string, mensagem: string) =>
+      new ErroHttp(502, codigo, `${mensagem} Nada foi gravado; o custo da chamada já foi cobrado.`, { custo_usd: arred6(custo), saldo_usd: saldo });
+    const g = await abrirFoto(volta.saida.png).catch(() => null);
+    if (!g) throw falhou("imagem_invalida", "O gerador devolveu uma imagem que não abre.");
+    if (fracaoTransparenteDe(g) < 0.02) throw falhou("fundo_nao_veio_transparente", "O gerador devolveu a foto com fundo opaco.");
+    const r = await recortePreservandoOriginal(o, g, volta.tela);
+    if (r.situacao === "vazio") throw falhou("recorte_vazio", "O gerador não achou o assunto (a máscara veio vazia). Marque a área do assunto e tente de novo.");
+    if (r.situacao === "desalinhado") {
+      throw falhou("recorte_desalinhado", "O gerador redesenhou o assunto e a máscara não bate com a foto original. Tente de novo ou use uma foto com o assunto mais destacado do fundo.");
+    }
+    doRecorte.info = { alinhou: r.alinhou, erro: Math.round(r.erro * 100) / 100, situacao: r.situacao, aviso: avisoDoRecorte(r) };
+    return r.png;
   };
 
   if (modo === "fundo_transparente") {
@@ -2916,8 +2997,10 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     nome: `${imagem.nome} (${ROTULO_DO_PREPARO[modo]})`.slice(0, 160),
     pasta: "Mesa Foto / Preparadas",
     categoria: imagem.categoria,
-    tags: ["mesa_foto", `preparo:${modo}`, ...(derivada.gerada ? ["gerada"] : [])],
-    descricao: PROMESSA_DO_MODO[derivada.modo],
+    tags: ["mesa_foto", `preparo:${modo}`, ...(derivada.gerada ? ["gerada"] : []), ...(modo === "fundo_transparente" ? ["sem_fundo"] : [])],
+    descricao: modo === "fundo_transparente"
+      ? `Sem fundo: pixels originais do assunto; do gerador veio só a máscara, alinhada à foto original.${doRecorte.info?.aviso ? ` ${doRecorte.info.aviso}` : ""}`.slice(0, 1000)
+      : PROMESSA_DO_MODO[derivada.modo],
     derivada_de: imagem.id,
     gerada: derivada.gerada,
     modo: derivada.modo,
@@ -2936,6 +3019,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
     modo_derivada: derivada.modo,
     promessa: PROMESSA_DO_MODO[derivada.modo],
     tamanho_de_trabalho: rota === "gerador" || modo !== "fundo_branco" || !recorteNaEntrada ? tamanho : null,
+    recorte: doRecorte.info,
+    aviso: doRecorte.info?.aviso ?? null,
     custo_usd: arred6(custo),
     saldo_usd: saldo,
     reserva_usada: reserva,
@@ -3824,6 +3909,8 @@ const FERRAMENTAS: FerramentasDaMesa = {
 const MODELOS = acoesDeModelos(FERRAMENTAS);
 const CANVAS = acoesDoCanvas(FERRAMENTAS);
 const CAMPANHAS = acoesDeCampanhas(FERRAMENTAS);
+const CLONES = acoesDeClones(FERRAMENTAS);
+const BIBLIOTECA_EM_LOTE = acoesDaBibliotecaEmLote(FERRAMENTAS, { ehAdmin, atualizarItemDaBiblioteca, modeloDeImagem });
 
 const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>> = {
   biblioteca_semear: bibliotecaSemear,
@@ -3858,6 +3945,9 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   ...CANVAS.acoes,
   // Ligada à Mesa (25/09): campanhas do cliente e a do mês pelo calendário (sem IA; campanhas.ts).
   campanhas_listar: CAMPANHAS.campanhas_listar,
+  // Clones de pessoa real com autorização (25/09; clones.ts) e a biblioteca em lote (biblioteca-lote.ts).
+  ...CLONES.acoes,
+  ...BIBLIOTECA_EM_LOTE.acoes,
 };
 
 /**
@@ -3869,7 +3959,7 @@ const ACOES_LONGAS = new Set([
   "acervo_registrar", "acervo_ler_foto", "kit_sugerir", "kit_salvar", "ensaio_planejar", "tomada_gerar", "versao_conferir",
   "versao_decidir", "preparar", "enviar", "referencia_importar", "agente_conversar", "agente_aplicar", "estimar",
   "produto_identificar", "variacoes_planejar", "campanha_planejar", "biblioteca_ilustrar", "biblioteca_exemplo_gerar",
-  ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS,
+  ...ACOES_LONGAS_DE_MODELOS, ...ACOES_LONGAS_DO_CANVAS, ...ACOES_LONGAS_DE_CLONES, ...ACOES_LONGAS_DA_BIBLIOTECA,
 ]);
 
 Deno.serve(async (req) => {

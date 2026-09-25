@@ -46,7 +46,8 @@ describe("estudio-arte: a lamina inteira sai do gerador", () => {
     expect(fonte).toContain("const TAMANHO_GERADOR = TAMANHO_4X5;");
     // O tamanho sai do quadro do card: no post (social) e sempre TAMANHO_GERADOR (4:5).
     expect(corpoDe("gerarCard")).toContain("const quadro = quadroDoCard(t, card);");
-    expect(corpoDe("quadroDoCard")).toMatch(/if \(!ehAds\(t\)\) \{\s*return \{\s*formato: null,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,/);
+    // Post em 4:5 (sem formato escolhido) segue 1088 x 1360; 3:4, 1:1 e 9:16 vêm do QUADRO_DO_POST (25/09).
+    expect(corpoDe("quadroDoCard")).toMatch(/return \{\s*formato: null,\s*post,\s*largura: LARGURA_LAMINA,\s*altura: ALTURA_LAMINA,\s*tamanho: TAMANHO_GERADOR,/);
     expect(corpoDe("gerarCard")).toContain("tamanho: card.layout ? quadro.tamanho : TAMANHO_2X3,");
     expect(corpoDe("gerarCard")).toContain("promptSe2x3: card.layout && !quadro.fixo ? formatoPara2x3(prompt) : undefined,");
     expect(fonte).toContain("const levaLogo = (t: Trabalho, ordem: number) => ordem === 1 || ordem === totalCards(t);");
@@ -61,7 +62,7 @@ describe("estudio-arte: a lamina inteira sai do gerador", () => {
   it("logo so vai no prompt quando o arquivo existe (sem anexo o gerador inventaria uma)", () => {
     const gerar = corpoDe("gerarCard");
     expect(gerar).toContain("let comLogo = false;");
-    expect(gerar).toContain("marca.temLogo = comLogo || !!logoNoCodigo;");
+    expect(gerar).toContain("marca.temLogo = comLogo || logoNoCodigo;");
   });
 
   it("qualidade padrao media (US$ 0,01 por lamina contra US$ 0,04 da alta)", () => {
@@ -84,12 +85,13 @@ describe("estudio-arte: uma lamina por chamada", () => {
   });
 
   it("o gerador so e chamado em gerar (replicar referencia, foto composta, foto real ou panorama, normal, um por vez) e em ajustar, fora de laco", () => {
-    // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada).
+    // + 1 no panorama do carrossel contínuo (garantirFundoContinuo, um trecho por chamada); + 1 do modo recorte (25/09).
     // A tela dupla (modo "continuar") saiu em 25/09: com o panorama ela nunca rodava.
-    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(6);
+    expect(fonte.match(/await chamarImagem\(/g) ?? []).toHaveLength(7);
     expect(corpoDe("garantirFundoContinuo").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     const g = corpoDe("gerarCard");
-    expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(4);
+    // 5 modos desde 25/09: replicar, foto composta, foto real ou panorama, recorte (pessoa ou produto sem fundo) e normal.
+    expect(g.match(/await chamarImagem\(/g) ?? []).toHaveLength(5);
     expect(g).not.toContain("continuar");
     // gerar_card nunca gera o trecho do panorama (trecho e lâmina juntos passavam de 400 s).
     expect(g).not.toContain("garantirFundoContinuo(");
@@ -97,7 +99,7 @@ describe("estudio-arte: uma lamina por chamada", () => {
     expect(g.indexOf("if (replicar) {")).toBeLessThan(g.indexOf("if (baseFoto && elementos.length) {"));
     expect(g.indexOf("if (baseFoto && elementos.length) {")).toBeLessThan(g.indexOf("if (baseFoto) {"));
     expect(g.indexOf("if (baseFoto) {")).toBeLessThan(g.indexOf("// 3) Normal."));
-    expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(4);
+    expect(g.match(/return await gravarVersao\(/g) ?? []).toHaveLength(5);
     expect(corpoDe("ajustarCard").match(/await chamarImagem\(/g) ?? []).toHaveLength(1);
     // Nenhum laco envolve a chamada ao gerador.
     const gerar = corpoDe("gerarCard");

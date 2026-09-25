@@ -256,16 +256,17 @@ describe("campanhas", () => {
     expect(corpo.hype).toEqual({ titulo: "H" });
   });
 
-  it("Desenhar selo chama campanha_selo e Gravar tudo chama gravar com o projeto da proposta", async () => {
+  it("Desenhar selo chama campanha_selo e Mandar para a agenda grava os conteúdos escolhidos com o projeto da proposta", async () => {
     mock.tabelas.calendario_propostas = [proposta];
     montar(h(CampanhaDetalhe, { campanha }));
     await screen.findByText("Teaser do amor");
     fireEvent.click(screen.getByRole("button", { name: /Desenhar selo/ }));
     await waitFor(() => expect(chamadasDe("campanha_selo").length).toBe(1));
     expect(chamadasDe("campanha_selo")[0]).toEqual({ acao: "campanha_selo", campanha_id: campanha.id });
-    fireEvent.click(screen.getByRole("button", { name: /Gravar tudo na agenda/ }));
+    // 25/09: a equipe escolhe (todos os que faltam vêm marcados) e manda só os escolhidos.
+    fireEvent.click(screen.getByRole("button", { name: /Mandar para a agenda \(1\)/ }));
     await waitFor(() => expect(chamadasDe("gravar").length).toBe(1));
-    expect(chamadasDe("gravar")[0]).toEqual({ acao: "gravar", proposta_id: proposta.id, project_id: proposta.project_id });
+    expect(chamadasDe("gravar")[0]).toEqual({ acao: "gravar", proposta_id: proposta.id, tema_ids: ["c1"], project_id: proposta.project_id });
   });
 
   it("a aba Campanhas lista as campanhas do cliente", async () => {

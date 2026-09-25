@@ -56,8 +56,10 @@ const carregarBiblioteca = () => import("@/components/mesa-foto/EtapaBiblioteca"
 const carregarCampanha = () => import("@/components/mesa-foto/EtapaCampanha");
 const carregarCriar = () => import("@/components/mesa-foto/EtapaCriar");
 const carregarModelos = () => import("@/components/mesa-foto/EtapaModelos");
+const carregarClones = () => import("@/components/mesa-foto/EtapaClones");
 // O Canvas (React Flow, ~60 KB) não entra na pré-carga: só baixa quando a aba abre.
 const EtapaModelos = lazy(carregarModelos);
+const EtapaClones = lazy(carregarClones);
 const EtapaCanvas = lazy(() => import("@/components/mesa-foto/EtapaCanvas"));
 const EtapaCampanha = lazy(carregarCampanha);
 const EtapaCriar = lazy(carregarCriar);
@@ -236,7 +238,7 @@ export default function MesaFoto() {
   useEffect(
     () =>
       quandoOcioso(() => {
-        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos]) {
+        for (const carregar of [carregarAcervo, carregarKits, carregarCriar, carregarEnsaio, carregarCampanha, carregarPreparar, carregarRevisar, carregarUsar, carregarBiblioteca, carregarModelos, carregarClones]) {
           carregar().catch(() => {
             /* sem rede agora: baixa quando a etapa abrir */
           });
@@ -434,6 +436,7 @@ export default function MesaFoto() {
                 {etapa === "usar" && <EtapaUsar />}
                 {etapa === "biblioteca" && <EtapaBiblioteca />}
                 {etapa === "modelos" && <EtapaModelos />}
+                {etapa === "clones" && <EtapaClones />}
                 {etapa === "canvas" && <EtapaCanvas />}
               </Suspense>
             </div>

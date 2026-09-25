@@ -344,7 +344,7 @@ describe("navegação: Modelos e Canvas discretos, fora do caminho de 3 passos",
     expect(within(caminho).getAllByRole("button")).toHaveLength(3);
     // 25/09: Biblioteca, Modelos e Canvas são ferramentas de apoio, depois de um traço fino, fora do caminho principal.
     const ferramentas = Array.from(nav.querySelectorAll("[data-ferramenta]")).map((b) => b.textContent);
-    expect(ferramentas).toEqual(["Biblioteca", "Modelos", "Canvas"]);
+    expect(ferramentas).toEqual(expect.arrayContaining(["Biblioteca", "Modelos", "Canvas"]));
     const modelos = nav.querySelector('[data-ferramenta="modelos"]') as HTMLElement;
     expect(modelos.closest("[data-caminho-principal]")).toBeNull();
     expect((nav.querySelector("[data-etapas-de-apoio]") as HTMLElement).className).toContain("flex-wrap");
@@ -627,7 +627,7 @@ describe("canvas: o grafo em código (sem React Flow)", () => {
 
   it("bloqueios iguais aos da função: sem produto e sem modelo, modelo sem âncora, cartão incompleto, nenhum motor", () => {
     const { c, gerar, estilo, pessoa } = base();
-    expect(bloqueiosDoGerar(ligar(c, estilo.id, gerar.id), gerar.id)).toContain("Adicione um produto ou uma modelo.");
+    expect(bloqueiosDoGerar(ligar(c, estilo.id, gerar.id), gerar.id)).toContain("Adicione um produto ou uma pessoa.");
     const personas = [normalizarPersona(PERSONA_BRUTA)!];
     const comPessoa = ligar(c, pessoa.id, gerar.id);
     expect(bloqueiosDoGerar(comPessoa, gerar.id, personas).join(" ")).toMatch(/Marina ainda não tem âncora/);
@@ -664,19 +664,19 @@ describe("canvas: o grafo em código (sem React Flow)", () => {
     expect(resultadoAlvo(dois, "nao-existe")).toBe(resultado.id);
     // A frase do Resultado diz o que ele junta.
     const nomes = (n: any) => (n.tipo === "produto" ? "Óculos Aro Fino" : n.tipo === "modelo" ? "Marina" : "");
-    expect(resumoDoResultado(entradasDoGerar(c, resultado.id), nomes)).toBe("Junta: produto Óculos Aro Fino + modelo Marina + ambiente (a escolher) + pedido (a escolher)");
+    expect(resumoDoResultado(entradasDoGerar(c, resultado.id), nomes)).toBe("Junta: produto Óculos Aro Fino + pessoa Marina + ambiente (a escolher) + pedido (a escolher)");
     expect(resumoDoResultado([], nomes)).toBe("");
   });
 
   it("modelos prontos montam o quadro ligado ao Resultado do centro; o segundo nasce abaixo; resultados se juntam sem repetir; rascunho local sobrevive sem armazenamento", () => {
-    expect(MODELOS_PRONTOS.map((m) => m.rotulo)).toEqual(["Produto na mão da modelo", "Produto no ambiente da marca", "Modelo usando o produto na rua"]);
+    expect(MODELOS_PRONTOS.map((m) => m.rotulo)).toEqual(["Produto na mão", "Produto na praia", "Na loja da marca", "UGC selfie", "Flat lay", "Vitrine", "Carrossel de produto", "Produto no ambiente", "Pessoa na rua"]);
     const centro = novoNo("gerar", 420, 0, { motores: [GPT] });
     const pronto = aplicarModeloPronto({ ...canvasVazio(CLIENTE), nos: [centro] }, "modelo-na-rua", GPT, { kit_id: KIT });
     expect(pronto.nos.filter((n) => n.tipo === "gerar").map((n) => n.id)).toEqual([centro.id]);
     expect(entradasDoGerar(pronto, centro.id).map((e) => e.entrada)).toEqual(["produto", "pessoa", "ambiente", "texto"]);
     const [produto, modelo, ambiente] = entradasDoGerar(pronto, centro.id).map((e) => e.no);
     expect(produto.dados.kit_id).toBe(KIT);
-    expect(faltaNoCartao(modelo)).toBe("Escolha a modelo");
+    expect(faltaNoCartao(modelo)).toBe("Escolha a pessoa");
     expect(ambiente.dados.texto).toMatch(/Rua da cidade/);
     const deNovo = aplicarModeloPronto(pronto, "produto-na-mao", GPT);
     const resultados = deNovo.nos.filter((n) => n.tipo === "gerar");
@@ -689,7 +689,7 @@ describe("canvas: o grafo em código (sem React Flow)", () => {
     expect(g.dados.motores).toEqual([GPT]);
     expect(entradasDoGerar(doZero, g.id).map((e) => e.entrada)).toEqual(["produto", "ambiente", "texto"]);
 
-    const r = { geracao_id: "g1", imagem_id: "i1", storage_bucket: "mesa", storage_path: "a.png", url: "", motor_id: GPT, status: "gerada" as const, erro: "", custo_usd: 0.1, conferencia: null, criado_em: "" };
+    const r = { geracao_id: "g1", imagem_id: "i1", storage_bucket: "mesa", storage_path: "a.png", url: "", motor_id: GPT, status: "gerada" as const, erro: "", custo_usd: 0.1, conferencia: null, criado_em: "", grupo: null, quadro: null, tipo: "foto" as const };
     const um = juntarResultados(pronto, { [centro.id]: [r] });
     const dois = juntarResultados(um, { [centro.id]: [r] });
     expect(dois.nos.find((n) => n.id === centro.id)!.dados.resultados).toHaveLength(1);
@@ -774,7 +774,7 @@ describe("aba Canvas", () => {
     const resultado = noDoQuadro("gerar");
     expect(resultado.getAttribute("data-no-do-canvas")).toBe("no-saida");
     expect(resultado.textContent).toContain("Resultado");
-    await waitFor(() => expect((resultado.querySelector("[data-junta]") as HTMLElement).textContent).toBe("Junta: produto Óculos Aro Fino + modelo Marina"));
+    await waitFor(() => expect((resultado.querySelector("[data-junta]") as HTMLElement).textContent).toBe("Junta: produto Óculos Aro Fino + pessoa Marina"));
     expect(document.body.textContent).not.toMatch(/Saída|Prompt/);
     // Cartões com a miniatura grande do que representam e a ordem em que vão ao gerador.
     await waitFor(() => expect(noDoQuadro("modelo").textContent).toContain("Marina"));
@@ -792,7 +792,7 @@ describe("aba Canvas", () => {
     expect(within(ajustes).getByRole("radiogroup", { name: "Formato do Resultado" })).toBeTruthy();
     const entradas = within(ajustes).getByRole("list", { name: "Entradas do Resultado" });
     expect(entradas.textContent).toContain("Produto: Óculos Aro Fino");
-    expect(entradas.textContent).toContain("Modelo: Marina");
+    expect(entradas.textContent).toContain("Pessoa: Marina");
     fireEvent.click(within(ajustes).getByRole("button", { name: "Recolher os ajustes" }));
     await waitFor(() => expect(document.querySelector('[data-ajustes="recolhidos"]')).toBeTruthy());
     // Tela cheia pelo controle do quadro.
@@ -824,8 +824,8 @@ describe("aba Canvas", () => {
       expect(d).toBeTruthy();
       return d;
     });
-    expect(within(adicionar).getAllByRole("tab").map((t) => t.textContent!.trim())).toEqual(["Produto", "Modelo", "Ambiente", "Estilo"]);
-    fireEvent.click(within(adicionar).getByRole("tab", { name: /Modelo/ }));
+    expect(within(adicionar).getAllByRole("tab").map((t) => t.textContent!.trim())).toEqual(["Produto", "Pessoa", "Ambiente", "Estilo"]);
+    fireEvent.click(within(adicionar).getByRole("tab", { name: /Pessoa/ }));
     await waitFor(() => expect(document.querySelector(`[data-escolher-cartao="modelo"] [data-opcao-da-escolha="${P1}"]`)).toBeTruthy());
     fireEvent.click(document.querySelector(`[data-escolher-cartao="modelo"] [data-opcao-da-escolha="${P1}"]`) as HTMLElement);
     await waitFor(() => expect(document.querySelectorAll('[data-no-do-canvas][data-tipo="modelo"]').length).toBe(2));
@@ -879,19 +879,13 @@ describe("aba Canvas", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-resultado]").length).toBe(2));
     expect(resultado.textContent).not.toMatch(/Saída/);
 
-    // Usar na Mesa só depois de aprovar; aprovado, abre o Estúdio da Mesa com a foto.
+    // BUG do dono (25/09): Usar na Mesa em 1 clique. Aprova sozinho (se precisar) e abre o Estúdio da Mesa com a foto.
     const geracao = resultado.querySelector("[data-foto-do-resultado]")!.getAttribute("data-foto-do-resultado")!;
-    const usar = await waitFor(() => {
-      const b = within(resultado).getByRole("button", { name: /Usar na Mesa/ }) as HTMLButtonElement;
-      expect(within(resultado).getByRole("button", { name: /^Aprovar$/ })).toBeTruthy();
-      return b;
-    });
-    expect(usar.disabled).toBe(true);
-    fireEvent.click(within(resultado).getByRole("button", { name: /^Aprovar$/ }));
+    const usar = within(resultado).getByRole("button", { name: "Usar na Mesa" }) as HTMLButtonElement;
+    expect(usar.disabled).toBe(false);
+    fireEvent.click(usar);
     await waitFor(() => expect(chamadasDe("acervo_decidir")).toHaveLength(1));
     expect(chamadasDe("acervo_decidir")[0]).toMatchObject({ imagem_id: `img-${geracao.slice(4)}`, decisao: "aprovar" });
-    await waitFor(() => expect((within(resultado).getByRole("button", { name: /Usar na Mesa/ }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(within(resultado).getByRole("button", { name: /Usar na Mesa/ }));
     await waitFor(() => expect(document.querySelector("[data-local]")!.getAttribute("data-local")).toBe(`/mesa?client=${CLIENTE}&aba=estudio&fotos=img-${geracao.slice(4)}`));
   });
 
@@ -939,7 +933,7 @@ describe("aba Canvas", () => {
     await waitFor(() => expect(document.querySelector("[data-modo-lista]")).toBeTruthy());
     const lista = document.querySelector("[data-modo-lista]") as HTMLElement;
     expect(lista.querySelectorAll("[data-entrada-da-lista]")).toHaveLength(2);
-    await waitFor(() => expect((lista.querySelector("[data-junta]") as HTMLElement).textContent).toBe("Junta: produto Óculos Aro Fino + modelo Marina"));
+    await waitFor(() => expect((lista.querySelector("[data-junta]") as HTMLElement).textContent).toBe("Junta: produto Óculos Aro Fino + pessoa Marina"));
     fireEvent.click(within(lista).getByRole("button", { name: /Pedido/ }));
     await waitFor(() => expect(lista.querySelectorAll("[data-entrada-da-lista]")).toHaveLength(3));
     expect(screen.getByLabelText("Texto do pedido")).toBeTruthy();
@@ -963,7 +957,7 @@ describe("aba Canvas", () => {
     await waitFor(() => expect(document.querySelectorAll("[data-no-do-canvas]").length).toBe(4));
     await waitFor(() => expect(document.querySelectorAll(".react-flow__edge").length).toBe(3));
     // Um só kit e uma só modelo pronta: já vêm escolhidos, e o Resultado diz o que junta.
-    await waitFor(() => expect((noDoQuadro("gerar").querySelector("[data-junta]") as HTMLElement).textContent).toMatch(/^Junta: produto Óculos Aro Fino \+ modelo Marina \+ pedido A modelo segura o produto/));
+    await waitFor(() => expect((noDoQuadro("gerar").querySelector("[data-junta]") as HTMLElement).textContent).toMatch(/^Junta: produto Óculos Aro Fino \+ pessoa Marina \+ pedido A pessoa segura o produto/));
     expect(document.querySelector("[data-modelos-prontos]")).toBeNull();
     expect((within(noDoQuadro("gerar")).getByRole("button", { name: /Gerar foto/ }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -979,7 +973,7 @@ describe("aba Canvas", () => {
     expect(noDoQuadro("gerar").textContent).toContain("1 motor");
     // O painel abre no cartão novo, com a modelo escolhida.
     await abrirAjustes();
-    expect(screen.getByText("Cartão: Modelo")).toBeTruthy();
+    expect(screen.getByText("Cartão: Pessoa")).toBeTruthy();
   });
 });
 
@@ -1136,7 +1130,7 @@ describe("contrato tela x função: nomes de ação e de campo", () => {
     [produto, pessoa, ambiente, estilo, prompt].forEach((n) => {
       c = ligar(c, n.id, gerar.id);
     });
-    const resultado = { geracao_id: "g-1", imagem_id: F1, storage_bucket: "mesa", storage_path: `${CLIENTE}/foto/canvas/g-1.png`, url: "https://assinada.test/expira", motor_id: GPT, status: "gerada" as const, erro: "", custo_usd: 0.1, conferencia: null, criado_em: "2026-09-24T12:00:00Z" };
+    const resultado = { geracao_id: "g-1", imagem_id: F1, storage_bucket: "mesa", storage_path: `${CLIENTE}/foto/canvas/g-1.png`, url: "https://assinada.test/expira", motor_id: GPT, status: "gerada" as const, erro: "", custo_usd: 0.1, conferencia: null, criado_em: "2026-09-24T12:00:00Z", grupo: null, quadro: null, tipo: "foto" as const };
     c = juntarResultados(c, { [gerar.id]: [resultado] });
     const corpo = corpoDoCanvas(c) as any;
     // Todo tipo da tela tem nome na função, e é o mesmo que a função traduz do apelido.

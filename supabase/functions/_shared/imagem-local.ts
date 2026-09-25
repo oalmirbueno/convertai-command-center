@@ -605,22 +605,52 @@ export async function analisarLogo(bytes: Uint8Array): Promise<{ tom: string | n
 }
 
 /**
- * Logo pronta para anexar ao gerador: no máximo 512 px e sem fundo falso.
- * Muita logo chega com o "xadrez" de transparência desenhado na própria imagem
- * (ou com fundo branco); o gerador copia isso como uma caixa. Aqui o fundo
- * claro e sem cor ligado à borda vira transparente (preenchimento a partir das
- * bordas, então o branco de dentro da logo fica).
+ * Logo pronta para anexar ao gerador ou para o código aplicar: no máximo
+ * 512 px e sem fundo falso. Muita logo chega com o "xadrez" de transparência
+ * desenhado na própria imagem ou com fundo branco (ou quase branco, creme,
+ * cinza claro de JPEG); o gerador copiava isso como uma caixa (dono, 25/09:
+ * "a logo tinha um fundo branco; a logo tem que seguir a logo mesmo"). Aqui o
+ * fundo claro e sem cor ligado à borda vira transparente (preenchimento a
+ * partir das bordas, então o branco de dentro da logo fica) e a franja de 1 a
+ * 2 px em volta do desenho perde o resto do fundo (sem contorno branco).
  */
 export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
   const img = await decodificar(bytes);
   const l = img.width > 512 || img.height > 512 ? img.clone().contain(512, 512) : img.clone();
   const W = l.width, H = l.height, b = l.bitmap;
+  // Cor do fundo pela borda: a média dos pixels opacos, claros e sem cor da moldura.
+  let sr = 0, sg = 0, sb = 0, nClaros = 0, nBorda = 0;
+  const olharBorda = (p: number) => {
+    const i = p * 4;
+    nBorda++;
+    if (b[i + 3] < 16) return;
+    const mx = Math.max(b[i], b[i + 1], b[i + 2]), mn = Math.min(b[i], b[i + 1], b[i + 2]);
+    if (mn >= 180 && mx - mn <= 30) {
+      sr += b[i];
+      sg += b[i + 1];
+      sb += b[i + 2];
+      nClaros++;
+    }
+  };
+  for (let x = 0; x < W; x++) {
+    olharBorda(x);
+    olharBorda((H - 1) * W + x);
+  }
+  for (let y = 1; y < H - 1; y++) {
+    olharBorda(y * W);
+    olharBorda(y * W + W - 1);
+  }
+  const temCorDeFundo = nClaros > 0 && nClaros >= nBorda * 0.35;
+  const cor = temCorDeFundo ? [sr / nClaros, sg / nClaros, sb / nClaros] : [255, 255, 255];
+  const distancia = (i: number) => Math.max(Math.abs(b[i] - cor[0]), Math.abs(b[i + 1] - cor[1]), Math.abs(b[i + 2] - cor[2]));
   const fundo = (i: number) => {
     if (b[i + 3] < 16) return true;
     const r = b[i], g = b[i + 1], bl = b[i + 2];
     const max = Math.max(r, g, bl), min = Math.min(r, g, bl);
-    return min >= 200 && max - min <= 18;
+    // Branco e xadrez claro de sempre, ou a cor clara da borda (creme, cinza de JPEG).
+    return (min >= 200 && max - min <= 18) || (temCorDeFundo && min >= 170 && distancia(i) <= 26);
   };
+  // 0 = não visto; 1 = visto e fica; 2 = fundo tirado.
   const visto = new Uint8Array(W * H);
   const pilha: number[] = [];
   for (let x = 0; x < W; x++) pilha.push(x, (H - 1) * W + x);
@@ -632,6 +662,7 @@ export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
     visto[p] = 1;
     if (!fundo(p * 4)) continue;
     b[p * 4 + 3] = 0;
+    visto[p] = 2;
     limpos++;
     const x = p % W, y = (p - x) / W;
     if (x > 0) pilha.push(p - 1);
@@ -640,8 +671,199 @@ export async function logoLimpa(bytes: Uint8Array): Promise<Uint8Array> {
     if (y < H - 1) pilha.push(p + W);
   }
   // Nada ou quase tudo limpo: a logo não tinha fundo falso (ou é branca); vai como veio.
-  if (limpos < W * H * 0.05 || limpos > W * H * 0.97) return bytes;
+  if (limpos < W * H * 0.005 || limpos > W * H * 0.97) return bytes;
+  // Franja: 2 passadas nos pixels colados ao fundo tirado; o que é quase a cor
+  // do fundo fica transparente em proporção e a cor perde a mistura com ele.
+  for (let passe = 0; passe < 2; passe++) {
+    const franja: number[] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const p = y * W + x;
+        if (visto[p] === 2 || b[p * 4 + 3] === 0) continue;
+        if ((x > 0 && visto[p - 1] === 2) || (x < W - 1 && visto[p + 1] === 2) || (y > 0 && visto[p - W] === 2) || (y < H - 1 && visto[p + W] === 2)) {
+          franja.push(p);
+        }
+      }
+    }
+    for (const p of franja) {
+      const i = p * 4;
+      const a = Math.min(1, distancia(i) / 70);
+      if (a < 1) {
+        if (a <= 0.02) {
+          b[i + 3] = 0;
+        } else {
+          for (let c = 0; c < 3; c++) b[i + c] = Math.max(0, Math.min(255, Math.round((b[i + c] - cor[c] * (1 - a)) / a)));
+          b[i + 3] = Math.round(b[i + 3] * a);
+        }
+      }
+      visto[p] = 2;
+    }
+  }
   return await l.encode(1);
+}
+
+/**
+ * Caixa do quadro final (fração) dentro da imagem que o gerador devolveu:
+ * iguais quando a proporção bate; senão o quadro é o recorte central "cover"
+ * (a reserva em 2:3 do 4:5 corta as faixas de cima e de baixo).
+ */
+export function caixaNoQuadroCentral(caixa: Area, largura: number, altura: number, proporcaoDoQuadro?: number | null): Area {
+  if (!proporcaoDoQuadro || !largura || !altura) return caixa;
+  const r = largura / altura;
+  if (Math.abs(r - proporcaoDoQuadro) / proporcaoDoQuadro < 0.02) return caixa;
+  if (r < proporcaoDoQuadro) {
+    // Imagem mais alta que o quadro: faixas em cima e embaixo.
+    const h = largura / proporcaoDoQuadro / altura;
+    const o = (1 - h) / 2;
+    return { x0: caixa.x0, x1: caixa.x1, y0: o + caixa.y0 * h, y1: o + caixa.y1 * h };
+  }
+  const w = (altura * proporcaoDoQuadro) / largura;
+  const o = (1 - w) / 2;
+  return { x0: o + caixa.x0 * w, x1: o + caixa.x1 * w, y0: caixa.y0, y1: caixa.y1 };
+}
+
+/** Logo oficial para o código aplicar: bytes já limpos e se ela é clara. */
+export type LogoParaAplicar = { bytes: Uint8Array; clara: boolean };
+
+/** Claridade média (0 a 255) da imagem dentro da caixa, a cada 2 px. */
+function valorNaCaixa(img: Image, caixa: Area): number {
+  const W = img.width, H = img.height, b = img.bitmap;
+  const x0 = Math.max(0, Math.floor(caixa.x0 * W)), x1 = Math.min(W, Math.ceil(caixa.x1 * W));
+  const y0 = Math.max(0, Math.floor(caixa.y0 * H)), y1 = Math.min(H, Math.ceil(caixa.y1 * H));
+  let soma = 0, n = 0;
+  for (let y = y0; y < y1; y += 2) {
+    for (let x = x0; x < x1; x += 2) {
+      const i = (y * W + x) * 4;
+      soma += 0.299 * b[i] + 0.587 * b[i + 1] + 0.114 * b[i + 2];
+      n++;
+    }
+  }
+  return n ? soma / n : 128;
+}
+
+/** Entre a principal e a alternativa, a que contrasta com o fundo da caixa (clara no escuro, escura no claro). */
+export function escolherLogo(logos: LogoParaAplicar[], valorDoFundo: number): number {
+  if (logos.length < 2) return 0;
+  const querClara = valorDoFundo < 128;
+  const i = logos.findIndex((l) => l.clara === querClara);
+  return i >= 0 ? i : 0;
+}
+
+/**
+ * Pessoa ou produto recortado (PNG sem fundo) posto pelo código na lâmina:
+ * o recorte é aparado pelo alfa, cabe na caixa (fração do quadro), centrado
+ * na horizontal e apoiado na base da caixa. Devolve a posição em fração do
+ * quadro e a imagem já no tamanho, para a mesma chamada colar de novo depois.
+ */
+export async function recorteNaCaixa(
+  bytes: Uint8Array,
+  largura: number,
+  altura: number,
+  caixa: Area,
+): Promise<{ recorte: Image; posicao: Area }> {
+  const bruto = await decodificar(bytes);
+  // Grande demais: reduz antes de aparar (limite de CPU).
+  const r = bruto.width > 1600 || bruto.height > 1600 ? bruto.contain(1600, 1600) : bruto;
+  const W = r.width, H = r.height, b = r.bitmap;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      if (b[(y * W + x) * 4 + 3] < 16) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+  }
+  if (x1 < 0) throw new Error("recorte_vazio");
+  x0 = Math.max(0, x0 - 2);
+  y0 = Math.max(0, y0 - 2);
+  x1 = Math.min(W - 1, x1 + 2);
+  y1 = Math.min(H - 1, y1 + 2);
+  const aparado = r.clone().crop(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+  const cw = (caixa.x1 - caixa.x0) * largura, ch = (caixa.y1 - caixa.y0) * altura;
+  const esc = Math.min(cw / aparado.width, ch / aparado.height);
+  const w = Math.max(8, Math.round(aparado.width * esc)), h = Math.max(8, Math.round(aparado.height * esc));
+  aparado.resize(w, h);
+  const x = Math.round(((caixa.x0 + caixa.x1) / 2) * largura - w / 2);
+  const y = Math.round(caixa.y1 * altura - h);
+  return { recorte: aparado, posicao: { x0: x / largura, y0: y / altura, x1: (x + w) / largura, y1: (y + h) / altura } };
+}
+
+/**
+ * Tela de partida do modo recorte: a cor de fundo da marca (ou um neutro
+ * claro) com o recorte já no lugar, e a máscara que protege o miolo do
+ * recorte (opaco = fica; o resto, transparente, o gerador desenha: cenário,
+ * sombra de contato, texto e acabamento).
+ */
+export async function telaDoRecorte(
+  recorte: Image,
+  posicao: Area,
+  largura: number,
+  altura: number,
+  corDeFundo: string | null,
+): Promise<{ tela: Uint8Array; mascara: Uint8Array }> {
+  const hex = corDeFundo && /^#[0-9a-f]{6}$/i.test(corDeFundo) ? corDeFundo : "#EEEAE4";
+  const cor = (parseInt(hex.slice(1), 16) * 256 + 255) >>> 0;
+  const tela = new Image(largura, altura);
+  tela.fill(cor);
+  const x = Math.round(posicao.x0 * largura), y = Math.round(posicao.y0 * altura);
+  tela.composite(recorte, x, y);
+  const m = new Image(largura, altura);
+  m.fill(0x00000000);
+  const mb = m.bitmap, rb = recorte.bitmap, rw = recorte.width, rh = recorte.height;
+  for (let yy = 0; yy < rh; yy++) {
+    const ty = y + yy;
+    if (ty < 0 || ty >= altura) continue;
+    for (let xx = 0; xx < rw; xx++) {
+      const tx = x + xx;
+      if (tx < 0 || tx >= largura) continue;
+      if (rb[(yy * rw + xx) * 4 + 3] < 250) continue;
+      const k = (ty * largura + tx) * 4;
+      mb[k] = 255;
+      mb[k + 1] = 255;
+      mb[k + 2] = 255;
+      mb[k + 3] = 255;
+    }
+  }
+  return { tela: await tela.encode(1), mascara: await m.encode(1) };
+}
+
+/**
+ * Acabamento da lâmina em UMA decodificação (limite de CPU): cola de novo o
+ * recorte original por cima do que o gerador devolveu (a pessoa e o produto
+ * ficam idênticos; o gerador só fez o entorno) e aplica a logo oficial na
+ * caixa dela, escolhendo a versão que contrasta. Caixas em fração do quadro
+ * final; `proporcaoDoQuadro` (largura / altura) mapeia para o recorte central
+ * quando a imagem voltou em outra proporção (reserva 2:3 do 4:5).
+ */
+export async function acabamentoDaLamina(
+  arte: Uint8Array,
+  opcoes: {
+    recorte?: { imagem: Image; posicao: Area; larguraDaTela: number } | null;
+    logo?: { logos: LogoParaAplicar[]; caixa: Area } | null;
+    proporcaoDoQuadro?: number | null;
+  },
+): Promise<{ png: Uint8Array; logo: number | null; recorte: boolean }> {
+  const img = await decodificar(arte);
+  let recorte = false;
+  if (opcoes.recorte) {
+    const r = opcoes.recorte;
+    const escala = img.width / r.larguraDaTela;
+    const peca = Math.abs(escala - 1) > 0.01
+      ? r.imagem.clone().resize(Math.max(1, Math.round(r.imagem.width * escala)), Math.max(1, Math.round(r.imagem.height * escala)))
+      : r.imagem;
+    img.composite(peca, Math.round(r.posicao.x0 * img.width), Math.round(r.posicao.y0 * img.height));
+    recorte = true;
+  }
+  let usada: number | null = null;
+  if (opcoes.logo && opcoes.logo.logos.length) {
+    const caixa = caixaNoQuadroCentral(opcoes.logo.caixa, img.width, img.height, opcoes.proporcaoDoQuadro);
+    usada = escolherLogo(opcoes.logo.logos, valorNaCaixa(img, caixa));
+    const escolhida = opcoes.logo.logos[usada];
+    logoNaImagem(img, await decodificar(escolhida.bytes), caixa, escolhida.clara);
+  }
+  return { png: await img.encode(1), logo: usada, recorte };
 }
 
 /** Amplia a área em volta (margem relativa), para o gerador ter espaço de fundir a borda. */

@@ -11,9 +11,11 @@ import {
   Layers,
   ListChecks,
   Loader2,
+  Lock,
   MessageSquare,
   PenLine,
   RefreshCw,
+  RotateCcw,
   Send,
   ShieldCheck,
   Sparkles,
@@ -62,7 +64,7 @@ import EstudioEntrega from "./EstudioEntrega";
 import EstudioFotos from "./EstudioFotos";
 import EstudioLaminaGrande from "./EstudioLaminaGrande";
 import EstudioLista, { DICA_DO_ROTEIRO, formatoDoItem, SeloDoItem, type FontesDaLista } from "./EstudioLista";
-import EstudioPreparar from "./EstudioPreparar";
+import EstudioPreparar, { SeletorDeFormato } from "./EstudioPreparar";
 import {
   ETAPAS_DA_ESTEIRA,
   etapaDoItem,
@@ -78,8 +80,14 @@ import PranchetaDoEstudio, { AVISO_DA_ORDEM_NO_CONTINUO, estaConferindo, type An
 import { chaveDoCorrigirSozinho, conferirECorrigir, type DecisaoDeAutocorrecao } from "./autocorrecaoDaLamina";
 import ReferenciasDoEstudio, { type AlvoDasReferencias } from "./ReferenciasDoEstudio";
 import {
+  AVISO_CONTINUO_FORA_DO_4X5,
   copiarTexto,
   corpoDoPreparar,
+  corpoDoReabrir,
+  formatoDoTrabalho,
+  proporcaoDoFormato,
+  versaoForaDoFormato,
+  type FormatoDoPost,
   enviarUmParaAprovacao,
   AVISO_CONTINUO_SEM_MODELO,
   gravarTrabalhoNoCache,
@@ -368,6 +376,8 @@ function DetalheDoItem({
   const [areas, setAreas] = useState<Area[]>([]);
   const [ampliada, setAmpliada] = useState<number | null>(null);
   const [refazendo, setRefazendo] = useState(false);
+  const [reabrindo, setReabrindo] = useState(false);
+  const [salvandoFormato, setSalvandoFormato] = useState(false);
   // Guardados na sessão: voltar de outra aba devolve a mesma lâmina, o mesmo painel e a mesma ferramenta.
   const [selecionado, setSelecionado] = useEstadoGuardado<number | null>(`${chave}:lamina`, null);
   const [painel, setPainel] = useEstadoGuardado<PainelDaLamina>(`${chave}:painel`, "direcao");
@@ -579,11 +589,17 @@ function DetalheDoItem({
   const todosComImagem = cardsDaDirecao.length > 0 && semImagem.length === 0;
   const algoGerando = emLote || Object.keys(andamento).length > 0;
   const ocupado = algoGerando || entregando;
-  const infinito = !!trabalho?.direcao?.carrossel_infinito;
+  // Formato do post (4:5, 3:4, 1:1 ou 9:16); o contínuo (panorama) só existe no 4:5.
+  const formato: FormatoDoPost = formatoDoTrabalho(trabalho?.direcao as { formato?: unknown } | undefined);
+  const proporcao = proporcaoDoFormato(formato);
+  const continuoLigado = !!trabalho?.direcao?.carrossel_infinito;
+  const infinito = continuoLigado && formato === "feed_4x5";
   // No contínuo, as lâminas dividem o mesmo panorama: enquanto uma gera,
   // refazer outra pediria o mesmo trecho de fundo duas vezes (cobra dobrado).
   const laminaOcupada = (ordem: number) => !!andamento[ordem] || entregando || (infinito && algoGerando);
   const progresso = cardsDaDirecao.length ? Math.round((laminasComArte / cardsDaDirecao.length) * 100) : 0;
+  // Lâminas cuja versão atual nasceu em outro formato (a entrega recusa: gere de novo).
+  const foraDoFormato = cardsDaDirecao.filter((c) => versaoForaDoFormato(ultimas.get(c.ordem) as { formato_post?: unknown } | undefined, formato)).map((c) => c.ordem);
   const entregue = !!trabalho && (trabalho.status === "entregue" || trabalho.entrega_status === "agendado");
   const estado: EstadoDoItem = cardsDaDirecao.length > 0 ? "producao" : arte && !refazendo ? "agenda" : "preparar";
   // No contínuo a ordem faz parte da cena (o panorama foi cortado nela): reordenar fica travado.
@@ -733,6 +749,57 @@ function DetalheDoItem({
     // A escolha aparece na lâmina na hora; a releitura da lista vem depois, só para confirmar.
     gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
     atualizar();
+  };
+
+  /**
+   * "Reabrir para corrigir" (pedido do dono em 25/09): o trabalho entregue volta
+   * para edição com as mesmas lâminas e versões; a próxima entrega é arquivo novo.
+   */
+  const reabrir = async () => {
+    if (!trabalho) return;
+    setReabrindo(true);
+    try {
+      const r = await chamarFuncao<{ trabalho?: TrabalhoGravado; aviso?: string | null }>("estudio-arte", corpoDoReabrir(trabalho.id));
+      gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
+      toast.success("Trabalho reaberto para corrigir", {
+        description: (r && r.aviso) || "Ajuste as lâminas, fotos e referências e entregue de novo: vira arquivo novo.",
+      });
+      setFerramenta("lamina");
+      atualizar();
+    } catch (e) {
+      avisarErro(e, "Não foi possível reabrir");
+    } finally {
+      setReabrindo(false);
+    }
+  };
+
+  /** Formato do post para o conjunto inteiro; as versões antigas ficam, a entrega pede gerar de novo as de outro formato. */
+  const mudarFormato = async (f: FormatoDoPost) => {
+    if (!trabalho || f === formato) return;
+    setSalvandoFormato(true);
+    try {
+      await configurar({ conjunto: { formato: f } });
+      toast.success("Formato do post mudou", {
+        description: [
+          laminasComArte ? "Gere as lâminas de novo para sair no formato novo." : "",
+          continuoLigado && f !== "feed_4x5" ? AVISO_CONTINUO_FORA_DO_4X5 : "",
+        ].filter(Boolean).join(" ") || undefined,
+      });
+    } catch (e) {
+      avisarErro(e, "Formato não salvo");
+    } finally {
+      setSalvandoFormato(false);
+    }
+  };
+
+  /** Tira da lâmina uma foto trazida ou uma referência própria, direto da faixa em cima da lâmina grande. */
+  const tirarDaLamina = async (ordem: number, corpo: Record<string, unknown>, rotulo: string) => {
+    try {
+      await configurar({ card: { ordem, ...corpo } });
+      toast.success(rotulo);
+    } catch (e) {
+      avisarErro(e, "Não foi possível tirar");
+    }
   };
 
   const refazerFundo = async () => {
@@ -930,7 +997,7 @@ function DetalheDoItem({
     .map((c) => {
       const lista = (trabalho?.cards || []).filter((v) => v.ordem === c.ordem);
       const vista = c.ordem === selecionado && versaoVista !== null ? lista.find((v) => v.versao === versaoVista) || ultimas.get(c.ordem)! : ultimas.get(c.ordem)!;
-      return { ordem: c.ordem, imagem: { caminho: vista.storage_path, titulo: `Lâmina ${c.ordem} · v${vista.versao}`, proporcao: 0.8 } };
+      return { ordem: c.ordem, imagem: { caminho: vista.storage_path, titulo: `Lâmina ${c.ordem} · v${vista.versao}`, proporcao } };
     });
   const ampliarLamina = (ordem: number) => {
     const i = paraAmpliar.findIndex((a) => a.ordem === ordem);
@@ -1090,6 +1157,9 @@ function DetalheDoItem({
         </div>
         {estado === "producao" && (
           <>
+            <div className="mb-1 mr-2 mt-1 shrink-0" title="Formato do post (vale para todas as lâminas)">
+              <SeletorDeFormato valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} compacto />
+            </div>
             {seletorDeQualidade}
             {seletorDeGerador}
             {chaveCorrigirSozinho}
@@ -1120,6 +1190,23 @@ function DetalheDoItem({
       </button>
     ) : null;
 
+  const avisoDeEntregue = entregue && trabalho ? (
+    <div className="mb-2 flex min-w-0 flex-wrap items-center rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-[12px] leading-snug" role="status" data-aviso="trabalho-entregue">
+      <Lock className="mr-2 h-3.5 w-3.5 shrink-0 text-warning" />
+      <span className="mr-2 min-w-0 flex-1">
+        {trabalho.entrega_status === "reprovado" ? "Pediram ajuste nesta arte. " : "Entregue em Arquivos. "}
+        Para corrigir, reabra: as lâminas voltam para edição e a entrega de agora fica no histórico.
+      </span>
+      <Button type="button" size="sm" className="h-8 shrink-0 gap-1 px-2.5 text-[12px]" onClick={() => void reabrir()} disabled={reabrindo || algoGerando}>
+        {reabrindo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />} Reabrir para corrigir
+      </Button>
+    </div>
+  ) : foraDoFormato.length && !algoGerando ? (
+    <p className="mb-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-[11.5px] leading-snug text-warning" data-aviso="fora-do-formato">
+      {foraDoFormato.length === 1 ? `A lâmina ${foraDoFormato[0]} foi gerada` : `As lâminas ${foraDoFormato.join(", ")} foram geradas`} em outro formato. Gere de novo para entregar em {formato === "feed_4x5" ? "4:5" : formato === "retrato_3x4" ? "3:4" : formato === "quadrado_1x1" ? "1:1" : "9:16"}.
+    </p>
+  ) : null;
+
   const acoesDaPrancheta = (c: { ordem: number }, v: unknown) => (
     <BotaoComCusto
       rotulo={<><Wand2 className="h-3.5 w-3.5" /><span className="sr-only">{v ? "Refazer" : "Gerar"} a lâmina {c.ordem}</span></>}
@@ -1143,6 +1230,7 @@ function DetalheDoItem({
       andamento={andamento}
       infinito={infinito}
       largura={vertical ? LARGURA_NA_PRANCHETA : LARGURA_NA_PRANCHETA_PILHA}
+      proporcao={proporcao}
       orientacao={vertical ? "vertical" : "horizontal"}
       podeReordenar={!ocupado && cardsDaDirecao.length > 1 && !entregue && !ordemTravada}
       avisoDaOrdem={ordemTravada ? AVISO_DA_ORDEM_NO_CONTINUO : undefined}
@@ -1178,6 +1266,8 @@ function DetalheDoItem({
       andamento={andamento[cardSelecionado.ordem]}
       onAmpliar={() => ampliarLamina(cardSelecionado.ordem)}
       soPelaLargura={!colunas}
+      proporcao={proporcao}
+      aviso={avisoDeEntregue}
       faixa={
         estado === "producao" && trabalho ? (
           <EstudioBaseDaLamina
@@ -1204,6 +1294,20 @@ function DetalheDoItem({
               setRefsAlvo("lamina");
               abrirFerramenta("referencias", false);
             }}
+            bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+            onTirarFoto={(caminho) =>
+              void tirarDaLamina(
+                cardSelecionado.ordem,
+                { fotos_livres: (cardSelecionado.fotos_livres || []).filter((f) => f.caminho !== caminho) },
+                "Foto tirada da lâmina",
+              )}
+            onTirarFotoDoAcervo={() => void tirarDaLamina(cardSelecionado.ordem, { imagens_ids: [] }, "Foto tirada da lâmina")}
+            onTirarReferencia={(id) =>
+              void tirarDaLamina(
+                cardSelecionado.ordem,
+                { referencias_ids: (cardSelecionado.referencias_ids || []).filter((r) => r !== id) },
+                "Referência tirada da lâmina",
+              )}
           />
         ) : undefined
       }
@@ -1331,7 +1435,9 @@ function DetalheDoItem({
       <EstudioFotos
         key={cardSelecionado.ordem}
         card={cardSelecionado}
-        ocupado={laminaOcupada(cardSelecionado.ordem) || entregue}
+        ocupado={laminaOcupada(cardSelecionado.ordem)}
+        entregue={entregue}
+        onReabrir={() => void reabrir()}
         temArte={!!ultimaDaEscolhida}
         onSalvar={(corpo) => configurar(corpo)}
         onTirarFotoAntiga={() => configurar({ card: { ordem: cardSelecionado.ordem, imagens_ids: [] } })}
@@ -1365,6 +1471,8 @@ function DetalheDoItem({
         aba={refsAba}
         onAba={setRefsAba}
         onAtualizar={atualizar}
+        entregue={entregue}
+        onReabrir={() => void reabrir()}
       />
     </div>
   ) : null;
@@ -1397,12 +1505,21 @@ function DetalheDoItem({
         {trabalho.direcao?.origem === "roteiro" ? "Direção montada do roteiro" : "Direção do diretor de arte"} · {cardsDaDirecao.length} lâmina{cardsDaDirecao.length === 1 ? "" : "s"}
       </p>
 
+      <section>
+        <Rotulo>Formato do post</Rotulo>
+        <SeletorDeFormato valor={formato} onMudar={(f) => void mudarFormato(f)} disabled={salvandoFormato || algoGerando || entregue} />
+      </section>
+
       {cardsDaDirecao.length > 1 && (
         <label className="flex cursor-pointer items-start rounded-lg border border-border bg-background px-3 py-2.5">
-          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
+          <Switch checked={infinito} onCheckedChange={(v) => void alternarContinuo(v)} disabled={salvandoContinuo || algoGerando || entregue || formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
           <span className="min-w-0">
             <span className="block text-[12.5px] font-medium">Carrossel contínuo</span>
-            <span className="block text-[11.5px] leading-snug text-muted-foreground">A cena atravessa as lâminas, como um panorama. Gera uma de cada vez.</span>
+            <span className="block text-[11.5px] leading-snug text-muted-foreground">
+              {formato === "feed_4x5"
+                ? "A cena atravessa as lâminas, como um panorama. Gera uma de cada vez. Desligado, as lâminas seguem a capa como série (mesmo grid, linhas, tipografia e paleta)."
+                : AVISO_CONTINUO_FORA_DO_4X5}
+            </span>
           </span>
         </label>
       )}
@@ -1465,7 +1582,7 @@ function DetalheDoItem({
             }}
           />
         </div>
-        {entregue && <p className="text-[11.5px] text-muted-foreground">Arte já entregue: a direção não muda mais neste trabalho.</p>}
+        {entregue && <p className="text-[11.5px] text-muted-foreground">Arte já entregue: reabra para corrigir (o aviso fica em cima da lâmina).</p>}
       </section>
     </div>
   ) : null;
@@ -1545,6 +1662,8 @@ function DetalheDoItem({
       linkAgenda={linkAgendaDoItem}
       onEntregar={(tambemEnviar) => void entregar(tambemEnviar)}
       onEnviar={() => void enviarAgora()}
+      onReabrir={entregue ? () => void reabrir() : undefined}
+      reabrindo={reabrindo}
     />
   ) : null;
 

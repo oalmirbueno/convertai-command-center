@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, FileSearch, Loader2, RefreshCw, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,9 @@ import {
   type SinalDoAnuncio,
 } from "./adsApi";
 import { Andamento, Diagnostico, Foto, pilula, SeloDoSinal, useAndamento } from "./Comuns";
-import JanelaDaReferencia, { Indicadores } from "./JanelaDaReferencia";
+import JanelaDaReferencia from "./JanelaDaReferencia";
+import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TabelaDeCampanhas, TendenciaDiaria } from "./ContaPaineis";
+import { extrasDaConta, PERIODOS_DA_CONTA_V4, type ExtrasDaConta, type PeriodoDaConta } from "./contaApi";
 
 /**
  * Conta ao vivo: tudo o que está rodando na conta de anúncios do cliente
@@ -42,9 +44,19 @@ import JanelaDaReferencia, { Indicadores } from "./JanelaDaReferencia";
  * "Analisar com o estrategista" (conta_analisar) diz o que escalar, pausar e
  * renovar, o que a copy ensina e os próximos testes, que viram plano com um
  * clique. Em cada anúncio: "Criar variações deste" e "Abrir ficha".
+ *
+ * v4 (frente E, 25/09): período de 7 a 90 dias, resumo com a comparação com
+ * o período anterior, saldo e situação de cada conta, tendência diária,
+ * tabela de campanhas, resultado certo para o objetivo de cada campanha,
+ * anúncios em páginas de 12, desempenho do cliente (perfil e anúncios
+ * juntos) e evolução (vencedores, manter, descartar, próximos testes e
+ * aprendizados gravados para os agentes). Trocar de período mostra os
+ * números anteriores até os novos chegarem.
  */
 
-export const PERIODOS_DA_CONTA: (7 | 14 | 30)[] = [7, 14, 30];
+export const PERIODOS_DA_CONTA: PeriodoDaConta[] = PERIODOS_DA_CONTA_V4.slice();
+/** Anúncios por página: a lista cresce no "Mostrar mais", sem montar 200 cartões de uma vez. */
+export const ANUNCIOS_POR_PAGINA = 12;
 export const RELEITURA_DA_CONTA_MS = 10 * 60_000;
 /** Depois de pedir a coleta, espera a Meta responder antes de reler. */
 export const ESPERA_DA_SINCRONIA_MS = 8000;
@@ -87,11 +99,17 @@ function CartaoDoAnuncio({
   onVariar,
   onFicha,
   abrindo,
+  rotuloDoResultado,
+  formato,
+  conjunto,
 }: {
   a: AnuncioAoVivo;
   onVariar: () => void;
   onFicha: () => void;
   abrindo: boolean;
+  rotuloDoResultado?: string;
+  formato?: string;
+  conjunto?: string;
 }) {
   const { catalogo } = useMesa();
   const m = a.metricas;
@@ -111,7 +129,7 @@ function CartaoDoAnuncio({
               <p className="truncate text-[13px] font-semibold" title={a.nome}>
                 {a.nome}
               </p>
-              <p className="truncate text-[11px] text-muted-foreground">{[a.campanha, statusLegivel(a.status)].filter(Boolean).join(" · ")}</p>
+              <p className="truncate text-[11px] text-muted-foreground">{[a.campanha, conjunto, formato === "video" ? "Vídeo" : formato === "imagem" ? "Imagem" : "", statusLegivel(a.status)].filter(Boolean).join(" · ")}</p>
             </div>
             <SeloDoSinal sinal={a.sinal} className="ml-2" />
           </div>
@@ -127,7 +145,7 @@ function CartaoDoAnuncio({
               <dd className="truncate font-medium tabular-nums">{brl(m.gasto)}</dd>
             </div>
             <div className="min-w-0">
-              <dt className="truncate text-muted-foreground">Resultados</dt>
+              <dt className="truncate text-muted-foreground" title={rotuloDoResultado || "Resultados"}>{rotuloDoResultado || "Resultados"}</dt>
               <dd className="truncate font-medium tabular-nums">{inteiro(m.resultados)}</dd>
             </div>
             <div className="min-w-0">
@@ -284,7 +302,8 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
-  const [dias, setDias] = useState<7 | 14 | 30>(14);
+  const [dias, setDias] = useState<PeriodoDaConta>(14);
+  const [mostrando, setMostrando] = useState(ANUNCIOS_POR_PAGINA);
   const [sinal, setSinal] = useState<SinalDoAnuncio | "">("");
   const [campanha, setCampanha] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
@@ -297,8 +316,12 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
 
   const conta = useQuery({
     queryKey: chavesAds.conta(clientId, dias),
-    queryFn: async (): Promise<ContaAoVivo> => normalizarConta(await chamarAds("conta_ao_vivo", { client_id: clientId, dias })),
+    queryFn: async (): Promise<ContaAoVivo & { extras: ExtrasDaConta }> => {
+      const bruto = await chamarAds("conta_ao_vivo", { client_id: clientId, dias });
+      return { ...normalizarConta(bruto), extras: extrasDaConta(bruto) };
+    },
     staleTime: 2 * 60_000,
+    placeholderData: keepPreviousData,
     refetchInterval: RELEITURA_DA_CONTA_MS,
     refetchIntervalInBackground: false,
     retry: false,
@@ -320,7 +343,9 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
     const a = anuncios.find((x) => x.ad_id === adId);
     return a ? a.nome : `Anúncio ${adId}`;
   };
+  const extras = dados ? dados.extras : null;
   const filtrados = ordenarAnuncios(anuncios.filter((a) => (!sinal || a.sinal === sinal) && (!campanha || a.campaign_id === campanha)));
+  const visiveis = filtrados.slice(0, mostrando);
   const contagemPorSinal = (s: SinalDoAnuncio) => anuncios.filter((a) => a.sinal === s && (!campanha || a.campaign_id === campanha)).length;
   const analise = analiseNova || (analiseSalva.data ? analiseSalva.data : null);
 
@@ -401,7 +426,10 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
               type="button"
               role="radio"
               aria-checked={dias === d}
-              onClick={() => setDias(d)}
+              onClick={() => {
+                setDias(d);
+                setMostrando(ANUNCIOS_POR_PAGINA);
+              }}
               className={`h-7 rounded-md px-2.5 text-[12px] ${dias === d ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground"}`}
             >
               {d} dias
@@ -453,40 +481,21 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
 
       {dados && dados.conectada && (
         <>
-          <Indicadores m={dados.totais} />
+          {extras ? <ResumoDaConta totais={dados.totais} extras={extras} /> : null}
+          {extras ? <SaldosDasContas contas={extras.contas} /> : null}
+          {extras ? <TendenciaDiaria serie={extras.serie} rotulo={extras.resultado_rotulo} /> : null}
 
           {analise && <PainelDaAnalise analise={analise.analise} quando={analise.criado_em || null} nomeDe={nomeDe} onTeste={testar} />}
 
-          {dados.campanhas.length > 0 && (
-            <section className="min-w-0" aria-label="Campanhas">
-              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Campanhas ({dados.campanhas.length})</h3>
-              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {dados.campanhas.map((c) => {
-                  const ativa = campanha === c.campaign_id;
-                  return (
-                    <button
-                      key={c.campaign_id || c.nome}
-                      type="button"
-                      aria-pressed={ativa}
-                      onClick={() => setCampanha(ativa ? "" : c.campaign_id)}
-                      className={`min-w-0 rounded-xl border bg-card px-3 py-2.5 text-left transition-colors ${ativa ? "border-primary ring-1 ring-primary/40" : "border-border hover:border-primary/40"}`}
-                    >
-                      <span className="flex min-w-0 items-center">
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">{c.nome}</span>
-                        {c.status && <span className="ml-2 shrink-0 rounded-full bg-secondary px-2 py-0.5 text-[10.5px] text-muted-foreground">{statusLegivel(c.status)}</span>}
-                      </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
-                        {[c.objetivo ? humanizar(c.objetivo.toLowerCase().replace(/^outcome_/, "")) : "", c.orcamento_diario !== null ? `${brl(c.orcamento_diario)} por dia` : ""].filter(Boolean).join(" · ")}
-                      </span>
-                      <span className="mt-1 block truncate text-[11.5px] tabular-nums">
-                        {brl(c.metricas.gasto)} · {inteiro(c.metricas.resultados)} resultados · {brl(c.metricas.custo_por_resultado)} cada
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+          <TabelaDeCampanhas
+            campanhas={dados.campanhas}
+            rotuloPorId={extras ? extras.rotuloPorId : {}}
+            selecionada={campanha}
+            onSelecionar={(id) => {
+              setCampanha(id);
+              setMostrando(ANUNCIOS_POR_PAGINA);
+            }}
+          />
 
           <section className="min-w-0" aria-label="Anúncios">
             <div className="mb-2 flex min-w-0 flex-wrap items-center">
@@ -513,13 +522,34 @@ export default function AbaConta({ onCriarPlano }: { onCriarPlano?: (p: PedidoDe
                 <p className="mt-1 text-[12.5px] text-muted-foreground">{anuncios.length ? "Limpe o filtro para ver todos." : "Troque o período ou sincronize agora."}</p>
               </div>
             ) : (
-              <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
-                {filtrados.map((a) => (
-                  <CartaoDoAnuncio key={a.ad_id} a={a} abrindo={abrindo === a.ad_id} onVariar={() => variar(a)} onFicha={() => void abrirFicha(a)} />
-                ))}
-              </div>
+              <>
+                <div className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-2">
+                  {visiveis.map((a) => (
+                    <CartaoDoAnuncio
+                      key={a.ad_id}
+                      a={a}
+                      abrindo={abrindo === a.ad_id}
+                      onVariar={() => variar(a)}
+                      onFicha={() => void abrirFicha(a)}
+                      rotuloDoResultado={extras ? extras.rotuloPorId[a.ad_id] : undefined}
+                      formato={extras ? extras.formatoPorAd[a.ad_id] : undefined}
+                      conjunto={extras ? extras.conjuntoPorAd[a.ad_id] : undefined}
+                    />
+                  ))}
+                </div>
+                {filtrados.length > visiveis.length && (
+                  <div className="mt-3 text-center">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setMostrando(mostrando + ANUNCIOS_POR_PAGINA)}>
+                      Mostrar mais {Math.min(ANUNCIOS_POR_PAGINA, filtrados.length - visiveis.length)} de {filtrados.length - visiveis.length}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </section>
+
+          <PainelDaEvolucao dias={dias} />
+          <PainelDoDesempenho dias={dias} />
         </>
       )}
 

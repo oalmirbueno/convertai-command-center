@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   Background,
   BackgroundVariant,
@@ -18,325 +19,150 @@ import {
   type Viewport as ViewportDoQuadro,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   ArrowUpRight,
-  Box,
   Check,
+  CheckCheck,
   ChevronRight,
   ClipboardList,
+  Copy,
   Download,
   Eye,
+  EyeOff,
   HelpCircle,
   ImagePlus,
+  Layers,
   LayoutList,
   Loader2,
-  MapPin,
   Maximize2,
-  MessageSquareText,
   Minimize2,
-  Palette,
   Plus,
   Save,
-  ScanSearch,
   SlidersHorizontal,
   Sparkles,
   Trash2,
-  UserRound,
   Wand2,
   Workflow,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Ampliar } from "@/components/mesa/Ampliar";
 import { MiniaturaDoStorage } from "@/components/mesa/ContextoMiniatura";
-import { AvisoDeErro, BotaoComCusto, useAvisarErro, useEstimativa } from "@/components/mesa/Custo";
+import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { ImagemDaMesa, useMesa } from "@/components/mesa/MesaContexto";
-import { ErroDaMesa, padraoPara, QUALIDADES, textoDoErro, usd, type Qualidade } from "@/lib/mesa/api";
-import { AprovarFoto, BotoesDeUso } from "./AcoesDeUso";
-import { Cartao, Moldura, Pilulas, useMesaFoto } from "./Comuns";
-import { ImagemDaBiblioteca } from "./EtapaBiblioteca";
-import {
-  acrescentarFotos,
-  decidirFoto,
-  FORMATOS,
-  invalidarFotos,
-  partesDaConferencia,
-  rotuloDoTipo,
-  useBiblioteca,
-  useFotos,
-  useKits,
-  type FotoDoAcervo,
-  type ItemDaBiblioteca,
-  type KitDeFoto,
-} from "./fotoApi";
-import {
-  chaveDoAndamento,
-  emParalelo,
-  lerPedidoAoCanvas,
-  marcarAndamento,
-  motoresDaRodada,
-  rotuloDoMotor,
-  STATUS_DA_PERSONA,
-  useAncoras,
-  useAndamentos,
-  usePersonas,
-  type ConferenciaDaPersona,
-  type ImagemDaPersona,
-  type Persona,
-  type Resolucao,
-} from "./modelosApi";
+import { ErroDaMesa, padraoPara, textoDoErro } from "@/lib/mesa/api";
+import { useModoFoco } from "@/lib/modoFoco";
+import { useBiblioteca, useFotos, useKits } from "./fotoApi";
+import { lerPedidoAoCanvas, motoresDaRodada, rotuloDoMotor, useAncoras, useAndamentos, usePersonas } from "./modelosApi";
 import {
   aplicarModeloPronto,
   apagarRascunho,
-  avisosDoGerar,
   baixarImagem,
   bloqueiosDoGerar,
   canvasVazio,
   chaveDosCanvases,
-  conferirGeracao,
+  conversarNoCanvas,
   desligar,
   entradasDoGerar,
   faltaNoCartao,
-  gerarNoCanvas,
   guardarRascunho,
   juntarResultados,
   lerRascunho,
   ligar,
+  MODELOS_EM_DESTAQUE,
   MODELOS_PRONTOS,
-  montarCanvas,
+  montarPelaResposta,
   mudarDados,
   novoNo,
   ORDEM_DAS_ENTRADAS,
-  partesDoGerar,
+  partesDaSerie,
+  partesDoResultado,
   podeLigar,
   porCartao,
   removerNo,
   resultadoAlvo,
   resumoDoResultado,
+  rotuloDaAcao,
+  rotuloDaPose,
   ROTULOS_DAS_ENTRADAS,
   salvarCanvas,
   TAMANHO_DA_SAIDA,
+  TAMANHO_DO_AGENTE,
   TAMANHO_DO_CARTAO,
+  tamanhoDoNo,
   TIPOS_DE_NO,
+  TIPOS_FUTUROS,
   useCanvases,
+  useProdutosDeFora,
+  VARIACOES_POR_VEZ,
   type Canvas,
   type DadosDoNo,
-  type Montagem,
   type NoDoCanvas,
+  type ProdutoDaEsteira,
   type ResultadoDoCanvas,
   type TipoDeNo,
 } from "./canvasApi";
+import { ChatDoAgente } from "./canvas/Agente";
+import { BOTAO, descrever, ICONE_DO_VIDEO, ICONES, kitsUsaveis, MiniaturaGrande, PAINEL, type Descricao, type Fontes } from "./canvas/comum";
+import { AjustesDoResultado, CustoDoResultado, EditorDoCartao, useUsoDoResultado } from "./canvas/Editores";
+import { EscolherCartao, type AbaDaEscolha, type PedidoDeEscolha } from "./canvas/Escolher";
+import { EsteiraDeProdutos, TIPO_ARRASTADO_DA_ESTEIRA } from "./canvas/Esteira";
+import { ComoFunciona, GaleriaDeModelos } from "./canvas/Galeria";
+import { andamentoDoResultado, gerarNoResultado, gerarVariacoes, tirarPendentes, usePendentes } from "./canvas/geracao";
+import { ModoLista } from "./canvas/ModoLista";
 
 /**
- * Canvas (docs/mesa-foto/MODELOS-E-CANVAS.md, seções 7 e 9.2): o dono põe no
- * quadro o que vai na foto (Produto do kit, Modelo, Ambiente, Estilo e o
- * Pedido em palavras) e cada cartão já se liga sozinho ao Resultado, que fica
- * no centro. No Resultado aparece "Junta: produto X + modelo Y", o botão
- * "Gerar foto" com o custo, o andamento e a foto que saiu, com aprovar, usar
- * na Mesa e baixar. Ligar à mão continua possível (vários Resultados).
+ * Canvas v3 (docs/mesa-foto/MODELOS-E-CANVAS.md, seções 7 e 9.2; pedidos do
+ * dono em 25/09). O Canvas é de composição: Produto (deste ou de outro
+ * cliente, pela esteira do topo), Pessoa (modelo sintética ou foto real com
+ * autorização), Ambiente (descrever, foto usada ou complementada, contexto),
+ * Estilo, Pedido e o Agente (bolinha de conversa que escreve o pedido). Tudo
+ * se liga sozinho ao Resultado, que tem a ação (na mão de, segurando, olhando
+ * para, no ambiente, trocar fundo), a pose (apresentando, UGC selfie, uso
+ * real, close da mão) e o carrossel (3 a 6). Na foto: aprovar, Usar na Mesa
+ * e Finalizar em 1 clique, Variações desta (mesma identidade, outro ângulo).
  *
- * Visual: quadro escuro com os tokens do painel (a aba inteira fica em modo
- * escuro), grade discreta, cartões com a miniatura grande do que representam
- * e cor por papel. Motores, formato, qualidade e resolução ficam numa barra
- * lateral recolhível, com o custo sempre à vista.
+ * Visual: quadro claro com cartões pretos e compactos; painéis pretos e
+ * menores. Modo foco: com o Canvas aberto, a barra de cima e os botões
+ * flutuantes do painel somem (src/lib/modoFoco.ts); a tela cheia sai por um
+ * portal no body (antes ficava presa no contexto de empilhamento da página e
+ * a barra do painel aparecia por cima).
  *
- * React Flow (@xyflow/react) só neste arquivo, carregado quando a aba abre.
- * Piso do painel (Safari 11 / Chrome 64): caixa de seleção desligada (usa
- * Pointer Events), conexão por toque (tocar uma alça e depois a outra),
- * cartões de tamanho fixo com as alças declaradas no próprio nó (nada
- * depende de medir depois de montar), miniaturas com altura fixa em px. Em
- * tela menor que 768 px abre o modo lista, com o mesmo grafo em formulário.
+ * React Flow (@xyflow/react) só neste arquivo, carregado quando a aba abre
+ * (as peças sem React Flow ficam em ./canvas/). Piso do painel (Safari 11 /
+ * Chrome 64): caixa de seleção desligada (usa Pointer Events), conexão por
+ * toque (tocar uma alça e depois a outra), cartões de tamanho fixo com as
+ * alças declaradas no próprio nó, miniaturas com altura fixa em px. Em tela
+ * menor que 768 px abre o modo lista, com o mesmo grafo em formulário.
  */
 
-const ALCA = 14;
-const PASSO_DAS_ENTRADAS = 22;
-const TOPO_DAS_ENTRADAS = Math.round(TAMANHO_DA_SAIDA.altura / 2 - 2 * PASSO_DAS_ENTRADAS);
-const ALTURA_DA_MINIATURA = 112;
-const ALTURA_DA_FOTO = 232;
+const ALCA = 12;
+const PASSO_DAS_ENTRADAS = 20;
+const TOPO_DAS_ENTRADAS = Math.round(TAMANHO_DA_SAIDA.altura / 2 - 2.5 * PASSO_DAS_ENTRADAS);
+const ALTURA_DA_FOTO = 206;
 const ATRASO_DO_SALVAR_MS = 1500;
 const DURACAO_DA_LINHA_NOVA_MS = 1800;
 const CHAVE_DO_COMO_FUNCIONA = "mesa-foto:canvas:como-funciona-visto";
-const FORMATOS_DO_CANVAS = FORMATOS.filter((f) => ["1:1", "4:5", "9:16", "16:9"].indexOf(f.valor) >= 0).map((f) => ({ valor: f.valor, rotulo: f.valor }));
-const RESOLUCOES_DO_CANVAS: { valor: string; rotulo: string }[] = [
-  { valor: "auto", rotulo: "Automática" },
-  { valor: "1K", rotulo: "1K" },
-  { valor: "2K", rotulo: "2K" },
-  { valor: "4K", rotulo: "4K" },
-];
-const TIPOS_DE_ENTRADA: Exclude<TipoDeNo, "gerar">[] = ["produto", "modelo", "ambiente", "estilo", "texto"];
-
-const ICONES: Record<TipoDeNo, typeof Box> = { produto: Box, modelo: UserRound, ambiente: MapPin, estilo: Palette, texto: MessageSquareText, gerar: Sparkles };
-
-type AbaDaEscolha = "produto" | "modelo" | "ambiente" | "estilo";
-const ABAS_DA_ESCOLHA: AbaDaEscolha[] = ["produto", "modelo", "ambiente", "estilo"];
-
-// ------------------------------------------------------------------ resultados que chegam fora da tela
-
-/**
- * Resultado que chegou depois de a tela sair (trocou de aba no meio da
- * geração): fica aqui até o canvas abrir de novo e juntar no Resultado.
- */
-let pendentes: Record<string, ResultadoDoCanvas[]> = {};
-const ouvintesDosPendentes: (() => void)[] = [];
-const chaveDoPendente = (canvasId: string, gerarId: string) => `${canvasId}|${gerarId}`;
-function anotarPendente(canvasId: string, gerarId: string, r: ResultadoDoCanvas) {
-  const k = chaveDoPendente(canvasId, gerarId);
-  const copia: Record<string, ResultadoDoCanvas[]> = { ...pendentes };
-  copia[k] = (copia[k] || []).filter((x) => x.geracao_id !== r.geracao_id).concat([r]);
-  pendentes = copia;
-  ouvintesDosPendentes.slice().forEach((f) => f());
-}
-function tirarPendentes(canvasId: string): Record<string, ResultadoDoCanvas[]> {
-  const saida: Record<string, ResultadoDoCanvas[]> = {};
-  const resto: Record<string, ResultadoDoCanvas[]> = {};
-  Object.keys(pendentes).forEach((k) => {
-    if (k.indexOf(`${canvasId}|`) === 0) saida[k.slice(canvasId.length + 1)] = pendentes[k];
-    else resto[k] = pendentes[k];
-  });
-  if (Object.keys(saida).length) {
-    pendentes = resto;
-    ouvintesDosPendentes.slice().forEach((f) => f());
-  }
-  return saida;
-}
-function usePendentes() {
-  return useSyncExternalStore(
-    (f) => {
-      ouvintesDosPendentes.push(f);
-      return () => {
-        const i = ouvintesDosPendentes.indexOf(f);
-        if (i >= 0) ouvintesDosPendentes.splice(i, 1);
-      };
-    },
-    () => pendentes,
-    () => pendentes,
-  );
-}
-
-async function gerarNoResultado(p: {
-  queryClient: QueryClient;
-  clientId: string;
-  canvasId: string;
-  gerarId: string;
-  motores: string[];
-  qualidade: Qualidade;
-  atualizar: () => void;
-}) {
-  let feitas = 0;
-  let falhas = 0;
-  let custo = 0;
-  p.motores.forEach((m) => marcarAndamento(chaveDoAndamento("canvas", p.gerarId, m), { estado: "gerando", erro: "" }));
-  await emParalelo(p.motores, 4, async (motorId) => {
-    const chave = chaveDoAndamento("canvas", p.gerarId, motorId);
-    try {
-      // Formato e resolução vão no Resultado salvo (a função lê de lá); aqui só o motor desta chamada e a qualidade.
-      const r = await gerarNoCanvas({ canvasId: p.canvasId, gerarId: p.gerarId, motorId, qualidade: p.qualidade });
-      if (r.imagem) acrescentarFotos(p.queryClient, p.clientId, [r.imagem]);
-      anotarPendente(p.canvasId, p.gerarId, r.resultado);
-      custo += Number(r.custo_usd || 0);
-      feitas++;
-      marcarAndamento(chave, null);
-    } catch (e) {
-      falhas++;
-      marcarAndamento(chave, { estado: "falhou", erro: textoDoErro(e) });
-    }
-  });
-  invalidarFotos(p.queryClient, p.clientId);
-  p.atualizar();
-  if (feitas) toast.success(`${feitas} ${feitas === 1 ? "foto pronta" : "fotos prontas"} no Resultado`, { description: `Custo real: ${usd(custo)}. Elas já estão no acervo, marcadas como geradas.` });
-  if (falhas) toast.error(`${falhas} ${falhas === 1 ? "motor falhou" : "motores falharam"}`, { description: "O erro aparece no Resultado, ao lado do motor." });
-}
-
-// ------------------------------------------------------------------ o que cada cartão mostra
-
-interface Miniatura {
-  caminho: string;
-  bucket: string;
-  item?: ItemDaBiblioteca | null;
-}
-
-interface Descricao {
-  titulo: string;
-  subtitulo: string;
-  miniatura: Miniatura | null;
-}
-
-interface Fontes {
-  kits: KitDeFoto[];
-  fotos: FotoDoAcervo[];
-  personas: Persona[];
-  ancoras: ImagemDaPersona[];
-  biblioteca: ItemDaBiblioteca[];
-}
-
-const daFoto = (x: FotoDoAcervo | null): Miniatura | null => (x ? { caminho: x.storage_path, bucket: x.storage_bucket || "mesa" } : null);
-
-function capaDoKit(k: KitDeFoto, fotos: FotoDoAcervo[]): Miniatura | null {
-  const id = k.frente_imagem_id || (k.refs[0] && k.refs[0].imagem_id) || null;
-  return daFoto(id ? fotos.find((x) => x.id === id) || null : null);
-}
-
-function rostoDaPersona(p: Persona, ancoras: ImagemDaPersona[]): Miniatura | null {
-  const a = p.ancora_imagem_id ? ancoras.find((x) => x.id === p.ancora_imagem_id) || null : null;
-  return a ? { caminho: a.storage_path || a.url, bucket: a.storage_bucket || "mesa" } : null;
-}
-
-const kitsUsaveis = (kits: KitDeFoto[]) => kits.filter((k) => !!k.id && k.tipo !== "pessoa" && k.status !== "arquivado");
-const personaSemAncora = (p: Persona) => p.status === "rascunho" || p.status === "candidatos";
-
-function descrever(no: NoDoCanvas, f: Fontes): Descricao {
-  const d = no.dados;
-  const foto = (id?: string | null) => (id ? f.fotos.find((x) => x.id === id) || null : null);
-  const falta = faltaNoCartao(no);
-  if (no.tipo === "produto") {
-    const k = f.kits.find((x) => x.id === d.kit_id) || null;
-    return { titulo: k ? k.nome : "Produto", subtitulo: k ? `${rotuloDoTipo(k.tipo)}${k.variante ? ` · ${k.variante}` : ""}` : falta, miniatura: k ? capaDoKit(k, f.fotos) : null };
-  }
-  if (no.tipo === "modelo") {
-    const p = f.personas.find((x) => x.id === d.modelo_id) || null;
-    return { titulo: p ? p.nome : "Modelo", subtitulo: p ? STATUS_DA_PERSONA[p.status].rotulo : falta, miniatura: p ? rostoDaPersona(p, f.ancoras) : null };
-  }
-  if (no.tipo === "ambiente" || no.tipo === "estilo") {
-    const x = foto(d.imagem_id);
-    const item = d.biblioteca_id ? f.biblioteca.find((i) => i.id === d.biblioteca_id) || null : null;
-    const t = (d.texto || "").trim();
-    return {
-      titulo: item ? item.titulo : t ? t.slice(0, 48) : x ? x.nome : TIPOS_DE_NO[no.tipo].rotulo,
-      subtitulo: falta || (no.tipo === "estilo" ? "só paleta, luz e enquadramento" : "lugar, luz e clima"),
-      miniatura: item ? { caminho: "", bucket: "mesa", item } : daFoto(x),
-    };
-  }
-  if (no.tipo === "texto") {
-    const t = (d.texto || "").trim();
-    return { titulo: t ? t.slice(0, 60) : "Pedido", subtitulo: falta || (d.papel === "restricao" ? "restrição" : "pedido"), miniatura: null };
-  }
-  return { titulo: "Resultado", subtitulo: "", miniatura: null };
-}
-
-function MiniaturaGrande({ m, alt }: { m: Miniatura | null; alt: string }) {
-  if (!m) return null;
-  return m.item ? <ImagemDaBiblioteca item={m.item} /> : <MiniaturaDoStorage bucket={m.bucket} caminho={m.caminho} alt={alt} largura={420} className="h-full w-full" />;
-}
+const CHAVE_DO_FOCO = "mesa-foto:canvas:foco-desligado";
+const TIPOS_DA_BARRA: Exclude<TipoDeNo, "gerar">[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente"];
 
 // ------------------------------------------------------------------ contexto do quadro (os nós chamam a tela)
 
 interface ValorDoQuadro {
   fontes: Fontes;
-  /** Gera no Resultado (salva antes; uma chamada por motor, em segundo plano). */
+  /** Gera no Resultado (salva antes; em segundo plano). */
   gerar: (gerarId: string) => Promise<Record<string, never>>;
-  /** Abre a escolha com miniatura (acervo, kits, modelos) para trocar o conteúdo do cartão. */
+  /** Variações da foto (mesma identidade, ângulos diferentes). */
+  variacoes: (gerarId: string, r: ResultadoDoCanvas) => Promise<unknown>;
+  /** Abre a escolha com miniatura para trocar o conteúdo do cartão. */
   abrirEscolha: (tipo: TipoDeNo, trocarId: string | null) => void;
   /** Seleciona o cartão e abre os ajustes. */
   abrir: (noId: string) => void;
   tirar: (noId: string) => void;
-  /** Monta um modelo pronto no Resultado vazio. */
   aplicarModelo: (chave: string) => void;
 }
 
@@ -361,6 +187,22 @@ interface DadosDoResultado extends Record<string, unknown> {
 type NoDeCartao = Node<DadosDoCartao>;
 type NoDeResultado = Node<DadosDoResultado>;
 
+/** Barrinha que aparece em cima do cartão selecionado: ajustar e apagar. */
+function FerramentasDoNo({ noId, tipo }: { noId: string; tipo: TipoDeNo }) {
+  const ctx = useContext(ContextoDoQuadro);
+  if (!ctx) return null;
+  return (
+    <div className="nodrag absolute -top-9 right-0 flex items-center rounded-lg border border-white/10 bg-zinc-950 p-0.5 shadow-xl" data-ferramentas-do-no={noId}>
+      <button type="button" className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-zinc-200 hover:bg-white/10" onClick={() => ctx.abrir(noId)} aria-label="Ajustar o cartão">
+        <SlidersHorizontal className="mr-1 h-3 w-3" /> Ajustar
+      </button>
+      <button type="button" className="flex h-7 items-center rounded-md px-1.5 text-[11px] text-red-300 hover:bg-red-500/15" onClick={() => ctx.tirar(noId)} aria-label={tipo === "gerar" ? "Apagar o Resultado" : "Apagar o cartão"}>
+        <Trash2 className="mr-1 h-3 w-3" /> Apagar
+      </button>
+    </div>
+  );
+}
+
 function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
   const ctx = useContext(ContextoDoQuadro);
   const { no, descricao, numero, ligado } = data;
@@ -368,60 +210,80 @@ function NoCartao({ data, selected }: NodeProps<NoDeCartao>) {
   const Icone = ICONES[no.tipo];
   const falta = faltaNoCartao(no);
   const texto = (no.dados.texto || "").trim();
+  const semMiniatura = !descricao.miniatura;
   return (
     <div
       style={{ width: TAMANHO_DO_CARTAO.largura, height: TAMANHO_DO_CARTAO.altura }}
-      className={`relative overflow-visible rounded-2xl border bg-card text-left shadow-lg transition-shadow ${tipo.borda} ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+      className={`relative overflow-visible rounded-xl border bg-zinc-950 text-left text-zinc-100 shadow-lg shadow-black/30 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/10"}`}
       data-no-do-canvas={no.id}
       data-tipo={no.tipo}
     >
-      <span className="pointer-events-none absolute left-3 right-3 top-0 h-[3px] rounded-b-full" style={{ background: tipo.cor }} />
-      <div className="flex h-8 items-center px-3">
-        <Icone className={`mr-1.5 h-3.5 w-3.5 shrink-0 ${tipo.texto}`} />
-        <span className={`min-w-0 flex-1 truncate text-[10.5px] font-semibold uppercase tracking-wider ${tipo.texto}`}>{tipo.rotulo}</span>
+      <span className="pointer-events-none absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full" style={{ background: tipo.cor }} />
+      <div className="flex h-6 items-center pl-3 pr-2 pt-1">
+        <Icone className={`mr-1 h-3 w-3 shrink-0 ${tipo.texto}`} />
+        <span className={`min-w-0 flex-1 truncate text-[9.5px] font-semibold uppercase tracking-wider ${tipo.texto}`}>{tipo.rotulo}</span>
         {numero !== null && (
-          <span className="rounded-full border border-border bg-background px-1.5 text-[10px] font-semibold text-foreground" title="Ordem em que vai ao gerador">
+          <span className="rounded-full bg-white/10 px-1.5 text-[9.5px] font-semibold text-white" title="Ordem em que vai ao gerador">
             {numero}
           </span>
         )}
-        {!ligado && <span className="ml-1 rounded-full bg-muted px-1.5 text-[9.5px] text-muted-foreground">solto</span>}
+        {!ligado && <span className="ml-1 rounded-full bg-white/10 px-1.5 text-[9px] text-zinc-400">solto</span>}
       </div>
-      <div className="relative mx-2 overflow-hidden rounded-xl bg-muted" style={{ height: ALTURA_DA_MINIATURA }}>
-        {no.tipo === "texto" ? (
-          <p className={`h-full overflow-hidden p-2.5 text-[12px] leading-snug [overflow-wrap:anywhere] ${texto ? "text-foreground" : "text-muted-foreground"}`}>
-            {texto ? `"${texto.slice(0, 180)}"` : "Escreva o que você quer na foto."}
-          </p>
-        ) : descricao.miniatura ? (
-          <MiniaturaGrande m={descricao.miniatura} alt={descricao.titulo} />
-        ) : (no.tipo === "ambiente" || no.tipo === "estilo") && texto ? (
-          <p className="h-full overflow-hidden p-2.5 text-[12px] leading-snug text-foreground [overflow-wrap:anywhere]">{texto.slice(0, 180)}</p>
-        ) : (
+      <div className="flex items-center px-2 pb-2 pl-3 pt-1">
+        {no.tipo === "texto" ? null : semMiniatura && !(no.tipo === "ambiente" && (texto || no.dados.modo === "contexto")) && !(no.tipo === "modelo" && no.dados.imagem_id) ? (
           <button
             type="button"
-            className="nodrag flex h-full w-full flex-col items-center justify-center rounded-xl border border-dashed border-border text-muted-foreground hover:border-primary/60 hover:text-foreground"
+            className="nodrag mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/20 text-zinc-400 hover:border-emerald-400/60 hover:text-white"
             onClick={() => ctx && ctx.abrirEscolha(no.tipo, no.id)}
             data-escolher-no-cartao={no.id}
+            aria-label={`Escolher ${tipo.rotulo.toLowerCase()}`}
           >
-            <ImagePlus className="mb-1 h-5 w-5" />
-            <span className="text-[11.5px] font-medium">Escolher {tipo.rotulo.toLowerCase()}</span>
+            <ImagePlus className="h-4 w-4" />
           </button>
+        ) : semMiniatura ? (
+          <span className={`mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${tipo.fundo}`}>
+            <Icone className={`h-4 w-4 ${tipo.texto}`} />
+          </span>
+        ) : (
+          <span className="relative mr-2 block h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-zinc-900">
+            <MiniaturaGrande m={descricao.miniatura} alt={descricao.titulo} />
+          </span>
         )}
+        <div className="min-w-0 flex-1">
+          {no.tipo === "texto" ? (
+            <p className={`h-11 overflow-hidden text-[11px] leading-snug [overflow-wrap:anywhere] ${texto ? "text-zinc-100" : "text-zinc-500"}`}>{texto ? `"${texto.slice(0, 110)}"` : "Escreva o que você quer na foto."}</p>
+          ) : (
+            <>
+              <p className="truncate text-[12px] font-semibold leading-snug">{descricao.titulo}</p>
+              <p className={`truncate text-[10.5px] ${falta ? "text-amber-300" : "text-zinc-400"}`}>{descricao.subtitulo}</p>
+            </>
+          )}
+        </div>
       </div>
-      <div className="px-3 pt-2">
-        <p className="truncate text-[12.5px] font-semibold leading-snug">{descricao.titulo}</p>
-        <p className={`truncate text-[10.5px] ${falta ? "text-warning" : "text-muted-foreground"}`}>{descricao.subtitulo}</p>
-      </div>
-      {selected && ctx && (
-        <button
-          type="button"
-          className="nodrag absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow hover:text-destructive"
-          aria-label="Tirar o cartão do quadro"
-          onClick={() => ctx.tirar(no.id)}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
-      <Handle type="source" position={Position.Right} id="saida" style={{ width: ALCA, height: ALCA, background: tipo.cor, border: "2px solid hsl(var(--card))" }} />
+      {selected && <FerramentasDoNo noId={no.id} tipo={no.tipo} />}
+      <Handle type="source" position={Position.Right} id="saida" style={{ width: ALCA, height: ALCA, background: tipo.cor, border: "2px solid #09090b" }} />
+    </div>
+  );
+}
+
+/** O Agente: uma bolinha. Tocar abre a conversa no painel. */
+function NoAgente({ data, selected }: NodeProps<NoDeCartao>) {
+  const { no, ligado } = data;
+  const tipo = TIPOS_DE_NO.agente;
+  const Icone = ICONES.agente;
+  const temPedido = !!(no.dados.pedido || "").trim();
+  return (
+    <div style={{ width: TAMANHO_DO_AGENTE.largura, height: TAMANHO_DO_AGENTE.altura }} className="relative flex flex-col items-center" data-no-do-canvas={no.id} data-tipo="agente">
+      <span
+        className={`relative flex h-[60px] w-[60px] items-center justify-center rounded-full border bg-zinc-950 shadow-lg shadow-violet-500/20 ${selected ? "border-violet-300 ring-2 ring-violet-400/70" : "border-violet-400/50"}`}
+        title={tipo.dica}
+      >
+        <Icone className="h-6 w-6 text-violet-300" />
+        {temPedido && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-emerald-400" title="Já escreveu o pedido" />}
+      </span>
+      <span className="mt-1 max-w-full truncate rounded-full bg-zinc-950 px-2 text-[10.5px] font-semibold text-violet-200">{ligado ? "Agente" : "Agente (solto)"}</span>
+      {selected && <FerramentasDoNo noId={no.id} tipo="agente" />}
+      <Handle type="source" position={Position.Right} id="saida" style={{ top: 30, width: ALCA, height: ALCA, background: tipo.cor, border: "2px solid #09090b" }} />
     </div>
   );
 }
@@ -440,225 +302,216 @@ function useSegundos(ativo: boolean) {
   return s;
 }
 
+const ICONE = "nodrag inline-flex h-7 items-center justify-center rounded-lg border border-white/10 bg-white/5 px-1.5 text-[11px] text-zinc-100 transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50";
+
 function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   const ctx = useContext(ContextoDoQuadro);
   const { no, junta, bloqueios, entradas } = data;
-  const { clientId, catalogo } = useMesa();
+  const { catalogo } = useMesa();
   const andamentos = useAndamentos();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [mostrando, setMostrando] = useState<string | null>(null);
   const [ampliada, setAmpliada] = useState(false);
-  const [ocupado, setOcupado] = useState<"" | "aprovar" | "baixar">("");
+  const [baixando, setBaixando] = useState(false);
   const motores = no.dados.motores || [];
-  const qualidade: Qualidade = no.dados.qualidade || "alta";
+  const carrossel = no.dados.carrossel || 0;
   const prontos = (no.dados.resultados || []).filter((r) => r.status === "gerada" && !!(r.storage_path || r.url));
   useEffect(() => setMostrando(null), [prontos.length]);
   const atual = prontos.find((r) => r.geracao_id === mostrando) || (prontos.length ? prontos[prontos.length - 1] : null);
-  const foto = atual && atual.imagem_id && ctx ? ctx.fontes.fotos.find((f) => f.id === atual.imagem_id) || null : null;
-  const estados = motores.map((m) => ({ motor: m, a: andamentos[chaveDoAndamento("canvas", no.id, m)] }));
-  const gerando = estados.filter((e) => !!e.a && e.a.estado === "gerando");
-  const falhas = estados.filter((e) => !!e.a && e.a.estado === "falhou");
+  const fotos = ctx ? ctx.fontes.fotos : [];
+  const foto = atual && atual.imagem_id ? fotos.find((f) => f.id === atual.imagem_id) || null : null;
+  const uso = useUsoDoResultado(fotos);
+  const { gerando, falhas } = andamentoDoResultado(andamentos, no.id);
   const segundos = useSegundos(gerando.length > 0);
   const caminho = atual ? atual.storage_path || atual.url : "";
-
-  const aprovar = async () => {
-    if (!foto || ocupado) return;
-    setOcupado("aprovar");
-    try {
-      const nova = await decidirFoto(clientId, foto.id, "aprovar");
-      if (nova) acrescentarFotos(queryClient, clientId, [nova]);
-      invalidarFotos(queryClient, clientId);
-      toast.success("Foto aprovada pela equipe", { description: "Agora ela pode ir para a Mesa e para a aprovação do cliente." });
-    } catch (e) {
-      avisarErro(e, "Não aprovada");
-    } finally {
-      setOcupado("");
-    }
-  };
+  const detalhes = [no.dados.acao && no.dados.acao !== "livre" ? rotuloDaAcao(no.dados.acao) : "", no.dados.pose && no.dados.pose !== "nenhuma" ? rotuloDaPose(no.dados.pose) : "", carrossel ? `carrossel ${carrossel}` : ""].filter(Boolean);
 
   const baixar = async () => {
-    if (!atual || ocupado) return;
-    setOcupado("baixar");
+    if (!atual || baixando) return;
+    setBaixando(true);
     try {
       await baixarImagem(atual.storage_bucket, atual.storage_path || atual.url, foto ? foto.nome : `canvas-${rotuloDoMotor(catalogo, atual.motor_id)}`);
     } catch (e) {
       avisarErro(e, "Foto não baixada");
     } finally {
-      setOcupado("");
+      setBaixando(false);
     }
   };
 
-  const usarNaMesa = () => {
-    if (!foto) return;
-    navigate(`/mesa?client=${clientId}&aba=estudio&fotos=${foto.id}`);
-  };
-
-  const rotuloDoGerar = motores.length > 1 ? `Gerar em ${motores.length} motores` : prontos.length ? "Gerar de novo" : "Gerar foto";
+  const rotuloDoGerar = carrossel ? `Gerar carrossel de ${carrossel}` : motores.length > 1 ? `Gerar em ${motores.length} motores` : prontos.length ? "Gerar de novo" : "Gerar foto";
+  const destaque = MODELOS_PRONTOS.filter((m) => MODELOS_EM_DESTAQUE.indexOf(m.chave) >= 0);
 
   return (
     <div
       style={{ width: TAMANHO_DA_SAIDA.largura, height: TAMANHO_DA_SAIDA.altura }}
-      className={`relative flex flex-col overflow-visible rounded-3xl border border-primary/40 bg-card shadow-2xl ${selected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+      className={`relative flex flex-col overflow-visible rounded-2xl border bg-zinc-950 text-zinc-100 shadow-2xl shadow-black/40 ${selected ? "border-white/60 ring-2 ring-emerald-400/70" : "border-white/15"}`}
       data-no-do-canvas={no.id}
       data-tipo="gerar"
     >
-      <div className="flex h-10 shrink-0 items-center px-4">
-        <span className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary/15">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
+      <div className="flex h-9 shrink-0 items-center px-3">
+        <span className="mr-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/20">
+          <Sparkles className="h-3 w-3 text-emerald-300" />
         </span>
-        <span className="flex-1 text-[12px] font-semibold uppercase tracking-wider">Resultado</span>
+        <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider">Resultado</span>
         {gerando.length > 0 ? (
-          <Loader2 className="h-4 w-4 animate-spin text-primary" aria-label="Gerando" />
+          <Loader2 className="h-4 w-4 animate-spin text-emerald-300" aria-label="Gerando" />
         ) : (
-          <span className="text-[10.5px] text-muted-foreground">
+          <span className="text-[10px] text-zinc-400">
             {prontos.length} {prontos.length === 1 ? "foto" : "fotos"}
           </span>
         )}
       </div>
-      <p className="h-9 shrink-0 overflow-hidden px-4 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]" data-junta="" title={junta || undefined}>
-        {junta ? <span className="text-foreground">{junta}</span> : "Junta o que você puser no quadro. Comece por um produto ou uma modelo na barra à esquerda."}
+      <p className="h-8 shrink-0 overflow-hidden px-3 text-[10.5px] leading-snug text-zinc-400 [overflow-wrap:anywhere]" data-junta="" title={junta || undefined}>
+        {junta ? <span className="text-zinc-100">{junta}</span> : "Junta o que você puser no quadro. Comece por um produto ou uma pessoa."}
       </p>
-      <div className="relative mx-3 mt-1 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted" style={{ height: ALTURA_DA_FOTO }} data-foto-do-resultado={atual ? atual.geracao_id : ""}>
+      <div className="relative mx-2.5 mt-0.5 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-zinc-900" style={{ height: ALTURA_DA_FOTO }} data-foto-do-resultado={atual ? atual.geracao_id : ""}>
         {atual ? (
           <button type="button" className="nodrag block h-full w-full cursor-zoom-in" onClick={() => setAmpliada(true)} aria-label="Ver a foto grande">
             <ImagemDaMesa caminho={caminho} bucket={atual.storage_bucket} alt="Foto gerada no Canvas" className="h-full w-full !object-contain" />
-            <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center rounded-full border border-primary/40 bg-card px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
+            <span className="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[9px] font-semibold text-emerald-300" data-selo="gerada">
               <Sparkles className="mr-0.5 h-2.5 w-2.5" /> gerada
             </span>
             {foto && foto.aprovada && (
-              <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center rounded-full border border-success/40 bg-card px-1.5 py-px text-[9.5px] font-semibold text-success">
+              <span className="pointer-events-none absolute right-1.5 top-1.5 inline-flex items-center rounded-full border border-emerald-400/40 bg-zinc-950/85 px-1.5 py-px text-[9px] font-semibold text-emerald-300">
                 <Check className="mr-0.5 h-2.5 w-2.5" /> aprovada
               </span>
             )}
           </button>
         ) : gerando.length > 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-            <Loader2 className="mb-2 h-7 w-7 animate-spin text-primary" />
-            <p className="text-[12.5px] font-medium">Gerando a foto</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">Costuma levar de 30 s a 2 min. Pode sair da aba: a foto fica salva.</p>
+          <div className="flex h-full flex-col items-center justify-center px-5 text-center">
+            <Loader2 className="mb-2 h-6 w-6 animate-spin text-emerald-300" />
+            <p className="text-[12px] font-medium">Gerando {gerando.length > 1 ? `${gerando.length} fotos` : "a foto"}</p>
+            <p className="mt-0.5 text-[10.5px] text-zinc-400">De 30 s a 2 min por foto. Pode sair da aba: fica salvo.</p>
           </div>
         ) : entradas === 0 && ctx ? (
-          <div className="flex h-full flex-col justify-center px-3 text-left" data-comece-rapido="">
-            <p className="mb-2 text-center text-[11.5px] text-muted-foreground">A foto aparece aqui. Comece por um modelo pronto:</p>
-            {MODELOS_PRONTOS.map((m) => (
+          <div className="flex h-full flex-col justify-center px-2.5 text-left" data-comece-rapido="">
+            <p className="mb-1.5 text-center text-[10.5px] text-zinc-400">A foto aparece aqui. Comece por um modelo pronto:</p>
+            {destaque.map((m) => (
               <button
                 key={m.chave}
                 type="button"
-                className="nodrag mb-1.5 flex w-full items-center rounded-xl border border-border bg-card px-2.5 py-2 text-left text-[12px] font-medium transition-colors hover:border-primary/60"
+                className="nodrag mb-1 flex w-full items-center rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-left text-[11.5px] font-medium transition-colors hover:border-emerald-400/60"
                 onClick={() => ctx.aplicarModelo(m.chave)}
                 data-modelo-pronto={m.chave}
                 title={m.dica}
               >
-                <Wand2 className="mr-2 h-3.5 w-3.5 shrink-0 text-primary" />
+                <Wand2 className="mr-1.5 h-3.5 w-3.5 shrink-0 text-emerald-300" />
                 <span className="min-w-0 flex-1 truncate">{m.rotulo}</span>
               </button>
             ))}
           </div>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center px-6 text-center text-muted-foreground">
-            <Sparkles className="mb-2 h-6 w-6 text-primary/70" />
-            <p className="text-[12px]">A foto aparece aqui.</p>
+          <div className="flex h-full flex-col items-center justify-center px-5 text-center text-zinc-400">
+            <Sparkles className="mb-1.5 h-5 w-5 text-emerald-300/70" />
+            <p className="text-[11.5px]">A foto aparece aqui.</p>
           </div>
         )}
       </div>
-      <div className="mx-3 mt-2 h-9 shrink-0" data-andamento-do-resultado="">
+      <div className="mx-2.5 mt-1.5 h-8 shrink-0" data-andamento-do-resultado="">
         {gerando.length > 0 ? (
           <div className="min-w-0">
-            <div className="mb-1 flex items-center text-[11px]">
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                Gerando {gerando.length > 1 ? `em ${gerando.length} motores` : `no ${rotuloDoMotor(catalogo, gerando[0].motor)}`}
-              </span>
-              <span className="text-muted-foreground">{segundos} s</span>
+            <div className="mb-1 flex items-center text-[10.5px]">
+              <span className="min-w-0 flex-1 truncate text-zinc-100">{gerando.length > 1 ? `Gerando ${gerando.length} fotos` : `Gerando no ${rotuloDoMotor(catalogo, gerando[0].motor)}`}</span>
+              <span className="text-zinc-400">{segundos} s</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full animate-pulse rounded-full bg-primary" style={{ width: `${Math.min(92, 8 + segundos * 1.2)}%` }} />
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full animate-pulse rounded-full bg-emerald-400" style={{ width: `${Math.min(92, 8 + segundos * 1.2)}%` }} />
             </div>
           </div>
         ) : prontos.length > 1 ? (
           <div className="flex min-w-0 items-center overflow-hidden" aria-label="Fotos deste Resultado">
             {prontos
-              .slice(-6)
+              .slice(-7)
               .reverse()
               .map((r) => (
                 <button
                   key={r.geracao_id}
                   type="button"
-                  className={`nodrag mr-1 block shrink-0 overflow-hidden rounded-md border ${atual && atual.geracao_id === r.geracao_id ? "border-primary" : "border-border"}`}
-                  style={{ width: 34, height: 34 }}
+                  className={`nodrag mr-1 block shrink-0 overflow-hidden rounded-md border ${atual && atual.geracao_id === r.geracao_id ? "border-emerald-400" : "border-white/10"}`}
+                  style={{ width: 30, height: 30 }}
                   onClick={() => setMostrando(r.geracao_id)}
                   aria-label={`Ver a foto do ${rotuloDoMotor(catalogo, r.motor_id)}`}
-                  title={rotuloDoMotor(catalogo, r.motor_id)}
+                  title={`${rotuloDoMotor(catalogo, r.motor_id)}${r.tipo === "carrossel" ? `, carrossel ${r.quadro || ""}` : r.tipo === "variacao" ? ", variação" : ""}`}
                 >
                   <MiniaturaDoStorage bucket={r.storage_bucket} caminho={r.storage_path || r.url} alt="" largura={96} className="h-full w-full" />
                 </button>
               ))}
           </div>
         ) : falhas.length > 0 ? (
-          <p className="truncate text-[11px] text-destructive" role="alert" title={falhas.map((f) => `${rotuloDoMotor(catalogo, f.motor)}: ${f.a ? f.a.erro : ""}`).join("\n")}>
-            {rotuloDoMotor(catalogo, falhas[0].motor)} falhou: {falhas[0].a ? falhas[0].a.erro : ""}
+          <p className="truncate pt-1.5 text-[10.5px] text-red-400" role="alert" title={falhas.map((f) => `${rotuloDoMotor(catalogo, f.motor)}: ${f.a.erro}`).join("\n")}>
+            {rotuloDoMotor(catalogo, falhas[0].motor)} falhou: {falhas[0].a.erro}
           </p>
         ) : (
-          <p className="truncate pt-2 text-[11px] text-muted-foreground">
+          <p className="truncate pt-1.5 text-[10.5px] text-zinc-400">
             {motores.length} {motores.length === 1 ? "motor" : "motores"} · {String(no.dados.formato || "4:5")} · {entradas} {entradas === 1 ? "cartão" : "cartões"}
+            {detalhes.length ? ` · ${detalhes.join(" · ")}` : ""}
           </p>
         )}
       </div>
-      <div className="mx-3 flex h-8 shrink-0 items-center" data-acoes-do-resultado="">
+      <div className="mx-2.5 flex h-8 shrink-0 items-center" data-acoes-do-resultado="">
         {atual ? (
           <>
-            {foto && foto.aprovada ? (
-              <span className="mr-1.5 inline-flex h-7 items-center rounded-lg px-1.5 text-[11.5px] font-medium text-success">
-                <Check className="mr-1 h-3.5 w-3.5" /> Aprovada
-              </span>
-            ) : (
-              <button type="button" className="nodrag mr-1.5 inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11.5px] hover:border-success/60 hover:text-success disabled:opacity-60" disabled={!foto || !!ocupado} onClick={() => void aprovar()}>
-                {ocupado === "aprovar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />} Aprovar
-              </button>
-            )}
             <button
               type="button"
-              className="nodrag mr-1.5 inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11.5px] hover:border-primary/60 disabled:cursor-not-allowed disabled:text-muted-foreground"
-              disabled={!foto || !foto.aprovada}
-              title={foto && foto.aprovada ? "Abre o Estúdio da Mesa com esta foto" : "Aprove a foto para usar na Mesa"}
-              onClick={usarNaMesa}
+              className={`${ICONE} mr-1`}
+              disabled={!!uso.ocupado || !atual.imagem_id}
+              onClick={() => void uso.usarNaMesa(atual)}
+              aria-label="Usar na Mesa"
+              title="Aprova (se precisar) e abre o Estúdio da Mesa com esta foto"
             >
-              <ArrowUpRight className="mr-1 h-3 w-3" /> Usar na Mesa
+              {uso.ocupado === "usar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ArrowUpRight className="mr-1 h-3 w-3" />} Mesa
             </button>
-            <button type="button" className="nodrag inline-flex h-7 items-center rounded-lg border border-border px-2 text-[11.5px] hover:border-primary/60 disabled:opacity-60" disabled={!!ocupado} onClick={() => void baixar()}>
-              {ocupado === "baixar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Download className="mr-1 h-3 w-3" />} Baixar
+            <button type="button" className={`${ICONE} mr-1`} disabled={!!uso.ocupado || !atual.imagem_id} onClick={() => void uso.finalizar(atual)} aria-label="Finalizar" title="Aprova (se precisar) e abre o Usar da Mesa Foto">
+              {uso.ocupado === "finalizar" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCheck className="mr-1 h-3 w-3" />} Finalizar
+            </button>
+            {ctx && atual.imagem_id && (
+              <BotaoComCusto
+                rotulo={<Copy className="h-3 w-3" />}
+                titulo="Variações desta foto"
+                descricao={`Variações desta: ${VARIACOES_POR_VEZ} fotos com a mesma pessoa, o mesmo produto e o mesmo estilo, em ângulos diferentes.`}
+                variant="outline"
+                className="nodrag mr-1 h-7 border-white/10 bg-white/5 px-1.5 text-[10.5px] text-zinc-100 hover:bg-white/15"
+                fecharAoConfirmar
+                disabled={gerando.length > 0}
+                partes={() => partesDaSerie(atual.motor_id, no.dados.qualidade || "alta", entradas, VARIACOES_POR_VEZ, true)}
+                executar={() => ctx.variacoes(no.id, atual)}
+              />
+            )}
+            <button type="button" className={ICONE} disabled={baixando} onClick={() => void baixar()} aria-label="Baixar" title="Baixar a foto (com gerada no nome)">
+              {baixando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
             </button>
           </>
         ) : (
-          <p className={`truncate text-[11px] ${bloqueios.length ? "text-warning" : "text-muted-foreground"}`} title={bloqueios.join("\n") || undefined}>
+          <p className={`truncate text-[10.5px] ${bloqueios.length ? "text-amber-300" : "text-zinc-400"}`} title={bloqueios.join("\n") || undefined}>
             {bloqueios.length ? bloqueios[0] : "Tudo pronto para gerar."}
           </p>
         )}
       </div>
-      <div className="mx-3 mb-3 mt-auto">
+      <div className="mx-2.5 mb-2.5 mt-auto">
         <BotaoComCusto
           rotulo={
             <>
-              <Sparkles className="mr-1.5 h-4 w-4" /> {rotuloDoGerar}
+              {carrossel ? <Layers className="mr-1.5 h-4 w-4" /> : <Sparkles className="mr-1.5 h-4 w-4" />} {rotuloDoGerar}
             </>
           }
           titulo="Geração do Canvas"
-          descricao="Uma foto por motor ligado. O que sair entra no acervo, marcado como gerado, e aparece aqui."
-          className="nodrag h-10 w-full rounded-xl text-[13px] font-semibold"
+          descricao={carrossel ? "Fotos coerentes no primeiro motor, uma de cada vez a partir da capa. Tudo entra no acervo, marcado como gerado." : "Uma foto por motor ligado. O que sair entra no acervo, marcado como gerado, e aparece aqui."}
+          className="nodrag h-9 w-full rounded-xl bg-emerald-400 text-[12.5px] font-semibold text-black hover:bg-emerald-300"
           disabled={!ctx || bloqueios.length > 0 || gerando.length > 0}
           fecharAoConfirmar
-          partes={() => partesDoGerar(motores, qualidade, entradas)}
+          partes={() => partesDoResultado(no, entradas)}
           executar={() => (ctx ? ctx.gerar(no.id) : Promise.resolve({}))}
         />
       </div>
+      {selected && <FerramentasDoNo noId={no.id} tipo="gerar" />}
       {ORDEM_DAS_ENTRADAS.map((e, i) => (
         <Handle
           key={e}
           type="target"
           position={Position.Left}
           id={e}
-          style={{ top: TOPO_DAS_ENTRADAS + i * PASSO_DAS_ENTRADAS, width: ALCA, height: ALCA, background: TIPOS_DE_NO[e === "pessoa" ? "modelo" : (e as TipoDeNo)].cor, border: "2px solid hsl(var(--card))" }}
+          title={ROTULOS_DAS_ENTRADAS[e]}
+          style={{ top: TOPO_DAS_ENTRADAS + i * PASSO_DAS_ENTRADAS, width: ALCA, height: ALCA, background: TIPOS_DE_NO[e === "pessoa" ? "modelo" : (e as TipoDeNo)].cor, border: "2px solid #09090b" }}
         />
       ))}
       {atual && (
@@ -672,607 +525,24 @@ function NoResultado({ data, selected }: NodeProps<NoDeResultado>) {
   );
 }
 
-const TIPOS_NO_QUADRO = { produto: NoCartao, modelo: NoCartao, ambiente: NoCartao, estilo: NoCartao, texto: NoCartao, gerar: NoResultado };
+const TIPOS_NO_QUADRO = { produto: NoCartao, modelo: NoCartao, ambiente: NoCartao, estilo: NoCartao, texto: NoCartao, agente: NoAgente, gerar: NoResultado };
 
 /** Alças declaradas no próprio nó: as linhas não dependem de medir o cartão depois de montar. */
 function alcasDoNo(tipo: TipoDeNo) {
   if (tipo === "gerar") {
     return ORDEM_DAS_ENTRADAS.map((e, i) => ({ id: e, type: "target" as const, position: Position.Left, x: -ALCA / 2, y: TOPO_DAS_ENTRADAS + i * PASSO_DAS_ENTRADAS - ALCA / 2, width: ALCA, height: ALCA }));
   }
-  return [{ id: "saida", type: "source" as const, position: Position.Right, x: TAMANHO_DO_CARTAO.largura - ALCA / 2, y: TAMANHO_DO_CARTAO.altura / 2 - ALCA / 2, width: ALCA, height: ALCA }];
-}
-
-// ------------------------------------------------------------------ escolher com miniatura (acervo, kits, modelos, biblioteca)
-
-function OpcaoComFoto({
-  miniatura,
-  titulo,
-  subtitulo,
-  aviso,
-  desligada,
-  onEscolher,
-  atributo,
-}: {
-  miniatura: Miniatura | null;
-  titulo: string;
-  subtitulo?: string;
-  aviso?: string;
-  desligada?: boolean;
-  onEscolher: () => void;
-  atributo: string;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={desligada}
-      onClick={onEscolher}
-      data-opcao-da-escolha={atributo}
-      className={`min-w-0 rounded-xl border bg-card p-1.5 text-left transition-colors ${desligada ? "cursor-not-allowed border-dashed border-border" : "border-border hover:border-primary/60"}`}
-    >
-      <Moldura proporcao={1}>
-        {miniatura ? <MiniaturaGrande m={miniatura} alt={titulo} /> : <span className="flex h-full w-full items-center justify-center text-[11px] text-muted-foreground">sem foto</span>}
-      </Moldura>
-      <p className="mt-1.5 truncate text-[12px] font-medium">{titulo}</p>
-      {subtitulo && <p className="truncate text-[10.5px] text-muted-foreground">{subtitulo}</p>}
-      {aviso && <p className="truncate text-[10.5px] text-warning">{aviso}</p>}
-    </button>
-  );
-}
-
-interface PedidoDeEscolha {
-  tipo: AbaDaEscolha;
-  /** Cartão a trocar; null põe um cartão novo no quadro. */
-  trocarId: string | null;
-}
-
-function EscolherCartao({
-  pedido,
-  fontes,
-  onFechar,
-  onEscolher,
-}: {
-  pedido: PedidoDeEscolha | null;
-  fontes: Fontes;
-  onFechar: () => void;
-  onEscolher: (tipo: AbaDaEscolha, dados: DadosDoNo, trocarId: string | null) => void;
-}) {
-  const { irPara } = useMesaFoto();
-  const [aba, setAba] = useState<AbaDaEscolha>("produto");
-  const [texto, setTexto] = useState("");
-  const [busca, setBusca] = useState("");
-  useEffect(() => {
-    if (!pedido) return;
-    setAba(pedido.tipo);
-    setTexto("");
-    setBusca("");
-  }, [pedido]);
-  const trocando = !!(pedido && pedido.trocarId);
-  const escolher = (dados: DadosDoNo) => {
-    if (!pedido) return;
-    onEscolher(aba, dados, pedido.trocarId);
-    onFechar();
-  };
-  const kits = kitsUsaveis(fontes.kits);
-  const personas = fontes.personas.filter((p) => p.status !== "arquivada");
-  const referencias = fontes.biblioteca.filter((i) => i.tipo === "referencia");
-  const termo = busca.trim().toLowerCase();
-  const fotos = fontes.fotos.filter((f) => !termo || String(f.nome || "").toLowerCase().indexOf(termo) >= 0).slice(0, 48);
-  const tipo = TIPOS_DE_NO[aba];
-
-  return (
-    <Dialog open={!!pedido} onOpenChange={(v) => (!v ? onFechar() : undefined)}>
-      <DialogContent className="dark max-h-[88vh] max-w-3xl overflow-y-auto border-border bg-background text-foreground" data-escolher-cartao={aba}>
-        <DialogHeader>
-          <DialogTitle className="text-[15px]">{trocando ? `Trocar ${tipo.rotulo.toLowerCase()}` : "Pôr no quadro"}</DialogTitle>
-          <DialogDescription className="text-[12px]">
-            {trocando ? tipo.dica : "Escolha pela foto. O cartão entra no quadro já ligado ao Resultado."}
-          </DialogDescription>
-        </DialogHeader>
-        {!trocando && (
-          <div className="flex min-w-0 flex-wrap items-center" role="tablist" aria-label="O que pôr no quadro">
-            {ABAS_DA_ESCOLHA.map((a) => {
-              const t = TIPOS_DE_NO[a];
-              const Icone = ICONES[a];
-              return (
-                <button
-                  key={a}
-                  type="button"
-                  role="tab"
-                  aria-selected={aba === a}
-                  onClick={() => setAba(a)}
-                  className={`mb-1.5 mr-1.5 inline-flex h-9 items-center rounded-full border px-3 text-[12.5px] ${aba === a ? `${t.borda} ${t.fundo} text-foreground` : "border-border text-muted-foreground hover:text-foreground"}`}
-                >
-                  <Icone className={`mr-1.5 h-3.5 w-3.5 ${t.texto}`} /> {t.rotulo}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {aba === "produto" &&
-          (kits.length ? (
-            <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Produtos do cliente">
-              {kits.map((k) => (
-                <OpcaoComFoto
-                  key={String(k.id)}
-                  atributo={String(k.id)}
-                  miniatura={capaDoKit(k, fontes.fotos)}
-                  titulo={k.nome}
-                  subtitulo={`${rotuloDoTipo(k.tipo)}${k.variante ? ` · ${k.variante}` : ""}`}
-                  onEscolher={() => escolher({ kit_id: String(k.id) })}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-5 text-center">
-              <p className="text-[13px] font-medium">Nenhum produto confirmado ainda.</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">O produto nasce no passo 2 (Produto), a partir das fotos.</p>
-              <Button type="button" size="sm" variant="outline" className="mt-3 h-8 text-[12px]" onClick={() => { onFechar(); irPara("kits"); }}>
-                Ir para Produto
-              </Button>
-            </div>
-          ))}
-
-        {aba === "modelo" &&
-          (personas.length ? (
-            <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-4" aria-label="Modelos">
-              {personas.map((p) => (
-                <OpcaoComFoto
-                  key={p.id}
-                  atributo={p.id}
-                  miniatura={rostoDaPersona(p, fontes.ancoras)}
-                  titulo={p.nome}
-                  subtitulo={STATUS_DA_PERSONA[p.status].rotulo}
-                  aviso={personaSemAncora(p) ? "sem âncora: escolha na aba Modelos" : undefined}
-                  desligada={personaSemAncora(p)}
-                  onEscolher={() => escolher({ modelo_id: p.id, versao: p.versao })}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-5 text-center">
-              <p className="text-[13px] font-medium">Nenhuma modelo ainda.</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">Crie a modelo sintética na aba Modelos e escolha a âncora.</p>
-              <Button type="button" size="sm" variant="outline" className="mt-3 h-8 text-[12px]" onClick={() => { onFechar(); irPara("modelos"); }}>
-                Ir para Modelos
-              </Button>
-            </div>
-          ))}
-
-        {(aba === "ambiente" || aba === "estilo") && (
-          <div className="min-w-0 space-y-4">
-            <div className="min-w-0 rounded-xl border border-border bg-card p-3">
-              <p className="mb-1.5 text-[12px] font-medium">{aba === "ambiente" ? "Descreva o lugar" : "Descreva a pegada"}</p>
-              <Textarea
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                rows={2}
-                placeholder={aba === "ambiente" ? "Ex.: praia no fim de tarde, mesa de madeira clara, rua com fachadas antigas" : "Ex.: luz de estúdio fria, céu azul limpo, cores quentes"}
-                aria-label={aba === "ambiente" ? "Descrição do ambiente" : "Descrição do estilo"}
-                className="text-[12.5px]"
-              />
-              <Button type="button" size="sm" className="mt-2 h-8 text-[12px]" disabled={!texto.trim()} onClick={() => escolher(trocando ? { texto: texto.trim() } : { texto: texto.trim() })}>
-                <Check className="mr-1 h-3.5 w-3.5" /> {trocando ? "Usar esta descrição" : "Pôr no quadro"}
-              </Button>
-            </div>
-            {referencias.length > 0 && (
-              <div className="min-w-0">
-                <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Referências da biblioteca</p>
-                <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Referências da biblioteca">
-                  {referencias.slice(0, 36).map((i) => (
-                    <OpcaoComFoto key={i.id} atributo={i.id} miniatura={{ caminho: "", bucket: "mesa", item: i }} titulo={i.titulo} onEscolher={() => escolher({ biblioteca_id: i.id, imagem_id: null })} />
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="min-w-0">
-              <div className="mb-1.5 flex min-w-0 flex-wrap items-center">
-                <p className="mr-2 min-w-0 flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fotos do acervo</p>
-                <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome" aria-label="Buscar foto do acervo" className="h-8 w-full min-w-0 text-[12px] sm:w-56" />
-              </div>
-              {fotos.length ? (
-                <div className="grid min-w-0 grid-cols-3 gap-2 sm:grid-cols-6" aria-label="Fotos do acervo">
-                  {fotos.map((f) => (
-                    <OpcaoComFoto key={f.id} atributo={f.id} miniatura={daFoto(f)} titulo={f.nome} onEscolher={() => escolher({ imagem_id: f.id, biblioteca_id: null })} />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[12px] text-muted-foreground">Nenhuma foto no acervo{termo ? " com esse nome" : ""}.</p>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground">{aba === "ambiente" ? "O gerador usa lugar, luz e clima; pessoas da foto não são copiadas." : "Só paleta, luz e enquadramento. Estilo nunca vira identidade."}</p>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ------------------------------------------------------------------ editores (barra lateral e modo lista)
-
-function EditorDoCartao({ no, fontes, onMudar, onEscolher }: { no: NoDoCanvas; fontes: Fontes; onMudar: (dados: Partial<DadosDoNo>) => void; onEscolher: () => void }) {
-  const d = no.dados;
-  const desc = descrever(no, fontes);
-  const tipo = TIPOS_DE_NO[no.tipo];
-  if (no.tipo === "texto") {
-    return (
-      <div className="min-w-0 space-y-2">
-        <Pilulas
-          rotulo="Papel do texto"
-          opcoes={[
-            { valor: "pedido", rotulo: "Pedido" },
-            { valor: "restricao", rotulo: "Restrição" },
-          ]}
-          valor={d.papel || "pedido"}
-          onEscolher={(v) => onMudar({ papel: v as "pedido" | "restricao" })}
-        />
-        <Textarea value={d.texto || ""} onChange={(e) => onMudar({ texto: e.target.value })} rows={5} placeholder="Ex.: ela usando o óculos, sorrindo de leve, luz de fim de tarde" aria-label="Texto do pedido" className="text-[12.5px]" />
-        <p className="text-[11px] text-muted-foreground">{d.papel === "restricao" ? "Restrição: o que não pode aparecer ou mudar." : "Pedido: a cena em palavras, do jeito que você falaria."}</p>
-      </div>
-    );
-  }
-  const temImagem = !!(d.imagem_id || d.biblioteca_id);
-  return (
-    <div className="min-w-0 space-y-2.5">
-      <div className="flex min-w-0 items-center rounded-xl border border-border bg-background p-2">
-        <span className="relative block shrink-0 overflow-hidden rounded-lg bg-muted" style={{ width: 64, height: 64 }}>
-          <MiniaturaGrande m={desc.miniatura} alt={desc.titulo} />
-        </span>
-        <div className="ml-2.5 min-w-0 flex-1">
-          <p className="truncate text-[12.5px] font-semibold">{desc.titulo}</p>
-          <p className={`truncate text-[11px] ${faltaNoCartao(no) ? "text-warning" : "text-muted-foreground"}`}>{desc.subtitulo}</p>
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" variant="outline" className="mb-1 mr-1.5 h-8 text-[12px]" onClick={onEscolher} data-trocar-cartao={no.id}>
-          <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
-          {(no.tipo === "produto" && d.kit_id) || (no.tipo === "modelo" && d.modelo_id) || temImagem ? `Trocar ${tipo.rotulo.toLowerCase()}` : `Escolher ${tipo.rotulo.toLowerCase()}`}
-        </Button>
-        {(no.tipo === "ambiente" || no.tipo === "estilo") && temImagem && (
-          <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px]" onClick={() => onMudar({ imagem_id: null, biblioteca_id: null })}>
-            Tirar a imagem
-          </Button>
-        )}
-      </div>
-      {(no.tipo === "ambiente" || no.tipo === "estilo") && (
-        <Textarea
-          value={d.texto || ""}
-          onChange={(e) => onMudar({ texto: e.target.value })}
-          rows={2}
-          placeholder={no.tipo === "ambiente" ? "Descreva o lugar: praia no fim de tarde, mesa de madeira clara..." : "Descreva a pegada: céu azul, luz de estúdio fria..."}
-          aria-label={no.tipo === "ambiente" ? "Descrição do ambiente" : "Descrição do estilo"}
-          className="text-[12.5px]"
-        />
-      )}
-      <p className="text-[11px] leading-snug text-muted-foreground">
-        {no.tipo === "produto"
-          ? "Vão as fotos de identidade do kit, na ordem de prioridade. O produto não muda."
-          : no.tipo === "modelo"
-            ? "Só modelo com âncora escolhida. Vão a âncora e as vistas mais próximas do ângulo."
-            : no.tipo === "ambiente"
-              ? "O gerador usa lugar, luz e clima; pessoas da foto não são copiadas."
-              : "Só paleta, luz e enquadramento. Nunca vira identidade."}
-      </p>
-    </div>
-  );
-}
-
-function FotoDoResultado({ r, foto, onConferencia }: { r: ResultadoDoCanvas; foto: FotoDoAcervo | null; onConferencia: (c: ConferenciaDaPersona | null) => void }) {
-  const { catalogo } = useMesa();
-  const { irPara } = useMesaFoto();
-  const [ampliada, setAmpliada] = useState(false);
-  const caminho = r.storage_path || r.url;
-  return (
-    <div className="min-w-0 rounded-xl border border-border bg-background p-2.5" data-resultado={r.geracao_id}>
-      <div className="flex min-w-0 items-start">
-        <button type="button" className="block shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted" style={{ width: 72, height: 90 }} onClick={() => setAmpliada(true)} aria-label="Ver grande">
-          <MiniaturaDoStorage bucket={r.storage_bucket} caminho={caminho} alt="Foto do Canvas" largura={200} className="h-full w-full" />
-        </button>
-        <div className="ml-2.5 min-w-0 flex-1">
-          <p className="flex items-center text-[12.5px] font-semibold">
-            <span className="min-w-0 truncate">{rotuloDoMotor(catalogo, r.motor_id)}</span>
-            <span className="ml-1.5 inline-flex shrink-0 items-center rounded-full border border-primary/30 px-1.5 py-px text-[9.5px] font-semibold text-primary" data-selo="gerada">
-              gerada
-            </span>
-          </p>
-          <p className="text-[11px] text-muted-foreground">{r.custo_usd ? `${usd(r.custo_usd)} · ` : ""}no acervo</p>
-          <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
-            {foto && <AprovarFoto foto={foto} />}
-            <BotaoComCusto
-              rotulo={
-                <>
-                  <ScanSearch className="mr-1 h-3.5 w-3.5" /> Conferir
-                </>
-              }
-              titulo="Conferência pronta"
-              descricao="A visão compara com o produto (formato, cor, logo) e com a âncora da modelo. Só aviso."
-              variant="outline"
-              className="mb-1.5 mr-1.5 h-8 text-[12px]"
-              partes={() => partesDaConferencia(catalogo)}
-              executar={() => conferirGeracao(r.geracao_id)}
-              aoConcluir={(data) => onConferencia(data ? data.conferencia : null)}
-            />
-            {r.imagem_id && (
-              <Button type="button" size="sm" variant="ghost" className="mb-1.5 h-8 text-[12px]" onClick={() => irPara("usar", { imagem: r.imagem_id })}>
-                Revisar e usar
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-      {foto && (
-        <div className="mt-1">
-          <BotoesDeUso fotos={[foto]} compacto />
-        </div>
-      )}
-      {r.conferencia && (
-        <div className="mt-1 rounded-md border border-border p-2 text-[11px] leading-snug" data-conferencia="">
-          <p className="mb-0.5 font-medium text-muted-foreground">Conferência (aviso, você decide)</p>
-          {r.conferencia.alertas.map((a) => (
-            <p key={a} className="text-warning [overflow-wrap:anywhere]">
-              {a}
-            </p>
-          ))}
-          {r.conferencia.pontos.map((p) => (
-            <p key={p.criterio} className={p.ok === false ? "text-warning" : "text-muted-foreground"}>
-              {p.ok === false ? "Atenção" : "Ok"}: {p.criterio}
-              {p.nota ? `, ${p.nota}` : ""}
-            </p>
-          ))}
-        </div>
-      )}
-      <Ampliar imagens={[{ caminho, bucket: r.storage_bucket, titulo: "Resultado do Canvas (gerada)", legenda: "Imagem gerada por IA" }]} indice={ampliada ? 0 : null} onFechar={() => setAmpliada(false)} />
-    </div>
-  );
-}
-
-function PedidoMontado({ m, fotos, onFechar }: { m: Montagem; fotos: FotoDoAcervo[]; onFechar: () => void }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-primary/40 bg-background p-3" data-pedido-montado="">
-      <div className="mb-2 flex min-w-0 items-center">
-        <p className="min-w-0 flex-1 text-[12.5px] font-semibold">O que vai para o gerador</p>
-        {m.estimativa_usd !== null && <span className="mr-2 text-[11.5px] text-muted-foreground">~{usd(m.estimativa_usd)} por motor</span>}
-        <button type="button" onClick={onFechar} aria-label="Fechar o que vai ao gerador" className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      {m.referencias.length > 0 && (
-        <ol className="mb-2 flex min-w-0 flex-wrap" aria-label="Referências na ordem">
-          {m.referencias.map((r) => {
-            const f = r.imagem_id ? fotos.find((x) => x.id === r.imagem_id) || null : null;
-            const caminho = r.storage_path || (f ? f.storage_path : "") || r.url;
-            return (
-              <li key={`${r.ordem}-${r.imagem_id || r.origem_id}`} className="mb-1.5 mr-1.5 w-14" title={r.legenda || r.papel}>
-                <span className="relative block overflow-hidden rounded-lg bg-muted" style={{ width: 56, height: 56 }}>
-                  {caminho ? <MiniaturaDoStorage bucket={r.storage_bucket || (f ? f.storage_bucket : "mesa")} caminho={caminho} alt={r.legenda || r.papel} largura={160} className="h-full w-full" /> : null}
-                  <span className="absolute left-0.5 top-0.5 rounded-full bg-card px-1 text-[9.5px] font-semibold">{r.ordem}</span>
-                </span>
-                <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{r.papel || r.origem_tipo}</span>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-      {m.cortadas > 0 && <p className="mb-1 text-[11px] text-warning">{m.cortadas} {m.cortadas === 1 ? "referência ficou" : "referências ficaram"} de fora pelo limite do motor.</p>}
-      {m.avisos.map((a) => (
-        <p key={a} className="mb-1 text-[11px] text-warning [overflow-wrap:anywhere]">
-          {a}
-        </p>
-      ))}
-      <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted p-2 text-[11.5px] leading-relaxed [overflow-wrap:anywhere]">{m.prompt || "A função não devolveu o texto do pedido."}</pre>
-    </div>
-  );
-}
-
-/** Custo de uma geração do Resultado (uma foto por motor ligado), sempre à vista. */
-function CustoDoResultado({ canvas, no, curto = false }: { canvas: Canvas; no: NoDoCanvas | null; curto?: boolean }) {
-  const motores = no ? no.dados.motores || [] : [];
-  const partes = no && motores.length ? partesDoGerar(motores, no.dados.qualidade || "alta", entradasDoGerar(canvas, no.id).length) : null;
-  const { data, isLoading } = useEstimativa(partes);
-  if (!no) return null;
-  if (!motores.length) return <span className="text-warning">sem motor</span>;
-  if (isLoading || data === undefined) return <span className="text-muted-foreground">estimando</span>;
-  return curto ? (
-    <span data-custo-do-resultado="">~{usd(data)}</span>
-  ) : (
-    <span data-custo-do-resultado="">
-      ~{usd(data)} por geração{motores.length > 1 ? ` (${motores.length} fotos)` : ""}
-    </span>
-  );
-}
-
-function AjustesDoResultado({
-  canvas,
-  no,
-  fontes,
-  onMudar,
-  garantirSalvo,
-  comGerar,
-  onGerar,
-}: {
-  canvas: Canvas;
-  no: NoDoCanvas;
-  fontes: Fontes;
-  onMudar: (dados: Partial<DadosDoNo>) => void;
-  garantirSalvo: () => Promise<Canvas | null>;
-  comGerar: boolean;
-  onGerar: (gerarId: string) => Promise<Record<string, never>>;
-}) {
-  const { catalogo } = useMesa();
-  const avisarErro = useAvisarErro();
-  const andamentos = useAndamentos();
-  const { opcoes } = useMemo(() => motoresDaRodada(catalogo), [catalogo]);
-  const [montagem, setMontagem] = useState<Montagem | null>(null);
-  const [montando, setMontando] = useState(false);
-  const [conferencias, setConferencias] = useState<Record<string, ConferenciaDaPersona | null>>({});
-  const d = no.dados;
-  const motores = d.motores || [];
-  const qualidade: Qualidade = d.qualidade || "alta";
-  const formato = d.formato || "4:5";
-  const entradas = entradasDoGerar(canvas, no.id);
-  const bloqueios = bloqueiosDoGerar(canvas, no.id, fontes.personas);
-  const avisos = avisosDoGerar(canvas, no.id, fontes.personas);
-  const resultados = (d.resultados || []).slice().reverse();
-  const gerando = motores.some((m) => {
-    const a = andamentos[chaveDoAndamento("canvas", no.id, m)];
-    return !!a && a.estado === "gerando";
-  });
-  const alternar = (id: string) => onMudar({ motores: motores.indexOf(id) >= 0 ? motores.filter((x) => x !== id) : motores.concat([id]) });
-
-  const montar = async () => {
-    if (montando || !motores.length) return;
-    setMontando(true);
-    try {
-      const salvo = await garantirSalvo();
-      if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de ver o que vai ao gerador.");
-      setMontagem(await montarCanvas({ canvasId: salvo.id, gerarId: no.id, motorId: motores[0], qualidade }));
-    } catch (e) {
-      avisarErro(e, "Não deu para montar o que vai ao gerador");
-    } finally {
-      setMontando(false);
-    }
-  };
-
-  return (
-    <div className="min-w-0 space-y-4" data-ajustes-do-resultado={no.id}>
-      <div className="min-w-0">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Motores (uma foto por motor)</p>
-        <div className="flex min-w-0 flex-wrap" role="group" aria-label="Motores do Resultado">
-          {opcoes.map((o) => {
-            const ligado = motores.indexOf(o.id) >= 0;
-            const a = andamentos[chaveDoAndamento("canvas", no.id, o.id)];
-            return (
-              <button
-                key={o.id}
-                type="button"
-                role="switch"
-                aria-checked={ligado}
-                onClick={() => alternar(o.id)}
-                className={`mb-1.5 mr-1.5 inline-flex h-7 max-w-full items-center truncate rounded-full border px-2.5 text-[11.5px] ${ligado ? "border-primary bg-primary/10 text-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
-                title={a && a.estado === "falhou" ? a.erro : undefined}
-              >
-                {ligado && <Check className="mr-1 h-3 w-3 text-primary" />}
-                {o.rotulo}
-                {a && a.estado === "gerando" && <Loader2 className="ml-1 h-3 w-3 animate-spin" />}
-                {a && a.estado === "falhou" && <span className="ml-1 text-destructive">falhou</span>}
-              </button>
-            );
-          })}
-        </div>
-        {motores.map((m) => {
-          const a = andamentos[chaveDoAndamento("canvas", no.id, m)];
-          return a && a.estado === "falhou" ? (
-            <p key={m} className="text-[11px] text-destructive [overflow-wrap:anywhere]" role="alert">
-              {rotuloDoMotor(catalogo, m)}: {a.erro}
-            </p>
-          ) : null;
-        })}
-      </div>
-      <div className="min-w-0">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Formato</p>
-        <Pilulas rotulo="Formato do Resultado" opcoes={FORMATOS_DO_CANVAS} valor={formato} onEscolher={(v) => onMudar({ formato: v })} />
-      </div>
-      <div className="min-w-0">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Qualidade</p>
-        <Pilulas rotulo="Qualidade do Resultado" opcoes={QUALIDADES.map((q) => ({ valor: q.valor, rotulo: q.rotulo }))} valor={qualidade} onEscolher={(v) => onMudar({ qualidade: v as Qualidade })} />
-      </div>
-      <div className="min-w-0">
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Resolução</p>
-        <Pilulas rotulo="Resolução do Resultado" opcoes={RESOLUCOES_DO_CANVAS} valor={d.resolucao || "auto"} onEscolher={(v) => onMudar({ resolucao: v === "auto" ? null : (v as Resolucao) })} />
-        <p className="mt-1 text-[10.5px] leading-snug text-muted-foreground">Automática usa a do motor. Motor que não aceita a pedida ajusta e avisa.</p>
-      </div>
-      <div className="flex min-w-0 items-center rounded-xl border border-border bg-background px-3 py-2 text-[12px]">
-        <span className="min-w-0 flex-1 text-muted-foreground">Custo</span>
-        <span className="font-semibold">
-          <CustoDoResultado canvas={canvas} no={no} />
-        </span>
-      </div>
-      <div className="min-w-0">
-        <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">O que o Resultado junta, na ordem</p>
-        {entradas.length === 0 ? (
-          <p className="text-[12px] text-muted-foreground">Nada ainda. Ponha um produto ou uma modelo pela barra à esquerda.</p>
-        ) : (
-          <ol className="min-w-0 space-y-1" aria-label="Entradas do Resultado">
-            {entradas.map((e) => (
-              <li key={e.ligacao.id} className="flex min-w-0 items-center text-[12px]">
-                <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold">{e.numero}</span>
-                <span className="mr-1.5 inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: TIPOS_DE_NO[e.no.tipo].cor }} />
-                <span className="min-w-0 flex-1 truncate">
-                  {ROTULOS_DAS_ENTRADAS[e.entrada]}: {descrever(e.no, fontes).titulo}
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-      {bloqueios.length > 0 && (
-        <ul className="space-y-0.5" aria-label="O que falta para gerar">
-          {bloqueios.map((b) => (
-            <li key={b} className="text-[11.5px] text-warning">
-              {b}
-            </li>
-          ))}
-        </ul>
-      )}
-      {avisos.map((a) => (
-        <p key={a} className="text-[11.5px] text-muted-foreground">
-          {a}
-        </p>
-      ))}
-      <div className="flex min-w-0 flex-wrap items-center">
-        <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-9 text-[12px]" disabled={montando || !motores.length || entradas.length === 0} onClick={() => void montar()}>
-          {montando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Eye className="mr-1.5 h-3.5 w-3.5" />} Ver o que vai ao gerador
-        </Button>
-        {comGerar && (
-          <BotaoComCusto
-            rotulo={
-              <>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> {motores.length > 1 ? `Gerar em ${motores.length} motores` : "Gerar foto"}
-              </>
-            }
-            titulo="Geração do Canvas"
-            descricao="Uma foto por motor ligado. O que sair entra no acervo, marcado como gerado, e aparece no Resultado."
-            className="mb-1.5 h-9 text-[12.5px]"
-            disabled={bloqueios.length > 0 || gerando}
-            fecharAoConfirmar
-            partes={() => partesDoGerar(motores, qualidade, entradas.length)}
-            executar={() => onGerar(no.id)}
-          />
-        )}
-      </div>
-      {montagem && <PedidoMontado m={montagem} fotos={fontes.fotos} onFechar={() => setMontagem(null)} />}
-      {resultados.length > 0 && (
-        <div className="min-w-0 space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fotos deste Resultado ({resultados.length})</p>
-          {resultados.slice(0, 8).map((r) =>
-            r.status === "falhou" ? (
-              <p key={r.geracao_id} className="text-[11.5px] text-destructive">
-                {rotuloDoMotor(catalogo, r.motor_id)}: {r.erro || "falhou"}
-              </p>
-            ) : (
-              <FotoDoResultado
-                key={r.geracao_id}
-                r={conferencias[r.geracao_id] !== undefined ? { ...r, conferencia: conferencias[r.geracao_id] } : r}
-                foto={r.imagem_id ? fontes.fotos.find((f) => f.id === r.imagem_id) || null : null}
-                onConferencia={(c) => {
-                  setConferencias({ ...conferencias, [r.geracao_id]: c });
-                  onMudar({ resultados: (d.resultados || []).map((x) => (x.geracao_id === r.geracao_id ? { ...x, conferencia: c } : x)) });
-                }}
-              />
-            ),
-          )}
-        </div>
-      )}
-    </div>
-  );
+  const t = tamanhoDoNo(tipo);
+  const y = tipo === "agente" ? 30 : t.altura / 2;
+  return [{ id: "saida", type: "source" as const, position: Position.Right, x: t.largura - ALCA / 2, y: y - ALCA / 2, width: ALCA, height: ALCA }];
 }
 
 // ------------------------------------------------------------------ peças que flutuam sobre o quadro
 
 function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) => void; onAdicionar: () => void; onResultado: () => void }) {
   return (
-    <nav aria-label="Cartões para o quadro" className="absolute left-3 top-3 z-10 w-[88px] rounded-2xl border border-border bg-card p-1.5 shadow-2xl" data-paleta-lateral="">
-      {TIPOS_DE_ENTRADA.map((t) => {
+    <nav aria-label="Cartões para o quadro" className={`${PAINEL} absolute left-3 top-3 z-10 w-[64px] rounded-2xl p-1`} data-paleta-lateral="">
+      {TIPOS_DA_BARRA.map((t) => {
         const tipo = TIPOS_DE_NO[t];
         const Icone = ICONES[t];
         return (
@@ -1291,24 +561,33 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
             onClick={() => onTipo(t)}
             title={`${tipo.dica} Toque para pôr no quadro (ou arraste).`}
             data-paleta={t}
-            className="mb-1 flex w-full flex-col items-center rounded-xl px-1 py-2 text-center transition-colors hover:bg-muted"
+            className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1.5 text-center transition-colors hover:bg-white/10"
           >
-            <span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${tipo.borda} ${tipo.fundo}`}>
-              <Icone className={`h-4 w-4 ${tipo.texto}`} />
+            <span className={`flex h-8 w-8 items-center justify-center ${t === "agente" ? "rounded-full" : "rounded-lg"} border ${tipo.borda} ${tipo.fundo}`}>
+              <Icone className={`h-3.5 w-3.5 ${tipo.texto}`} />
             </span>
-            <span className="mt-1 text-[11.5px] font-medium leading-none">{tipo.rotulo}</span>
+            <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">{tipo.rotulo}</span>
           </button>
         );
       })}
-      <span className="mx-1 my-1 block h-px bg-border" />
-      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-1 flex w-full flex-col items-center rounded-xl px-1 py-2 text-center hover:bg-muted" title="Escolher do acervo, dos produtos ou das modelos, pela foto">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+      {TIPOS_FUTUROS.map((t) => (
+        <button key={t.chave} type="button" disabled title={t.dica} data-paleta={t.chave} aria-label={`${t.rotulo} (em breve)`} className="mb-0.5 flex w-full cursor-not-allowed flex-col items-center rounded-xl px-0.5 py-1.5 text-center opacity-50">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-dashed border-white/20">
+            <ICONE_DO_VIDEO className="h-3.5 w-3.5 text-zinc-400" />
+          </span>
+          <span className="mt-0.5 text-[10px] leading-none text-zinc-400">{t.rotulo}</span>
+          <span className="text-[8.5px] leading-none text-zinc-500">em breve</span>
+        </button>
+      ))}
+      <span className="mx-1 my-1 block h-px bg-white/10" />
+      <button type="button" onClick={onAdicionar} data-paleta="adicionar" className="mb-0.5 flex w-full flex-col items-center rounded-xl px-0.5 py-1.5 text-center hover:bg-white/10" title="Escolher do acervo, dos produtos ou das pessoas, pela foto">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400 text-black">
           <Plus className="h-4 w-4" />
         </span>
-        <span className="mt-1 text-[11.5px] font-medium leading-none">Adicionar</span>
+        <span className="mt-0.5 text-[10px] font-medium leading-none text-zinc-200">Adicionar</span>
       </button>
-      <button type="button" onClick={onResultado} data-paleta="gerar" className="flex w-full items-center justify-center rounded-lg px-1 py-1.5 text-[10.5px] text-muted-foreground hover:bg-muted hover:text-foreground" title="Outro Resultado, para gerar outra combinação no mesmo quadro">
-        <Plus className="mr-0.5 h-3 w-3" /> Resultado
+      <button type="button" onClick={onResultado} data-paleta="gerar" className="flex w-full items-center justify-center rounded-lg px-0.5 py-1 text-[9.5px] text-zinc-400 hover:bg-white/10 hover:text-white" title="Outro Resultado, para outra combinação no mesmo quadro">
+        <Plus className="mr-0.5 h-3 w-3" /> Result.
       </button>
     </nav>
   );
@@ -1317,91 +596,29 @@ function Paleta({ onTipo, onAdicionar, onResultado }: { onTipo: (t: TipoDeNo) =>
 function BarraLateral({ recolhida, onRecolher, titulo, custo, custoCurto, children }: { recolhida: boolean; onRecolher: (v: boolean) => void; titulo: ReactNode; custo: ReactNode; custoCurto: ReactNode; children: ReactNode }) {
   if (recolhida) {
     return (
-      <div className="absolute right-3 top-3 z-10 flex w-[64px] flex-col items-center rounded-2xl border border-border bg-card px-1 py-2 shadow-2xl" data-ajustes="recolhidos">
-        <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-muted" title="Motores, formato, qualidade e resolução">
+      <div className={`${PAINEL} absolute right-3 top-3 z-10 flex w-[56px] flex-col items-center rounded-2xl px-1 py-1.5`} data-ajustes="recolhidos">
+        <button type="button" onClick={() => onRecolher(false)} aria-label="Abrir os ajustes" className="flex h-9 w-9 items-center justify-center rounded-xl hover:bg-white/10" title="Ajustes do cartão ou do Resultado">
           <SlidersHorizontal className="h-4 w-4" />
         </button>
-        <span className="mt-1 text-center text-[10px] leading-tight text-muted-foreground">Ajustes</span>
-        <span className="mt-2 text-center text-[10.5px] font-semibold leading-tight">{custoCurto}</span>
+        <span className="mt-0.5 text-center text-[9.5px] leading-tight text-zinc-400">Ajustes</span>
+        <span className="mt-1.5 text-center text-[10px] font-semibold leading-tight">{custoCurto}</span>
       </div>
     );
   }
   return (
-    <aside aria-label="Ajustes" className="absolute bottom-3 right-3 top-3 z-10 flex w-[300px] max-w-[46%] flex-col rounded-2xl border border-border bg-card shadow-2xl" data-ajustes="abertos">
-      <div className="flex shrink-0 items-center border-b border-border px-3 py-2.5">
-        <SlidersHorizontal className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+    <aside aria-label="Ajustes" className={`${PAINEL} absolute bottom-3 right-3 top-3 z-10 flex w-[288px] max-w-[46%] flex-col rounded-2xl`} data-ajustes="abertos">
+      <div className="flex shrink-0 items-center border-b border-white/10 px-3 py-2">
+        <SlidersHorizontal className="mr-2 h-3.5 w-3.5 text-zinc-400" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[12px] font-semibold">{titulo}</h3>
-          <p className="truncate text-[11px] text-muted-foreground">{custo}</p>
+          <p className="truncate text-[10.5px] text-zinc-400">{custo}</p>
         </div>
-        <button type="button" onClick={() => onRecolher(true)} aria-label="Recolher os ajustes" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
+        <button type="button" onClick={() => onRecolher(true)} aria-label="Recolher os ajustes" className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white">
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
     </aside>
-  );
-}
-
-function ComoFunciona({ onFechar }: { onFechar: () => void }) {
-  return (
-    <div className="absolute left-1/2 top-3 z-10 w-[420px] max-w-[60%] -translate-x-1/2 rounded-2xl border border-border bg-card p-3 shadow-2xl" data-como-funciona="">
-      <div className="mb-1.5 flex items-center">
-        <HelpCircle className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        <p className="flex-1 text-[12px] font-semibold">Como funciona</p>
-        <button type="button" onClick={onFechar} aria-label="Fechar o como funciona" className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <ol className="space-y-1 text-[12px] leading-snug text-muted-foreground">
-        <li>
-          <b className="text-foreground">1.</b> Ponha o que vai na foto pela barra à esquerda: produto, modelo, ambiente, estilo ou um pedido em palavras.
-        </li>
-        <li>
-          <b className="text-foreground">2.</b> Cada cartão já se liga sozinho ao Resultado. Toque num cartão para trocar o que ele leva.
-        </li>
-        <li>
-          <b className="text-foreground">3.</b> No Resultado, toque em Gerar foto. A foto aparece nele e vai para o acervo.
-        </li>
-      </ol>
-    </div>
-  );
-}
-
-function ModelosProntos({ onAplicar, onFechar, flutuante }: { onAplicar: (chave: string) => void; onFechar?: () => void; flutuante: boolean }) {
-  return (
-    <div
-      className={flutuante ? "absolute bottom-4 left-1/2 z-10 w-[640px] max-w-[70%] -translate-x-1/2 rounded-2xl border border-border bg-card p-3 shadow-2xl" : "min-w-0 rounded-2xl border border-border bg-card p-3"}
-      data-modelos-prontos=""
-    >
-      <div className="mb-2 flex items-center">
-        <Wand2 className="mr-1.5 h-3.5 w-3.5 text-primary" />
-        <p className="flex-1 text-[12px] font-semibold">Modelos prontos: montam o quadro em 1 clique</p>
-        {onFechar && (
-          <button type="button" onClick={onFechar} aria-label="Fechar os modelos prontos" className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-      <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-3">
-        {MODELOS_PRONTOS.map((m) => (
-          <button key={m.chave} type="button" onClick={() => onAplicar(m.chave)} data-modelo-pronto={m.chave} className="min-w-0 rounded-xl border border-border bg-background p-2.5 text-left transition-colors hover:border-primary/60">
-            <span className="mb-1.5 flex items-center">
-              {m.cartoes.map((c, i) => {
-                const Icone = ICONES[c.tipo];
-                return (
-                  <span key={`${c.tipo}-${i}`} className={`mr-1 flex h-6 w-6 items-center justify-center rounded-md ${TIPOS_DE_NO[c.tipo].fundo}`}>
-                    <Icone className={`h-3 w-3 ${TIPOS_DE_NO[c.tipo].texto}`} />
-                  </span>
-                );
-              })}
-            </span>
-            <span className="block text-[12.5px] font-semibold leading-snug">{m.rotulo}</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{m.dica}</span>
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -1418,6 +635,7 @@ function Quadro({
   onMudarCanvas,
   onViewport,
   onSoltar,
+  onSoltarProduto,
   cheia,
   onCheia,
 }: {
@@ -1429,6 +647,7 @@ function Quadro({
   onMudarCanvas: (fn: (c: Canvas) => Canvas) => void;
   onViewport: (v: ViewportDoQuadro) => void;
   onSoltar: (t: TipoDeNo, pos: { x: number; y: number }) => void;
+  onSoltarProduto: (kitId: string, pos: { x: number; y: number }) => void;
   cheia: boolean;
   onCheia: () => void;
 }) {
@@ -1472,7 +691,7 @@ function Quadro({
 
   const nodes = useMemo((): Node[] => {
     return canvas.nos.map((n) => {
-      const tamanho = n.tipo === "gerar" ? TAMANHO_DA_SAIDA : TAMANHO_DO_CARTAO;
+      const tamanho = tamanhoDoNo(n.tipo);
       const base = {
         id: n.id,
         type: n.tipo,
@@ -1505,13 +724,9 @@ function Quadro({
     (): Edge[] =>
       canvas.ligacoes.map((l) => {
         const origem = canvas.nos.find((n) => n.id === l.de);
-        const destino = canvas.nos.find((n) => n.id === l.para);
-        const cor = origem ? TIPOS_DE_NO[origem.tipo].cor : "hsl(var(--border))";
+        const cor = origem ? TIPOS_DE_NO[origem.tipo].cor : "#71717a";
         const ativa = !!selecionado && selecionado.tipo === "ligacao" && selecionado.id === l.id;
-        const gerando = !!destino && (destino.dados.motores || []).some((m) => {
-          const a = andamentos[chaveDoAndamento("canvas", destino.id, m)];
-          return !!a && a.estado === "gerando";
-        });
+        const gerando = andamentoDoResultado(andamentos, l.para).gerando.length > 0;
         return {
           id: l.id,
           source: l.de,
@@ -1519,6 +734,7 @@ function Quadro({
           sourceHandle: "saida",
           targetHandle: l.entrada,
           selected: ativa,
+          reconnectable: true,
           style: { stroke: cor, strokeWidth: ativa ? 3.5 : 2.5 },
           animated: gerando || recentes.indexOf(l.id) >= 0,
         };
@@ -1563,26 +779,42 @@ function Quadro({
     [onMudarCanvas, onSelecionar],
   );
 
+  // Trocar a ligação arrastando a ponta: solta noutro Resultado (ou noutro cartão) liga lá; solta no vazio desliga.
+  const religou = useRef(false);
+
   const soltar = (e: DragEvent<HTMLDivElement>) => {
-    const t = e.dataTransfer ? (e.dataTransfer.getData("application/mesa-foto-no") as TipoDeNo) : ("" as TipoDeNo);
+    if (!e.dataTransfer) return;
+    const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const posicao = { x: p.x - TAMANHO_DO_CARTAO.largura / 2, y: p.y - 24 };
+    const kit = e.dataTransfer.getData(TIPO_ARRASTADO_DA_ESTEIRA);
+    if (kit) {
+      e.preventDefault();
+      try {
+        const v = JSON.parse(kit);
+        if (v && typeof v.kit_id === "string") onSoltarProduto(v.kit_id, posicao);
+      } catch {
+        /* arrasto de outro lugar: ignora */
+      }
+      return;
+    }
+    const t = e.dataTransfer.getData("application/mesa-foto-no") as TipoDeNo;
     if (!t || !TIPOS_DE_NO[t]) return;
     e.preventDefault();
-    const p = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    onSoltar(t, { x: p.x - TAMANHO_DO_CARTAO.largura / 2, y: p.y - 24 });
+    onSoltar(t, posicao);
   };
 
   const estilo = {
-    "--xy-background-color": "hsl(var(--background))",
-    "--xy-controls-button-background-color": "hsl(var(--card))",
-    "--xy-controls-button-background-color-hover": "hsl(var(--muted))",
-    "--xy-controls-button-color": "hsl(var(--foreground))",
-    "--xy-controls-button-color-hover": "hsl(var(--foreground))",
-    "--xy-controls-button-border-color": "hsl(var(--border))",
-    "--xy-controls-box-shadow": "none",
-    "--xy-edge-stroke-default": "hsl(var(--border))",
-    "--xy-connectionline-stroke-default": "hsl(var(--primary))",
+    "--xy-background-color": "#eef0f3",
+    "--xy-controls-button-background-color": "#09090b",
+    "--xy-controls-button-background-color-hover": "#27272a",
+    "--xy-controls-button-color": "#f4f4f5",
+    "--xy-controls-button-color-hover": "#ffffff",
+    "--xy-controls-button-border-color": "#27272a",
+    "--xy-controls-box-shadow": "0 4px 16px rgba(0,0,0,0.25)",
+    "--xy-edge-stroke-default": "#71717a",
+    "--xy-connectionline-stroke-default": "#10b981",
     "--xy-connectionline-stroke-width-default": 2.5,
-    "--xy-handle-border-color": "hsl(var(--card))",
+    "--xy-handle-border-color": "#09090b",
   } as CSSProperties;
 
   return (
@@ -1609,6 +841,22 @@ function Quadro({
           if (c.source && c.target) onMudarCanvas((atual) => ligar(atual, c.source, c.target));
         }}
         isValidConnection={(c) => !!podeLigar(canvas, String(c.source), String(c.target))}
+        edgesReconnectable
+        onReconnectStart={() => {
+          religou.current = false;
+        }}
+        onReconnect={(velha, nova) => {
+          religou.current = true;
+          if (!nova.source || !nova.target) return;
+          onMudarCanvas((c) => {
+            const sem = desligar(c, velha.id);
+            return podeLigar(sem, nova.source, nova.target) ? ligar(sem, nova.source, nova.target) : c;
+          });
+        }}
+        onReconnectEnd={(_e, velha) => {
+          if (!religou.current) onMudarCanvas((c) => desligar(c, velha.id));
+          religou.current = false;
+        }}
         onPaneClick={() => onSelecionar(null)}
         onMoveEnd={(_e, v) => onViewport(v)}
         defaultViewport={canvas.viewport}
@@ -1629,8 +877,7 @@ function Quadro({
         proOptions={{ hideAttribution: true }}
         style={estilo}
       >
-        <Background id="fina" variant={BackgroundVariant.Dots} gap={24} size={1.2} color="hsl(var(--border))" />
-        <Background id="grossa" variant={BackgroundVariant.Lines} gap={144} lineWidth={1} color="hsl(var(--border) / 0.45)" />
+        <Background id="fina" variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#c4c7ce" />
         <Controls showInteractive={false} position="bottom-left">
           <ControlButton onClick={onCheia} title={cheia ? "Sair da tela cheia" : "Tela cheia"} aria-label={cheia ? "Sair da tela cheia" : "Tela cheia"}>
             {/* O CSS do quadro pinta o ícone por dentro; ícone de traço fica sem preenchimento. */}
@@ -1642,102 +889,24 @@ function Quadro({
   );
 }
 
-// ------------------------------------------------------------------ modo lista (celular)
-
-function ModoLista({
-  canvas,
-  fontes,
-  onMudarCanvas,
-  garantirSalvo,
-  onGerar,
-  onPor,
-  onEscolher,
-}: {
-  canvas: Canvas;
-  fontes: Fontes;
-  onMudarCanvas: (fn: (c: Canvas) => Canvas) => void;
-  garantirSalvo: () => Promise<Canvas | null>;
-  onGerar: (gerarId: string) => Promise<Record<string, never>>;
-  onPor: (t: TipoDeNo, gerarId: string | null) => void;
-  onEscolher: (t: TipoDeNo, trocarId: string | null, gerarId: string | null) => void;
-}) {
-  const resultados = canvas.nos.filter((n) => n.tipo === "gerar");
-  const [resultadoId, setResultadoId] = useState<string | null>(resultados.length ? resultados[0].id : null);
-  const resultado = resultados.find((s) => s.id === resultadoId) || resultados[0] || null;
-  const entradas = resultado ? entradasDoGerar(canvas, resultado.id) : [];
-  const soltos = canvas.nos.filter((n) => n.tipo !== "gerar" && !canvas.ligacoes.some((l) => l.de === n.id));
-
-  if (!resultado) {
-    return (
-      <Cartao titulo="Modo lista">
-        <p className="mb-2 text-[12px] text-muted-foreground">O canvas não tem Resultado. Ele junta os cartões e gera a foto.</p>
-        <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => onPor("gerar", null)}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Pôr um Resultado
-        </Button>
-      </Cartao>
-    );
-  }
-
-  return (
-    <div className="min-w-0 space-y-3" data-modo-lista="">
-      {resultados.length > 1 && (
-        <Pilulas rotulo="Resultado aberto" opcoes={resultados.map((s, i) => ({ valor: s.id, rotulo: `Resultado ${i + 1}` }))} valor={resultado.id} onEscolher={setResultadoId} />
-      )}
-      <Cartao titulo="O que vai na foto" dica="Na ordem em que vai ao gerador: produto, modelo, ambiente, estilo e o pedido.">
-        {entradas.length === 0 && <p className="mb-2 text-[12px] text-muted-foreground">Nada ainda. Toque num botão abaixo.</p>}
-        <ol className="min-w-0 space-y-3">
-          {entradas.map((e) => (
-            <li key={e.ligacao.id} className="min-w-0 rounded-xl border border-border p-2.5" data-entrada-da-lista={e.no.id}>
-              <div className="mb-2 flex min-w-0 items-center">
-                <span className="mr-2 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10.5px] font-semibold">{e.numero}</span>
-                <span className={`min-w-0 flex-1 truncate text-[12.5px] font-semibold ${TIPOS_DE_NO[e.no.tipo].texto}`}>{TIPOS_DE_NO[e.no.tipo].rotulo}</span>
-                <button type="button" aria-label="Tirar o cartão" onClick={() => onMudarCanvas((c) => removerNo(c, e.no.id))} className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <EditorDoCartao no={e.no} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, e.no.id, dados))} onEscolher={() => onEscolher(e.no.tipo, e.no.id, resultado.id)} />
-            </li>
-          ))}
-        </ol>
-        {soltos.length > 0 && <p className="mt-2 text-[11px] text-muted-foreground">{soltos.length} {soltos.length === 1 ? "cartão solto" : "cartões soltos"} no quadro, sem ligação.</p>}
-        <div className="mt-3 flex min-w-0 flex-wrap items-center" aria-label="Pôr na foto">
-          {TIPOS_DE_ENTRADA.map((t) => {
-            const Icone = ICONES[t];
-            return (
-              <Button key={t} type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-9 text-[12px]" onClick={() => (t === "texto" ? onPor(t, resultado.id) : onEscolher(t, null, resultado.id))}>
-                <Icone className={`mr-1 h-3.5 w-3.5 ${TIPOS_DE_NO[t].texto}`} /> {TIPOS_DE_NO[t].rotulo}
-              </Button>
-            );
-          })}
-        </div>
-      </Cartao>
-      <Cartao titulo="Resultado" acao={<span className="text-[11.5px] font-semibold"><CustoDoResultado canvas={canvas} no={resultado} /></span>}>
-        <p className="mb-3 text-[12px] leading-snug [overflow-wrap:anywhere]" data-junta="">
-          {resumoDoResultado(entradas, (x) => descrever(x, fontes).titulo) || "Junta o que você puser acima. Comece por um produto ou uma modelo."}
-        </p>
-        <AjustesDoResultado canvas={canvas} no={resultado} fontes={fontes} onMudar={(dados) => onMudarCanvas((c) => mudarDados(c, resultado.id, dados))} garantirSalvo={garantirSalvo} comGerar onGerar={onGerar} />
-      </Cartao>
-    </div>
-  );
-}
-
 // ------------------------------------------------------------------ etapa
 
 type EstadoDoSalvar = { estado: "salvo" | "salvando" | "pendente" | "erro" | "conflito"; erro: string };
 
-function lerVisto(): boolean {
+function lerMarca(chave: string): boolean {
   try {
-    return window.localStorage.getItem(CHAVE_DO_COMO_FUNCIONA) === "1";
+    return window.localStorage.getItem(chave) === "1";
   } catch {
     return false;
   }
 }
 
-function marcarVisto() {
+function gravarMarca(chave: string, v: boolean) {
   try {
-    window.localStorage.setItem(CHAVE_DO_COMO_FUNCIONA, "1");
+    if (v) window.localStorage.setItem(chave, "1");
+    else window.localStorage.removeItem(chave);
   } catch {
-    /* sem armazenamento: volta a aparecer na próxima vez */
+    /* sem armazenamento: volta ao padrão na próxima vez */
   }
 }
 
@@ -1751,14 +920,18 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const [lista, setLista] = useState<boolean>(() => typeof window !== "undefined" && window.innerWidth < 768);
   const [recolhida, setRecolhida] = useState<boolean>(() => typeof window !== "undefined" && window.innerWidth < 1100);
   const [escolha, setEscolha] = useState<(PedidoDeEscolha & { gerarId: string | null }) | null>(null);
-  const [comoFunciona, setComoFunciona] = useState<boolean>(() => !lerVisto());
+  const [comoFunciona, setComoFunciona] = useState<boolean>(() => !lerMarca(CHAVE_DO_COMO_FUNCIONA));
   const [prontosAbertos, setProntosAbertos] = useState(false);
   const [cheia, setCheia] = useState(false);
+  const [foco, setFoco] = useState<boolean>(() => !lerMarca(CHAVE_DO_FOCO));
   const [resultadoAtivo, setResultadoAtivo] = useState<string | null>(null);
   const mexeu = useRef(false);
   const salvando = useRef<Promise<Canvas | null> | null>(null);
   const atual = useRef(canvas);
   atual.current = canvas;
+
+  // Modo foco: sem a barra de cima e sem os botões flutuantes do painel enquanto o Canvas está aberto (e sempre em tela cheia).
+  useModoFoco("canvas", foco || cheia);
 
   const kits = useKits(clientId);
   const fotos = useFotos(clientId);
@@ -1766,9 +939,14 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const personas = useMemo(() => personasQ.data || [], [personasQ.data]);
   const ancoras = useAncoras(personas.map((p) => p.ancora_imagem_id || ""));
   const biblioteca = useBiblioteca(clientId, !!escolha || canvas.nos.some((n) => n.tipo === "estilo" || n.tipo === "ambiente"));
+  const idsDeFora = useMemo(() => {
+    const doCliente = (kits.data || []).map((k) => String(k.id));
+    return canvas.nos.filter((n) => n.tipo === "produto" && !!n.dados.kit_id && doCliente.indexOf(String(n.dados.kit_id)) < 0).map((n) => String(n.dados.kit_id));
+  }, [canvas.nos, kits.data]);
+  const deFora = useProdutosDeFora(kits.isSuccess ? idsDeFora : []);
   const fontes: Fontes = useMemo(
-    () => ({ kits: kits.data || [], fotos: fotos.data || [], personas, ancoras: ancoras.data || [], biblioteca: biblioteca.data || [] }),
-    [kits.data, fotos.data, personas, ancoras.data, biblioteca.data],
+    () => ({ kits: kits.data || [], fotos: fotos.data || [], personas, ancoras: ancoras.data || [], biblioteca: biblioteca.data || [], produtosDeFora: deFora.data || [] }),
+    [kits.data, fotos.data, personas, ancoras.data, biblioteca.data, deFora.data],
   );
   const { opcoes } = useMemo(() => motoresDaRodada(catalogo), [catalogo]);
   const padraoDaSaida = (opcoes.find((o) => o.padrao) || opcoes[0] || { id: (padraoPara(catalogo, "imagem") || { id: "" }).id }).id || null;
@@ -1830,6 +1008,16 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     if (Object.keys(porGerar).length) mudar((c) => juntarResultados(c, porGerar));
   }, [pend, canvas.id, mudar]);
 
+  // Esc sai da tela cheia.
+  useEffect(() => {
+    if (!cheia) return;
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCheia(false);
+    };
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [cheia]);
+
   const garantirSalvo = async () => {
     if (atual.current.id && salvar.estado === "salvo") return atual.current;
     return salvarAgora();
@@ -1840,7 +1028,15 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de gerar.");
     const g = salvo.nos.find((n) => n.id === gerarId) || atual.current.nos.find((n) => n.id === gerarId);
     if (!g) throw new Error("Resultado não encontrado no canvas.");
-    void gerarNoResultado({ queryClient, clientId, canvasId: salvo.id, gerarId, motores: g.dados.motores || [], qualidade: g.dados.qualidade || "alta", atualizar: atualizarCusto });
+    void gerarNoResultado({ queryClient, clientId, canvasId: salvo.id, gerarId, motores: g.dados.motores || [], carrossel: g.dados.carrossel || 0, qualidade: g.dados.qualidade || "alta", atualizar: atualizarCusto });
+    return {};
+  };
+
+  const variacoes = async (gerarId: string, r: ResultadoDoCanvas): Promise<Record<string, never>> => {
+    const salvo = await garantirSalvo();
+    if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de gerar.");
+    const g = salvo.nos.find((n) => n.id === gerarId) || atual.current.nos.find((n) => n.id === gerarId);
+    void gerarVariacoes({ queryClient, clientId, canvasId: salvo.id, gerarId, base: r, qualidade: (g && g.dados.qualidade) || "alta", atualizar: atualizarCusto });
     return {};
   };
 
@@ -1875,11 +1071,11 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   };
 
   const abrirEscolha = (tipo: TipoDeNo, trocarId: string | null, gerarId: string | null = null) => {
-    if (tipo === "texto" || tipo === "gerar") {
+    if (tipo === "texto" || tipo === "gerar" || tipo === "agente") {
       if (trocarId) abrirNo(trocarId);
       return;
     }
-    setEscolha({ tipo, trocarId, gerarId });
+    setEscolha({ tipo: tipo as AbaDaEscolha, trocarId, gerarId });
   };
 
   const aoEscolher = (tipo: AbaDaEscolha, dados: DadosDoNo, trocarId: string | null) => {
@@ -1891,8 +1087,8 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   };
 
   const aoTocarNaPaleta = (t: TipoDeNo) => {
-    if (t === "texto") {
-      porNoQuadro("texto", { papel: "pedido" }, { selecionar: true });
+    if (t === "texto" || t === "agente") {
+      porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { selecionar: true });
       setRecolhida(false);
       return;
     }
@@ -1905,7 +1101,12 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
 
   const aoSoltar = (t: TipoDeNo, posicao: { x: number; y: number }) => {
     const id = porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { posicao, selecionar: t !== "gerar" });
-    if (t !== "texto" && t !== "gerar") setEscolha({ tipo: t as AbaDaEscolha, trocarId: id, gerarId: null });
+    if (t !== "texto" && t !== "gerar" && t !== "agente") setEscolha({ tipo: t as AbaDaEscolha, trocarId: id, gerarId: null });
+  };
+
+  const porProduto = (p: Pick<ProdutoDaEsteira, "kit_id" | "nome">, posicao: { x: number; y: number } | null = null) => {
+    porNoQuadro("produto", { kit_id: p.kit_id, titulo: p.nome }, { posicao });
+    if (p.nome) toast.success(`${p.nome} no quadro`, { description: "Já ligado ao Resultado." });
   };
 
   const tirar = (id: string) => {
@@ -1913,16 +1114,17 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     setSelecionado(null);
   };
 
-  const aplicarModelo = (chave: string) => {
+  const preencherPadrao = () => {
     const kitsDoCliente = kitsUsaveis(fontes.kits);
     const prontas = fontes.personas.filter((p) => p.status === "ancora" || p.status === "folha" || p.status === "pronta");
-    const preencher = {
+    return {
       kit_id: kitsDoCliente.length === 1 ? String(kitsDoCliente[0].id) : null,
       modelo_id: prontas.length === 1 ? prontas[0].id : null,
       versao: prontas.length === 1 ? prontas[0].versao : null,
     };
-    const antes = atual.current;
-    const novo = aplicarModeloPronto(antes, chave, padraoDaSaida, preencher);
+  };
+
+  const depoisDeMontar = (antes: Canvas, novo: Canvas, titulo: string) => {
     const novos = novo.nos.filter((n) => !antes.nos.some((x) => x.id === n.id));
     mudar(() => novo);
     setProntosAbertos(false);
@@ -1933,13 +1135,46 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
       setSelecionado({ tipo: "no", id: incompleto.id });
       setRecolhida(false);
     } else if (g) setSelecionado({ tipo: "no", id: g.id });
+    toast.success(titulo, { description: incompleto ? "Os cartões já estão ligados ao Resultado. Falta escolher o que está em amarelo." : "Tudo ligado. Confira e toque em Gerar." });
+  };
+
+  const aplicarModelo = (chave: string) => {
+    const antes = atual.current;
+    const novo = aplicarModeloPronto(antes, chave, padraoDaSaida, preencherPadrao());
     const modelo = MODELOS_PRONTOS.find((m) => m.chave === chave);
-    toast.success(modelo ? modelo.rotulo : "Modelo pronto no quadro", { description: incompleto ? "Os cartões já estão ligados ao Resultado. Falta escolher o que está em amarelo." : "Tudo ligado. Confira e toque em Gerar foto." });
+    depoisDeMontar(antes, novo, modelo ? modelo.rotulo : "Modelo pronto no quadro");
+  };
+
+  /** "Montar pelo contexto" (auto paint): o agente escolhe o modelo e preenche o quadro. */
+  const montarPeloContexto = async () => {
+    const salvo = await garantirSalvo();
+    if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de montar pelo contexto.");
+    const r = await conversarNoCanvas({ canvasId: salvo.id, tarefa: "montar", gerarId: resultadoAlvo(salvo, resultadoAtivo) });
+    const antes = atual.current;
+    depoisDeMontar(antes, montarPelaResposta(antes, r, padraoDaSaida, preencherPadrao()), "Quadro montado pelo contexto");
+    if (r.resposta) toast.info("O agente explicou", { description: r.resposta.slice(0, 300) });
+    return { custo_usd: r.custo_usd };
+  };
+
+  /** Ambiente pelo contexto com o agente: ele escreve a descrição no cartão. */
+  const ambienteComAgente = async (noId: string, gerarId: string | null = null) => {
+    const salvo = await garantirSalvo();
+    if (!salvo || !salvo.id) throw new Error("Salve o canvas antes de chamar o agente.");
+    const ligacao = atual.current.ligacoes.find((l) => l.de === noId);
+    const r = await conversarNoCanvas({ canvasId: salvo.id, tarefa: "ambiente", gerarId: gerarId || (ligacao ? ligacao.para : null) });
+    if (r.ambiente) mudar((c) => mudarDados(c, noId, { texto: r.ambiente || "", modo: "contexto" }));
+    else toast.info("O agente não descreveu um lugar", { description: r.resposta.slice(0, 200) });
+    return { custo_usd: r.custo_usd };
   };
 
   const fecharComoFunciona = () => {
-    marcarVisto();
+    gravarMarca(CHAVE_DO_COMO_FUNCIONA, true);
     setComoFunciona(false);
+  };
+
+  const alternarFoco = () => {
+    gravarMarca(CHAVE_DO_FOCO, foco);
+    setFoco(!foco);
   };
 
   const alternarCheia = () => {
@@ -1966,6 +1201,7 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
   const valorDoQuadro: ValorDoQuadro = {
     fontes,
     gerar,
+    variacoes,
     abrirEscolha: (t, id) => abrirEscolha(t, id),
     abrir: abrirNo,
     tirar,
@@ -1978,10 +1214,25 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     tituloDoPainel = "Ligação";
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
-        <p className="text-[12px] text-muted-foreground">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado. Na mesma entrada, a ordem das ligações é a prioridade.</p>
-        <Button type="button" size="sm" variant="outline" className="h-8 text-[12px]" onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }}>
+        <p className="text-[11.5px] text-zinc-400">{ROTULOS_DAS_ENTRADAS[ligacaoAberta.entrada]} ligado ao Resultado. Arraste a ponta da linha para outro Resultado; solte no vazio para desligar.</p>
+        <button type="button" className={BOTAO} onClick={() => { mudar((c) => desligar(c, ligacaoAberta.id)); setSelecionado(null); }}>
           <X className="mr-1 h-3.5 w-3.5" /> Desligar
-        </Button>
+        </button>
+      </div>
+    );
+  } else if (cartaoDoPainel && cartaoDoPainel.tipo === "agente") {
+    tituloDoPainel = "Agente";
+    conteudoDoPainel = (
+      <div className="min-w-0 space-y-3">
+        <ChatDoAgente key={cartaoDoPainel.id} canvas={canvas} no={cartaoDoPainel} fontes={fontes} onMudarCanvas={mudar} garantirSalvo={garantirSalvo} onGerar={gerar} />
+        <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
+          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
+            Voltar aos ajustes
+          </button>
+          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
+            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          </button>
+        </div>
       </div>
     );
   } else if (cartaoDoPainel) {
@@ -1989,27 +1240,33 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
     tituloDoPainel = `Cartão: ${TIPOS_DE_NO[cartaoDoPainel.tipo].rotulo}`;
     conteudoDoPainel = (
       <div className="min-w-0 space-y-3" data-painel-do-cartao={cartaoDoPainel.id}>
-        <EditorDoCartao key={cartaoDoPainel.id} no={cartaoDoPainel} fontes={fontes} onMudar={(dados) => mudar((c) => mudarDados(c, cartaoDoPainel.id, dados))} onEscolher={() => abrirEscolha(cartaoDoPainel.tipo, cartaoDoPainel.id)} />
+        <EditorDoCartao
+          key={cartaoDoPainel.id}
+          no={cartaoDoPainel}
+          fontes={fontes}
+          onMudar={(dados) => mudar((c) => mudarDados(c, cartaoDoPainel.id, dados))}
+          onEscolher={() => abrirEscolha(cartaoDoPainel.tipo, cartaoDoPainel.id)}
+          onAgente={cartaoDoPainel.tipo === "ambiente" ? () => ambienteComAgente(cartaoDoPainel.id) : undefined}
+        />
         {!ligado && (
-          <Button
+          <button
             type="button"
-            size="sm"
-            className="h-8 text-[12px]"
+            className={BOTAO}
             onClick={() => {
               const alvo = resultadoAlvo(atual.current, resultadoAtivo);
               if (alvo) mudar((c) => ligar(c, cartaoDoPainel.id, alvo));
             }}
           >
             <Workflow className="mr-1.5 h-3.5 w-3.5" /> Ligar ao Resultado
-          </Button>
+          </button>
         )}
-        <div className="flex min-w-0 flex-wrap items-center border-t border-border pt-3">
-          <Button type="button" size="sm" variant="ghost" className="mb-1 mr-1.5 h-8 text-[12px]" onClick={() => setSelecionado(null)}>
+        <div className="flex min-w-0 flex-wrap items-center border-t border-white/10 pt-2.5">
+          <button type="button" className={`${BOTAO} mb-1 mr-1.5`} onClick={() => setSelecionado(null)}>
             Voltar aos ajustes
-          </Button>
-          <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-[12px] text-destructive hover:text-destructive" onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
-            <Trash2 className="mr-1 h-3 w-3" /> Tirar do quadro
-          </Button>
+          </button>
+          <button type="button" className={`${BOTAO} mb-1 text-red-300`} onClick={() => tirar(cartaoDoPainel.id)} aria-label="Tirar o cartão do quadro">
+            <Trash2 className="mr-1 h-3 w-3" /> Apagar
+          </button>
         </div>
       </div>
     );
@@ -2026,78 +1283,134 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
           garantirSalvo={garantirSalvo}
           comGerar={false}
           onGerar={gerar}
+          onVariacoes={variacoes}
         />
         {resultados.length > 1 && (
-          <Button type="button" size="sm" variant="ghost" className="h-8 text-[12px] text-destructive hover:text-destructive" onClick={() => tirar(resultadoDoPainel.id)}>
-            <Trash2 className="mr-1 h-3 w-3" /> Tirar este Resultado
-          </Button>
+          <button type="button" className={`${BOTAO} text-red-300`} onClick={() => tirar(resultadoDoPainel.id)}>
+            <Trash2 className="mr-1 h-3 w-3" /> Apagar este Resultado
+          </button>
         )}
       </div>
     );
   } else {
     conteudoDoPainel = (
       <div className="min-w-0 space-y-2">
-        <p className="text-[12px] text-muted-foreground">O quadro está sem Resultado. Ele junta os cartões e gera a foto.</p>
-        <Button type="button" size="sm" className="h-8 text-[12px]" onClick={() => porNoQuadro("gerar")}>
+        <p className="text-[11.5px] text-zinc-400">O quadro está sem Resultado. Ele junta os cartões e gera a foto.</p>
+        <button type="button" className={BOTAO} onClick={() => porNoQuadro("gerar")}>
           <Plus className="mr-1 h-3.5 w-3.5" /> Pôr um Resultado
-        </Button>
+        </button>
       </div>
     );
   }
 
-  return (
-    <div className="min-w-0 space-y-2" data-canvas-aberto={canvas.id || "novo"}>
-      <div className="flex min-w-0 flex-wrap items-center" data-barra-do-canvas="">
-        {seletor}
-        <Input value={canvas.nome} onChange={(e) => mudar((c) => ({ ...c, nome: e.target.value }))} aria-label="Nome do canvas" className="mb-1.5 mr-2 h-9 w-full min-w-0 text-[13px] font-semibold sm:w-56" />
-        <span className={`mb-1.5 mr-2 inline-flex items-center text-[11.5px] ${salvar.estado === "erro" || salvar.estado === "conflito" ? "text-warning" : "text-muted-foreground"}`} role="status" data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
-          {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" /> : null}
-          {rotuloDoSalvar}
-        </span>
+  const barra = (
+    <div className="flex min-w-0 flex-wrap items-center" data-barra-do-canvas="">
+      {seletor}
+      <Input value={canvas.nome} onChange={(e) => mudar((c) => ({ ...c, nome: e.target.value }))} aria-label="Nome do canvas" className="mb-1.5 mr-2 h-8 w-full min-w-0 text-[12.5px] font-semibold sm:w-52" />
+      <span className={`mb-1.5 mr-2 inline-flex items-center text-[11px] ${salvar.estado === "erro" || salvar.estado === "conflito" ? "text-warning" : "text-muted-foreground"}`} role="status" data-estado-do-salvar={salvar.estado} title={salvar.erro || undefined}>
+        {salvar.estado === "salvando" ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : salvar.estado === "salvo" ? <Check className="mr-1 h-3 w-3" /> : null}
+        {rotuloDoSalvar}
+      </span>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="mb-1.5 mr-1 h-8 text-[12px]"
+        disabled={salvar.estado === "salvando"}
+        onClick={() =>
+          salvarAgora()
+            .then(() => toast.success("Canvas salvo"))
+            .catch((e) => avisarErro(e, "Canvas não salvo"))
+        }
+      >
+        <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar
+      </Button>
+      {salvar.estado === "conflito" && (
         <Button
           type="button"
           size="sm"
-          variant="ghost"
+          variant="outline"
           className="mb-1.5 mr-1.5 h-8 text-[12px]"
-          disabled={salvar.estado === "salvando"}
-          onClick={() =>
-            salvarAgora()
-              .then(() => toast.success("Canvas salvo"))
-              .catch((e) => avisarErro(e, "Canvas não salvo"))
-          }
+          onClick={async () => {
+            if (canvas.id) apagarRascunho(clientId, canvas.id);
+            await queryClient.refetchQueries({ queryKey: chaveDosCanvases(clientId) }).catch(() => undefined);
+            const r = queryClient.getQueryData<Canvas[]>(chaveDosCanvases(clientId)) || [];
+            const doServidor = r.find((x) => x.id === canvas.id) || null;
+            if (doServidor) onTrocar(doServidor);
+            else toast.info("Abra o canvas de novo na lista", { description: "A versão da outra aba já está salva." });
+          }}
         >
-          <Save className="mr-1.5 h-3.5 w-3.5" /> Salvar
+          Recarregar
         </Button>
-        {salvar.estado === "conflito" && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="mb-1.5 mr-1.5 h-8 text-[12px]"
-            onClick={async () => {
-              if (canvas.id) apagarRascunho(clientId, canvas.id);
-              await queryClient.refetchQueries({ queryKey: chaveDosCanvases(clientId) }).catch(() => undefined);
-              const r = queryClient.getQueryData<Canvas[]>(chaveDosCanvases(clientId)) || [];
-              const doServidor = r.find((x) => x.id === canvas.id) || null;
-              if (doServidor) onTrocar(doServidor);
-              else toast.info("Abra o canvas de novo na lista", { description: "A versão da outra aba já está salva." });
-            }}
-          >
-            Recarregar
-          </Button>
-        )}
-        <span className="hidden flex-1 sm:block" />
-        <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={() => setProntosAbertos(!prontosAbertos)}>
-          <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Modelos prontos
-        </Button>
-        <Button type="button" size="sm" variant={comoFunciona ? "default" : "outline"} className="mb-1.5 mr-1.5 h-8 text-[12px]" aria-pressed={comoFunciona} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))}>
-          <HelpCircle className="mr-1.5 h-3.5 w-3.5" /> Como funciona
-        </Button>
-        <Button type="button" size="sm" variant={lista ? "default" : "outline"} className="mb-1.5 h-8 text-[12px]" aria-pressed={lista} onClick={() => setLista(!lista)}>
-          {lista ? <Workflow className="mr-1.5 h-3.5 w-3.5" /> : <LayoutList className="mr-1.5 h-3.5 w-3.5" />}
-          {lista ? "Ver o quadro" : "Modo lista"}
-        </Button>
+      )}
+      <span className="hidden flex-1 sm:block" />
+      <Button type="button" size="sm" variant={prontosAbertos ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={prontosAbertos} onClick={() => setProntosAbertos(!prontosAbertos)}>
+        <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Modelos prontos
+      </Button>
+      <Button type="button" size="sm" variant={comoFunciona ? "default" : "outline"} className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={comoFunciona} onClick={() => (comoFunciona ? fecharComoFunciona() : setComoFunciona(true))}>
+        <HelpCircle className="mr-1.5 h-3.5 w-3.5" /> Como funciona
+      </Button>
+      <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1 h-8 text-[12px]" aria-pressed={!foco} onClick={alternarFoco} title={foco ? "Mostrar a barra do painel e os botões flutuantes" : "Esconder a barra do painel e os botões flutuantes"}>
+        {foco ? <Eye className="mr-1.5 h-3.5 w-3.5" /> : <EyeOff className="mr-1.5 h-3.5 w-3.5" />}
+        {foco ? "Mostrar menu" : "Só o canvas"}
+      </Button>
+      <Button type="button" size="sm" variant={lista ? "default" : "outline"} className="mb-1.5 h-8 text-[12px]" aria-pressed={lista} onClick={() => setLista(!lista)}>
+        {lista ? <Workflow className="mr-1.5 h-3.5 w-3.5" /> : <LayoutList className="mr-1.5 h-3.5 w-3.5" />}
+        {lista ? "Ver o quadro" : "Modo lista"}
+      </Button>
+    </div>
+  );
+
+  const quadro = (
+    <div
+      className={`flex min-w-0 flex-col overflow-hidden ${cheia ? "dark fixed inset-0 z-[120] bg-zinc-950 p-2 text-foreground" : "relative w-full rounded-2xl border border-border"}`}
+      style={cheia ? undefined : { height: "calc(100vh - 150px)", minHeight: 560 }}
+      data-quadro=""
+      data-tela-cheia={cheia ? "sim" : "nao"}
+    >
+      {cheia && <div className="shrink-0 px-1 pt-1">{barra}</div>}
+      <div className="shrink-0 p-2 pb-0" style={{ background: "#eef0f3" }}>
+        <EsteiraDeProdutos onPor={(p) => porProduto(p)} />
       </div>
+      <div className="relative min-h-0 flex-1" style={{ background: "#eef0f3" }}>
+        <ContextoDoQuadro.Provider value={valorDoQuadro}>
+          <Quadro
+            canvas={canvas}
+            fontes={fontes}
+            selecionado={selecionado}
+            onSelecionar={setSelecionado}
+            onAbrir={abrirNo}
+            onMudarCanvas={mudar}
+            onViewport={(v) => setCanvas((c) => ({ ...c, viewport: { x: v.x, y: v.y, zoom: v.zoom } }))}
+            onSoltar={aoSoltar}
+            onSoltarProduto={(kitId, posicao) => porProduto({ kit_id: kitId, nome: "" }, posicao)}
+            cheia={cheia}
+            onCheia={alternarCheia}
+          />
+        </ContextoDoQuadro.Provider>
+        <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} onResultado={() => porNoQuadro("gerar")} />
+        <BarraLateral
+          recolhida={recolhida}
+          onRecolher={setRecolhida}
+          titulo={tituloDoPainel}
+          custo={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} />}
+          custoCurto={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} curto />}
+        >
+          {conteudoDoPainel}
+        </BarraLateral>
+        {comoFunciona && <ComoFunciona onFechar={fecharComoFunciona} />}
+        {prontosAbertos && (
+          <div className="absolute bottom-3 left-[84px] right-3 z-10 mx-auto max-w-[900px]">
+            <GaleriaDeModelos onAplicar={aplicarModelo} onFechar={() => setProntosAbertos(false)} onMontarPeloContexto={montarPeloContexto} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-w-0 space-y-2" data-canvas-aberto={canvas.id || "novo"}>
+      {!cheia && barra}
       {salvar.estado === "erro" && <AvisoDeErro erro={new Error(`O canvas não foi salvo: ${salvar.erro}`)} />}
 
       {lista ? (
@@ -2107,56 +1420,29 @@ function CanvasAberto({ inicial, onTrocar, seletor }: { inicial: Canvas; onTroca
               <ComoFunciona onFechar={fecharComoFunciona} />
             </div>
           )}
-          {(prontosAbertos || semEntradas) && <ModelosProntos onAplicar={aplicarModelo} onFechar={prontosAbertos ? () => setProntosAbertos(false) : undefined} flutuante={false} />}
+          {(prontosAbertos || semEntradas) && <GaleriaDeModelos onAplicar={aplicarModelo} onFechar={prontosAbertos ? () => setProntosAbertos(false) : undefined} onMontarPeloContexto={montarPeloContexto} />}
           <ModoLista
             canvas={canvas}
             fontes={fontes}
             onMudarCanvas={mudar}
             garantirSalvo={garantirSalvo}
             onGerar={gerar}
+            onVariacoes={variacoes}
             onPor={(t, gerarId) => {
               porNoQuadro(t, t === "texto" ? { papel: "pedido" } : {}, { gerarId });
             }}
             onEscolher={(t, trocarId, gerarId) => abrirEscolha(t, trocarId, gerarId)}
+            onAgenteDoAmbiente={(noId, gerarId) => ambienteComAgente(noId, gerarId)}
           />
         </div>
+      ) : cheia ? (
+        // Tela cheia num portal no body: escapa do contexto de empilhamento da página (a barra do painel não fica por cima).
+        createPortal(quadro, document.body)
       ) : (
-        <div
-          className={`min-w-0 overflow-hidden rounded-2xl border border-border bg-background ${cheia ? "fixed bottom-2 left-2 right-2 top-2 z-50" : "relative w-full"}`}
-          style={cheia ? undefined : { height: "calc(100vh - 150px)", minHeight: 560 }}
-          data-quadro=""
-          data-tela-cheia={cheia ? "sim" : "nao"}
-        >
-          <ContextoDoQuadro.Provider value={valorDoQuadro}>
-            <Quadro
-              canvas={canvas}
-              fontes={fontes}
-              selecionado={selecionado}
-              onSelecionar={setSelecionado}
-              onAbrir={abrirNo}
-              onMudarCanvas={mudar}
-              onViewport={(v) => setCanvas((c) => ({ ...c, viewport: { x: v.x, y: v.y, zoom: v.zoom } }))}
-              onSoltar={aoSoltar}
-              cheia={cheia}
-              onCheia={alternarCheia}
-            />
-          </ContextoDoQuadro.Provider>
-          <Paleta onTipo={aoTocarNaPaleta} onAdicionar={() => abrirEscolha("produto", null)} onResultado={() => porNoQuadro("gerar")} />
-          <BarraLateral
-            recolhida={recolhida}
-            onRecolher={setRecolhida}
-            titulo={tituloDoPainel}
-            custo={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} />}
-            custoCurto={<CustoDoResultado canvas={canvas} no={resultadoDoPainel} curto />}
-          >
-            {conteudoDoPainel}
-          </BarraLateral>
-          {comoFunciona && <ComoFunciona onFechar={fecharComoFunciona} />}
-          {prontosAbertos && <ModelosProntos onAplicar={aplicarModelo} onFechar={() => setProntosAbertos(false)} flutuante />}
-        </div>
+        quadro
       )}
       <p className="flex items-start text-[11px] leading-snug text-muted-foreground">
-        <ClipboardList className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Tudo o que o Canvas gera vai para o acervo como gerado, passa por aprovar e segue para a Mesa e para Usar como as outras fotos.
+        <ClipboardList className="mr-1 mt-0.5 h-3 w-3 shrink-0" /> Tudo o que o Canvas gera vai para o acervo como gerado. Usar na Mesa e Finalizar aprovam a foto no mesmo clique.
       </p>
       <EscolherCartao pedido={escolha} fontes={fontes} onFechar={() => setEscolha(null)} onEscolher={aoEscolher} />
     </div>
@@ -2206,7 +1492,7 @@ export default function EtapaCanvas() {
           if (c) trocar(abrirComRascunho(clientId, c));
         }}
       >
-        <SelectTrigger className="mb-1.5 mr-1.5 h-9 w-full min-w-0 text-[12.5px] sm:w-56" aria-label="Canvas aberto">
+        <SelectTrigger className="mb-1.5 mr-1.5 h-8 w-full min-w-0 text-[12px] sm:w-52" aria-label="Canvas aberto">
           <SelectValue placeholder={lista.length ? "Abrir um canvas" : "Nenhum canvas salvo ainda"} />
         </SelectTrigger>
         <SelectContent className="dark">
@@ -2217,7 +1503,7 @@ export default function EtapaCanvas() {
           ))}
         </SelectContent>
       </Select>
-      <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-2 h-9 text-[12.5px]" onClick={() => trocar(canvasVazio(clientId))}>
+      <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-2 h-8 text-[12px]" onClick={() => trocar(canvasVazio(clientId))}>
         <Plus className="mr-1 h-3.5 w-3.5" /> Novo canvas
       </Button>
     </>
@@ -2225,7 +1511,7 @@ export default function EtapaCanvas() {
 
   return (
     <ReactFlowProvider>
-      <div className="dark min-w-0 rounded-2xl border border-border bg-background p-2 pb-16 text-foreground sm:p-3 sm:pb-16" data-canvas-escuro="">
+      <div className="dark min-w-0 rounded-2xl border border-border bg-background p-2 pb-10 text-foreground sm:p-3 sm:pb-10" data-canvas-escuro="">
         {canvases.isError && <AvisoDeErro erro={canvases.error} className="mb-2" />}
         {aberto ? (
           <CanvasAberto key={`${aberto.id || "novo"}-${chave}`} inicial={aberto} onTrocar={trocar} seletor={seletor} />

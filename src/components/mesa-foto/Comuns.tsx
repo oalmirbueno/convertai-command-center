@@ -33,6 +33,7 @@ export const ETAPAS_DA_MESA_FOTO = [
   { valor: "usar", rotulo: "Usar" },
   { valor: "biblioteca", rotulo: "Biblioteca" },
   { valor: "modelos", rotulo: "Modelos" },
+  { valor: "clones", rotulo: "Clones" },
   { valor: "canvas", rotulo: "Canvas" },
 ] as const;
 
@@ -54,6 +55,7 @@ export const PASSOS_PRINCIPAIS: { passo: number; etapa: EtapaDaMesaFoto; rotulo:
 export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
   { etapa: "biblioteca", rotulo: "Biblioteca" },
   { etapa: "modelos", rotulo: "Modelos" },
+  { etapa: "clones", rotulo: "Clones" },
   { etapa: "canvas", rotulo: "Canvas" },
 ];
 
@@ -65,6 +67,8 @@ export const ETAPAS_DE_APOIO: { etapa: EtapaDaMesaFoto; rotulo: string }[] = [
 export const ABAS_FUTURAS: { etapa: string; rotulo: string; disponivel: boolean; depoisDe: string }[] = [
   // docs/mesa-foto/MODELOS-E-CANVAS.md: Modelos depois do Produto, Canvas depois de Criar.
   { etapa: "modelos", rotulo: "Modelos", disponivel: true, depoisDe: "kits" },
+  // Clones de pessoa real com autorização (25/09; docs/mesa-foto/CLONES.md).
+  { etapa: "clones", rotulo: "Clones", disponivel: true, depoisDe: "modelos" },
   { etapa: "canvas", rotulo: "Canvas", disponivel: true, depoisDe: "criar" },
 ];
 
@@ -152,7 +156,7 @@ export function SeloDaFoto({
   foto,
   compacto = false,
 }: {
-  foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean };
+  foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean; tags?: string[] };
   compacto?: boolean;
 }) {
   const classe = classeDaFoto(foto);
@@ -178,7 +182,8 @@ export function SeloDaFoto({
       )}
       {classe === "derivada" && (
         <span className="mb-0.5 mr-1 rounded-full border border-border bg-card px-1.5 py-px text-[10px] font-medium text-foreground" data-selo="derivada">
-          tratada{!compacto && foto.modo ? ` · ${rotuloDoModo(foto.modo)}` : ""}
+          {foto.tags && (foto.tags.indexOf("sem_fundo") >= 0 || foto.tags.indexOf("preparo:fundo_transparente") >= 0) ? "sem fundo" : "tratada"}
+          {!compacto && foto.modo && !(foto.tags && foto.tags.indexOf("sem_fundo") >= 0) ? ` · ${rotuloDoModo(foto.modo)}` : ""}
         </span>
       )}
       {classe === "original" && !compacto && !foto.referencia_web && (
@@ -200,7 +205,7 @@ export function SeloDaFoto({
  * sempre no canto da imagem): aprovada, a aprovar (gerada sem decisão),
  * tratada ou original; referência da internet sempre avisa.
  */
-export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean } }) {
+export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "derivada_de" | "modo" | "aprovada"> & { referencia_web?: boolean; tags?: string[] } }) {
   const classe = classeDaFoto(foto);
   if (foto.referencia_web) {
     return (
@@ -225,7 +230,7 @@ export function SeloCurto({ foto }: { foto: Pick<FotoDoAcervo, "gerada" | "deriv
   }
   return (
     <span className="mb-1 inline-flex items-center rounded-full border border-border bg-card px-1.5 py-px text-[10px] text-muted-foreground" data-selo-curto={classe}>
-      {classe === "derivada" ? "tratada" : "original"}
+      {classe === "derivada" ? (foto.tags && foto.tags.indexOf("sem_fundo") >= 0 ? "sem fundo" : "tratada") : "original"}
     </span>
   );
 }

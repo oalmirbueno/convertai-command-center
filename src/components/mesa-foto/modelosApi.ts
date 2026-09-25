@@ -504,6 +504,8 @@ export function usePersonas(clientId: string, ativo = true) {
       if (error) throw erroDeTabela(error, "foto_modelos");
       const saida: Persona[] = [];
       for (const b of (data || []) as any[]) {
+        // Clone de pessoa real mora na aba Clones (migration 04): fora da galeria de personas sintéticas.
+        if (b && b.origem === "clone_de_foto_real") continue;
         const p = normalizarPersona(b);
         if (p) saida.push(p);
       }

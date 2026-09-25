@@ -162,7 +162,8 @@ describe("base de conhecimento do diretor", () => {
   it("regras com números da base e sem travessão", () => {
     expect(CONHECIMENTO_DIRETOR).toContain("90 px");
     expect(CONHECIMENTO_DIRETOR).toContain("60-30-10");
-    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(6500);
+    // Teto subiu de 6.500 para 7.000 em 25/09 (dono: "reforçar o designer"): logo sem caixa, série pela capa, recorte, variedade.
+    expect(CONHECIMENTO_DIRETOR.split(/\s+/).length).toBeLessThanOrEqual(7000);
     expect(PADRAO_NA_IMAGEM.split("\n").length).toBeLessThanOrEqual(14);
     for (const t of [CONHECIMENTO_DIRETOR, PADRAO_NA_IMAGEM]) {
       expect(t).not.toContain("—");
@@ -172,8 +173,9 @@ describe("base de conhecimento do diretor", () => {
 
   it("o diretor recebe a base como prefixo fixo (cacheado) e o ajuste recebe o padrão", () => {
     const estudio = ler("supabase/functions/estudio-arte/index.ts");
-    expect(estudio).toContain("sistema: `${CONHECIMENTO_DIRETOR}\\n\\n${prompt}\\n\\n${INSTRUCOES_DIRECAO}`");
-    expect(estudio).toContain("sistema: `${INSTRUCOES_AJUSTE}\\n\\n${PADRAO_NA_IMAGEM}`");
+    // A base continua na frente (prefixo cacheado); as regras aprendidas com o cliente vão por último.
+    expect(estudio).toContain('sistema: [CONHECIMENTO_DIRETOR, prompt, INSTRUCOES_DIRECAO, preferencias].filter(Boolean).join("\\n\\n"),');
+    expect(estudio).toContain('sistema: [INSTRUCOES_AJUSTE, PADRAO_NA_IMAGEM, preferencias].filter(Boolean).join("\\n\\n"),');
   });
 });
 
@@ -239,7 +241,10 @@ describe("regressão de 23/09: série contínua, capa da marca e logo legível",
   it("logo escura ou colorida pede fundo claro atrás dela; logo clara pede fundo escuro", () => {
     const escura = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true, logo: { tom: "#1E5AA8", clara: false } });
     expect(escura).toContain("tom dominante #1E5AA8");
-    expect(escura).toContain("nunca da mesma cor nem do mesmo valor da logo");
+    // Desde 25/09 o prompt não pede fundo claro atrás da logo (o gerador desenhava uma caixa branca).
+    expect(escura).toContain("nunca sobre a mesma cor nem o mesmo valor da logo");
+    expect(escura).toContain("A logo entra sem caixa, cartão, faixa, retângulo ou fundo branco atrás");
+    expect(escura).not.toContain("o fundo atrás dela é claro e liso");
     const clara = promptDaLamina(capa, marca(), { total: 5, carrosselInfinito: false, levaLogo: true, logo: { tom: "#FFFFFF", clara: true } });
     expect(clara).toContain("A logo é clara");
   });

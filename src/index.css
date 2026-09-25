@@ -516,3 +516,24 @@
     hsl(var(--background));
   background-attachment: fixed;
 }
+
+/* ── Modo foco (Canvas da Mesa Foto) ──
+   src/lib/modoFoco.ts liga data-modo-foco no body enquanto o Canvas está
+   aberto; o AppLayout marca a casca com data-casca. Some o que flutua (ajuda
+   e assistente de voz) e, de 768 px para cima, a barra de cima; o conteúdo
+   sobe. Ao sair do Canvas o atributo some e tudo volta. */
+body[data-modo-foco] [data-casca="flutuante"] {
+  display: none !important;
+}
+@media (min-width: 768px) {
+  body[data-modo-foco] [data-casca="topo"] {
+    display: none !important;
+  }
+  body[data-modo-foco] [data-casca="conteudo"] {
+    padding-top: 12px !important;
+    max-width: none !important;
+  }
+  body[data-modo-foco] [data-casca="conteudo"] header.sticky {
+    top: 0 !important;
+  }
+}

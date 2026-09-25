@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ClipboardPaste, Eye, Loader2, Maximize2, PackageSearch, ScanSearch, Search, Upload, Wand2, X } from "lucide-react";
+import { ClipboardPaste, Eye, Loader2, Maximize2, PackageSearch, ScanSearch, Scissors, Search, Upload, UsersRound, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Ampliar } from "@/components/mesa/Ampliar";
 import { AvisoDeErro, BotaoComCusto, useAvisarErro } from "@/components/mesa/Custo";
 import { imagensDoColar } from "@/components/mesa/EstudioFotos";
 import { useMesa } from "@/components/mesa/MesaContexto";
+import { padraoPara } from "@/lib/mesa/api";
 import { AprovarFoto, BotoesDeUso } from "./AcoesDeUso";
 import { Cartao, FotoInteira, ListaCurta, MiniaturaDaFoto, Pilulas, SeloCurto, SeloDaFoto, useMesaFoto, Vazio } from "./Comuns";
 import ProdutoDasFotos from "./ProdutoDasFotos";
@@ -19,6 +20,10 @@ import {
   invalidarFotos,
   lerFoto,
   partesDaLeitura,
+  partesDoPreparo,
+  podeTirarFundo,
+  podeVirarClone,
+  tirarFundo,
   rotuloDoPapel,
   rotuloDoTipo,
   subirOriginais,
@@ -182,6 +187,42 @@ function LeituraNaTela({ leitura }: { leitura: LeituraDaFoto }) {
   );
 }
 
+/**
+ * "Tirar fundo" (pedido do dono, 25/09): um clique na foto. O recorte guarda
+ * os pixels originais do assunto (do gerador vem só o contorno, alinhado à
+ * foto); a versão sem fundo entra no acervo como derivada, com o selo.
+ */
+export function BotaoTirarFundo({ foto, onPronta }: { foto: FotoDoAcervo; onPronta?: (id: string) => void }) {
+  const { clientId, catalogo } = useMesa();
+  const queryClient = useQueryClient();
+  return (
+    <BotaoComCusto
+      rotulo={
+        <>
+          <Scissors className="mr-1.5 h-3.5 w-3.5" /> Tirar fundo
+        </>
+      }
+      titulo="Fundo tirado"
+      descricao="PNG sem fundo com os pixels originais do assunto (o gerador só marca o contorno). A foto original não muda: sai uma versão nova no acervo."
+      variant="outline"
+      className="mb-1.5 mr-1.5 h-8 text-[12px]"
+      partes={() => {
+        const m = padraoPara(catalogo, "imagem");
+        return partesDoPreparo(m ? m.id : null, "media");
+      }}
+      executar={() => tirarFundo(clientId, foto.id)}
+      aoConcluir={(data) => {
+        if (data && data.imagem) {
+          acrescentarFotos(queryClient, clientId, [data.imagem]);
+          if (onPronta) onPronta(data.imagem.id);
+        }
+        invalidarFotos(queryClient, clientId);
+        if (data && data.aviso) toast.message("Confira o recorte", { description: data.aviso });
+      }}
+    />
+  );
+}
+
 function DetalheDaFoto({
   foto,
   todas,
@@ -277,6 +318,12 @@ function DetalheDaFoto({
             invalidarFotos(queryClient, clientId);
           }}
         />
+        {podeTirarFundo(foto) && <BotaoTirarFundo foto={foto} onPronta={onAbrir} />}
+        {podeVirarClone(foto) && (
+          <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("clones", { imagem: foto.id })} title="Mesmo rosto em outras roupas, cenários e poses (pessoa real, com autorização)">
+            <UsersRound className="mr-1.5 h-3.5 w-3.5" /> Variações desta pessoa
+          </Button>
+        )}
         <Button type="button" size="sm" variant="outline" className="mb-1.5 mr-1.5 h-8 text-[12px]" onClick={() => irPara("preparar", { imagem: foto.id })}>
           <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Preparar
         </Button>
@@ -324,6 +371,9 @@ function CartaoDaFoto({
           extras={[
             { rotulo: "Ver grande", acao: onAmpliar },
             { rotulo: "Detalhes e leitura", acao: onAbrir },
+            // Abre o detalhe, onde o botão Tirar fundo mostra o custo antes.
+            ...(podeTirarFundo(foto) ? [{ rotulo: "Tirar fundo", acao: onAbrir }] : []),
+            ...(podeVirarClone(foto) ? [{ rotulo: "Variações desta pessoa (clone)", acao: () => irPara("clones", { imagem: foto.id }) }] : []),
             ...(foto.referencia_web ? [] : [{ rotulo: "Preparar (fundo, luz, cenário)", acao: () => irPara("preparar", { imagem: foto.id }) }]),
           ]}
         />

@@ -45,6 +45,13 @@ export interface ItemProposto {
   cards?: CardDoRoteiro[];
   task_id?: string | null;
   campanha_id?: string | null;
+  /** Tipo de conteúdo e framework (MesConhecimento.ts). */
+  tipo_editorial?: string;
+  framework?: string;
+  /** Instrução de arte da equipe; vai para a direção do Estúdio ao gravar. */
+  instrucao_arte?: string;
+  /** Etapa da campanha (aquecimento, lançamento...). */
+  etapa?: string;
 }
 
 export interface PropostaV4 {
@@ -207,6 +214,8 @@ export function atualizarAgenda(qc: QueryClient, clientId: string) {
   void qc.invalidateQueries({ queryKey: ["mesa", "agenda-do-mes", clientId] });
   void qc.invalidateQueries({ queryKey: ["mesa", "itens-do-mes", clientId] });
   void qc.invalidateQueries({ queryKey: ["mesa", "propostas", clientId] });
+  // As miniaturas do mês também (antes ficavam com a lista velha até recarregar).
+  void qc.invalidateQueries({ queryKey: ["mesa", "artes-do-mes", clientId] });
 }
 
 // ------------------------------------------------------------------ datas
@@ -282,7 +291,8 @@ export async function subirAnexo(clientId: string, arquivo: File): Promise<strin
   const ext = extensaoDoAnexo(arquivo);
   if (!ext) throw new Error("Só imagens JPG, PNG ou WEBP.");
   if (arquivo.size > MAX_BYTES_ANEXO) throw new Error("Imagem acima de 12 MB.");
-  const caminho = caminhoDoAnexo(clientId, crypto.randomUUID(), ext);
+  // crypto.randomUUID não existe no Safari 11 (o anexo falhava no iPhone antigo).
+  const caminho = caminhoDoAnexo(clientId, novoIdDaProposta(), ext);
   const tipo = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
   const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
   if (error) throw error;
@@ -408,6 +418,68 @@ export const buscarHypes = (clientId: string, forcar: boolean) =>
 export const gravarProposta = (propostaId: string, projectId?: string | null) =>
   chamarFuncao<any>("agente-calendario", projectId ? { acao: "gravar", proposta_id: propostaId, project_id: projectId } : { acao: "gravar", proposta_id: propostaId });
 
+/** Grava só os conteúdos escolhidos (campanha: "Mandar para a agenda"). */
+export const gravarSelecionados = (propostaId: string, temaIds: string[], projectId?: string | null) =>
+  chamarFuncao<any>("agente-calendario", {
+    acao: "gravar",
+    proposta_id: propostaId,
+    tema_ids: temaIds.slice(0, 60),
+    ...(projectId ? { project_id: projectId } : {}),
+  });
+
+/** Campos que a equipe muda à mão num conteúdo da proposta (sem IA). */
+export interface CamposDoItem {
+  data?: string;
+  formato?: "carrossel" | "estatico";
+  tema?: string;
+  gancho?: string;
+  copy?: string;
+  cta?: string;
+  instrucao_arte?: string;
+  tipo_editorial?: string;
+  framework?: string;
+  cards?: { ordem: number; texto?: string; ilustracao?: string }[];
+}
+
+export const editarItemDaProposta = (propostaId: string, temaId: string, campos: CamposDoItem) =>
+  chamarFuncao<any>("agente-calendario", { acao: "editar_item", proposta_id: propostaId, tema_id: temaId, campos });
+
+export interface CorpoDoConteudoRapido {
+  clientId: string;
+  pedido: string;
+  campanhaId?: string | null;
+  /** "hoje", "livre" ou AAAA-MM-DD. */
+  data?: string;
+  formato?: "carrossel" | "estatico" | null;
+  tipo?: string | null;
+  framework?: string | null;
+}
+
+export function corpoDoConteudoRapido(c: CorpoDoConteudoRapido): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "conteudo_rapido", client_id: c.clientId, pedido: c.pedido };
+  if (c.campanhaId) corpo.campanha_id = c.campanhaId;
+  if (c.data) corpo.data = c.data;
+  if (c.formato) corpo.formato = c.formato;
+  if (c.tipo) corpo.tipo = c.tipo;
+  if (c.framework) corpo.framework = c.framework;
+  return corpo;
+}
+
+export const conteudoRapido = (c: CorpoDoConteudoRapido) => chamarFuncao<any>("agente-calendario", corpoDoConteudoRapido(c));
+
+/** Id de proposta criado na tela (para acompanhar os temas chegando). Sem crypto.randomUUID: Safari 11. */
+export function novoIdDaProposta(): string {
+  const b = new Uint8Array(16);
+  const c = typeof window !== "undefined" ? window.crypto : undefined;
+  if (c && typeof c.getRandomValues === "function") c.getRandomValues(b);
+  else for (let i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h: string[] = [];
+  for (let i = 0; i < 16; i++) h.push((b[i] + 0x100).toString(16).slice(1));
+  return `${h.slice(0, 4).join("")}-${h.slice(4, 6).join("")}-${h.slice(6, 8).join("")}-${h.slice(8, 10).join("")}-${h.slice(10, 16).join("")}`;
+}
+
 export const ajustarProposta = (propostaId: string, mensagem: string) =>
   chamarFuncao<any>("agente-calendario", { acao: "conversar", proposta_id: propostaId, mensagem });
 
@@ -510,6 +582,11 @@ export const partesDoPedido = (catalogo: ModeloIa[], anexos: number): ParteDaEst
 /** Ajuste dos conteúdos numa proposta (conversar). */
 export const partesDoAjuste = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
   { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: TAMANHOS.conversarMes.entrada, tokensSaida: TAMANHOS.conversarMes.saida },
+];
+
+/** Conteúdo rápido: uma chamada com contexto enxuto e raciocínio baixo. */
+export const partesDoConteudoRapido = (catalogo: ModeloIa[]): ParteDaEstimativa[] => [
+  { modeloId: modeloDoEstrategista(catalogo), tipo: "texto", tokensEntrada: 14000, tokensSaida: saidaPorRaciocinio("low") + TAMANHOS.detalhar.saidaPorItem },
 ];
 
 /** Busca de hypes: pesquisa na web e a nota do Jev (centavos). */

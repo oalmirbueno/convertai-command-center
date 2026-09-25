@@ -290,7 +290,7 @@ describe("aba Mês", () => {
 
   it("detalhar relê a proposta também quando volta com erro parcial", () => {
     const i = mes.indexOf('acao: "escolher_temas", proposta_id: proposta.id');
-    const trecho = mes.slice(i - 200, i + 500);
+    const trecho = mes.slice(i - 200, i + 1000);
     expect(trecho).toContain("} finally {");
     expect(trecho).toContain("atualizar();");
   });

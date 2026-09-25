@@ -28,7 +28,7 @@ describe("fotos da lâmina trazidas pela equipe", () => {
     expect(f).toContain('caminho.indexOf("..") >= 0');
     expect(f).toContain('papel === "fundo" && saida.some((f) => f.papel === "fundo")');
     expect(f).toContain('saida.filter((f) => f.papel === "elemento").length >= 2');
-    expect(direcao).toContain('export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string };');
+    expect(direcao).toContain('export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean };');
   });
   it("configurar grava as fotos e a direção refeita não as perde", () => {
     expect(corpoDe(estudio, "configurar")).toContain("mudou.fotos_livres = fotosLivres");
@@ -60,7 +60,9 @@ describe("conversa da campanha", () => {
   const c = corpoDe(calendario, "campanhaConversar");
   it("guarda a conversa presa à campanha e não mexe em conteúdo já gravado", () => {
     expect(calendario).toContain('const REF_CAMPANHA = "mesa_campanha";');
-    expect(c).toContain('proposta.status !== "gravada"');
+    // 25/09: o que já está na agenda fica protegido item a item (task_id), o resto pode mudar.
+    expect(c).toContain("const naAgenda = proposta.itens.filter((i) => i.task_id);");
+    expect(c).toContain("naAgenda.concat(livres)");
     expect(c).toContain("item.campanha_id = c.id;");
     expect(calendario).toContain("  campanha_conversar: campanhaConversar,");
   });
@@ -184,17 +186,19 @@ describe("restante da auditoria (23/09 noite)", () => {
     expect(estudio).toContain('.contains("task_ids", [taskId])\n    .eq("status", "gravada")');
   });
   it("o custo do Jev entra no custo mostrado dos temas", () => {
-    expect(calendario).toContain("custo_usd: Math.round((saida.custoUsd + jev.custo) * 1e6) / 1e6");
+    expect(calendario).toContain("custo_usd: Math.round((custo + jev.custo) * 1e6) / 1e6");
     expect(calendario).toContain("custo_usd: Math.round((saida.custoUsd + custoJev) * 1e6) / 1e6");
   });
   it("temas acompanham a frequência pedida (até 30)", () => {
     expect(calendario).toContain("Math.min(30, Math.max(15, Math.round(Number(parametros.frequencia) || 0)))");
-    expect(calendario).toContain("temasBrutos.slice(0, maxTemas)");
+    // 25/09: três frentes em paralelo, cada uma com a sua parte dos temas.
+    expect(calendario).toContain("const frentes = temasPorFrente(maxTemas);");
+    expect(calendario).toContain("brutos.slice(0, f.max)");
   });
   it("pedido livre ajusta a data dentro de hoje a +30 dias", () => {
     expect(corpoDe(calendario, "diasUteisDaProposta")).toContain("somarDias(fimBase, 30)");
     expect(corpoDe(calendario, "conversar")).toContain("const uteis = diasUteisDaProposta(p);");
-    expect(corpoDe(calendario, "gravar")).toContain("const uteis = diasUteisDaProposta(p);");
+    expect(corpoDe(calendario, "gravarItens")).toContain("const uteis = diasUteisDaProposta(p);");
   });
   it("mensagens em ordem e custo da campanha somado sem perder parcela", () => {
     expect(corpoDe(calendario, "registrarMensagens")).toContain("criado_em: new Date(base + i).toISOString()");
@@ -320,8 +324,9 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
 
   it("3: no panorama a fatia fica intacta: letras coladas por cima e logo pelo código", () => {
     const g = corpoDe(estudio, "gerarCard");
-    expect(g).toContain("if ((fotoFixa || panorama) && tomDaLogo) {");
-    expect(g).toContain("logo: logoNoCodigo ? { bytes: logoNoCodigo, caixa: areaDaLogo, clara: !!tomDaLogo?.clara } : null,");
+    // Desde 25/09 a logo entra pelo código em todos os modos; no panorama, na mesma passada do recorte das letras.
+    expect(g).toContain("logosNoCodigo = daMarca.logos;");
+    expect(g).toContain("logo: logoNoCodigo ? { bytes: logosNoCodigo[0].bytes, caixa: areaDaLogo, clara: logosNoCodigo[0].clara } : null,");
     expect(imagem).toContain("export async function colarMudancasNaBase(");
     // O gerado vai para o enquadramento da base (inverso do devolverOriginalAlinhado).
     expect(imagem).toContain("const xg = (x: number) => (((x + 0.5) / W - al.cu) * al.escala + 0.5) * W - 0.5;");
@@ -388,8 +393,9 @@ describe("carrossel contínuo: auditoria de 25/09", () => {
   it("9: o prompt do panorama não pede pose nova nem fundo claro atrás da logo", () => {
     const g = corpoDe(estudio, "gerarCard");
     expect(g).toContain("carrosselInfinito: infinito && !panorama,");
-    expect(g).toContain("if (infinito && !panorama && ordem === total && ordem > 2) {");
+    expect(g).toContain("if (capa && ordem > 2 && !replicar) {");
     expect(g).toContain("NÃO copie a cena dele, a cena desta lâmina é a imagem 1 e já está pronta");
+    expect(g).toContain("NÃO copie a cena nem a foto dela");
     expect(corpoDe(estudio, "regrasDeRender")).toContain("t.direcao.carrossel_infinito && !ehAds(t) && !cenaPronta");
   });
 

@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { ParteDaEstimativa } from "@/lib/mesa/api";
 import { BotaoComCusto, useAvisarErro } from "./Custo";
 import { Cronometro } from "./PranchetaDoEstudio";
-import { QUANTIDADES_DE_LAMINAS, type EscolhasDoPreparo } from "./estudioUtil";
+import { FORMATOS_DO_POST, QUANTIDADES_DE_LAMINAS, type EscolhasDoPreparo, type FormatoDoPost } from "./estudioUtil";
 import type { InfoDoRoteiro } from "./useItensDoMes";
 
 /**
@@ -40,6 +40,54 @@ function Opcao({ ativa, onClick, titulo, detalhe, icone }: { ativa: boolean; onC
   );
 }
 
+/**
+ * Formato do post (pedido do dono em 25/09: "todos os tamanhos do
+ * Instagram"): 4:5, 3:4 (o retrato novo, 1080 x 1440), 1:1 e 9:16. Um toque
+ * escolhe; o carrossel inteiro usa o mesmo formato.
+ */
+export function SeletorDeFormato({
+  valor,
+  onMudar,
+  disabled = false,
+  compacto = false,
+}: {
+  valor: FormatoDoPost;
+  onMudar: (f: FormatoDoPost) => void;
+  disabled?: boolean;
+  compacto?: boolean;
+}) {
+  return (
+    <div className={`grid grid-cols-4 gap-0.5 rounded-lg border border-border bg-background p-0.5 ${compacto ? "" : "w-full"}`} role="radiogroup" aria-label="Formato do post">
+      {FORMATOS_DO_POST.map((f) => {
+        const ativo = valor === f.valor;
+        // Miniatura do quadro na proporção (altura fixa de 14 px, largura pela proporção).
+        const largura = Math.round(14 * f.proporcao);
+        return (
+          <button
+            key={f.valor}
+            type="button"
+            role="radio"
+            aria-checked={ativo}
+            disabled={disabled}
+            onClick={() => onMudar(f.valor)}
+            title={`${f.rotulo} (${f.tamanho}): ${f.dica}`}
+            data-formato={f.valor}
+            className={`flex min-w-[52px] flex-col items-center justify-center rounded-md px-1.5 leading-tight transition-colors disabled:opacity-50 ${compacto ? "h-10" : "h-12"} ${
+              ativo ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            <span className="flex items-center">
+              <span className={`mr-1 inline-block rounded-[2px] border ${ativo ? "border-primary-foreground" : "border-current"}`} style={{ width: largura, height: 14 }} aria-hidden />
+              <span className={`text-[12px] tabular-nums ${ativo ? "font-medium" : ""}`}>{f.rotulo}</span>
+            </span>
+            {!compacto && <span className={`mt-0.5 text-[9.5px] tabular-nums ${ativo ? "text-primary-foreground/80" : ""}`}>{f.tamanho}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function EstudioPreparar({
   roteiro,
   postUnico,
@@ -63,9 +111,10 @@ export default function EstudioPreparar({
   const [laminas, setLaminas] = useState<number | null>(null);
   const [continuo, setContinuo] = useState<boolean>(!!(roteiro && roteiro.continuo));
   const [pedido, setPedido] = useState("");
+  const [formato, setFormato] = useState<FormatoDoPost>("feed_4x5");
   const [desde, setDesde] = useState<number | null>(null);
 
-  const escolhas: EscolhasDoPreparo = { modo, laminas, continuo, pedido };
+  const escolhas: EscolhasDoPreparo = { modo, laminas, continuo: continuo && formato === "feed_4x5", pedido, formato };
   const preparar = async () => {
     setDesde(Date.now());
     try {
@@ -108,6 +157,11 @@ export default function EstudioPreparar({
         />
       </div>
 
+      <div className="mt-4">
+        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Formato</p>
+        <SeletorDeFormato valor={formato} onMudar={setFormato} />
+      </div>
+
       {!postUnico && (
         <div className="mt-4 space-y-4">
           {modo === "diretor" && (
@@ -134,10 +188,14 @@ export default function EstudioPreparar({
           )}
 
           <label className="flex cursor-pointer items-start rounded-lg border border-border px-3 py-2.5">
-            <Switch checked={continuo} onCheckedChange={setContinuo} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
+            <Switch checked={continuo && formato === "feed_4x5"} onCheckedChange={setContinuo} disabled={formato !== "feed_4x5"} className="mr-3 mt-0.5 shrink-0" aria-label="Carrossel contínuo" />
             <span className="min-w-0">
               <span className="block text-[13px] font-medium">Carrossel contínuo</span>
-              <span className="block text-[11.5px] leading-snug text-muted-foreground">A cena atravessa as lâminas, como um panorama. Gera uma de cada vez.</span>
+              <span className="block text-[11.5px] leading-snug text-muted-foreground">
+                {formato === "feed_4x5"
+                  ? "A cena atravessa as lâminas, como um panorama. Gera uma de cada vez. Sem ele, as lâminas seguem a capa como série."
+                  : "Só no 4:5. Neste formato as lâminas seguem a capa como série."}
+              </span>
             </span>
           </label>
         </div>

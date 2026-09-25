@@ -13,14 +13,136 @@
  * pessoa, ambiente e estilo só como estilo), orçamento por papel dentro do
  * limite do gerador, prompt com índice das imagens, invariantes do kit e da
  * ficha, hiper-realismo quando há pessoa, proibições e o texto livre.
+ *
+ * Versão 3 (dono, 25/09): o Canvas é de composição, não só de modelo.
+ * - "modelo" é o cartão Pessoa: persona sintética (modelo_id) OU foto real de
+ *   pessoa do acervo do cliente (imagem_id), que só vale com autorizada true.
+ * - "ambiente" tem 3 modos: descrever (texto), foto (usar o lugar como está ou
+ *   complementar) e contexto (o lugar sai da marca e do nicho do cliente).
+ * - "agente" (bolinha de conversa) liga no resultado e entra como pedido: o
+ *   texto que o agente escreveu (dados.pedido) vai no PEDIDO.
+ * - "saida" ganha a ação da composição (na mão de, segurando, olhando para,
+ *   no ambiente, trocar fundo), a pose/intenção (apresentando, UGC selfie, uso
+ *   real, close da mão) e o carrossel (3 a 6 fotos coerentes).
+ * - Variações e carrossel: o pedido de gerar pode trazer a foto base
+ *   (identidade da cena), o ângulo obrigatório e a posição no carrossel.
+ * - Produto de outro cliente: vale se a equipe tem acesso ao cliente do kit
+ *   (a função confere can_access_client); a cobrança é sempre do cliente do canvas.
+ *
+ * Vídeo (em breve, sem código ainda): cartão "video" ligado a um resultado,
+ * dados { imagem_id (foto aprovada do resultado), motor_video, duracao_s,
+ * movimento, formato } e ação canvas_video_gerar { canvas_id, no_video_id }
+ * -> { job_id } com consulta canvas_video_status. Não entra em TIPOS_DE_NO
+ * até existir: canvas com esse cartão é recusado.
  */
 
 import { ErroDeRegra, limpo, listaDeTextos, semTravessao, UUID } from "./calculos.ts";
 import { FORMATOS, type Formato } from "./receitas.ts";
 import { BLOCO_HIPER_REALISMO, type FichaDaPersona, fichaEmTexto, garantirPermitido, PROIBICOES_DA_PERSONA } from "./personas.ts";
 
-export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida"] as const;
+export const TIPOS_DE_NO = ["produto", "modelo", "ambiente", "estilo", "prompt", "saida", "agente"] as const;
 export type TipoDeNo = typeof TIPOS_DE_NO[number];
+
+// ------------------------------------------------------------------ composição (v3)
+
+/** O que acontece entre as entradas no resultado (a "ação" da composição). */
+export const ACOES_DO_RESULTADO: Record<string, string> = {
+  livre: "",
+  na_mao: "O produto está na mão da pessoa, com pegada natural (dedos visíveis, corretos e relaxados), o produto nítido, inteiro e na escala real.",
+  segurando: "A pessoa segura o produto na altura do peito ou perto do rosto, virado para a câmera, rótulo legível, com as mãos do jeito real de segurar.",
+  olhando_para: "A pessoa olha para o produto com interesse genuíno (olhar no produto, não na câmera), expressão natural.",
+  no_ambiente: "O produto (e a pessoa, se houver) está dentro do ambiente, com perspectiva, escala, luz e sombra de contato coerentes com o lugar; nada parece colado.",
+  trocar_fundo: "Mantenha o assunto como está (mesma pose, mesmo produto, mesma roupa) e troque só o fundo pelo ambiente, com a luz do assunto casada com o novo lugar.",
+};
+
+/** Pose e intenção (preparo para UGC e campanha). */
+export const POSES_DO_RESULTADO: Record<string, string> = {
+  nenhuma: "",
+  apresentando: "POSE: modelo apresentando o produto para a câmera, como em campanha: produto estendido ou perto do rosto, rótulo virado para a lente, sorriso leve, olhar na câmera, postura aberta.",
+  ugc_selfie: "POSE UGC: selfie feita pela própria pessoa, braço estendido segurando o celular (lente frontal), a outra mão segura o produto perto do rosto, falando com a câmera como num vídeo de review; enquadramento vertical, fundo real de casa ou do dia a dia.",
+  uso_real: "POSE: uso real do produto no dia a dia, flagrante espontâneo, sem olhar para a câmera, gesto no meio da ação.",
+  close_mao: "POSE: close da mão segurando o produto, macro com profundidade de campo curta; pele da mão com textura real, unhas naturais, produto em foco total.",
+};
+
+/** Poses com pegada de celular (lente e luz de smartphone no lugar do retrato 85 mm). */
+export const POSES_UGC = ["ugc_selfie"];
+
+export const LENTE_UGC = "LENTE E LUZ DE CELULAR: foto de smartphone (lente de 24 a 26 mm equivalente, foco em tudo, leve distorção de grande angular perto das bordas), luz ambiente real da casa ou da rua, balanço de branco do lugar, ruído fino de sensor pequeno; nada de estúdio, nada de fundo desfocado artificial.";
+
+/** Ângulos obrigatórios das variações e do carrossel (um diferente por foto da série). */
+export const ANGULOS_DE_VARIACAO = [
+  "plano médio frontal, câmera na altura dos olhos",
+  "três quartos pela esquerda, plano americano",
+  "close fechado no produto e nas mãos, fundo desfocado",
+  "de cima para baixo (plongée leve), cena inteira",
+  "perfil pela direita, olhar fora da câmera",
+  "contra-plongée leve, plano aberto com o ambiente",
+];
+
+/** O papel de cada foto do carrossel, na ordem (3 a 6 fotos). */
+export const QUADROS_DO_CARROSSEL = [
+  "capa: a foto de impacto, pessoa e produto bem claros",
+  "detalhe do produto em uso, mostrando material e acabamento",
+  "uso real no dia a dia, gesto natural",
+  "o ambiente e o contexto, plano aberto",
+  "close emocional (rosto e produto), olhar e expressão",
+  "fechamento: produto em destaque com respiro para texto",
+];
+
+export const MIN_QUADROS = 3;
+export const MAX_QUADROS = 6;
+
+export const MODOS_DO_AMBIENTE = ["descrever", "foto", "contexto"] as const;
+export const USOS_DA_FOTO_DO_AMBIENTE = ["usar", "complementar"] as const;
+
+export const MAX_MENSAGENS_DO_AGENTE = 24;
+
+/** Modelos prontos da tela (canvasApi.ts, MODELOS_PRONTOS): o agente só sugere um destes. */
+export const CHAVES_DOS_MODELOS_PRONTOS = [
+  "produto-na-mao",
+  "produto-na-praia",
+  "loja-da-marca",
+  "ugc-selfie",
+  "flat-lay",
+  "vitrine",
+  "carrossel-de-produto",
+  "produto-no-ambiente",
+  "modelo-na-rua",
+];
+
+/** Carrossel: 0 (foto solta) ou de 3 a 6. */
+export const lerCarrossel = (v: unknown): number => {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= MIN_QUADROS ? Math.min(MAX_QUADROS, n) : 0;
+};
+
+/** Ângulo pedido (índice de ANGULOS_DE_VARIACAO) ou null. */
+export const lerAngulo = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= 0 ? n % ANGULOS_DE_VARIACAO.length : null;
+};
+
+/** Posição no carrossel { atual, total } (atual de 1 a total) ou null. */
+export function lerQuadro(quadro: unknown, quadros: unknown): { atual: number; total: number } | null {
+  const total = lerCarrossel(quadros);
+  const atual = Math.floor(Number(quadro));
+  if (!total || !Number.isFinite(atual) || atual < 1) return null;
+  return { atual: Math.min(atual, total), total };
+}
+
+/**
+ * Ambiente "pelo contexto" sem IA: o lugar sai da marca (estilo e paleta), do
+ * nicho e da campanha que a Mesa usa. Sem dado, um lugar neutro e real.
+ */
+export function ambienteDoContexto(ctx: { cliente?: string | null; estilo?: string | null; nicho?: string | null; campanha?: string | null } | null): string {
+  const partes: string[] = [];
+  if (ctx?.nicho) partes.push(`lugar típico de ${limpo(ctx.nicho, 120)}`);
+  if (ctx?.estilo) partes.push(`com a cara da marca (${limpo(ctx.estilo, 240)})`);
+  if (ctx?.campanha) partes.push(`no clima da campanha ${limpo(ctx.campanha, 120)}`);
+  const base = partes.length ? partes.join(", ") : "lugar real e atual, com materiais naturais e luz natural";
+  return semTravessao(`Ambiente pensado para ${limpo(ctx?.cliente, 120) || "a marca"}: ${base}. Cenário crível, sem texto nem marca de terceiros.`);
+}
 
 /**
  * Nomes que a tela usa para os mesmos cartões (o quadro chama o prompt de
@@ -56,7 +178,7 @@ export const LIMITE_REFERENCIAS_DO_CANVAS = 12;
 
 /** Papel de cada nó de entrada ao chegar no gerador. */
 export type PapelNoCanvas = "produto" | "pessoa" | "ambiente" | "estilo";
-export const PAPEL_DO_NO: Record<Exclude<TipoDeNo, "saida" | "prompt">, PapelNoCanvas> = {
+export const PAPEL_DO_NO: Record<Exclude<TipoDeNo, "saida" | "prompt" | "agente">, PapelNoCanvas> = {
   produto: "produto",
   modelo: "pessoa",
   ambiente: "ambiente",
@@ -102,7 +224,14 @@ export function resultadosDaSaida(v: unknown): Record<string, unknown>[] {
     const status = r.status === "falhou" || r.status === "gerando" ? r.status : "gerada";
     const custo = Number(r.custo_usd);
     const conferencia = r.conferencia && typeof r.conferencia === "object" && !Array.isArray(r.conferencia) && JSON.stringify(r.conferencia).length <= 6000 ? r.conferencia : null;
+    const quadro = Math.floor(Number(r.quadro));
+    // Série (variações de uma foto ou carrossel): o grupo junta as fotos na tela. Foto solta não leva estes campos.
+    const grupo = /^[A-Za-z0-9_-]{1,64}$/.test(String(r.grupo ?? "")) ? String(r.grupo) : null;
+    const serie = grupo
+      ? { grupo, quadro: Number.isFinite(quadro) && quadro > 0 ? Math.min(quadro, 12) : null, tipo: r.tipo === "carrossel" ? "carrossel" : "variacao" }
+      : {};
     saida.push({
+      ...serie,
       geracao_id: geracao,
       imagem_id: idOuNulo(r.imagem_id),
       storage_bucket: limpo(r.storage_bucket, 60) || "mesa",
@@ -130,17 +259,29 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
     case "produto":
       return { titulo, kit_id: idOuNulo(d.kit_id), imagem_ids: idsDeUmOuVarios(d.imagem_ids, d.imagem_id, 8) };
     case "modelo": {
+      // Pessoa: persona sintética (modelo_id) ou foto real do acervo (imagem_id, só com autorização).
       const versao = Math.floor(Number(d.versao));
-      return { titulo, modelo_id: idOuNulo(d.modelo_id), versao: Number.isFinite(versao) && versao > 0 ? versao : null };
+      const modeloId = idOuNulo(d.modelo_id);
+      return {
+        titulo,
+        modelo_id: modeloId,
+        versao: Number.isFinite(versao) && versao > 0 ? versao : null,
+        imagem_id: modeloId ? null : idOuNulo(d.imagem_id),
+        autorizada: !modeloId && d.autorizada === true,
+      };
     }
     case "ambiente": {
       const texto = limpo(d.texto ?? d.guia, 1500) || null;
       if (texto) garantirPermitido(texto);
+      const imagem = idOuNulo(d.imagem_id) ?? listaDeIds(d.imagem_ids, 1)[0] ?? null;
+      const modo = (MODOS_DO_AMBIENTE as readonly string[]).includes(String(d.modo)) ? String(d.modo) : imagem ? "foto" : "descrever";
       return {
         titulo,
-        imagem_id: idOuNulo(d.imagem_id) ?? listaDeIds(d.imagem_ids, 1)[0] ?? null,
+        imagem_id: imagem,
         biblioteca_id: idOuNulo(d.biblioteca_id) ?? listaDeIds(d.biblioteca_ids, 1)[0] ?? null,
         texto,
+        modo,
+        uso: d.uso === "usar" ? "usar" : "complementar",
       };
     }
     case "estilo": {
@@ -158,7 +299,22 @@ export function dadosDoNo(tipo: TipoDeNo, bruto: unknown): Record<string, unknow
       const qualidade = ["baixa", "media", "alta"].includes(String(d.qualidade)) ? String(d.qualidade) : "alta";
       const resolucao = ["512", "1K", "2K", "4K"].includes(String(d.resolucao ?? "").toUpperCase()) ? String(d.resolucao).toUpperCase() : null;
       const motores = Array.isArray(d.motores) ? Array.from(new Set(d.motores.map((x) => limpo(x, 120)).filter(Boolean))).slice(0, 8) : [];
-      return { titulo, formato, qualidade, resolucao, motores, resultados: resultadosDaSaida(d.resultados) };
+      const acao = String(d.acao ?? "") in ACOES_DO_RESULTADO ? String(d.acao) : "livre";
+      const pose = String(d.pose ?? "") in POSES_DO_RESULTADO ? String(d.pose) : "nenhuma";
+      return { titulo, formato, qualidade, resolucao, motores, acao, pose, carrossel: lerCarrossel(d.carrossel), resultados: resultadosDaSaida(d.resultados) };
+    }
+    case "agente": {
+      // A conversa fica no cartão (curta); o pedido que o agente escreveu vai ao gerador.
+      const pedido = limpo(d.pedido, 3000);
+      if (pedido) garantirPermitido(pedido);
+      const mensagens = (Array.isArray(d.mensagens) ? d.mensagens : [])
+        .map((m) => {
+          const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
+          return { papel: o.papel === "agente" ? "agente" : "usuario", texto: limpo(o.texto, 2000) };
+        })
+        .filter((m) => m.texto)
+        .slice(-MAX_MENSAGENS_DO_AGENTE);
+      return { titulo, pedido, mensagens };
     }
   }
 }
@@ -247,6 +403,7 @@ export function idsDoCanvas(c: Pick<CanvasNormalizado, "nos">) {
     if (n.tipo === "produto" && d.kit_id) kits.add(String(d.kit_id));
     if (n.tipo === "produto") (d.imagem_ids as string[] ?? []).forEach((x) => imagens.add(x));
     if (n.tipo === "modelo" && d.modelo_id) modelos.add(String(d.modelo_id));
+    if (n.tipo === "modelo" && !d.modelo_id && d.imagem_id) imagens.add(String(d.imagem_id));
     if (n.tipo === "ambiente" && d.imagem_id) imagens.add(String(d.imagem_id));
     if (n.tipo === "ambiente" && d.biblioteca_id) biblioteca.add(String(d.biblioteca_id));
     if (n.tipo === "estilo") {
@@ -270,13 +427,13 @@ export function escolherSaida(c: Pick<CanvasNormalizado, "nos">, pedido?: unknow
   throw new ErroDeRegra(400, "saida_obrigatoria", "O canvas tem mais de um cartão de resultado: diga qual gerar (no_saida_id).", { saidas: saidas.map((s) => s.id) });
 }
 
-export type EntradasDaSaida = { produto: NoCanvas[]; modelo: NoCanvas[]; ambiente: NoCanvas[]; estilo: NoCanvas[]; prompt: NoCanvas[] };
+export type EntradasDaSaida = { produto: NoCanvas[]; modelo: NoCanvas[]; ambiente: NoCanvas[]; estilo: NoCanvas[]; prompt: NoCanvas[]; agente?: NoCanvas[] };
 
 /** Nós ligados ao resultado, agrupados por tipo, na ordem das ligações. */
 export function entradasDaSaida(c: Pick<CanvasNormalizado, "nos" | "ligacoes">, saidaId: string): EntradasDaSaida {
   const porId = new Map(c.nos.map((n) => [n.id, n]));
   const ligadas = c.ligacoes.filter((l) => l.para === saidaId).sort((a, b) => a.ordem - b.ordem);
-  const e: EntradasDaSaida = { produto: [], modelo: [], ambiente: [], estilo: [], prompt: [] };
+  const e: Required<EntradasDaSaida> = { produto: [], modelo: [], ambiente: [], estilo: [], prompt: [], agente: [] };
   for (const l of ligadas) {
     const n = porId.get(l.de);
     if (!n || n.tipo === "saida") continue;
@@ -318,7 +475,8 @@ export function orcamentoPorPapel(limite: number, disponiveis: Record<PapelNoCan
 
 export type OrigemDaReferencia = { tipo: "kit" | "persona" | "acervo" | "biblioteca"; id: string; no_id: string };
 export type ReferenciaCandidata = {
-  papel: PapelNoCanvas;
+  /** "base": a foto base de uma variação ou do carrossel (vai sempre em 1º, fora do orçamento por papel). */
+  papel: PapelNoCanvas | "base";
   origem: OrigemDaReferencia;
   /** cliente_imagens (kit, acervo), foto_modelo_imagens (persona) ou foto_biblioteca. */
   imagem_id: string;
@@ -354,6 +512,19 @@ export function ordenarReferencias(candidatas: ReferenciaCandidata[], limite: nu
   return { referencias: escolhidas.map((r, i) => ({ ...r, ordem: i + 1 })), cortadas, avisos };
 }
 
+/**
+ * Com foto base (variação ou carrossel): ela vai como Imagem 1 e as outras
+ * dividem o que sobra do limite (limite - 1), na mesma ordem de papel.
+ */
+export function ordenarComBase(base: ReferenciaCandidata | null, candidatas: ReferenciaCandidata[], limite: number) {
+  if (!base) return ordenarReferencias(candidatas, limite);
+  const resto = ordenarReferencias(candidatas.filter((c) => c.papel !== "base"), Math.max(0, limite - 1));
+  return {
+    ...resto,
+    referencias: [{ ...base, papel: "base" as const, ordem: 1 }, ...resto.referencias.map((r) => ({ ...r, ordem: r.ordem + 1 }))],
+  };
+}
+
 /** Faixa "Imagem 1" ou "Imagens 2 a 4" das referências de um papel. */
 function faixa(refs: ReferenciaMontada[]): string {
   if (!refs.length) return "";
@@ -364,30 +535,46 @@ function faixa(refs: ReferenciaMontada[]): string {
 
 export type ProdutoDoPedido = { no_id: string; nome: string; variante: string | null; invariantes: string[]; lacunas: string[] };
 export type PessoaDoPedido = { no_id: string; nome: string; ficha: FichaDaPersona; invariantes: string[] };
+/** Pessoa real (foto do acervo do cliente, com autorização registrada no cartão). */
+export type PessoaRealDoPedido = { no_id: string; nome: string };
 
 /**
  * Prompt do Canvas com índice das imagens por papel, as invariantes do kit e
  * da ficha repetidas, o ambiente e o estilo só como direção, o texto livre e
- * o bloco de hiper-realismo quando há pessoa.
+ * o bloco de hiper-realismo quando há pessoa. Na v3 entram a ação da
+ * composição, a pose (UGC troca a lente de retrato pela de celular), a foto
+ * base da série, o ângulo obrigatório e a posição no carrossel.
  */
 export function promptDoCanvas(e: {
   referencias: ReferenciaMontada[];
   produtos: ProdutoDoPedido[];
   pessoas: PessoaDoPedido[];
-  ambientes: { texto: string | null }[];
+  pessoasReais?: PessoaRealDoPedido[];
+  ambientes: { texto: string | null; no_id?: string; modo?: string; uso?: string; comFoto?: boolean }[];
   estilos: { guia: string | null }[];
   textos: { texto: string; papel: "pedido" | "restricao" }[];
   formato: Formato;
   marca?: { nome: string; paleta: string[] } | null;
+  acao?: string | null;
+  pose?: string | null;
+  angulo?: number | null;
+  quadro?: { atual: number; total: number } | null;
 }): string {
   const linhas: string[] = [];
-  const temPessoa = e.pessoas.length > 0;
-  linhas.push(`FOTOGRAFIA ${temPessoa ? "PUBLICITÁRIA EDITORIAL REAL" : "PUBLICITÁRIA DE PRODUTO REAL"}${e.marca?.nome ? ` para a marca ${e.marca.nome}` : ""}, formato ${e.formato}.`);
+  const reais = e.pessoasReais ?? [];
+  const temPessoa = e.pessoas.length > 0 || reais.length > 0;
+  const ugc = !!e.pose && POSES_UGC.includes(e.pose);
+  const tipoDaFoto = ugc ? "UGC REAL FEITA COM CELULAR" : temPessoa ? "PUBLICITÁRIA EDITORIAL REAL" : "PUBLICITÁRIA DE PRODUTO REAL";
+  linhas.push(`FOTOGRAFIA ${tipoDaFoto}${e.marca?.nome ? ` para a marca ${e.marca.nome}` : ""}, formato ${e.formato}.`);
   const pedidos = e.textos.filter((t) => t.papel === "pedido" && t.texto);
   if (pedidos.length) linhas.push(`PEDIDO: ${pedidos.map((t) => t.texto).join(" ")}`);
 
-  const refsDe = (papel: PapelNoCanvas) => e.referencias.filter((r) => r.papel === papel);
+  const refsDe = (papel: PapelNoCanvas | "base") => e.referencias.filter((r) => r.papel === papel);
   if (e.referencias.length) linhas.push("IMAGENS ANEXADAS, NA ORDEM:");
+  const base = refsDe("base");
+  if (base.length) {
+    linhas.push(`${faixa(base)}: A FOTO BASE desta série (identidade da cena): a mesma pessoa (rosto, cabelo, pele e corpo), o mesmo produto, a mesma roupa, o mesmo lugar, a mesma luz e a mesma paleta. Não copie o enquadramento nem a pose da base: mude como pedido abaixo.`);
+  }
   for (const p of e.produtos) {
     const refs = refsDe("produto").filter((r) => r.origem.no_id === p.no_id);
     const nome = `${p.nome}${p.variante ? ` (variante ${p.variante})` : ""}`;
@@ -397,21 +584,48 @@ export function promptDoCanvas(e: {
     const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id);
     linhas.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA SINTÉTICA "${pessoa.nome}" (identidade da pessoa, gerada, não existe): a mesma pessoa, com mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele, marcas e cabelo. ${fichaEmTexto(pessoa.ficha)} Invariantes: ${pessoa.invariantes.join("; ")}.`);
   }
+  for (const pessoa of reais) {
+    const refs = refsDe("pessoa").filter((r) => r.origem.no_id === pessoa.no_id);
+    linhas.push(`${refs.length ? `${faixa(refs)}: ` : ""}A PESSOA DA FOTO${pessoa.nome ? ` "${pessoa.nome}"` : ""} (pessoa real, com autorização registrada pela equipe): a mesma pessoa, com o mesmo rosto, formato do rosto, olhos, nariz, lábios, tom de pele e cabelo; não embeleze nem mude traços.`);
+  }
   const ambientes = refsDe("ambiente");
   e.ambientes.forEach((a, i) => {
-    const ref = ambientes[i];
-    linhas.push(`${ref ? `${faixa([ref])}: ` : ""}O AMBIENTE: use o lugar, a luz e o clima${a.texto ? ` (${a.texto})` : ""}; não copie pessoas, marcas nem textos da foto do ambiente.`);
+    const ref = a.no_id ? ambientes.find((r) => r.origem.no_id === a.no_id) : ambientes[i];
+    const texto = a.texto ? ` (${a.texto})` : "";
+    if (ref && a.uso === "usar") {
+      linhas.push(`${faixa([ref])}: O LUGAR REAL: use este ambiente como o cenário da foto (mesma arquitetura, móveis, cores e luz do lugar)${texto}, com a cena ambientada e realista; não copie pessoas, marcas nem textos da foto.`);
+    } else if (ref) {
+      linhas.push(`${faixa([ref])}: O AMBIENTE (base): parta deste lugar e complemente o que faltar (estenda o espaço, arrume a cena, objetos de cena coerentes), mantendo a identidade do lugar${texto}; não copie pessoas, marcas nem textos da foto.`);
+    } else {
+      linhas.push(`O AMBIENTE: use o lugar, a luz e o clima${texto}; cenário crível e ambientado.`);
+    }
   });
   const estilos = refsDe("estilo");
   if (estilos.length) linhas.push(`${faixa(estilos)}: SÓ ESTILO (paleta, luz, enquadramento e clima); não copie objetos, pessoas, marcas nem textos destas imagens.`);
   const guias = e.estilos.map((s) => s.guia).filter((g): g is string => !!g);
   if (guias.length) linhas.push(`DIREÇÃO DE ESTILO: ${guias.join(" ")} Esta direção não muda as invariantes.`);
+  const acao = e.acao ? ACOES_DO_RESULTADO[e.acao] ?? "" : "";
+  const pose = e.pose ? POSES_DO_RESULTADO[e.pose] ?? "" : "";
+  if (acao) linhas.push(`COMPOSIÇÃO: ${acao}`);
+  if (pose) linhas.push(pose);
+  if (e.quadro) {
+    const papel = QUADROS_DO_CARROSSEL[Math.min(e.quadro.atual, QUADROS_DO_CARROSSEL.length) - 1];
+    linhas.push(`CARROSSEL: esta é a foto ${e.quadro.atual} de ${e.quadro.total} de uma sequência coerente (mesma pessoa, mesmo produto, mesmo ambiente, mesma paleta e mesma luz). Esta foto: ${papel}.`);
+  }
+  if (e.angulo !== null && e.angulo !== undefined) {
+    linhas.push(`ÂNGULO DESTA VERSÃO (obrigatório): ${ANGULOS_DE_VARIACAO[e.angulo % ANGULOS_DE_VARIACAO.length]}. Tem que ser diferente das outras fotos da série; nada de repetir o enquadramento.`);
+  }
   if (temPessoa) {
-    linhas.push("AÇÃO: a pessoa usa o produto do jeito real de uso, com naturalidade; o produto na escala e na posição certas de uso; mãos com cinco dedos.");
-    linhas.push(...BLOCO_HIPER_REALISMO);
-    linhas.push(`REGRAS DA PESSOA: ${PROIBICOES_DA_PERSONA.join("; ")}.`);
+    if (!acao && !pose) linhas.push("AÇÃO: a pessoa usa o produto do jeito real de uso, com naturalidade; o produto na escala e na posição certas de uso; mãos com cinco dedos.");
+    // UGC: pele real igual, mas lente e luz de celular no lugar do retrato de 85 mm.
+    if (ugc) linhas.push(BLOCO_HIPER_REALISMO[0], LENTE_UGC, BLOCO_HIPER_REALISMO[3]);
+    else linhas.push(...BLOCO_HIPER_REALISMO);
+    const regras = e.pessoas.length
+      ? PROIBICOES_DA_PERSONA
+      : ["pessoa real adulta, a mesma da foto, sem mudar traços", "sem sexualização, sem nudez e sem roupa reveladora", "mãos com cinco dedos, unhas e articulações corretas"];
+    linhas.push(`REGRAS DA PESSOA: ${regras.join("; ")}.`);
   } else {
-    linhas.push("LUZ E CENA: luz com direção e fonte reais, sombra de contato e reflexos coerentes com o cenário; materiais críveis; profundidade real.");
+    linhas.push(ugc ? LENTE_UGC : "LUZ E CENA: luz com direção e fonte reais, sombra de contato e reflexos coerentes com o cenário; materiais críveis; profundidade real.");
   }
   const lacunas = e.produtos.flatMap((p) => p.lacunas).slice(0, 8);
   if (lacunas.length) linhas.push(`NÃO DOCUMENTADO NO KIT (não invente; deixe fora do quadro ou discreto): ${lacunas.join("; ")}.`);
@@ -428,14 +642,62 @@ export function garantirQueDaParaGerar(e: EntradasDaSaida): void {
     throw new ErroDeRegra(409, "sem_produto_nem_pessoa", "Ligue ao resultado pelo menos um produto (kit) ou uma modelo (persona).");
   }
   for (const n of e.produto) if (!n.dados.kit_id) throw new ErroDeRegra(409, "produto_sem_kit", "Há cartão de produto sem kit escolhido.", { no_id: n.id });
-  for (const n of e.modelo) if (!n.dados.modelo_id) throw new ErroDeRegra(409, "modelo_sem_persona", "Há cartão de modelo sem a modelo escolhida.", { no_id: n.id });
+  for (const n of e.modelo) {
+    if (!n.dados.modelo_id && !n.dados.imagem_id) throw new ErroDeRegra(409, "modelo_sem_persona", "Há cartão de pessoa sem a modelo ou a foto escolhida.", { no_id: n.id });
+    if (!n.dados.modelo_id && n.dados.imagem_id && n.dados.autorizada !== true) {
+      throw new ErroDeRegra(409, "pessoa_sem_autorizacao", "Foto de pessoa real só entra com a autorização marcada no cartão.", { no_id: n.id });
+    }
+  }
 }
 
-/** Textos dos cartões de prompt ligados ao resultado. */
+/** Textos dos cartões de prompt ligados ao resultado, e o pedido que o agente escreveu. */
 export function textosDasEntradas(e: EntradasDaSaida): { texto: string; papel: "pedido" | "restricao" }[] {
+  const doAgente = (e.agente ?? []).map((n) => ({ texto: limpo(n.dados.pedido, 3000), papel: "pedido" as const }));
   return e.prompt
     .map((n) => ({ texto: limpo(n.dados.texto, 3000), papel: (n.dados.papel === "restricao" ? "restricao" : "pedido") as "pedido" | "restricao" }))
+    .concat(doAgente)
     .filter((t) => t.texto);
+}
+
+/** Histórico que a tela manda para o agente (curto, só texto). */
+export function historicoDoAgente(v: unknown): { papel: "usuario" | "agente"; conteudo: string }[] {
+  return (Array.isArray(v) ? v : [])
+    .map((m) => {
+      const o = (m && typeof m === "object" ? m : {}) as Record<string, unknown>;
+      return { papel: (o.papel === "agente" ? "agente" : "usuario") as "usuario" | "agente", conteudo: limpo(o.texto ?? o.conteudo, 2000) };
+    })
+    .filter((m) => m.conteudo)
+    .slice(-12);
+}
+
+/**
+ * Resposta do agente do Canvas, validada: a ação, a pose, o formato, o modelo
+ * pronto e os ids sugeridos só valem se estão nas listas que a função mandou.
+ */
+export function respostaDoAgente(
+  bruto: unknown,
+  validos: { kits: string[]; modelos: string[]; modelosProntos: string[]; formatos: string[] },
+): { resposta: string; pedido: string; acao: string | null; pose: string | null; ambiente: string | null; formato: string | null; modelo_pronto: string | null; kit_id: string | null; modelo_id: string | null } {
+  const r = (bruto && typeof bruto === "object" && !Array.isArray(bruto) ? bruto : {}) as Record<string, unknown>;
+  const dentro = (v: unknown, lista: string[]) => (typeof v === "string" && lista.includes(v) ? v : null);
+  const pedido = limpo(r.pedido, 3000);
+  let pedidoOk = pedido;
+  try {
+    if (pedido) garantirPermitido(pedido);
+  } catch {
+    pedidoOk = "";
+  }
+  return {
+    resposta: semTravessao(limpo(r.resposta, 4000)) || "Sem resposta do agente.",
+    pedido: semTravessao(pedidoOk),
+    acao: dentro(r.acao, Object.keys(ACOES_DO_RESULTADO)),
+    pose: dentro(r.pose, Object.keys(POSES_DO_RESULTADO)),
+    ambiente: semTravessao(limpo(r.ambiente, 1500)) || null,
+    formato: dentro(r.formato, validos.formatos),
+    modelo_pronto: dentro(r.modelo_pronto, validos.modelosProntos),
+    kit_id: dentro(r.kit_id, validos.kits),
+    modelo_id: dentro(r.modelo_id, validos.modelos),
+  };
 }
 
 export const listaCurta = (v: unknown) => listaDeTextos(v, 12, 200);

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { chamarFuncao, type ParteDaEstimativa, type Qualidade } from "@/lib/mesa/api";
-import { normalizarFoto, type FotoDoAcervo } from "./fotoApi";
+import { decidirFoto, normalizarFoto, type FotoDoAcervo } from "./fotoApi";
 import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona, type Resolucao } from "./modelosApi";
 
 /**
@@ -14,12 +14,25 @@ import { normalizarConferenciaDaPersona, type ConferenciaDaPersona, type Persona
  * grafo sem carregar o quadro). A ordem das referências que valem é a da
  * função (canvas_montar); a da tela é a prévia com a mesma regra: produto,
  * pessoa, ambiente, estilo e o texto por último.
+ *
+ * Versão 3 (dono, 25/09): o Canvas é de composição. Pessoa = persona ou foto
+ * real (com autorização); Ambiente em 3 modos (descrever, foto, contexto);
+ * Agente (bolinha de conversa) que escreve o pedido; Resultado com ação,
+ * pose/intenção e carrossel; "Variações desta" e o carrossel são N chamadas
+ * de canvas_gerar (uma imagem por chamada, custo de todas à vista antes).
+ *
+ * Vídeo (em breve): só o lugar na paleta (TIPOS_FUTUROS). Contrato previsto
+ * em supabase/functions/mesa-foto/canvas-regras.ts (cabeçalho): cartão
+ * "video" ligado a um Resultado, dados { imagem_id, motor_video, duracao_s,
+ * movimento, formato }, ações canvas_video_gerar e canvas_video_status.
  */
 
 // ------------------------------------------------------------------ tipos
 
-export type TipoDeNo = "produto" | "modelo" | "ambiente" | "estilo" | "texto" | "gerar";
-export type Entrada = "produto" | "pessoa" | "ambiente" | "estilo" | "texto";
+export type TipoDeNo = "produto" | "modelo" | "ambiente" | "estilo" | "texto" | "gerar" | "agente";
+export type Entrada = "produto" | "pessoa" | "ambiente" | "estilo" | "texto" | "agente";
+export type ModoDoAmbiente = "descrever" | "foto" | "contexto";
+export type UsoDaFotoDoAmbiente = "usar" | "complementar";
 
 export interface ResultadoDoCanvas {
   geracao_id: string;
@@ -33,21 +46,43 @@ export interface ResultadoDoCanvas {
   custo_usd: number;
   conferencia: ConferenciaDaPersona | null;
   criado_em: string;
+  /** Série: as variações de uma foto ou as fotos de um carrossel têm o mesmo grupo. */
+  grupo: string | null;
+  quadro: number | null;
+  tipo: "foto" | "variacao" | "carrossel";
+}
+
+export interface MensagemDoAgente {
+  papel: "usuario" | "agente";
+  texto: string;
 }
 
 export interface DadosDoNo {
+  /** Nome guardado no cartão (produto de outro cliente, pessoa real). */
+  titulo?: string;
   kit_id?: string | null;
   modelo_id?: string | null;
   versao?: number | null;
   imagem_id?: string | null;
+  /** Pessoa real: a equipe confirmou a autorização de uso da imagem. */
+  autorizada?: boolean;
   biblioteca_id?: string | null;
   texto?: string;
+  modo?: ModoDoAmbiente;
+  uso?: UsoDaFotoDoAmbiente;
   papel?: "pedido" | "restricao";
   motores?: string[];
   formato?: string;
   qualidade?: Qualidade;
   resolucao?: Resolucao | null;
+  acao?: string;
+  pose?: string;
+  /** 0 = foto solta; 3 a 6 = carrossel. */
+  carrossel?: number;
   resultados?: ResultadoDoCanvas[];
+  /** Agente: o pedido que ele escreveu (vai ao gerador) e a conversa curta. */
+  pedido?: string;
+  mensagens?: MensagemDoAgente[];
 }
 
 export interface NoDoCanvas {
@@ -106,35 +141,88 @@ export interface Montagem {
 
 // ------------------------------------------------------------------ constantes
 
-/** Tamanho fixo dos cartões no quadro (px). Sem medir depois de montar: o polyfill mínimo de ResizeObserver não percebe. */
-export const TAMANHO_DO_CARTAO = { largura: 216, altura: 196 };
+/**
+ * Tamanho fixo dos cartões no quadro (px). Sem medir depois de montar: o
+ * polyfill mínimo de ResizeObserver não percebe. v3: cartões compactos
+ * (o dono achou "quadrado gigante").
+ */
+export const TAMANHO_DO_CARTAO = { largura: 200, altura: 88 };
 /** O Resultado é maior: mostra o que junta, a foto gerada, o andamento e o botão de gerar. */
-export const TAMANHO_DA_SAIDA = { largura: 320, altura: 476 };
+export const TAMANHO_DA_SAIDA = { largura: 280, altura: 412 };
+/** O Agente é uma bolinha (com o nome embaixo). */
+export const TAMANHO_DO_AGENTE = { largura: 76, altura: 92 };
 
-export const ORDEM_DAS_ENTRADAS: Entrada[] = ["produto", "pessoa", "ambiente", "estilo", "texto"];
+export const tamanhoDoNo = (tipo: TipoDeNo) => (tipo === "gerar" ? TAMANHO_DA_SAIDA : tipo === "agente" ? TAMANHO_DO_AGENTE : TAMANHO_DO_CARTAO);
+
+export const ORDEM_DAS_ENTRADAS: Entrada[] = ["produto", "pessoa", "ambiente", "estilo", "texto", "agente"];
 
 /**
- * Cada papel tem a sua cor (a mesma no cartão, na alça e na linha). Classes
- * do Tailwind escritas por inteiro para o purge achar.
+ * Cada papel tem a sua cor (a mesma no cartão, na alça e na linha). Cores
+ * fixas (não dependem do tema): os cartões são pretos e legíveis sobre
+ * qualquer fundo. Classes do Tailwind escritas por inteiro para o purge achar.
  */
 export const TIPOS_DE_NO: Record<TipoDeNo, { rotulo: string; dica: string; entrada: Entrada | null; cor: string; borda: string; fundo: string; texto: string }> = {
-  produto: { rotulo: "Produto", dica: "Um produto do kit. Ele nunca muda na foto.", entrada: "produto", cor: "hsl(var(--primary))", borda: "border-primary/50", fundo: "bg-primary/10", texto: "text-primary" },
-  modelo: { rotulo: "Modelo", dica: "Uma modelo sintética da aba Modelos (com âncora escolhida).", entrada: "pessoa", cor: "hsl(var(--info))", borda: "border-info/50", fundo: "bg-info/10", texto: "text-info" },
-  ambiente: { rotulo: "Ambiente", dica: "Foto de um lugar ou uma descrição: lugar, luz e clima.", entrada: "ambiente", cor: "hsl(var(--warning))", borda: "border-warning/50", fundo: "bg-warning/10", texto: "text-warning" },
-  estilo: { rotulo: "Estilo", dica: "Referência de pegada: só paleta, luz e enquadramento.", entrada: "estilo", cor: "hsl(292 84% 67%)", borda: "border-fuchsia-400/50", fundo: "bg-fuchsia-400/10", texto: "text-fuchsia-400" },
-  texto: { rotulo: "Pedido", dica: "O que você quer na foto, em palavras (ou uma restrição).", entrada: "texto", cor: "hsl(215 25% 72%)", borda: "border-slate-400/50", fundo: "bg-slate-400/10", texto: "text-slate-300" },
-  gerar: { rotulo: "Resultado", dica: "Junta os cartões ligados e gera a foto.", entrada: null, cor: "hsl(var(--foreground))", borda: "border-primary/40", fundo: "bg-card", texto: "text-foreground" },
+  produto: { rotulo: "Produto", dica: "Um produto do kit (deste ou de outro cliente). Ele nunca muda na foto.", entrada: "produto", cor: "#22e57a", borda: "border-emerald-400/50", fundo: "bg-emerald-400/15", texto: "text-emerald-300" },
+  modelo: { rotulo: "Pessoa", dica: "Uma modelo sintética (aba Modelos) ou a foto real de uma pessoa, com autorização.", entrada: "pessoa", cor: "#38bdf8", borda: "border-sky-400/50", fundo: "bg-sky-400/15", texto: "text-sky-300" },
+  ambiente: { rotulo: "Ambiente", dica: "Descreva o lugar, use uma foto (como está ou complementada) ou gere pelo contexto do cliente.", entrada: "ambiente", cor: "#fbbf24", borda: "border-amber-400/50", fundo: "bg-amber-400/15", texto: "text-amber-300" },
+  estilo: { rotulo: "Estilo", dica: "Referência de pegada: só paleta, luz e enquadramento.", entrada: "estilo", cor: "#e879f9", borda: "border-fuchsia-400/50", fundo: "bg-fuchsia-400/15", texto: "text-fuchsia-300" },
+  texto: { rotulo: "Pedido", dica: "O que você quer na foto, em palavras (ou uma restrição).", entrada: "texto", cor: "#cbd5e1", borda: "border-slate-300/50", fundo: "bg-slate-300/15", texto: "text-slate-200" },
+  agente: { rotulo: "Agente", dica: "Converse com o diretor de fotografia: ele lê o contexto do cliente e escreve o pedido do Resultado ligado.", entrada: "agente", cor: "#a78bfa", borda: "border-violet-400/50", fundo: "bg-violet-400/15", texto: "text-violet-300" },
+  gerar: { rotulo: "Resultado", dica: "Junta os cartões ligados e gera a foto.", entrada: null, cor: "#f4f4f5", borda: "border-white/20", fundo: "bg-zinc-950", texto: "text-white" },
 };
 
 export const ROTULOS_DAS_ENTRADAS: Record<Entrada, string> = {
   produto: "Produto",
-  pessoa: "Modelo",
+  pessoa: "Pessoa",
   ambiente: "Ambiente",
   estilo: "Estilo",
   texto: "Pedido",
+  agente: "Agente",
 };
 
-export const TIPOS_DA_PALETA: TipoDeNo[] = ["produto", "modelo", "ambiente", "estilo", "texto", "gerar"];
+export const TIPOS_DA_PALETA: TipoDeNo[] = ["produto", "modelo", "ambiente", "estilo", "texto", "agente", "gerar"];
+
+/** Tipos que ainda não existem: aparecem desligados na paleta ("em breve"). */
+export const TIPOS_FUTUROS: { chave: string; rotulo: string; dica: string }[] = [
+  { chave: "video", rotulo: "Vídeo", dica: "Em breve: transformar a foto aprovada em vídeo curto (movimento de câmera, UGC)." },
+];
+
+// ------------------------------------------------------------------ composição (espelho de canvas-regras.ts)
+
+/** Ação do Resultado (o que acontece entre as entradas). Chaves iguais às da função. */
+export const ACOES_DO_RESULTADO: { valor: string; rotulo: string; dica: string }[] = [
+  { valor: "livre", rotulo: "Livre", dica: "Só o pedido decide." },
+  { valor: "na_mao", rotulo: "Na mão de", dica: "O produto na mão da pessoa, pegada natural." },
+  { valor: "segurando", rotulo: "Segurando", dica: "Segura o produto virado para a câmera." },
+  { valor: "olhando_para", rotulo: "Olhando para", dica: "A pessoa olha para o produto." },
+  { valor: "no_ambiente", rotulo: "No ambiente", dica: "Produto e pessoa dentro do lugar, com luz e sombra reais." },
+  { valor: "trocar_fundo", rotulo: "Trocar fundo", dica: "Mantém o assunto e troca só o fundo." },
+];
+
+/** Pose e intenção (campanha e preparo para UGC). */
+export const POSES_DO_RESULTADO: { valor: string; rotulo: string; dica: string }[] = [
+  { valor: "nenhuma", rotulo: "Sem pose", dica: "A pose sai do pedido." },
+  { valor: "apresentando", rotulo: "Apresentando", dica: "Modelo apresentando o produto para a câmera." },
+  { valor: "ugc_selfie", rotulo: "UGC selfie", dica: "Selfie de celular segurando o produto, pegada de review." },
+  { valor: "uso_real", rotulo: "Uso real", dica: "Flagrante espontâneo usando o produto." },
+  { valor: "close_mao", rotulo: "Close da mão", dica: "Macro da mão com o produto." },
+];
+
+/** Ângulos obrigatórios das variações e do carrossel (mesma ordem da função). */
+export const ANGULOS_DE_VARIACAO = [
+  "Frontal, plano médio",
+  "Três quartos, plano americano",
+  "Close no produto e nas mãos",
+  "De cima, cena inteira",
+  "Perfil, olhar fora",
+  "De baixo, plano aberto",
+];
+
+export const OPCOES_DE_CARROSSEL = [0, 3, 4, 5, 6];
+export const VARIACOES_POR_VEZ = 3;
+
+export const rotuloDaAcao = (v?: string | null) => (ACOES_DO_RESULTADO.find((a) => a.valor === v) || ACOES_DO_RESULTADO[0]).rotulo;
+export const rotuloDaPose = (v?: string | null) => (POSES_DO_RESULTADO.find((a) => a.valor === v) || POSES_DO_RESULTADO[0]).rotulo;
 
 export const entradaDoTipo = (t: TipoDeNo): Entrada | null => TIPOS_DE_NO[t].entrada;
 
@@ -169,16 +257,31 @@ export function normalizarResultado(v: any): ResultadoDoCanvas | null {
     custo_usd: numero(v.custo_usd),
     conferencia: normalizarConferenciaDaPersona(v.conferencia),
     criado_em: texto(v.criado_em),
+    grupo: textoOuNulo(v.grupo),
+    quadro: v.quadro === null || v.quadro === undefined || v.quadro === "" ? null : numero(v.quadro) || null,
+    tipo: v.tipo === "variacao" || v.tipo === "carrossel" ? v.tipo : "foto",
   };
 }
+
+const lerCarrossel = (v: unknown) => {
+  const n = Math.floor(Number(v));
+  return isFinite(n) && n >= 3 ? Math.min(6, n) : 0;
+};
 
 function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
   const d = v && typeof v === "object" ? v : {};
   const saida: DadosDoNo = {};
-  if (tipo === "produto") saida.kit_id = textoOuNulo(d.kit_id);
+  if (tipo === "produto") {
+    saida.kit_id = textoOuNulo(d.kit_id);
+    saida.titulo = texto(d.titulo);
+  }
   if (tipo === "modelo") {
     saida.modelo_id = textoOuNulo(d.modelo_id);
     saida.versao = d.versao === undefined || d.versao === null ? null : numero(d.versao, 1);
+    // Pessoa real (foto do acervo) só quando não há persona.
+    saida.imagem_id = saida.modelo_id ? null : textoOuNulo(d.imagem_id);
+    saida.autorizada = !saida.modelo_id && d.autorizada === true;
+    saida.titulo = texto(d.titulo);
   }
   if (tipo === "ambiente" || tipo === "estilo") {
     // A função grava o estilo com listas (imagem_ids, biblioteca_ids) e o texto em "guia".
@@ -186,9 +289,21 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
     saida.biblioteca_id = textoOuNulo(d.biblioteca_id || (Array.isArray(d.biblioteca_ids) ? d.biblioteca_ids[0] : null));
     saida.texto = texto(d.texto || d.guia);
   }
+  if (tipo === "ambiente") {
+    const m = texto(d.modo);
+    saida.modo = m === "descrever" || m === "foto" || m === "contexto" ? m : saida.imagem_id ? "foto" : "descrever";
+    saida.uso = texto(d.uso) === "usar" ? "usar" : "complementar";
+  }
   if (tipo === "texto") {
     saida.texto = texto(d.texto);
     saida.papel = texto(d.papel) === "restricao" ? "restricao" : "pedido";
+  }
+  if (tipo === "agente") {
+    saida.pedido = texto(d.pedido);
+    saida.mensagens = (Array.isArray(d.mensagens) ? d.mensagens : [])
+      .map((m: any) => ({ papel: (m && m.papel === "agente" ? "agente" : "usuario") as MensagemDoAgente["papel"], texto: texto(m && m.texto) }))
+      .filter((m: MensagemDoAgente) => !!m.texto)
+      .slice(-24);
   }
   if (tipo === "gerar") {
     saida.motores = Array.isArray(d.motores) ? d.motores.map(String).filter(Boolean) : [];
@@ -197,6 +312,11 @@ function normalizarDados(tipo: TipoDeNo, v: any): DadosDoNo {
     saida.qualidade = q === "baixa" || q === "media" || q === "alta" ? q : "alta";
     const r = texto(d.resolucao);
     saida.resolucao = r === "1K" || r === "2K" || r === "4K" ? r : null;
+    const a = texto(d.acao);
+    saida.acao = ACOES_DO_RESULTADO.some((x) => x.valor === a) ? a : "livre";
+    const p = texto(d.pose);
+    saida.pose = POSES_DO_RESULTADO.some((x) => x.valor === p) ? p : "nenhuma";
+    saida.carrossel = lerCarrossel(d.carrossel);
     const resultados: ResultadoDoCanvas[] = [];
     if (Array.isArray(d.resultados)) {
       d.resultados.forEach((x: any) => {
@@ -349,7 +469,10 @@ export function entradasDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: st
 export function faltaNoCartao(no: NoDoCanvas): string {
   const d = no.dados;
   if (no.tipo === "produto" && !d.kit_id) return "Escolha o produto";
-  if (no.tipo === "modelo" && !d.modelo_id) return "Escolha a modelo";
+  if (no.tipo === "modelo" && !d.modelo_id && !d.imagem_id) return "Escolha a pessoa";
+  if (no.tipo === "modelo" && !d.modelo_id && d.imagem_id && !d.autorizada) return "Confirme a autorização da pessoa";
+  if (no.tipo === "ambiente" && d.modo === "contexto") return "";
+  if (no.tipo === "ambiente" && d.modo === "foto" && !d.imagem_id && !d.biblioteca_id) return "Escolha a foto do lugar";
   if ((no.tipo === "ambiente" || no.tipo === "estilo") && !d.imagem_id && !d.biblioteca_id && !(d.texto || "").trim()) return no.tipo === "ambiente" ? "Escolha uma foto ou descreva" : "Escolha uma referência ou descreva";
   if (no.tipo === "texto" && !(d.texto || "").trim()) return "Escreva o pedido";
   return "";
@@ -378,7 +501,7 @@ export function bloqueiosDoGerar(c: Pick<Canvas, "nos" | "ligacoes">, gerarId: s
   if (!gerar || gerar.tipo !== "gerar") return ["Resultado não encontrado."];
   const entradas = entradasDoGerar(c, gerarId);
   const b: string[] = [];
-  if (!entradas.some((e) => e.entrada === "produto" || e.entrada === "pessoa")) b.push("Adicione um produto ou uma modelo.");
+  if (!entradas.some((e) => e.entrada === "produto" || e.entrada === "pessoa")) b.push("Adicione um produto ou uma pessoa.");
   entradas.forEach((e) => {
     const falta = faltaNoCartao(e.no);
     if (falta) b.push(`${e.numero}. ${TIPOS_DE_NO[e.no.tipo].rotulo}: ${falta.toLowerCase()}.`);
@@ -423,7 +546,7 @@ const VAO_X = 110;
 const VAO_Y = 24;
 const LINHAS_POR_COLUNA = 3;
 
-const alturaDoNo = (n: Pick<NoDoCanvas, "tipo">) => (n.tipo === "gerar" ? TAMANHO_DA_SAIDA.altura : TAMANHO_DO_CARTAO.altura);
+const alturaDoNo = (n: Pick<NoDoCanvas, "tipo">) => tamanhoDoNo(n.tipo).altura;
 
 /**
  * O Resultado que recebe o cartão novo: o pedido (o que está aberto na tela),
@@ -494,29 +617,133 @@ export function porCartao<T extends Pick<Canvas, "nos" | "ligacoes">>(
 /** Resultado sem nenhum cartão ligado (um modelo pronto pode usar ele). */
 export const resultadoVazio = (c: Pick<Canvas, "ligacoes">, gerarId: string) => !c.ligacoes.some((l) => l.para === gerarId);
 
-// ------------------------------------------------------------------ modelos prontos
+// ------------------------------------------------------------------ modelos prontos (galeria)
 
 export interface CartaoDoModeloPronto {
   tipo: Exclude<TipoDeNo, "gerar">;
   dados?: DadosDoNo;
 }
 
-/** Quadros que montam em 1 clique: os cartões já ligados ao Resultado. */
-export const MODELOS_PRONTOS: { chave: string; rotulo: string; dica: string; cartoes: CartaoDoModeloPronto[] }[] = [
+export interface ModeloPronto {
+  chave: string;
+  rotulo: string;
+  dica: string;
+  cartoes: CartaoDoModeloPronto[];
+  /** Ajustes que o modelo põe no Resultado (ação, pose, carrossel, formato). */
+  resultado?: Partial<DadosDoNo>;
+  /** Cores da miniatura (gradiente) enquanto a capa de verdade não chega. */
+  cores: [string, string];
+  /**
+   * Capa (URL pública) da miniatura. As 15 imagens de base que o dono separou
+   * entram aqui quando o orquestrador passar onde estão; sem capa, a
+   * miniatura desenha os cartões do modelo sobre o gradiente.
+   */
+  capa?: string | null;
+}
+
+/** O que o modelo pronto põe no Resultado (ação, pose, formato e carrossel). */
+function ajusteDoModelo(acao: string | null, pose: string | null, formato: string, carrossel = 0): Partial<DadosDoNo> {
+  const d: Partial<DadosDoNo> = { formato };
+  if (acao) d.acao = acao;
+  if (pose) d.pose = pose;
+  if (carrossel) d.carrossel = carrossel;
+  return d;
+}
+
+/** Quadros que montam em 1 clique: os cartões já ligados ao Resultado, com a ação e a pose certas. */
+export const MODELOS_PRONTOS: ModeloPronto[] = [
   {
     chave: "produto-na-mao",
-    rotulo: "Produto na mão da modelo",
-    dica: "A modelo segura o produto perto do rosto, com o produto nítido em primeiro plano.",
+    rotulo: "Produto na mão",
+    dica: "A pessoa segura o produto perto do rosto, produto nítido em primeiro plano.",
+    cores: ["#0f766e", "#22e57a"],
+    resultado: ajusteDoModelo("na_mao", "apresentando", "4:5"),
     cartoes: [
       { tipo: "produto" },
       { tipo: "modelo" },
-      { tipo: "texto", dados: { texto: "A modelo segura o produto na mão, perto do rosto, com o produto em primeiro plano, nítido e inteiro.", papel: "pedido" } },
+      { tipo: "texto", dados: { texto: "A pessoa segura o produto na mão, perto do rosto, com o produto em primeiro plano, nítido e inteiro.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "produto-na-praia",
+    rotulo: "Produto na praia",
+    dica: "O produto em destaque na areia, luz dourada do fim da tarde.",
+    cores: ["#0369a1", "#fbbf24"],
+    resultado: ajusteDoModelo("no_ambiente", null, "4:5"),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "ambiente", dados: { modo: "descrever", texto: "Praia ao fim da tarde, areia clara, mar ao fundo, luz dourada lateral." } },
+      { tipo: "texto", dados: { texto: "O produto em destaque na areia, apoiado numa canga ou numa pedra, com sombra de contato real e o mar desfocado ao fundo.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "loja-da-marca",
+    rotulo: "Na loja da marca",
+    dica: "Mande a foto da loja: a pessoa apresenta o produto no lugar real, ambientado.",
+    cores: ["#1f2937", "#a78bfa"],
+    resultado: ajusteDoModelo("segurando", "apresentando", "4:5"),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "modelo" },
+      { tipo: "ambiente", dados: { modo: "foto", uso: "usar" } },
+      { tipo: "texto", dados: { texto: "A pessoa dentro da loja, apresentando o produto perto do balcão, a loja reconhecível e bem iluminada ao fundo.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "ugc-selfie",
+    rotulo: "UGC selfie",
+    dica: "Selfie de celular segurando o produto, pegada de review para vídeo UGC.",
+    cores: ["#be185d", "#f59e0b"],
+    resultado: ajusteDoModelo("segurando", "ugc_selfie", "9:16"),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "modelo" },
+      { tipo: "texto", dados: { texto: "Em casa, ela mostra o produto para a câmera do celular como num review, falando com quem assiste, luz da janela.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "flat-lay",
+    rotulo: "Flat lay",
+    dica: "Visto de cima, produto no centro com objetos da rotina.",
+    cores: ["#78350f", "#fde68a"],
+    resultado: ajusteDoModelo("livre", "nenhuma", "1:1"),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "estilo", dados: { texto: "Flat lay visto de cima, superfície de linho ou madeira clara, objetos de cena da rotina, sombra suave de janela." } },
+      { tipo: "texto", dados: { texto: "Composição flat lay vista de cima, produto no centro e objetos coerentes com a marca ao redor, com respiro.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "vitrine",
+    rotulo: "Vitrine",
+    dica: "O produto numa vitrine com a cara da marca (ambiente pelo contexto).",
+    cores: ["#312e81", "#38bdf8"],
+    resultado: ajusteDoModelo("no_ambiente", null, "4:5"),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "ambiente", dados: { modo: "contexto" } },
+      { tipo: "texto", dados: { texto: "O produto exposto numa vitrine de loja bem iluminada, prateleira limpa, reflexo leve do vidro, sem texto inventado.", papel: "pedido" } },
+    ],
+  },
+  {
+    chave: "carrossel-de-produto",
+    rotulo: "Carrossel de produto",
+    dica: "5 fotos coerentes: capa, detalhe, uso, ambiente e fechamento.",
+    cores: ["#065f46", "#e879f9"],
+    resultado: ajusteDoModelo("segurando", "nenhuma", "4:5", 5),
+    cartoes: [
+      { tipo: "produto" },
+      { tipo: "modelo" },
+      { tipo: "ambiente", dados: { modo: "contexto" } },
+      { tipo: "texto", dados: { texto: "Sequência de campanha com a mesma pessoa, o mesmo produto e o mesmo lugar, contando o uso do produto do começo ao fim.", papel: "pedido" } },
     ],
   },
   {
     chave: "produto-no-ambiente",
-    rotulo: "Produto no ambiente da marca",
+    rotulo: "Produto no ambiente",
     dica: "O produto em destaque num lugar com a cara da marca. Escolha a foto do lugar.",
+    cores: ["#44403c", "#fbbf24"],
+    resultado: ajusteDoModelo("no_ambiente", null, "4:5"),
     cartoes: [
       { tipo: "produto" },
       { tipo: "ambiente" },
@@ -525,27 +752,33 @@ export const MODELOS_PRONTOS: { chave: string; rotulo: string; dica: string; car
   },
   {
     chave: "modelo-na-rua",
-    rotulo: "Modelo usando o produto na rua",
+    rotulo: "Pessoa na rua",
     dica: "Foto espontânea de rua, com luz natural do fim da tarde.",
+    cores: ["#374151", "#38bdf8"],
+    resultado: ajusteDoModelo(null, "uso_real", "4:5"),
     cartoes: [
       { tipo: "produto" },
       { tipo: "modelo" },
-      { tipo: "ambiente", dados: { texto: "Rua da cidade com calçada e fachadas, luz natural do fim da tarde." } },
-      { tipo: "texto", dados: { texto: "A modelo usa o produto enquanto caminha pela rua, foto espontânea de lifestyle.", papel: "pedido" } },
+      { tipo: "ambiente", dados: { modo: "descrever", texto: "Rua da cidade com calçada e fachadas, luz natural do fim da tarde." } },
+      { tipo: "texto", dados: { texto: "A pessoa usa o produto enquanto caminha pela rua, foto espontânea de lifestyle.", papel: "pedido" } },
     ],
   },
 ];
 
+/** Os 3 primeiros aparecem no Resultado vazio; a galeria mostra todos. */
+export const MODELOS_EM_DESTAQUE = ["produto-na-mao", "ugc-selfie", "produto-na-praia"];
+
 /**
  * Monta o modelo pronto: usa o Resultado que ainda não tem nada ligado (o do
  * centro, num quadro novo) ou cria outro abaixo. O que o dono tem de um só
- * (um kit, uma modelo) vem preenchido; o resto fica para escolher.
+ * (um kit, uma modelo) vem preenchido; o resto fica para escolher. O
+ * Resultado recebe a ação, a pose, o formato e o carrossel do modelo.
  */
 export function aplicarModeloPronto(
   c: Canvas,
   chave: string,
   motorPadrao: string | null,
-  preencher: { kit_id?: string | null; modelo_id?: string | null; versao?: number | null } = {},
+  preencher: { kit_id?: string | null; modelo_id?: string | null; versao?: number | null; pedido?: string | null; ambiente?: string | null } = {},
 ): Canvas {
   const m = MODELOS_PRONTOS.find((x) => x.chave === chave);
   if (!m) return c;
@@ -558,6 +791,7 @@ export function aplicarModeloPronto(
     novo = porCartao(novo, g);
     gerarId = g.id;
   }
+  if (m.resultado) novo = mudarDados(novo, gerarId, m.resultado);
   m.cartoes.forEach((cartao) => {
     const dados: DadosDoNo = { ...(cartao.dados || {}) };
     if (cartao.tipo === "produto" && preencher.kit_id) dados.kit_id = preencher.kit_id;
@@ -565,8 +799,106 @@ export function aplicarModeloPronto(
       dados.modelo_id = preencher.modelo_id;
       dados.versao = preencher.versao || null;
     }
+    if (cartao.tipo === "texto" && preencher.pedido) dados.texto = preencher.pedido;
+    if (cartao.tipo === "ambiente" && preencher.ambiente && dados.modo !== "foto") {
+      dados.modo = "descrever";
+      dados.texto = preencher.ambiente;
+    }
     novo = porCartao(novo, novoNo(cartao.tipo, 0, 0, dados), { gerarId });
   });
+  return novo;
+}
+
+// ------------------------------------------------------------------ agente do Canvas
+
+export interface RespostaDoAgenteDoCanvas {
+  resposta: string;
+  pedido: string;
+  acao: string | null;
+  pose: string | null;
+  ambiente: string | null;
+  formato: string | null;
+  modelo_pronto: string | null;
+  kit_id: string | null;
+  modelo_id: string | null;
+  custo_usd: number | null;
+}
+
+export function normalizarRespostaDoAgente(data: any): RespostaDoAgenteDoCanvas {
+  const d = data && typeof data === "object" ? data : {};
+  const ou = (v: unknown) => textoOuNulo(v);
+  return {
+    resposta: texto(d.resposta) || "Sem resposta do agente.",
+    pedido: texto(d.pedido),
+    acao: ACOES_DO_RESULTADO.some((a) => a.valor === d.acao) ? String(d.acao) : null,
+    pose: POSES_DO_RESULTADO.some((a) => a.valor === d.pose) ? String(d.pose) : null,
+    ambiente: ou(d.ambiente),
+    formato: ou(d.formato),
+    modelo_pronto: MODELOS_PRONTOS.some((m) => m.chave === d.modelo_pronto) ? String(d.modelo_pronto) : null,
+    kit_id: ou(d.kit_id),
+    modelo_id: ou(d.modelo_id),
+    custo_usd: d.custo_usd === undefined || d.custo_usd === null ? null : numero(d.custo_usd),
+  };
+}
+
+/** Corpo de canvas_agente (JSON puro): o canvas salvo, a tarefa e o histórico curto. */
+export function corpoDoAgente(p: { canvasId: string; gerarId?: string | null; mensagem?: string; tarefa?: "conversar" | "ambiente" | "montar"; historico?: MensagemDoAgente[] }): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao: "canvas_agente", canvas_id: p.canvasId, tarefa: p.tarefa || "conversar" };
+  if (p.gerarId) corpo.no_saida_id = p.gerarId;
+  if (p.mensagem && p.mensagem.trim()) corpo.mensagem = p.mensagem.trim();
+  if (p.historico && p.historico.length) corpo.historico = p.historico.slice(-12).map((m) => ({ papel: m.papel, texto: m.texto.slice(0, 2000) }));
+  return corpo;
+}
+
+export async function conversarNoCanvas(p: Parameters<typeof corpoDoAgente>[0]): Promise<RespostaDoAgenteDoCanvas> {
+  return normalizarRespostaDoAgente(await chamarFuncao<any>("mesa-foto", corpoDoAgente(p)));
+}
+
+/**
+ * Põe a resposta do agente no quadro: a conversa e o pedido no cartão do
+ * agente; a ação, a pose e o formato no Resultado ligado (quando vieram).
+ */
+export function aplicarRespostaDoAgente(c: Canvas, agenteId: string, mensagem: string, r: RespostaDoAgenteDoCanvas): Canvas {
+  const agente = c.nos.find((n) => n.id === agenteId);
+  if (!agente) return c;
+  const conversa = (agente.dados.mensagens || [])
+    .concat(mensagem.trim() ? [{ papel: "usuario" as const, texto: mensagem.trim() }] : [])
+    .concat([{ papel: "agente" as const, texto: r.resposta }])
+    .slice(-24);
+  let novo = mudarDados(c, agenteId, { mensagens: conversa, pedido: r.pedido || agente.dados.pedido || "" });
+  c.ligacoes
+    .filter((l) => l.de === agenteId)
+    .forEach((l) => {
+      const ajuste: Partial<DadosDoNo> = {};
+      if (r.acao) ajuste.acao = r.acao;
+      if (r.pose) ajuste.pose = r.pose;
+      if (r.formato && ["1:1", "4:5", "9:16", "16:9"].indexOf(r.formato) >= 0) ajuste.formato = r.formato;
+      if (Object.keys(ajuste).length) novo = mudarDados(novo, l.para, ajuste);
+    });
+  return novo;
+}
+
+/**
+ * "Montar pelo contexto": o agente escolhe o modelo pronto, o produto, a
+ * pessoa, o ambiente e escreve o pedido; a tela monta o quadro com isso.
+ */
+export function montarPelaResposta(c: Canvas, r: RespostaDoAgenteDoCanvas, motorPadrao: string | null, padrao: { kit_id?: string | null; modelo_id?: string | null; versao?: number | null } = {}): Canvas {
+  const chave = r.modelo_pronto || (r.pose === "ugc_selfie" ? "ugc-selfie" : "produto-na-mao");
+  const antes = c;
+  let novo = aplicarModeloPronto(c, chave, motorPadrao, {
+    kit_id: r.kit_id || padrao.kit_id || null,
+    modelo_id: r.modelo_id || padrao.modelo_id || null,
+    versao: r.modelo_id ? null : padrao.versao || null,
+    pedido: r.pedido || null,
+    ambiente: r.ambiente || null,
+  });
+  const g = novo.nos.find((n) => n.tipo === "gerar" && novo.ligacoes.some((l) => l.para === n.id && !antes.ligacoes.some((x) => x.id === l.id)));
+  if (g) {
+    const ajuste: Partial<DadosDoNo> = {};
+    if (r.acao) ajuste.acao = r.acao;
+    if (r.pose) ajuste.pose = r.pose;
+    if (Object.keys(ajuste).length) novo = mudarDados(novo, g.id, ajuste);
+  }
   return novo;
 }
 
@@ -646,23 +978,32 @@ export const TIPO_NA_FUNCAO: Record<TipoDeNo, string> = {
   estilo: "estilo",
   texto: "prompt",
   gerar: "saida",
+  agente: "agente",
 };
 
 /** Dados de um cartão na forma que a função grava (canvas-regras.ts, dadosDoNo). */
 export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, unknown> {
-  if (tipo === "produto") return { kit_id: d.kit_id || null };
-  if (tipo === "modelo") return { modelo_id: d.modelo_id || null, versao: d.versao || null };
-  if (tipo === "ambiente") return { imagem_id: d.imagem_id || null, biblioteca_id: d.biblioteca_id || null, texto: (d.texto || "").trim() || null };
+  if (tipo === "produto") return { kit_id: d.kit_id || null, titulo: (d.titulo || "").trim() || null };
+  if (tipo === "modelo") {
+    return { modelo_id: d.modelo_id || null, versao: d.versao || null, imagem_id: d.modelo_id ? null : d.imagem_id || null, autorizada: !d.modelo_id && !!d.autorizada, titulo: (d.titulo || "").trim() || null };
+  }
+  if (tipo === "ambiente") {
+    return { imagem_id: d.imagem_id || null, biblioteca_id: d.biblioteca_id || null, texto: (d.texto || "").trim() || null, modo: d.modo || (d.imagem_id ? "foto" : "descrever"), uso: d.uso === "usar" ? "usar" : "complementar" };
+  }
   if (tipo === "estilo") {
     return { imagem_ids: d.imagem_id ? [d.imagem_id] : [], biblioteca_ids: d.biblioteca_id ? [d.biblioteca_id] : [], guia: (d.texto || "").trim() || null };
   }
   if (tipo === "texto") return { texto: d.texto || "", papel: d.papel === "restricao" ? "restricao" : "pedido" };
+  if (tipo === "agente") return { pedido: (d.pedido || "").trim(), mensagens: (d.mensagens || []).slice(-24).map((m) => ({ papel: m.papel, texto: m.texto.slice(0, 2000) })) };
   // Resultado: as fotos vão junto (a função guarda o atalho, sem a URL assinada, que expira).
   return {
     motores: d.motores || [],
     formato: d.formato || "4:5",
     qualidade: d.qualidade || "alta",
     resolucao: d.resolucao || null,
+    acao: d.acao || "livre",
+    pose: d.pose || "nenhuma",
+    carrossel: d.carrossel || 0,
     resultados: (d.resultados || []).map((r) => ({
       geracao_id: r.geracao_id,
       imagem_id: r.imagem_id,
@@ -674,6 +1015,9 @@ export function dadosParaAFuncao(tipo: TipoDeNo, d: DadosDoNo): Record<string, u
       custo_usd: r.custo_usd,
       conferencia: r.conferencia,
       criado_em: r.criado_em,
+      grupo: r.grupo,
+      quadro: r.quadro,
+      tipo: r.tipo,
     })),
   };
 }
@@ -738,23 +1082,41 @@ export function normalizarMontagem(data: any): Montagem {
  * o cartão de resultado (no_saida_id) e o gerador (modelo_imagem_id). Formato
  * e qualidade de base vêm do Resultado salvo; a qualidade daqui vale por cima.
  */
-export function corpoDoPedidoDoCanvas(acao: "canvas_montar" | "canvas_gerar", p: { canvasId: string; gerarId: string; motorId: string; qualidade: Qualidade; resolucao?: Resolucao | null }): Record<string, unknown> {
-  const corpo: Record<string, unknown> = { acao, canvas_id: p.canvasId, no_saida_id: p.gerarId, modelo_imagem_id: p.motorId, qualidade: p.qualidade };
-  if (p.resolucao) corpo.resolucao = p.resolucao;
-  return corpo;
+/** Série (v3): foto base, ângulo obrigatório, posição no carrossel e o grupo que junta as fotos. */
+export interface PedidoDaSerie {
+  baseImagemId?: string | null;
+  angulo?: number | null;
+  quadro?: number | null;
+  quadros?: number | null;
+  grupo?: string | null;
 }
 
-export async function montarCanvas(p: { canvasId: string; gerarId: string; motorId: string; qualidade: Qualidade; resolucao?: Resolucao | null }): Promise<Montagem> {
-  return normalizarMontagem(await chamarFuncao<any>("mesa-foto", corpoDoPedidoDoCanvas("canvas_montar", p)));
-}
-
-export async function gerarNoCanvas(p: {
+export interface PedidoDoCanvas extends PedidoDaSerie {
   canvasId: string;
   gerarId: string;
   motorId: string;
   qualidade: Qualidade;
   resolucao?: Resolucao | null;
-}): Promise<{ resultado: ResultadoDoCanvas; imagem: FotoDoAcervo | null; custo_usd?: number }> {
+}
+
+export function corpoDoPedidoDoCanvas(acao: "canvas_montar" | "canvas_gerar", p: PedidoDoCanvas): Record<string, unknown> {
+  const corpo: Record<string, unknown> = { acao, canvas_id: p.canvasId, no_saida_id: p.gerarId, modelo_imagem_id: p.motorId, qualidade: p.qualidade };
+  if (p.resolucao) corpo.resolucao = p.resolucao;
+  if (p.baseImagemId) corpo.base_imagem_id = p.baseImagemId;
+  if (p.angulo !== null && p.angulo !== undefined) corpo.angulo = p.angulo;
+  if (p.quadro && p.quadros) {
+    corpo.quadro = p.quadro;
+    corpo.quadros = p.quadros;
+  }
+  if (p.grupo) corpo.grupo = p.grupo;
+  return corpo;
+}
+
+export async function montarCanvas(p: PedidoDoCanvas): Promise<Montagem> {
+  return normalizarMontagem(await chamarFuncao<any>("mesa-foto", corpoDoPedidoDoCanvas("canvas_montar", p)));
+}
+
+export async function gerarNoCanvas(p: PedidoDoCanvas): Promise<{ resultado: ResultadoDoCanvas; imagem: FotoDoAcervo | null; custo_usd?: number }> {
   const data = await chamarFuncao<any>("mesa-foto", corpoDoPedidoDoCanvas("canvas_gerar", p));
   const imagem = normalizarFoto(data && data.imagem);
   const g = data && data.geracao && typeof data.geracao === "object" ? data.geracao : {};
@@ -768,6 +1130,9 @@ export async function gerarNoCanvas(p: {
     motor_id: g.motor_id || p.motorId,
     status: g.status === "falhou" ? "falhou" : "gerada",
     custo_usd: data && data.custo_usd,
+    grupo: p.grupo || null,
+    quadro: p.quadro || null,
+    tipo: p.quadro ? "carrossel" : p.baseImagemId ? "variacao" : "foto",
   }) as ResultadoDoCanvas;
   return { resultado, imagem, custo_usd: data && data.custo_usd };
 }
@@ -810,4 +1175,113 @@ const ENTRADA_POR_REFERENCIA = 1600;
 /** Uma imagem por motor ligado no Resultado (uma chamada por motor). */
 export function partesDoGerar(motores: string[], qualidade: Qualidade, referencias: number): ParteDaEstimativa[] {
   return motores.map((id) => ({ modeloId: id, tipo: "imagem" as const, imagens: 1, qualidade, tokensEntrada: 3000 + referencias * ENTRADA_POR_REFERENCIA }));
+}
+
+/**
+ * Série (variações ou carrossel): N chamadas no mesmo motor. A partir da
+ * segunda foto do carrossel (e em toda variação) a foto base vai junto.
+ */
+export function partesDaSerie(motorId: string, qualidade: Qualidade, referencias: number, vezes: number, comBaseDesdeAPrimeira = false): ParteDaEstimativa[] {
+  const saida: ParteDaEstimativa[] = [];
+  for (let i = 0; i < vezes; i++) {
+    const refs = referencias + (comBaseDesdeAPrimeira || i > 0 ? 1 : 0);
+    saida.push({ modeloId: motorId, tipo: "imagem" as const, imagens: 1, qualidade, tokensEntrada: 3000 + refs * ENTRADA_POR_REFERENCIA });
+  }
+  return saida;
+}
+
+/** O que o botão Gerar do Resultado vai gastar: um por motor, ou o carrossel inteiro no primeiro motor. */
+export function partesDoResultado(no: Pick<NoDoCanvas, "dados">, referencias: number): ParteDaEstimativa[] {
+  const motores = no.dados.motores || [];
+  const q: Qualidade = no.dados.qualidade || "alta";
+  const n = no.dados.carrossel || 0;
+  if (n && motores.length) return partesDaSerie(motores[0], q, referencias, n);
+  return partesDoGerar(motores, q, referencias);
+}
+
+// ------------------------------------------------------------------ usar e finalizar
+
+/**
+ * "Usar na Mesa" e "Finalizar" em 1 clique: aprova a foto se ainda não foi
+ * aprovada (a Mesa e o cliente só recebem foto aprovada) e devolve a foto
+ * atualizada. Foto já aprovada não chama nada.
+ */
+export async function aprovarSePreciso(clientId: string, imagemId: string, jaAprovada: boolean): Promise<FotoDoAcervo | null> {
+  if (jaAprovada) return null;
+  return decidirFoto(clientId, imagemId, "aprovar");
+}
+
+export const enderecoDaMesa = (clientId: string, imagemIds: string[]) => `/mesa?client=${clientId}&aba=estudio&fotos=${imagemIds.join(",")}`;
+
+// ------------------------------------------------------------------ esteira de produtos (topo do quadro)
+
+export interface ProdutoDaEsteira {
+  kit_id: string;
+  client_id: string;
+  nome: string;
+  variante: string | null;
+  tipo: string;
+  capa: { bucket: string; caminho: string } | null;
+}
+
+/** "todos": todos os clientes que a equipe enxerga (o RLS de foto_kits filtra). */
+export const TODOS_OS_CLIENTES = "todos";
+
+async function lerProdutosDaEsteira(filtro: { clientId?: string | null; ids?: string[] }): Promise<ProdutoDaEsteira[]> {
+  let q = (supabase as any).from("foto_kits").select("id, client_id, nome, variante, tipo, status, frente_imagem_id, atualizado_em");
+  if (filtro.ids) q = q.in("id", filtro.ids);
+  else if (filtro.clientId && filtro.clientId !== TODOS_OS_CLIENTES) q = q.eq("client_id", filtro.clientId);
+  const { data, error } = await q.order("atualizado_em", { ascending: false }).limit(filtro.ids ? 60 : 80);
+  if (error) throw error instanceof Error ? error : new Error(String(error.message || "Não foi possível ler os produtos."));
+  const kits = ((data || []) as any[]).filter((k) => k && k.id && k.tipo !== "pessoa" && k.status !== "arquivado");
+  const semFrente = kits.filter((k) => !k.frente_imagem_id).map((k) => String(k.id));
+  let refs: any[] = [];
+  if (semFrente.length) {
+    const r = await (supabase as any).from("foto_kit_refs").select("kit_id, imagem_id, papel, prioridade").in("kit_id", semFrente);
+    refs = (r && r.data) || [];
+  }
+  const capaId = (k: any) =>
+    k.frente_imagem_id ||
+    (refs.filter((r) => String(r.kit_id) === String(k.id)).sort((a, b) => (a.papel === "identidade" ? 0 : 1) - (b.papel === "identidade" ? 0 : 1) || numero(a.prioridade) - numero(b.prioridade))[0] || { imagem_id: null }).imagem_id;
+  const ids = kits.map(capaId).filter(Boolean).map(String);
+  let imagens: any[] = [];
+  if (ids.length) {
+    const r = await (supabase as any).from("cliente_imagens").select("id, storage_bucket, storage_path").in("id", ids);
+    imagens = (r && r.data) || [];
+  }
+  return kits.map((k) => {
+    const img = imagens.find((i) => String(i.id) === String(capaId(k) || ""));
+    return {
+      kit_id: String(k.id),
+      client_id: texto(k.client_id),
+      nome: texto(k.nome) || "Produto",
+      variante: textoOuNulo(k.variante),
+      tipo: texto(k.tipo),
+      capa: img && img.storage_path ? { bucket: texto(img.storage_bucket) || "mesa", caminho: texto(img.storage_path) } : null,
+    };
+  });
+}
+
+export function useEsteira(clienteDoFiltro: string, ativo = true) {
+  return useQuery({
+    queryKey: ["mesa-foto", "canvas", "esteira", clienteDoFiltro],
+    enabled: ativo && !!clienteDoFiltro,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: () => lerProdutosDaEsteira({ clientId: clienteDoFiltro }),
+  });
+}
+
+/** Produtos citados no quadro que não são deste cliente (vieram da esteira): nome e capa. */
+export function useProdutosDeFora(ids: string[]) {
+  const chave = ids.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["mesa-foto", "canvas", "produtos-de-fora", chave],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: 1,
+    queryFn: () => lerProdutosDaEsteira({ ids }),
+  });
 }

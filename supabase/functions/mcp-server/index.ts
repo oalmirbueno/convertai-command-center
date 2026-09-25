@@ -20,6 +20,7 @@ import {
 import {
   acceptsMcpResponse,
   corsHeaders,
+  folegoResponse,
   isMcpOriginAllowed,
   isMcpProtocolVersionSupported,
   jsonResponse,
@@ -188,6 +189,10 @@ async function dispatch(msg: JsonRpcRequest, auth: AuthResult): Promise<JsonRpcR
         + "Chame aceleriq_capabilities para ver os nomes exatos que a sua credencial pode invocar. "
         + "Antes de propor ou subir trafego pago, estude o que a Mesa Ads gerou com aceleriq_mesa_ads_contexto "
         + "(briefing, oferta, angulos e porques, notas do Jev, copy e artes) e as fotos aprovadas com aceleriq_mesa_foto_contexto. "
+        + "Antes de criar conteudo, arte, campanha ou anuncio, leia o que o cliente ja ensinou com aceleriq_cerebro_do_cliente "
+        + "e, quando o dono ou o cliente ensinar algo novo, registre com aceleriq_cerebro_registrar. "
+        + "Quando precisar agir nas mesas (conteudo no calendario, campanha, briefing, imagens, oferta, aprovacao), use as tools aceleriq_mesa_* de acao: "
+        + "elas rodam com a sessao da pessoa conectada (OAuth), pedem idempotency_key e confirmacao onde ha custo ou efeito no cliente. "
         + "Tools com escopo exigem OAuth Bearer antes de tools/call.",
     });
   }
@@ -434,6 +439,17 @@ Deno.serve(async (req) => {
           "Access-Control-Expose-Headers": "WWW-Authenticate, Mcp-Session-Id, Link",
         },
       });
+    }
+  }
+
+  // Ação longa nas mesas (IA, entrega de arquivo): a resposta começa na hora
+  // e respira até o resultado, para a plataforma não derrubar com 504 aos
+  // 150 s. Só tools/call autenticado de tool marcada longRunning; o resto
+  // segue a resposta de sempre.
+  if (auth.ok && message.method === "tools/call" && Object.prototype.hasOwnProperty.call(message, "id")) {
+    const nome = String(((message.params ?? {}) as Record<string, unknown>).name ?? "");
+    if (TOOL_MAP.get(nome)?.longRunning) {
+      return folegoResponse(() => dispatch(message, auth), prefersSse(req), (message.id ?? null) as JsonRpcId);
     }
   }
 

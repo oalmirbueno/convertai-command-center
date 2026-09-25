@@ -675,21 +675,11 @@ async function handleComplete(
   let anuncios: JsonRecord = { autorizado: false };
   if (permissions.granted.includes("ads_read")) {
     try {
-      const contas = await graphGet(
-        config,
-        "me/adaccounts",
-        userAccessToken,
-        { fields: "id,name,account_status", limit: "200" },
-      );
-      await rpcOrThrow(
-        admin,
-        "save_meta_ads_token_from_login",
-        { _token: userAccessToken, _label: "Token do login da Meta" },
-        "Nao foi possivel guardar o acesso de anuncios.",
-      );
+      const contas = await listarContasDeAnuncio(config, userAccessToken);
+      await guardarTokenDeAnuncios(admin, userAccessToken, metaUserId, contas);
       anuncios = {
         autorizado: true,
-        contas: Array.isArray(contas.data) ? contas.data.length : 0,
+        contas: contas.length,
       };
     } catch (error) {
       anuncios = {
@@ -907,27 +897,128 @@ async function handleAdsComplete(
     );
   }
 
-  const contas = await graphGet(config, "me/adaccounts", userAccessToken, {
-    fields: "id,name,account_status",
-    limit: "200",
-  });
+  // Quem é o perfil da Meta: o token passa a ser guardado POR PERFIL, e
+  // conectar com outro perfil não derruba mais o token deste.
+  const eu = await graphGet(config, "me", userAccessToken, { fields: "id" });
+  const metaUserId = cleanText(eu.id, 64) || null;
 
-  await rpcOrThrow(
-    admin,
-    "save_meta_ads_token_from_login",
-    { _token: userAccessToken, _label: "Token do login da Meta" },
-    "Não foi possível guardar o acesso de anúncios.",
-  );
+  const contas = await listarContasDeAnuncio(config, userAccessToken);
+  await guardarTokenDeAnuncios(admin, userAccessToken, metaUserId, contas);
 
   return {
     ok: true,
-    contas: Array.isArray(contas.data)
-      ? contas.data.map((c: JsonRecord) => ({
-        numero: String(c.id ?? "").replace(/^act_/i, ""),
-        nome: c.name ?? null,
-      }))
-      : [],
+    contas,
   };
+}
+
+/** Conta de anúncio como o painel mostra na escolha (nada de token aqui). */
+type ContaDeAnuncio = {
+  numero: string;
+  nome: string | null;
+  status: number | null;
+  status_rotulo: string | null;
+  utilizavel: boolean;
+  moeda: string | null;
+  empresa: string | null;
+  gasto_total: number | null;
+};
+
+const STATUS_DA_CONTA: Record<number, string> = {
+  1: "ativa",
+  2: "desativada",
+  3: "com pendência de pagamento",
+  7: "em análise de risco",
+  8: "aguardando acerto",
+  9: "em período de carência",
+  100: "encerramento pendente",
+  101: "encerrada",
+};
+
+/** Campos ricos primeiro; se a Meta recusar algum por permissão, os básicos (os que sempre funcionaram). */
+const CAMPOS_DA_CONTA_RICOS = "id,account_id,name,account_status,currency,amount_spent,business{id,name}";
+const CAMPOS_DA_CONTA_BASICOS = "id,name,account_status";
+
+function contaDaMeta(bruta: JsonRecord): ContaDeAnuncio | null {
+  const numero = cleanText(bruta.account_id ?? bruta.id, 64).replace(/^act_/i, "");
+  if (!/^\d{3,}$/.test(numero)) return null;
+  const status = typeof bruta.account_status === "number" ? bruta.account_status : Number(bruta.account_status) || null;
+  const gasto = bruta.amount_spent != null && Number.isFinite(Number(bruta.amount_spent)) ? Number(bruta.amount_spent) / 100 : null;
+  return {
+    numero,
+    nome: cleanText(bruta.name, 200) || null,
+    status,
+    status_rotulo: status ? STATUS_DA_CONTA[status] ?? `status ${status}` : null,
+    // Desativada ou encerrada não entrega nada: aparece, mas marcada.
+    utilizavel: status == null || [1, 3, 7, 8, 9].indexOf(status) >= 0,
+    moeda: cleanText(bruta.currency, 8) || null,
+    empresa: cleanText(recordValue(bruta.business)?.name, 200) || null,
+    gasto_total: gasto,
+  };
+}
+
+/**
+ * Todas as contas de anúncio que o perfil enxerga, página por página (a
+ * versão anterior lia só a primeira página e só id, nome e status).
+ */
+async function listarContasDeAnuncio(config: RuntimeConfig, token: string): Promise<ContaDeAnuncio[]> {
+  const ler = async (campos: string) => {
+    const saida: ContaDeAnuncio[] = [];
+    let after = "";
+    for (let pagina = 0; pagina < 10; pagina++) {
+      const payload = await graphGet(config, "me/adaccounts", token, {
+        fields: campos,
+        limit: "100",
+        ...(after ? { after } : {}),
+      });
+      for (const c of Array.isArray(payload.data) ? payload.data : []) {
+        const conta = recordValue(c) ? contaDaMeta(c as JsonRecord) : null;
+        if (conta && !saida.some((x) => x.numero === conta.numero)) saida.push(conta);
+      }
+      const proximo = cleanText(recordValue(recordValue(payload.paging)?.cursors)?.after, 512);
+      if (!proximo || proximo === after || !recordValue(payload.paging)?.next) break;
+      after = proximo;
+    }
+    return saida;
+  };
+  try {
+    return await ler(CAMPOS_DA_CONTA_RICOS);
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "META_PROVIDER_ERROR") return await ler(CAMPOS_DA_CONTA_BASICOS);
+    throw error;
+  }
+}
+
+/**
+ * Guarda o token de anúncios no cofre, com o perfil e as contas que ele
+ * enxerga (save_meta_ads_token_from_login de 4 argumentos, docs/mesa-ads/v4).
+ * Enquanto o SQL novo não estiver aplicado, cai na versão antiga.
+ */
+async function guardarTokenDeAnuncios(
+  admin: SupabaseClient,
+  token: string,
+  metaUserId: string | null,
+  contas: ContaDeAnuncio[],
+): Promise<void> {
+  const { error } = await admin.rpc("save_meta_ads_token_from_login", {
+    _token: token,
+    _label: "Token do login da Meta",
+    _meta_user_id: metaUserId,
+    _contas: contas.map((c) => c.numero),
+  });
+  if (!error) return;
+  const semVersaoNova = error.code === "PGRST202" || error.code === "42883";
+  if (!semVersaoNova) {
+    throw new ApiError("Não foi possível guardar o acesso de anúncios.", 422, "DATABASE_REJECTED", undefined, {
+      rpc: "save_meta_ads_token_from_login",
+      database_code: error.code || "unknown",
+    });
+  }
+  await rpcOrThrow(
+    admin,
+    "save_meta_ads_token_from_login",
+    { _token: token, _label: "Token do login da Meta" },
+    "Não foi possível guardar o acesso de anúncios.",
+  );
 }
 
 Deno.serve(async (req) => {

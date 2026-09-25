@@ -23,6 +23,12 @@ export interface AuthContext {
   // Optional per-call fields, populated by the dispatcher for write tools.
   correlationId?: string;
   resultRefHolder?: { value?: string };
+  // Só no caminho OAuth: o token de acesso do Supabase da própria pessoa,
+  // já validado (JWKS + getUser) na entrada. Existe para as AÇÕES nas mesas
+  // (MCP 2.3): a mesa confere equipe e acesso ao cliente com a sessão de quem
+  // age, como na tela. Nunca vai para log, resposta ou auditoria; só segue,
+  // como Authorization, para as funções do próprio projeto (mcp-mesas-acoes.ts).
+  userAccessToken?: string;
 }
 
 export interface ClientDataScope {
@@ -472,6 +478,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
         scopes,
         origin: `oauth:${clientId || 'user'}:${sub}`,
         dataScope,
+        userAccessToken: token,
       },
     };
   }
@@ -486,7 +493,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 // canInvoke() in mcp-tools.ts. Inlined to avoid a circular import.
 const SCOPE_EXPANSIONS_LOCAL: Record<string, string[]> = {
   'aceleriq:read': ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','commercial:read','contracts:read','editorial:read'],
-  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write','editorial:write','commercial:write'],
+  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write','clients:write','mesas:write','editorial:write','commercial:write'],
 };
 export function expandScopesLocal(granted: readonly string[]): Set<string> {
   const out = new Set<string>();

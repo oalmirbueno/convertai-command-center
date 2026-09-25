@@ -11,9 +11,24 @@
  *     -> { canvas } ou 409 { error: 'canvas_mudou', versao_atual, canvas }
  * - canvas_montar { canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao? }
  *     -> { referencias, cortadas, prompt, avisos, estimativa_usd, ... } (sem IA: o que vai ao gerador)
- * - canvas_gerar { canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao?, seed? }
- *     -> { geracao, imagem, url, montado, custo_usd, saldo_usd, reserva_usada, avisos } (UMA imagem por chamada)
+ * - canvas_gerar { canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao?, seed?,
+ *     base_imagem_id?, angulo?, quadro?, quadros?, grupo? }
+ *     -> { geracao, imagem, url, montado, custo_usd, saldo_usd, reserva_usada, avisos, grupo, quadro } (UMA imagem por chamada)
+ *     v3: "Variações desta" e o carrossel são N chamadas desta ação (a tela
+ *     mostra o custo de todas antes): base_imagem_id é a foto base (vai como
+ *     Imagem 1, identidade da cena), angulo o índice do ângulo obrigatório,
+ *     quadro/quadros a posição no carrossel (3 a 6) e grupo junta a série.
  * - canvas_conferir { geracao_id } -> { geracao_id, conferencia, custo_usd, saldo_usd } (visão + Jev só como aviso)
+ * - canvas_agente { canvas_id, mensagem?, tarefa? ('conversar' | 'ambiente' | 'montar'), no_saida_id?, historico? }
+ *     -> { resposta, pedido, acao, pose, ambiente, formato, modelo_pronto, kit_id, modelo_id, custo_usd, saldo_usd }
+ *     O agente (bolinha do quadro) lê o contexto do cliente, o que está ligado
+ *     no resultado e a última foto dele, e escreve o pedido. Não grava no
+ *     canvas: a tela põe a resposta no cartão e salva com a versão esperada.
+ *
+ * Produto de outro cliente (esteira do topo): vale quando a equipe tem acesso
+ * ao cliente do kit (can_access_client, pela leitura do kit); a cobrança é
+ * sempre do cliente do canvas, e a foto gerada não aponta kit_id nem
+ * derivada_de de outro cliente (só a etiqueta kit:<id>).
  *
  * Apelidos aceitos (a tela escreveu em paralelo): cartão "texto" = "prompt",
  * "gerar" = "saida"; no_gerar_id = no_saida_id; motor_id = modelo_imagem_id.
@@ -45,28 +60,40 @@ import { lerMarcaParaDirecao } from "../_shared/contexto-cliente.ts";
 import { JevErro, jevPerguntar, notaScore, probabilidadeNoul } from "../_shared/jev.ts";
 import { arred6, dimensoesDaImagem, ErroDeRegra, extensaoDe, limpo, mimeDe, normalizarConferencia, sha256Hex, UUID } from "./calculos.ts";
 import {
+  ACOES_DO_RESULTADO,
+  ambienteDoContexto,
+  ANGULOS_DE_VARIACAO,
   type CanvasNormalizado,
   canvasGravado,
+  CHAVES_DOS_MODELOS_PRONTOS,
   entradasDaSaida,
   escolherSaida,
   garantirQueDaParaGerar,
+  historicoDoAgente,
   idsDoCanvas,
   LIMITE_REFERENCIAS_DO_CANVAS,
+  lerAngulo,
   lerPedidoDoCanvas,
+  lerQuadro,
   type NoCanvas,
   normalizarCanvas,
-  ordenarReferencias,
+  ordenarComBase,
   type PessoaDoPedido,
+  type PessoaRealDoPedido,
+  POSES_DO_RESULTADO,
   type ProdutoDoPedido,
   promptDoCanvas,
+  QUADROS_DO_CARROSSEL,
   type ReferenciaCandidata,
   type ReferenciaMontada,
+  respostaDoAgente,
+  resultadosDaSaida,
   textosDasEntradas,
 } from "./canvas-regras.ts";
 import type { Chamador, FerramentasDaMesa, ItemDaBibliotecaLido } from "./ferramentas.ts";
 import type { LinhaImagemPersona, LinhaPersona } from "./modelos.ts";
-import { identidadesDaVista, NIVEIS_PELE, personaUsavel } from "./personas.ts";
-import { type Formato, TAMANHO_DO_FORMATO } from "./receitas.ts";
+import { garantirPermitido, identidadesDaVista, NIVEIS_PELE, personaUsavel } from "./personas.ts";
+import { FORMATOS, type Formato, TAMANHO_DO_FORMATO } from "./receitas.ts";
 
 export const REF_CANVAS = "foto_canvas";
 /** Padrão do Canvas (pesquisa, seção 4.3): GPT Image 2.5 Sunburst em qualidade alta. */
@@ -143,13 +170,22 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     return c;
   }
 
-  /** Todo id citado no canvas existe e é do cliente (regra da casa: validar id contra o banco em toda escrita). */
-  async function conferirIds(clientId: string, c: CanvasNormalizado) {
+  /**
+   * Todo id citado no canvas existe e é do cliente (regra da casa: validar id
+   * contra o banco em toda escrita). Kit de outro cliente (esteira) volta em
+   * clientesDosKits para quem chamou conferir o acesso a esse cliente.
+   */
+  async function conferirIds(clientId: string, c: CanvasNormalizado): Promise<{ clientesDosKits: string[] }> {
     const ids = idsDoCanvas(c);
     const fora: Record<string, string[]> = {};
+    const clientesDosKits = new Set<string>();
     if (ids.kits.length) {
       const { data } = await db().from("foto_kits").select("id, client_id").in("id", ids.kits);
-      const ok = new Set(((data as { id: string; client_id: string }[] | null) ?? []).filter((k) => k.client_id === clientId).map((k) => k.id));
+      const achados = (data as { id: string; client_id: string }[] | null) ?? [];
+      achados.forEach((k) => {
+        if (k.client_id !== clientId) clientesDosKits.add(k.client_id);
+      });
+      const ok = new Set(achados.map((k) => k.id));
       const faltam = ids.kits.filter((k) => !ok.has(k));
       if (faltam.length) fora.kits = faltam;
     }
@@ -172,6 +208,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     if (Object.keys(fora).length) {
       throw new ErroDeRegra(409, "id_fora_do_cliente", "O canvas cita kit, persona, imagem ou item da biblioteca que não existe ou é de outro cliente.", { fora });
     }
+    return { clientesDosKits: [...clientesDosKits] };
   }
 
   // ---------------------------------------------------------------- montagem
@@ -189,10 +226,17 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     prompt: string;
     avisos: string[];
     kitIds: string[];
+    /** Kits deste cliente (os de outro cliente só entram como etiqueta). */
+    kitIdsDoCliente: string[];
     personaIds: string[];
     primeiraDoProduto: string | null;
     estimativa_usd: number;
     limite: number;
+    /** Série (v3): foto base, ângulo e posição no carrossel. */
+    base_imagem_id: string | null;
+    angulo: number | null;
+    quadro: { atual: number; total: number } | null;
+    grupo: string | null;
   };
 
   async function montar(ch: Chamador, canvas: LinhaCanvas, corpo: Record<string, unknown>): Promise<Montagem> {
@@ -212,17 +256,21 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     const candidatas: ReferenciaCandidata[] = [];
     const produtos: ProdutoDoPedido[] = [];
     const pessoas: PessoaDoPedido[] = [];
+    const pessoasReais: PessoaRealDoPedido[] = [];
     const kitIds: string[] = [];
+    const kitIdsDoCliente: string[] = [];
     const personaIds: string[] = [];
     let primeiraDoProduto: string | null = null;
 
     // Produto do kit: identidade invariante (a vista escolhida no cartão ou a ordem de prioridade do kit).
     for (const no of entradas.produto) {
+      // lerKitComRefs confere o acesso ao cliente do kit (can_access_client): produto de outro cliente vale para a equipe com acesso.
       const { kit, refs } = await f.lerKitComRefs(ch, String(no.dados.kit_id));
-      if (kit.client_id !== canvas.client_id) throw new ErroDeRegra(409, "kit_de_outro_cliente", "Este kit pertence a outro cliente.", { no_id: no.id });
       if (kit.status === "arquivado") throw new ErroDeRegra(409, "kit_arquivado", `O kit ${kit.nome} está arquivado.`, { no_id: no.id });
-      if (kit.tipo === "pessoa") throw new ErroDeRegra(409, "kit_de_pessoa", "Pessoa real não entra no cartão de produto. Use o cartão de modelo (persona).", { no_id: no.id });
+      if (kit.tipo === "pessoa") throw new ErroDeRegra(409, "kit_de_pessoa", "Pessoa real não entra no cartão de produto. Use o cartão de pessoa.", { no_id: no.id });
       kitIds.push(kit.id);
+      if (kit.client_id === canvas.client_id) kitIdsDoCliente.push(kit.id);
+      else avisos.push(`O produto ${kit.nome} é de outro cliente: a cobrança fica no cliente deste canvas.`);
       const utilizaveis = refs.filter((r) => PAPEIS_DE_PRODUTO.includes(r.papel) && !(r.imagem.gerada && !r.imagem.aprovada));
       const escolhidas = Array.isArray(no.dados.imagem_ids) && (no.dados.imagem_ids as string[]).length
         ? (no.dados.imagem_ids as string[]).map((id) => utilizaveis.find((r) => r.imagem_id === id)).filter((r): r is typeof utilizaveis[number] => !!r)
@@ -237,13 +285,24 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       for (const r of lista) {
         candidatas.push({ papel: "produto", origem: { tipo: "kit", id: kit.id, no_id: no.id }, imagem_id: r.imagem_id, titulo: kit.nome, legenda: `${r.papel}${r.vista ? `, vista ${r.vista}` : ""}` });
         fontes.set(`acervo:${r.imagem_id}`, { tipo: "acervo", bucket: r.imagem.storage_bucket, caminho: r.imagem.storage_path, nome: r.imagem.nome });
-        primeiraDoProduto = primeiraDoProduto ?? r.imagem_id;
+        if (kit.client_id === canvas.client_id) primeiraDoProduto = primeiraDoProduto ?? r.imagem_id;
       }
       produtos.push({ no_id: no.id, nome: kit.nome, variante: kit.variante, invariantes: kit.invariantes ?? [], lacunas: kit.lacunas ?? [] });
     }
 
+    // Pessoa real (foto do acervo deste cliente, com autorização marcada no cartão).
+    const reais = entradas.modelo.filter((n) => !n.dados.modelo_id && n.dados.imagem_id);
+    const fotosReais = reais.length ? await f.lerImagens(canvas.client_id, reais.map((n) => String(n.dados.imagem_id))) : [];
+    for (const no of reais) {
+      const img = fotosReais.find((x) => x.id === String(no.dados.imagem_id));
+      if (!img) throw new ErroDeRegra(409, "id_fora_do_cliente", "A foto da pessoa não está no acervo deste cliente.", { no_id: no.id });
+      candidatas.push({ papel: "pessoa", origem: { tipo: "acervo", id: img.id, no_id: no.id }, imagem_id: img.id, titulo: img.nome, legenda: "pessoa real" });
+      fontes.set(`acervo:${img.id}`, { tipo: "acervo", bucket: img.storage_bucket, caminho: img.storage_path, nome: img.nome });
+      pessoasReais.push({ no_id: no.id, nome: limpo(no.dados.titulo, 60) });
+    }
+
     // Persona: identidade da pessoa (âncora e vistas aprovadas).
-    for (const no of entradas.modelo) {
+    for (const no of entradas.modelo.filter((n) => !!n.dados.modelo_id)) {
       const { data } = await db().from("foto_modelos").select("*").eq("id", String(no.dados.modelo_id)).maybeSingle();
       const p = data as LinhaPersona | null;
       if (!p || (p.client_id && p.client_id !== canvas.client_id)) throw new ErroDeRegra(409, "persona_fora_do_cliente", "Esta persona não existe ou é de outro cliente.", { no_id: no.id });
@@ -263,8 +322,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       pessoas.push({ no_id: no.id, nome: p.nome, ficha: p.ficha, invariantes: p.invariantes ?? [] });
     }
 
-    // Ambiente e estilo: só estilo (foto do acervo ou referência da biblioteca).
-    const ambientes: { texto: string | null }[] = [];
+    // Ambiente e estilo (foto do acervo ou referência da biblioteca); ambiente "contexto" sai da marca do cliente.
+    const ambientes: { texto: string | null; no_id: string; modo: string; uso: string; comFoto: boolean }[] = [];
     const estilos: { guia: string | null }[] = [];
     const idsBiblioteca = [
       ...entradas.ambiente.map((n) => n.dados.biblioteca_id).filter(Boolean),
@@ -291,15 +350,19 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       fontes.set(`acervo:${img.id}`, { tipo: "acervo", bucket: img.storage_bucket, caminho: img.storage_path, nome: img.nome });
       return null;
     };
+    const precisaDoContexto = entradas.ambiente.some((n) => n.dados.modo === "contexto" && !n.dados.texto);
+    const contexto = precisaDoContexto && f.contextoDoCliente ? await f.contextoDoCliente(canvas.client_id).catch(() => null) : null;
     for (const no of entradas.ambiente) {
       const textos: string[] = [];
+      const modo = String(no.dados.modo || "descrever");
       if (no.dados.imagem_id) doAcervoOuBiblioteca(no, "ambiente", String(no.dados.imagem_id), false);
       if (no.dados.biblioteca_id) {
         const prompt = doAcervoOuBiblioteca(no, "ambiente", String(no.dados.biblioteca_id), true);
         if (prompt) textos.push(limpo(prompt.prompt_pt || prompt.prompt_en, 800));
       }
       if (no.dados.texto) textos.push(String(no.dados.texto));
-      ambientes.push({ texto: textos.filter(Boolean).join(" ") || null });
+      else if (modo === "contexto") textos.push(ambienteDoContexto(contexto ? lerContextoDoAmbiente(contexto) : null));
+      ambientes.push({ texto: textos.filter(Boolean).join(" ") || null, no_id: no.id, modo, uso: String(no.dados.uso || "complementar"), comFoto: !!(no.dados.imagem_id || no.dados.biblioteca_id) });
     }
     for (const no of entradas.estilo) {
       const guias: string[] = [];
@@ -312,8 +375,21 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       estilos.push({ guia: guias.filter(Boolean).join(" ") || null });
     }
 
+    // Série (v3): foto base (identidade da cena), ângulo obrigatório e posição no carrossel.
+    let base: ReferenciaCandidata | null = null;
+    const baseId = corpo.base_imagem_id != null && corpo.base_imagem_id !== "" ? idDe(corpo.base_imagem_id, "base_imagem_id") : null;
+    if (baseId) {
+      const [img] = await f.lerImagens(canvas.client_id, [baseId]);
+      if (!img) throw new ErroDeRegra(409, "id_fora_do_cliente", "A foto base não está no acervo deste cliente.", { base_imagem_id: baseId });
+      base = { papel: "base", origem: { tipo: "acervo", id: img.id, no_id: saida.id }, imagem_id: img.id, titulo: img.nome, legenda: "foto base" };
+      fontes.set(`acervo:${img.id}`, { tipo: "acervo", bucket: img.storage_bucket, caminho: img.storage_path, nome: img.nome });
+    }
+    const angulo = lerAngulo(corpo.angulo);
+    const quadro = lerQuadro(corpo.quadro, corpo.quadros);
+    const grupo = /^[A-Za-z0-9_-]{1,64}$/.test(String(corpo.grupo ?? "")) ? String(corpo.grupo) : null;
+
     const limite = Math.max(1, Math.min(limiteDeReferencias(m), LIMITE_REFERENCIAS_DO_CANVAS));
-    const ordem = ordenarReferencias(candidatas, limite);
+    const ordem = ordenarComBase(base, candidatas, limite);
     avisos.push(...ordem.avisos);
     const ajuste = resolucaoParaModelo(capacidadesDoModelo(m), resolucao);
     if (ajuste.aviso) avisos.push(ajuste.aviso);
@@ -325,11 +401,16 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       referencias: ordem.referencias,
       produtos,
       pessoas,
+      pessoasReais,
       ambientes,
       estilos,
       textos: textosDasEntradas(entradas),
       formato,
       marca: marca ? { nome: marca.nomeCliente, paleta } : null,
+      acao: String(saida.dados.acao || "livre"),
+      pose: String(saida.dados.pose || "nenhuma"),
+      angulo,
+      quadro,
     });
     const tamanho = TAMANHO_DO_FORMATO[formato];
     const estimativa = estimarComModelo(m, {
@@ -348,10 +429,15 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       prompt,
       avisos: Array.from(new Set(avisos)),
       kitIds,
+      kitIdsDoCliente,
       personaIds,
       primeiraDoProduto,
       estimativa_usd: estimativa,
       limite,
+      base_imagem_id: base ? base.imagem_id : null,
+      angulo,
+      quadro,
+      grupo,
     };
   }
 
@@ -384,6 +470,11 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     prompt: mt.prompt,
     avisos: mt.avisos,
     estimativa_usd: mt.estimativa_usd,
+    base_imagem_id: mt.base_imagem_id,
+    angulo: mt.angulo,
+    angulo_texto: mt.angulo === null ? null : ANGULOS_DE_VARIACAO[mt.angulo],
+    quadro: mt.quadro,
+    grupo: mt.grupo,
   });
 
   // ---------------------------------------------------------------- ações
@@ -416,7 +507,9 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     await f.garantirAcesso(ch, clientId);
     const bruto = (corpo.canvas && typeof corpo.canvas === "object" ? corpo.canvas : {}) as Record<string, unknown>;
     const c = normalizarCanvas(bruto);
-    await conferirIds(clientId, c);
+    const conferidos = await conferirIds(clientId, c);
+    // Produto de outro cliente (esteira): a equipe precisa ter acesso ao cliente do kit.
+    for (const outro of conferidos.clientesDosKits) await f.garantirAcesso(ch, outro);
     const campos = { nome: c.nome, nos: c.nos, ligacoes: c.ligacoes, viewport: c.viewport };
     const id = String(bruto.id ?? "").trim();
     if (!id) {
@@ -456,7 +549,7 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
     if (c.status === "arquivado") throw new ErroDeRegra(409, "canvas_arquivado", "O canvas está arquivado.");
     const mt = await montar(ch, c, corpo);
     const imagens = await f.emParalelo(mt.referencias, 4, (r) => baixarFonte(c.client_id, mt.fontes.get(chaveDaFonte(r))));
-    const montado = { referencias: mt.referencias, prompt: mt.prompt, avisos: mt.avisos };
+    const montado = { referencias: mt.referencias, prompt: mt.prompt, avisos: mt.avisos, base_imagem_id: mt.base_imagem_id, angulo: mt.angulo, quadro: mt.quadro, grupo: mt.grupo };
     const { data: criada, error: e0 } = await db().from("foto_canvas_geracoes").insert({
       canvas_id: c.id,
       client_id: c.client_id,
@@ -516,12 +609,15 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
         ...mt.kitIds.map((k) => `kit:${k}`),
         ...mt.personaIds.map((p) => `persona:${p}`),
         ...(comPessoa ? ["pessoa_sintetica"] : []),
+        ...(mt.grupo ? [`serie:${mt.grupo}`] : []),
+        ...(mt.quadro ? ["carrossel"] : mt.base_imagem_id ? ["variacao"] : []),
       ])).slice(0, 30),
       descricao: `Imagem gerada por IA no Canvas "${c.nome}" (motor ${saida.modeloId}).${comPessoa ? " Pessoa sintética: ao publicar, ligue o rótulo de IA." : ""}`.slice(0, 1000),
-      derivada_de: mt.primeiraDoProduto,
+      // Variação: nasce da foto base; senão, da primeira foto do produto deste cliente (nunca de outro cliente).
+      derivada_de: mt.base_imagem_id ?? mt.primeiraDoProduto,
       gerada: true,
       modo: "canvas",
-      kit_id: mt.kitIds[0] ?? null,
+      kit_id: mt.kitIdsDoCliente[0] ?? null,
       sha256: sha,
       largura: dim?.largura ?? null,
       altura: dim?.altura ?? null,
@@ -551,6 +647,8 @@ export function acoesDoCanvas(f: FerramentasDaMesa) {
       saldo_usd: saida.saldoUsd,
       reserva_usada: saida.reservaUsada ?? null,
       avisos: Array.from(new Set([...mt.avisos, ...(saida.avisos ?? [])])),
+      grupo: mt.grupo,
+      quadro: mt.quadro ? mt.quadro.atual : null,
     });
   }
 
@@ -674,6 +772,118 @@ Não julgue beleza nem gosto. Português do Brasil, sem travessão. Responda só
     return f.json({ geracao_id: g.id, imagem_id: g.imagem_id, conferencia, custo_usd: arred6(custo), saldo_usd: lido.saldoUsd });
   }
 
+  const SISTEMA_AGENTE_CANVAS = `Você é o diretor de fotografia do Canvas da agência Aceleriq, conversando com a equipe dentro do quadro de uma foto.
+Você recebe o contexto real do cliente (marca, público, campanha), o que está ligado no resultado (produto, pessoa, ambiente, estilo, pedido, ação e pose) e, quando houver, a última foto gerada (a imagem anexada).
+Seu trabalho: responder curto e prático, e escrever o PEDIDO do resultado, uma descrição de cena concreta em português (quem, o que faz com o produto, onde, luz, enquadramento, clima), pronta para o gerador. O produto do kit nunca muda (forma, cor, texto e logo).
+Realismo acima de tudo: pele real, luz com fonte, escala certa do produto; quando pedirem UGC, pegada de celular, selfie ou review.
+Sugira ação (acao) e pose (pose) só das listas; formato só da lista; modelo_pronto só da lista; kit_id e modelo_id só dos ids do contexto. Sem sugestão, use null.
+tarefa "ambiente": descreva no campo ambiente um lugar realista para a marca (e no pedido, a cena).
+tarefa "montar": escolha o modelo_pronto que mais combina com o cliente e o pedido, e preencha pedido, ambiente, acao, pose e os ids.
+Nunca peça pessoa parecida com alguém real, nunca menor de idade, nunca sexualização. Português do Brasil, sem travessão. Responda só com o JSON pedido.`;
+
+  /** Conversa com o agente do Canvas (bolinha do quadro): escreve o pedido pelo contexto. Não grava o canvas. */
+  async function canvasAgente(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await canvasComAcesso(ch, idDe(corpo.canvas_id, "canvas_id"));
+    const tarefa = corpo.tarefa === "ambiente" || corpo.tarefa === "montar" ? String(corpo.tarefa) : "conversar";
+    const mensagem = limpo(corpo.mensagem, 4000);
+    if (!mensagem && tarefa === "conversar") throw new ErroDeRegra(400, "mensagem_vazia", "Escreva a mensagem para o agente.");
+    if (mensagem) garantirPermitido(mensagem);
+    let saida: NoCanvas | null = null;
+    try {
+      saida = escolherSaida(c, lerPedidoDoCanvas(corpo).no_saida_id);
+    } catch {
+      saida = null;
+    }
+    const entradas = saida ? entradasDaSaida(c, saida.id) : null;
+    const [kitsQ, personasQ, contexto, modelo] = await Promise.all([
+      db().from("foto_kits").select("id, client_id, nome, variante, tipo, invariantes, status").eq("client_id", c.client_id).neq("status", "arquivado").limit(30),
+      db().from("foto_modelos").select("*").or(`client_id.is.null,client_id.eq.${c.client_id}`).neq("status", "arquivada").limit(30),
+      f.contextoDoCliente ? f.contextoDoCliente(c.client_id).catch(() => null) : Promise.resolve(null),
+      f.modeloDeTexto("diretor_arte", corpo.modelo_id),
+    ]);
+    const kits = ((kitsQ.data as { id: string; nome: string; variante: string | null; tipo: string; invariantes: string[] | null }[] | null) ?? []).filter((k) => k.tipo !== "pessoa");
+    // Clone de pessoa real (migration 04) não se mistura com persona sintética: fica fora da lista do agente.
+    const personas = ((personasQ.data as { id: string; nome: string; status: string; origem?: string | null }[] | null) ?? [])
+      .filter((p) => p.origem !== "clone" && personaUsavel(p.status).ok);
+    const nomeDoNo = (n: NoCanvas) => {
+      if (n.tipo === "produto") return kits.find((k) => k.id === n.dados.kit_id)?.nome || limpo(n.dados.titulo, 80) || "produto";
+      if (n.tipo === "modelo") return personas.find((p) => p.id === n.dados.modelo_id)?.nome ?? (limpo(n.dados.titulo, 80) || "pessoa real");
+      return limpo(n.dados.titulo, 80);
+    };
+    const quadro = entradas && saida
+      ? {
+        produtos: entradas.produto.map((n) => nomeDoNo(n)),
+        pessoas: entradas.modelo.map((n) => ({ nome: nomeDoNo(n), real: !n.dados.modelo_id })),
+        ambientes: entradas.ambiente.map((n) => ({ texto: limpo(n.dados.texto, 400) || null, modo: n.dados.modo ?? null, com_foto: !!n.dados.imagem_id })),
+        estilos: entradas.estilo.map((n) => limpo(n.dados.guia, 300)).filter(Boolean),
+        pedidos: textosDasEntradas(entradas).map((t) => `${t.papel}: ${t.texto}`),
+        acao: saida.dados.acao ?? "livre",
+        pose: saida.dados.pose ?? "nenhuma",
+        formato: saida.dados.formato ?? "4:5",
+        carrossel: saida.dados.carrossel ?? 0,
+      }
+      : null;
+    // A última foto do resultado vai junto (o agente "vê" o que saiu).
+    const ultima = saida ? resultadosDaSaida(saida.dados.resultados).filter((r) => r.imagem_id && r.status === "gerada").pop() : null;
+    const [img] = ultima ? await f.lerImagens(c.client_id, [String(ultima.imagem_id)]) : [];
+    const foto = img ? await f.baixarReduzida(img.storage_bucket, img.storage_path, 1024, "ultima-foto").catch(() => null) : null;
+    const formatos = FORMATOS as readonly string[] as string[];
+    const dados = {
+      tarefa,
+      cliente: contexto ? contexto.dados : { cliente: c.nome },
+      quadro,
+      kits_do_cliente: kits.map((k) => ({ id: k.id, nome: k.nome, variante: k.variante, tipo: k.tipo, invariantes: (k.invariantes ?? []).slice(0, 6) })),
+      pessoas_prontas: personas.map((p) => ({ id: p.id, nome: p.nome })),
+      acoes: Object.keys(ACOES_DO_RESULTADO),
+      poses: Object.keys(POSES_DO_RESULTADO),
+      angulos: ANGULOS_DE_VARIACAO,
+      quadros_do_carrossel: QUADROS_DO_CARROSSEL,
+      modelos_prontos: CHAVES_DOS_MODELOS_PRONTOS,
+      formatos,
+      ultima_foto_anexada: !!foto,
+    };
+    const nulo = (tipo: string) => ({ type: [tipo, "null"] });
+    const esquema = {
+      nome: "agente_do_canvas",
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["resposta", "pedido", "acao", "pose", "ambiente", "formato", "modelo_pronto", "kit_id", "modelo_id"],
+        properties: {
+          resposta: { type: "string" },
+          pedido: { type: "string" },
+          acao: nulo("string"),
+          pose: nulo("string"),
+          ambiente: nulo("string"),
+          formato: nulo("string"),
+          modelo_pronto: nulo("string"),
+          kit_id: nulo("string"),
+          modelo_id: nulo("string"),
+        },
+      },
+    };
+    const pedidoPadrao = tarefa === "ambiente"
+      ? "Descreva um ambiente realista para este cliente e esta foto."
+      : tarefa === "montar"
+      ? "Monte o quadro pelo contexto do cliente: escolha o modelo pronto, o produto, a pessoa, o ambiente e escreva o pedido."
+      : mensagem;
+    const lido = await chamarTexto({
+      clientId: c.client_id,
+      tarefa: "estudio",
+      agente: "diretor_arte",
+      modeloId: modelo.id,
+      sistema: `${SISTEMA_AGENTE_CANVAS}\n\nDADOS REAIS:\n${JSON.stringify(dados)}`,
+      mensagens: [...historicoDoAgente(corpo.historico), { papel: "usuario", conteudo: mensagem || pedidoPadrao, imagens: foto ? [foto] : undefined }],
+      esquemaJson: esquema,
+      maxTokensSaida: 4_000,
+      timeoutMs: 300_000,
+      referencia: { tipo: REF_CANVAS, id: c.id },
+      criadoPor: ch.userId,
+    });
+    const r = respostaDoAgente(lido.json, { kits: kits.map((k) => k.id), modelos: personas.map((p) => p.id), modelosProntos: CHAVES_DOS_MODELOS_PRONTOS, formatos });
+    return f.json({ ...r, tarefa, no_saida_id: saida ? saida.id : null, custo_usd: arred6(lido.custoUsd), saldo_usd: lido.saldoUsd });
+  }
+
   /** estimar { acao_alvo: 'canvas_gerar', canvas_id, no_saida_id?, modelo_imagem_id?, qualidade?, resolucao?, motores? } */
   async function estimarCanvas(ch: Chamador, corpo: Record<string, unknown>): Promise<Response> {
     const c = await canvasComAcesso(ch, idDe(corpo.canvas_id, "canvas_id"));
@@ -698,13 +908,30 @@ Não julgue beleza nem gosto. Português do Brasil, sem travessão. Responda só
       canvas_montar: canvasMontar,
       canvas_gerar: canvasGerar,
       canvas_conferir: canvasConferir,
+      canvas_agente: canvasAgente,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarCanvas,
   };
 }
 
+/** Contexto do cliente reduzido ao que o ambiente "pelo contexto" usa (sem IA). */
+function lerContextoDoAmbiente(ctx: { cliente: string; dados: Record<string, unknown> }) {
+  const d = ctx.dados || {};
+  const marca = (d.marca && typeof d.marca === "object" ? d.marca : {}) as Record<string, unknown>;
+  const textoDe = (v: unknown) => (typeof v === "string" ? v : v && typeof v === "object" ? JSON.stringify(v) : "");
+  const campanha = [d.campanha_escolhida, d.campanha_do_mes]
+    .map((x) => (x && typeof x === "object" ? String((x as Record<string, unknown>).nome ?? "") : ""))
+    .find(Boolean) || null;
+  return {
+    cliente: ctx.cliente,
+    estilo: limpo(textoDe(marca.estilo), 240) || null,
+    nicho: typeof d.nicho === "string" ? d.nicho : null,
+    campanha,
+  };
+}
+
 /** Ações do Canvas que chamam IA ou baixam imagens (respondem com fôlego). */
-export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar"];
+export const ACOES_LONGAS_DO_CANVAS = ["canvas_montar", "canvas_gerar", "canvas_conferir", "canvas_ler", "canvas_salvar", "canvas_agente"];
 
 /** Alvos que a ação estimar repassa para o Canvas. */
 export const ALVOS_DE_ESTIMATIVA_DO_CANVAS = ["canvas_gerar"];

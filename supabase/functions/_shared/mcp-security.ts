@@ -126,6 +126,10 @@ export const OAUTH_STAFF_SCOPES = [
   'contracts:write',
   'memory:read',
   'memory:propose',
+  // MCP 2.3: agir nas mesas. Concedível a staff, mas a ação só roda com a
+  // sessão da própria pessoa (OAuth) e a mesa confere o acesso ao cliente de
+  // novo; principal restrito a cliente ainda cai no portão de dataScope.
+  'mesas:write',
 ] as const;
 
 // A plain Supabase OAuth/OIDC consent (`openid email profile`) must never
@@ -211,7 +215,7 @@ export function oauthScopesForStaff(
   const hasApplicationScope = [...claimed].some(scope =>
     // 'commercial' precisa estar aqui: um token so com commercial:* era lido
     // como "sem escopo de aplicacao" e caia para a linha de base clients:read.
-    /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|commercial|contracts|memory):/.test(scope)
+    /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|commercial|contracts|memory|mesas):/.test(scope)
     || scope === 'admin'
   );
   if (!hasApplicationScope) return [...OAUTH_OIDC_BASELINE_SCOPES];

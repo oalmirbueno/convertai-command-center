@@ -300,7 +300,7 @@ describe("o preparo decide tudo antes da direção", () => {
     fireEvent.change(screen.getByPlaceholderText("Ex.: use fotos reais do ambiente, capa centralizada"), { target: { value: "capa centralizada" } });
     expect(await screen.findByText("~US$ 0,036")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Preparar direção/ }));
-    await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "diretor", laminas: 5, continuo: true, pedido: "capa centralizada" }));
+    await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "diretor", laminas: 5, continuo: true, pedido: "capa centralizada", formato: "feed_4x5" }));
     await waitFor(() => expect(onConcluido).toHaveBeenCalled());
   });
 
@@ -318,7 +318,7 @@ describe("o preparo decide tudo antes da direção", () => {
     expect(screen.queryByRole("radiogroup", { name: "Quantidade de lâminas" })).toBeNull();
     expect((screen.getByRole("switch", { name: "Carrossel contínuo" }) as HTMLElement).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: /Montar do roteiro/ }));
-    await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "roteiro", laminas: null, continuo: true, pedido: "" }));
+    await waitFor(() => expect(onPreparar).toHaveBeenCalledWith({ modo: "roteiro", laminas: null, continuo: true, pedido: "", formato: "feed_4x5" }));
   });
 });
 

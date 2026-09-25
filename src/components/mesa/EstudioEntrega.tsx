@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { CalendarCheck, Check, FolderCheck, FolderOpen, Loader2, Send } from "lucide-react";
+import { CalendarCheck, Check, FolderCheck, FolderOpen, Loader2, RotateCcw, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { faltaEnviar, textoDaEntrega } from "./EstudioSituacao";
 import type { Trabalho } from "./useItensDoMes";
@@ -46,6 +46,8 @@ export default function EstudioEntrega({
   linkAgenda,
   onEntregar,
   onEnviar,
+  onReabrir,
+  reabrindo = false,
 }: {
   trabalho: Trabalho;
   laminasFeitas: number;
@@ -62,6 +64,9 @@ export default function EstudioEntrega({
   linkAgenda: string | null;
   onEntregar: (tambemEnviar: boolean) => void;
   onEnviar: () => void;
+  /** "Reabrir para corrigir": mesmas lâminas e versões, nova rodada de entrega (arquivo novo). */
+  onReabrir?: () => void;
+  reabrindo?: boolean;
 }) {
   const entregue = trabalho.status === "entregue" || trabalho.entrega_status === "agendado";
   const todas = laminasTotal > 0 && laminasFeitas >= laminasTotal;
@@ -115,6 +120,17 @@ export default function EstudioEntrega({
               <FolderOpen className="mr-1.5 h-4 w-4" /> Abrir em Arquivos
             </Link>
           </Button>
+          {onReabrir && (
+            <div className="rounded-lg border border-border bg-background p-3">
+              <Button type="button" variant={trabalho.entrega_status === "reprovado" ? "default" : "outline"} className="h-10 w-full" onClick={onReabrir} disabled={reabrindo || ocupado}>
+                {reabrindo ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-1.5 h-4 w-4" />}
+                Reabrir para corrigir
+              </Button>
+              <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground">
+                As lâminas voltam para edição com todas as versões. A entrega de agora fica em Arquivos e no histórico; a próxima vira arquivo novo e passa de novo pela aprovação.
+              </p>
+            </div>
+          )}
           {linkAgenda && (
             <Button asChild variant="ghost" className="h-10 w-full">
               <Link to={linkAgenda}>

@@ -41,6 +41,42 @@ export const QUADRO_FINAL: Record<FormatoCriativo, { largura: number; altura: nu
   stories_9x16: { largura: 1080, altura: 1920 },
 };
 
+/**
+ * Formato do post orgânico (trabalho social), escolhido na tela para o
+ * conjunto inteiro (no carrossel do Instagram todas as lâminas têm a mesma
+ * proporção). Sem formato, 4:5 como sempre foi.
+ *
+ * 3:4 (1080 x 1440): o Instagram trocou a grade do perfil de 1:1 para 3:4 em
+ * janeiro de 2025 e passou a aceitar foto 3:4 no feed em maio de 2025; é a
+ * foto mais alta do feed e a única que aparece inteira na grade, sem corte.
+ * Fontes consultadas em 25/09/2026: https://nealschaffer.com/instagram-post-size/
+ * e https://influencermarketinghub.com/instagram-image-sizes/.
+ */
+export type FormatoDoPost = "feed_4x5" | "retrato_3x4" | "quadrado_1x1" | "stories_9x16";
+export const FORMATOS_DO_POST: FormatoDoPost[] = ["feed_4x5", "retrato_3x4", "quadrado_1x1", "stories_9x16"];
+export const FORMATO_PADRAO_DO_POST: FormatoDoPost = "feed_4x5";
+
+/**
+ * Quadro do post por formato: o final publicado e o tamanho pedido ao
+ * gerador (múltiplos de 16, na mesma proporção ou a menos de 1% dela).
+ */
+export const QUADRO_DO_POST: Record<FormatoDoPost, {
+  final: { largura: number; altura: number };
+  gerador: { largura: number; altura: number };
+  proporcao: string;
+  rotulo: string;
+}> = {
+  feed_4x5: { final: { largura: 1080, altura: 1350 }, gerador: { largura: 1088, altura: 1360 }, proporcao: "4:5", rotulo: "Retrato 4:5 (1080 x 1350)" },
+  retrato_3x4: { final: { largura: 1080, altura: 1440 }, gerador: { largura: 1104, altura: 1472 }, proporcao: "3:4", rotulo: "Retrato 3:4 (1080 x 1440)" },
+  quadrado_1x1: { final: { largura: 1080, altura: 1080 }, gerador: { largura: 1088, altura: 1088 }, proporcao: "1:1", rotulo: "Quadrado 1:1 (1080 x 1080)" },
+  stories_9x16: { final: { largura: 1080, altura: 1920 }, gerador: { largura: 1088, altura: 1920 }, proporcao: "9:16", rotulo: "Stories e Reels 9:16 (1080 x 1920)" },
+};
+
+/** Formato do post lido com cuidado (JSON do banco): o que não é conhecido vira 4:5. */
+export function formatoDoPost(v: unknown): FormatoDoPost {
+  return FORMATOS_DO_POST.indexOf(v as FormatoDoPost) >= 0 ? v as FormatoDoPost : FORMATO_PADRAO_DO_POST;
+}
+
 export type PapelBloco = "headline" | "subtitulo" | "apoio" | "numero" | "cta" | "selo";
 export type BlocoTexto = { papel: PapelBloco; texto: string };
 export type ZonaTexto =
@@ -82,7 +118,7 @@ export type CardDirecao = {
   formato?: FormatoCriativo;
 };
 
-export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string };
+export type FotoLivre = { caminho: string; papel: "fundo" | "elemento"; nota?: string; recortada?: boolean };
 
 export type MarcaParaDirecao = {
   nomeCliente: string;
@@ -120,7 +156,8 @@ type Margens = { x: number; topo: number; base: number; capaExtra: number };
  * 106 px na base do quadro final) ou a zona segura do formato, o que for
  * maior; sem o recorte da grade do perfil (anúncio não aparece nela).
  */
-export function margensDoQuadro(formato?: FormatoCriativo | null): Margens {
+export function margensDoQuadro(formato?: FormatoCriativo | null, post?: FormatoDoPost | null): Margens {
+  if (post && post !== "feed_4x5") return margensDoPost(post);
   if (!formato) return { x: MARGEM_X, topo: MARGEM_TOPO, base: MARGEM_BASE, capaExtra: CAPA_LATERAL_EXTRA };
   const q = QUADRO_FINAL[formato];
   const z = ZONA_SEGURA[formato];
@@ -132,13 +169,33 @@ export function margensDoQuadro(formato?: FormatoCriativo | null): Margens {
   };
 }
 
-export function caixaDaZona(zona: ZonaTexto, capa: boolean, carrossel = true, formato?: FormatoCriativo | null): Caixa {
-  const m = margensDoQuadro(formato);
+/**
+ * Margens do post orgânico fora do 4:5: o mesmo grid em px (90 nas laterais,
+ * 100 no topo e 106 na base do quadro final). Stories e Reels: a zona segura
+ * da interface (14% em cima, 20% embaixo). Capa 1:1: a grade 3:4 do perfil
+ * corta cerca de 135 px de cada lateral do quadrado; o 3:4 aparece inteiro.
+ */
+export function margensDoPost(post: FormatoDoPost): Margens {
+  if (post === "feed_4x5") return { x: MARGEM_X, topo: MARGEM_TOPO, base: MARGEM_BASE, capaExtra: CAPA_LATERAL_EXTRA };
+  const q = QUADRO_DO_POST[post].final;
+  if (post === "stories_9x16") return { x: um((90 / q.largura) * 100), topo: 14, base: 20, capaExtra: 0 };
+  return {
+    x: um((90 / q.largura) * 100),
+    topo: um((100 / q.altura) * 100),
+    base: um((106 / q.altura) * 100),
+    capaExtra: post === "quadrado_1x1" ? 12.5 : 0,
+  };
+}
+
+export function caixaDaZona(zona: ZonaTexto, capa: boolean, carrossel = true, formato?: FormatoCriativo | null, post?: FormatoDoPost | null): Caixa {
+  const m = margensDoQuadro(formato, post);
   const extra = capa ? m.capaExtra : 0;
   const esq = AREA.x0 + m.x + extra;
   const dir = AREA.x1 - m.x - extra;
   const chegaNaDireita = zona === "topo-centro" || zona === "coluna-direita";
-  const topo = AREA.y0 + (carrossel && chegaNaDireita ? Math.max(TOPO_ABAIXO_DO_CONTADOR, m.topo) : m.topo);
+  // O contador fica nos 110 px de cima: no 4:5 são 8,9% (valor de sempre); nos outros, pela altura.
+  const abaixoDoContador = post && post !== "feed_4x5" ? um((120 / QUADRO_DO_POST[post].final.altura) * 100) : TOPO_ABAIXO_DO_CONTADOR;
+  const topo = AREA.y0 + (carrossel && chegaNaDireita ? Math.max(abaixoDoContador, m.topo) : m.topo);
   const base = AREA.y1 - m.base;
   const altura = base - topo;
   const terco = um(altura / 3);
@@ -346,11 +403,17 @@ export function promptDaLamina(
      * escolhida, não do layout da direção. `comFoto`: a foto do cliente é o assunto.
      */
     replicar?: { comFoto: boolean } | null;
+    /** Formato do post orgânico (trabalho social); sem ele ou em 4:5, o prompt de sempre. */
+    post?: FormatoDoPost | null;
+    /** Canto da logo quando o código muda o de sempre (recorte à esquerda: a logo vai para a direita). */
+    cantoDaLogo?: string | null;
   },
 ): string {
   const formato = opcoes.anuncio && FORMATOS_CRIATIVO.includes(opcoes.anuncio.formato) ? opcoes.anuncio.formato : null;
   const anuncio = !!formato;
-  const quadro = formato ? QUADRO_FINAL[formato] : { largura: 1080, altura: 1350 };
+  // Post fora do 4:5 (3:4, 1:1 ou 9:16): quadro, margens e zona do formato; o 4:5 segue exatamente como era.
+  const post = !formato && opcoes.post && opcoes.post !== "feed_4x5" && FORMATOS_DO_POST.indexOf(opcoes.post) >= 0 ? opcoes.post : null;
+  const quadro = formato ? QUADRO_FINAL[formato] : post ? QUADRO_DO_POST[post].final : { largura: 1080, altura: 1350 };
   // A peça única do anúncio é a própria capa; o carrossel de anúncio (cards
   // feed 4:5 em sequência) é série como o carrossel do post.
   const capa = card.funcao === "capa" || card.ordem === 1;
@@ -358,8 +421,8 @@ export function promptDaLamina(
   const layout = normalizarLayout(card.layout, card.funcao, card.ordem, opcoes.total);
   const blocos = (card.blocos && card.blocos.length ? card.blocos : blocosDoTexto(card.texto_exato, card.funcao))
     .filter((b) => PAPEIS.includes(b.papel) && b.texto.trim());
-  const caixa = caixaDaZona(layout.zona_texto, capa, serie, formato);
-  const margens = margensDoQuadro(formato);
+  const caixa = caixaDaZona(layout.zona_texto, capa, serie, formato, post);
+  const margens = margensDoQuadro(formato, post);
   const px = (pct: number, lado: number) => Math.round((pct / 100) * lado);
   // Cada linha da headline: cerca de 121 px (9% do quadro 4:5).
   const linhaHeadline = Math.round((121.5 / quadro.altura) * 100);
@@ -392,7 +455,7 @@ export function promptDaLamina(
   // atrás do texto, nada de mudar pose ou enquadramento, e a logo entra pelo
   // código (o gerador desenhava a logo torta dentro de uma caixa fosca).
   const foto = !!opcoes.fotoReal;
-  const cantoDaLogo = layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo";
+  const cantoDaLogo = opcoes.cantoDaLogo || (layout.zona_texto === "base-esquerda" || layout.zona_texto === "base-centro" ? "superior esquerdo" : "inferior esquerdo");
 
   const paletaTxt = paleta.length
     ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
@@ -458,16 +521,18 @@ export function promptDaLamina(
       : "- Tipografia: siga a tipografia das artes da marca anexadas (mesma classificação, peso e caixa).",
     marca.tipografiaCitada?.observacao ? `- Observação da marca sobre tipografia: ${marca.tipografiaCitada.observacao}` : "",
     opcoes.logoNoCodigo && opcoes.levaLogo
-      ? `- Logo: NÃO desenhe logo, símbolo nem marca. A logo oficial é aplicada depois pelo sistema no canto ${cantoDaLogo}; deixe esse canto só com a foto, sem texto e sem nenhuma forma.`
+      ? `- Logo: NÃO desenhe logo, símbolo nem marca. A logo oficial é aplicada depois pelo sistema no canto ${cantoDaLogo}; deixe esse canto limpo, só com ${foto ? "a foto" : "o fundo da arte"}, sem texto, sem nenhuma forma e sem caixa, cartão, faixa ou mancha clara reservando lugar para ela.`
       : opcoes.levaLogo && marca.temLogo
       ? (replicar
         ? `- Logo oficial anexada, sem redesenhar, no lugar em que a referência põe a marca dela (se a referência não tem marca, no canto ${cantoDaLogo}), com 48 a 72 px de altura e no máximo 20% da largura, dentro das margens${anuncio ? " e da zona segura" : ""}.`
         : `- Logo oficial anexada, com 48 a 72 px de altura e no máximo 20% da largura, no canto ${cantoDaLogo} dentro das margens${anuncio ? " e da zona segura" : ""}, sem redesenhar, nunca no canto superior direito.`) +
+        // Nunca "fundo claro e liso atrás da logo": o gerador desenhava uma caixa branca (dono, 25/09).
         (opcoes.logo
           ? opcoes.logo.clara
-            ? " A logo é clara: o fundo atrás dela é escuro o bastante para ela aparecer inteira."
-            : ` A logo é escura ou colorida${opcoes.logo.tom ? ` (tom dominante ${opcoes.logo.tom})` : ""}: o fundo atrás dela é claro e liso, nunca da mesma cor nem do mesmo valor da logo.`
-          : " Nunca ponha a logo sobre fundo da mesma cor dela.")
+            ? " A logo é clara: ela pousa numa parte escura da própria arte, direto sobre ela."
+            : ` A logo é escura ou colorida${opcoes.logo.tom ? ` (tom dominante ${opcoes.logo.tom})` : ""}: ela pousa numa parte clara da própria arte, direto sobre ela, nunca sobre a mesma cor nem o mesmo valor da logo.`
+          : " Nunca ponha a logo sobre fundo da mesma cor dela.") +
+        " A logo entra sem caixa, cartão, faixa, retângulo ou fundo branco atrás, exatamente como o desenho dela."
       : opcoes.levaLogo
         ? "- A logo oficial ainda não foi enviada em imagem: NÃO desenhe nem invente logo, símbolo ou marca; deixe só um respiro no canto onde ela entraria."
         : "- Sem logo nesta lâmina.",
@@ -485,6 +550,15 @@ export function promptDaLamina(
         serie ? "- Canto superior direito livre de texto (a Meta mostra o contador do carrossel ali)." : "",
         "",
         regrasDoCriativo(formato),
+      ]
+      : post
+      ? [
+        `- Arte ${post === "stories_9x16" ? "vertical 9:16 para Stories e Reels" : post === "quadrado_1x1" ? "quadrada 1:1" : "vertical 3:4 (o retrato mais alto do feed, inteiro também na grade do perfil)"} (${quadro.largura} x ${quadro.altura}), usando o quadro inteiro, sem bordas vazias.`,
+        `- Margens de segurança: ${px(margens.x, quadro.largura)} px nas laterais${capa && margens.capaExtra ? ` (mais ${px(margens.capaExtra, quadro.largura)} px na capa, que a grade 3:4 do perfil corta nas laterais do quadrado)` : ""}, ${px(margens.topo, quadro.altura)} px no topo e ${px(margens.base, quadro.altura)} px na base. Nenhum texto nem a logo encostam nas margens.`,
+        post === "stories_9x16"
+          ? `- Stories e Reels: a interface do Instagram cobre o topo (perfil) e a base (resposta, legenda e botões); nos ${px(margens.topo, quadro.altura)} px de cima e nos ${px(margens.base, quadro.altura)} px de baixo só a continuação do fundo.`
+          : "",
+        serie ? "- Canto superior direito livre de texto (o Instagram mostra o contador do carrossel ali)." : "",
       ]
       : [
         "- Arte vertical 4:5 (1080 x 1350), usando o quadro inteiro, sem bordas vazias.",
@@ -508,11 +582,13 @@ export function promptDaLamina(
  * Área da logo (percentual do quadro) no mesmo canto que o prompt descreve:
  * superior esquerdo quando o texto está na base, inferior esquerdo nos demais.
  */
-export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCriativo | null): Caixa {
-  const m = margensDoQuadro(formato);
+export function caixaDaLogo(zona: ZonaTexto, capa: boolean, formato?: FormatoCriativo | null, post?: FormatoDoPost | null): Caixa {
+  const m = margensDoQuadro(formato, post);
   const esq = AREA.x0 + m.x + (capa ? m.capaExtra : 0);
-  // 72 px de 1350, com folga (81 px); no anúncio, os mesmos 81 px na altura do formato.
-  const alturaLogo = formato ? um((81 / QUADRO_FINAL[formato].altura) * 100) : 6;
+  // 72 px de 1350, com folga (81 px); no anúncio e nos outros formatos do post, os mesmos 81 px na altura do quadro.
+  const alturaLogo = post && post !== "feed_4x5"
+    ? um((81 / QUADRO_DO_POST[post].final.altura) * 100)
+    : formato ? um((81 / QUADRO_FINAL[formato].altura) * 100) : 6;
   if (zona === "base-esquerda" || zona === "base-centro") {
     return { x0: esq, x1: esq + 22, y0: m.topo, y1: m.topo + alturaLogo };
   }
@@ -534,6 +610,8 @@ export function blocoReplicarReferencia(e: {
   fotos: { indice: number; descricao?: string | null; papel: "fundo" | "elemento" }[];
   logo?: number | null;
   capa?: boolean;
+  /** A logo oficial é aplicada depois pelo código (a marca da referência só sai). */
+  logoNoCodigo?: boolean;
 }): string {
   const refs = e.referencias.slice(0, 2);
   if (!refs.length) return "";
@@ -564,11 +642,90 @@ export function blocoReplicarReferencia(e: {
     `A equipe escolheu ${refs.length === 1 ? "esta referência" : "estas duas referências"} para esta lâmina. Recrie a lâmina seguindo de perto a referência: quem olhar as duas lado a lado reconhece o mesmo layout, quase igual, só que com a marca e o conteúdo deste cliente.`,
     ...linhasDasRefs,
     ...linhasDoAssunto,
-    `- Troque: o texto da referência pelo texto exato desta lâmina (mesmo papel e mesma posição: o título dela vira a headline, o texto menor vira o apoio); as cores dela pelas da paleta da marca, na mesma função (fundo por fundo, destaque por destaque); as fontes dela pelas da marca, com o mesmo peso e a mesma escala; a marca dela pela logo oficial${e.logo ? ` (imagem ${e.logo})` : ""}.`,
+    `- Troque: o texto da referência pelo texto exato desta lâmina (mesmo papel e mesma posição: o título dela vira a headline, o texto menor vira o apoio); as cores dela pelas da paleta da marca, na mesma função (fundo por fundo, destaque por destaque); as fontes dela pelas da marca, com o mesmo peso e a mesma escala; ${e.logoNoCodigo ? "a marca dela sai (a logo oficial desta marca é aplicada depois pelo sistema; não desenhe logo nem caixa para ela)" : `a marca dela pela logo oficial${e.logo ? ` (imagem ${e.logo})` : ""}`}.`,
     "- Não copie da referência: o texto, a logo, o nome ou o site de outra marca, marcas d'água e as pessoas dela.",
     e.capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed, na posição em que a referência põe o título." : "",
     "- Onde o padrão de design ou a composição descrita adiante divergirem da referência, vale a referência. Continuam valendo: o texto exato, a paleta, as fontes e a logo da marca, as margens de segurança e a ortografia.",
   ].filter(Boolean).join("\n");
+}
+
+/**
+ * Série do carrossel sem precisar do contínuo (pedido do dono em 25/09:
+ * "reconhecer a capa e continuar a partir dela com os traços, linhas,
+ * desenho; não reinventar, acompanhar"). Da lâmina 2 em diante a capa (a
+ * versão atual dela, anexada) é o guia do sistema visual: o que se repete e o
+ * que pode variar. A última lâmina fecha voltando à capa. `capa`: índice da
+ * imagem anexada com a capa (null quando a capa ainda não tem arte).
+ * `cenaFixa`: foto real ou fundo contínuo (só o texto e o acabamento seguem a capa).
+ */
+export function blocoDaSerie(e: { ordem: number; total: number; capa: number | null; cenaFixa?: boolean }): string {
+  if (e.total < 2 || e.ordem < 2) return "";
+  const final = e.ordem === e.total;
+  const guia = e.capa ? `a capa (imagem ${e.capa})` : "a capa desta série";
+  return [
+    `SÉRIE DO CARROSSEL (lâmina ${e.ordem} de ${e.total}): esta lâmina continua ${guia}; não é uma peça nova.`,
+    e.cenaFixa
+      ? `- A cena desta lâmina já está decidida. Da capa vem o sistema do texto: a mesma tipografia (família, peso, caixa e escala relativa entre headline e apoio), as mesmas cores de texto e de destaque, o mesmo alinhamento e os mesmos elementos gráficos do texto (fios, sublinhados, marcadores), no mesmo traço e espessura.`
+      : `- Repita o sistema visual da capa: o mesmo grid e as mesmas margens, as mesmas linhas, formas e elementos gráficos (mesmo traço, espessura, cantos, cor e posição relativa), a mesma tipografia (família, peso, caixa e escala relativa), a mesma paleta e proporção de cores e o mesmo tratamento de foto, luz e textura.`,
+    "- Varie só o conteúdo: o texto, a imagem desta lâmina e a posição do bloco dentro do mesmo grid. Não reinvente o estilo, não troque de fonte nem de paleta e não crie elementos gráficos que a capa não tem.",
+    "- Não copie o texto nem a composição exata da capa: é a mesma série, não a mesma lâmina.",
+    final
+      ? "- FECHAMENTO: esta é a última lâmina. Feche voltando à capa: a mesma cor dominante ou o mesmo elemento gráfico e o mesmo enquadramento da capa, como um espelho do começo, com o CTA em destaque."
+      : "",
+  ].filter(Boolean).join("\n");
+}
+
+/** Uma preferência do cliente lida da memória do diretor (agente_memoria). */
+export type PreferenciaDoCliente = { tipo: string; texto: string; origem?: string | null };
+
+/**
+ * Preferências aprendidas com os ajustes pedidos pela equipe e com as
+ * reprovações do cliente (memória do diretor, origem ajuste ou aprovacao):
+ * entram no prompt como REGRAS DA MARCA, acima do padrão de design e abaixo do
+ * texto exato e do kit (pedido do dono em 25/09: "aprender com os ajustes que
+ * eu peço, memória por cliente"). As mais recentes primeiro, sem repetir, até
+ * `max` linhas curtas.
+ */
+export function blocoDasPreferencias(lista: PreferenciaDoCliente[] | null | undefined, max = 8): string {
+  const vistas: string[] = [];
+  const linhas: string[] = [];
+  for (const p of lista ?? []) {
+    const t = String(p && p.texto || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    if (!t) continue;
+    const chave = t.toLowerCase().slice(0, 80);
+    if (vistas.indexOf(chave) >= 0) continue;
+    vistas.push(chave);
+    linhas.push(`- ${p.tipo === "evitar" ? "Evitar: " : ""}${t}`);
+    if (linhas.length >= max) break;
+  }
+  if (!linhas.length) return "";
+  return [
+    "REGRAS DA MARCA APRENDIDAS COM ESTE CLIENTE (pedidos de ajuste da equipe e do cliente; valem como regra da marca, acima do padrão de design e abaixo do texto exato, da paleta e da logo):",
+    ...linhas,
+  ].join("\n");
+}
+
+/**
+ * Lâmina com pessoa ou produto recortado (sem fundo, papel "elemento" com
+ * `recortada`): o recorte é posto pelo código do lado oposto ao texto, nunca
+ * embaixo dele. Devolve a zona do texto que combina com o lugar do recorte e a
+ * caixa do recorte (fração do quadro, 0 a 1). Texto em cima: recorte na faixa
+ * de baixo; texto numa coluna: recorte na outra metade, até o chão.
+ */
+export function lugarDoRecorte(zona: ZonaTexto): { zona: ZonaTexto; caixa: { x0: number; y0: number; x1: number; y1: number } } {
+  switch (zona) {
+    case "topo-esquerda":
+    case "topo-centro":
+      return { zona, caixa: { x0: 0.1, y0: 0.47, x1: 0.9, y1: 1 } };
+    case "centro":
+    case "base-centro":
+      return { zona: "topo-centro", caixa: { x0: 0.1, y0: 0.47, x1: 0.9, y1: 1 } };
+    case "coluna-direita":
+    case "base-direita":
+      return { zona: "coluna-direita", caixa: { x0: 0, y0: 0.1, x1: 0.5, y1: 1 } };
+    default:
+      return { zona: "coluna-esquerda", caixa: { x0: 0.5, y0: 0.1, x1: 1, y1: 1 } };
+  }
 }
 
 export function formatoPara2x3(prompt: string): string {
