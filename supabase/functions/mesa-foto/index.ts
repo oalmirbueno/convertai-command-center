@@ -474,13 +474,27 @@ async function baixar(bucket: string, caminho: string, max = MAX_BYTES_ORIGINAL)
  * é pequeno o bastante (_shared/imagem-reduzida.ts); grande demais, reduz
  * aqui como já era quando a transformação falhava.
  */
+/**
+ * Abaixo disto a foto vai ao gerador como está, sem abrir aqui. 26/09: abrir e
+ * reduzir as vistas do clone (PNG de 1536 px, várias por chamada) dentro da
+ * função estourou o limite de 2 s de CPU ("CPU Time exceeded") e a variação
+ * morria no meio. O gerador aceita a foto maior; só custa um pouco mais de envio.
+ */
+const MAX_BYTES_SEM_REDUZIR = 12 * 1024 * 1024;
+/** Só reduz aqui o que é barato de abrir (cerca de 0,1 s). */
+const MAX_PIXELS_REDUZIR_AQUI = 1_500_000;
+
 async function baixarReduzida(bucket: string, caminho: string, lado: number, nome: string): Promise<ImagemEntrada> {
-  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, { maxBytes: MAX_BYTES_ORIGINAL });
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, { maxBytes: MAX_BYTES_ORIGINAL, maxPixels: MAX_PIXELS_REDUZIR_AQUI });
   if (r && r.cabe && r.largura && r.altura && Math.max(r.largura, r.altura) <= lado + 2) {
     return { bytes: r.bytes, mime: r.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(r.mime)}` };
   }
   const original = r ? r.bytes : await baixar(bucket, caminho);
-  if (!mimeDe(original)) throw new ErroHttp(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
+  const mime = mimeDe(original);
+  if (!mime) throw new ErroHttp(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
+  if (original.byteLength <= MAX_BYTES_SEM_REDUZIR && /^image\/(jpeg|png|webp)$/.test(mime)) {
+    return { bytes: original, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
+  }
   const png = await reduzir(original, lado);
   return { bytes: png, mime: "image/png", nome: `${nomeSeguro(nome)}.png` };
 }
