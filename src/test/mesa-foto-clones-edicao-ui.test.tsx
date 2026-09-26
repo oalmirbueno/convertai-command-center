@@ -383,3 +383,58 @@ describe("duplicar e usar nas outras etapas", () => {
     expect(irPara).toHaveBeenCalledWith("book");
   });
 });
+
+describe("26/09: foto de referência da expressão (sorriso fiel)", () => {
+  const PRESET_SORRISO = { id: "sorriso_close", rotulo: "Close sorrindo", roupa: "a mesma roupa neutra", cenario: "fundo liso claro fora de foco", pose: "rosto de frente, leve inclinação", expressao: "sorriso aberto e natural", luz: "luz frontal suave e difusa", enquadramento: "close" };
+  const SORRISO = fotoBruta(F4, { nome: "paula-sorriso.jpg", tags: [`clone_expressao:${CL}`, "expressao:sorriso_aberto"] });
+
+  it("a foto guardada no clone vai como referência da expressão em cada variação; tirar do clone chama a função", async () => {
+    respostas.clone_ler = cloneLido({ presets: [PRESET_SORRISO], fotos_de_expressao: [SORRISO] });
+    respostas.clone_variacao_gerar = { imagem: fotoBruta("aaaaaaaa-0000-4000-8000-00000000000b", { gerada: true, modo: "clone", tags: [`clone:${CL}`] }), custo_usd: 0.15, avisos: [] };
+    respostas.clone_expressao_guardar = { fotos_de_expressao: [], avisos: [], custo_usd: 0 };
+    montar();
+    const campo = (await waitFor(() => {
+      const el = document.querySelector("[data-foto-da-expressao]");
+      if (!el || !el.querySelector(`[data-expressao-guardada="${F4}"]`)) throw new Error("sem o campo");
+      return el;
+    })) as HTMLElement;
+    fireEvent.click(screen.getByRole("radio", { name: "Close sorrindo" }));
+    fireEvent.click(within(campo).getByRole("button", { name: "Usar nesta variação: paula-sorriso.jpg" }));
+    await waitFor(() => expect(campo.querySelector(`[data-foto-da-expressao-escolhida="${F4}"]`)).toBeTruthy());
+    // Já guardada: não oferece guardar de novo.
+    expect(within(campo).queryByText("Guardar no clone como foto de expressão")).toBeNull();
+    await clicarComCusto(screen.getByRole("button", { name: /Gerar 2 variações/ }), "clone_variacao_gerar");
+    await waitFor(() => expect(chamadasDe("clone_variacao_gerar")).toHaveLength(2));
+    for (const corpo of chamadasDe("clone_variacao_gerar")) {
+      expect(corpo).toMatchObject({ modelo_id: CL, pedido: { preset: "sorriso_close" }, expressao_ref_ids: [F4] });
+      expect(corpo.guardar_expressao).toBeUndefined();
+    }
+    fireEvent.click(within(campo).getByRole("button", { name: "Tirar do clone" }));
+    await waitFor(() => expect(chamadasDe("clone_expressao_guardar")).toEqual([{ acao: "clone_expressao_guardar", modelo_id: CL, imagem_ids: [F4], tirar: true }]));
+  });
+
+  it("foto escolhida do acervo com 'guardar no clone': só a primeira variação guarda; sem foto, o corpo é o de antes", async () => {
+    respostas.clone_ler = cloneLido({ presets: [PRESET_SORRISO] });
+    respostas.clone_variacao_gerar = { imagem: fotoBruta("aaaaaaaa-0000-4000-8000-00000000000c", { gerada: true, modo: "clone", tags: [`clone:${CL}`] }), custo_usd: 0.15, avisos: [] };
+    montar();
+    await screen.findByRole("radio", { name: "Close sorrindo" });
+    fireEvent.click(screen.getByRole("radio", { name: "Close sorrindo" }));
+    // Sem foto da expressão: o corpo não leva nada novo.
+    await clicarComCusto(screen.getByRole("button", { name: /Gerar 2 variações/ }), "clone_variacao_gerar");
+    await waitFor(() => expect(chamadasDe("clone_variacao_gerar")).toHaveLength(2));
+    for (const corpo of chamadasDe("clone_variacao_gerar")) expect(Object.keys(corpo).sort()).toEqual(["acao", "formato", "modelo_id", "pedido", "qualidade"]);
+    mock.invoke.mockClear();
+    const campo = document.querySelector("[data-foto-da-expressao]") as HTMLElement;
+    fireEvent.click(within(campo).getByRole("button", { name: "Adicionar foto da expressão" }));
+    fireEvent.click(await screen.findByRole("button", { name: "paula-rua.jpg" }));
+    fireEvent.click(screen.getByRole("button", { name: /Usar 1 foto/ }));
+    await waitFor(() => expect(campo.querySelector(`[data-foto-da-expressao-escolhida="${F4}"]`)).toBeTruthy());
+    fireEvent.click(within(campo).getByLabelText("Guardar no clone como foto de expressão"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Gerar 2 variações/ }).hasAttribute("disabled")).toBe(false));
+    await clicarComCusto(screen.getByRole("button", { name: /Gerar 2 variações/ }), "clone_variacao_gerar");
+    await waitFor(() => expect(chamadasDe("clone_variacao_gerar")).toHaveLength(2));
+    const corpos = chamadasDe("clone_variacao_gerar");
+    expect(corpos.every((c: any) => c.expressao_ref_ids && c.expressao_ref_ids[0] === F4)).toBe(true);
+    expect(corpos.filter((c: any) => c.guardar_expressao === true)).toHaveLength(1);
+  });
+});

@@ -109,6 +109,8 @@ export interface CloneAberto {
   variacoes: FotoDoAcervo[];
   /** Variações apagadas (inativas no acervo): ficam para restaurar. */
   variacoes_arquivadas: FotoDoAcervo[];
+  /** Fotos reais da expressão guardadas no clone (ex.: o sorriso dela), oferecidas na "Foto da expressão". */
+  fotos_de_expressao: FotoDoAcervo[];
   motores: MotorDoClone[];
   presets: PresetDoClone[];
 }
@@ -246,6 +248,7 @@ export function normalizarCloneAberto(data: any): CloneAberto | null {
     arquivadas,
     variacoes,
     variacoes_arquivadas: fotos(data.variacoes_arquivadas),
+    fotos_de_expressao: fotos(data.fotos_de_expressao),
     folha: {
       vistas: Array.isArray(f.vistas) ? f.vistas.map((v: any) => ({ vista: texto(v.vista), geradas: Number(v.geradas) || 0, aprovada_id: texto(v.aprovada_id) || null })) : [],
       aprovadas: Number(f.aprovadas) || 0,
@@ -307,6 +310,7 @@ export function cloneAbertoProvisorio(c: Clone, fotos: FotoDoAcervo[], motores: 
     arquivadas: [],
     variacoes,
     variacoes_arquivadas: [],
+    fotos_de_expressao: [],
     folha: { vistas: [], aprovadas: 0, total: VISTAS_DO_CLONE.length, pronto: false, frente_aprovada: false },
     motores,
     presets,
@@ -485,14 +489,38 @@ export interface PedidoDaVariacao {
 /** Preset que aplica a logo oficial do kit da marca (a função anexa a logo e avisa para conferir). */
 export const PRESET_UNIFORME = "uniforme_marca";
 
-export async function gerarVariacaoDoClone(p: { modeloId: string; pedido: PedidoDaVariacao; formato: string; qualidade: Qualidade }): Promise<{ imagem: FotoDoAcervo | null; url: string | null; custo_usd?: number; avisos: string[] }> {
+/** No máximo 2 fotos de referência da expressão por variação (a função confere de novo). */
+export const MAX_FOTOS_DA_EXPRESSAO = 2;
+
+/**
+ * Foto da expressão desta variação (26/09, "meu sorriso está diferente"):
+ * 1 ou 2 fotos reais da pessoa com a expressão pedida; guardar = fica no
+ * clone como foto de expressão, com a mesma autorização.
+ */
+export interface ExpressaoDaVariacao {
+  ids: string[];
+  guardar?: boolean;
+}
+
+/** Corpo de clone_variacao_gerar. Sem foto da expressão, igual ao de antes. */
+export function corpoDaVariacaoDoClone(p: { modeloId: string; pedido: PedidoDaVariacao; formato: string; qualidade: Qualidade; expressao?: ExpressaoDaVariacao | null }): Record<string, unknown> {
   const pedido: Record<string, unknown> = { preset: p.pedido.preset };
   (["roupa", "cenario", "pose", "expressao", "livre", "luz"] as const).forEach((k) => {
     const v = p.pedido[k];
     if (v && v.trim()) pedido[k] = v.trim();
   });
   if (p.pedido.enquadramento) pedido.enquadramento = p.pedido.enquadramento;
-  const data = await chamarFuncao<any>("mesa-foto", { acao: "clone_variacao_gerar", modelo_id: p.modeloId, pedido, formato: p.formato, qualidade: p.qualidade });
+  const corpo: Record<string, unknown> = { acao: "clone_variacao_gerar", modelo_id: p.modeloId, pedido, formato: p.formato, qualidade: p.qualidade };
+  const ids = p.expressao ? p.expressao.ids.filter(Boolean).slice(0, MAX_FOTOS_DA_EXPRESSAO) : [];
+  if (ids.length) {
+    corpo.expressao_ref_ids = ids;
+    if (p.expressao && p.expressao.guardar) corpo.guardar_expressao = true;
+  }
+  return corpo;
+}
+
+export async function gerarVariacaoDoClone(p: { modeloId: string; pedido: PedidoDaVariacao; formato: string; qualidade: Qualidade; expressao?: ExpressaoDaVariacao | null }): Promise<{ imagem: FotoDoAcervo | null; url: string | null; custo_usd?: number; avisos: string[] }> {
+  const data = await chamarFuncao<any>("mesa-foto", corpoDaVariacaoDoClone(p));
   const url = data && data.imagem && typeof data.imagem.url === "string" ? data.imagem.url : data && typeof data.url === "string" ? data.url : null;
   return { imagem: normalizarFoto(data && data.imagem), url, custo_usd: data && data.custo_usd, avisos: lista(data && data.avisos) };
 }
@@ -692,6 +720,15 @@ export async function refazerVariacaoDoClone(p: { modeloId: string; imagemId: st
   const data = await chamarFuncao<any>("mesa-foto", corpo);
   const url = data && data.imagem && typeof data.imagem.url === "string" ? data.imagem.url : data && typeof data.url === "string" ? data.url : null;
   return { imagem: normalizarFoto(data && data.imagem), url, custo_usd: data && data.custo_usd, avisos: lista(data && data.avisos) };
+}
+
+/** Guardar (ou tirar) fotos reais no clone como fotos de expressão. Devolve as guardadas. */
+export async function guardarFotosDeExpressaoDoClone(modeloId: string, ids: string[], tirar = false): Promise<{ fotos: FotoDoAcervo[]; avisos: string[] }> {
+  const corpo: Record<string, unknown> = { acao: "clone_expressao_guardar", modelo_id: modeloId, imagem_ids: ids.slice(0, MAX_FOTOS_DA_EXPRESSAO) };
+  if (tirar) corpo.tirar = true;
+  const data = await chamarFuncao<any>("mesa-foto", corpo);
+  const fotos = (data && Array.isArray(data.fotos_de_expressao) ? data.fotos_de_expressao : []).map((i: any) => normalizarFoto(i)).filter(Boolean) as FotoDoAcervo[];
+  return { fotos, avisos: lista(data && data.avisos) };
 }
 
 /** Duplicar: mesmas fotos de origem e a mesma autorização (a função confere de novo). */

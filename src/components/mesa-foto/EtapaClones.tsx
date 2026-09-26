@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Archive, ArrowRightLeft, BookOpen, Check, Copy, CopyPlus, Download, Images, Lightbulb, Loader2, Maximize2, MoreHorizontal, Plus, RefreshCw, RotateCcw, ScanSearch, ShieldCheck, Shirt, Sparkles, Star, Trash2, UserRound, X } from "lucide-react";
+import { AlertTriangle, Archive, ArrowRightLeft, BookOpen, Check, Copy, CopyPlus, Download, Images, Lightbulb, Loader2, Maximize2, MoreHorizontal, Plus, RefreshCw, RotateCcw, ScanSearch, ShieldCheck, Shirt, Smile, Sparkles, Star, Trash2, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -55,7 +55,10 @@ import {
   guardarCloneNaLista,
   guardarVariacaoDoClone,
   guardarVistaDoClone,
+  guardarFotosDeExpressaoDoClone,
   IDADE_MINIMA_CLONE,
+  MAX_FOTOS_DA_EXPRESSAO,
+  type ExpressaoDaVariacao,
   invalidarClone,
   MAX_FOTOS_DO_CLONE,
   mudarCloneAberto,
@@ -204,17 +207,19 @@ async function rodarVistas(p: { queryClient: QueryClient; clientId: string; clon
 /** Um item do lote de variações: o pedido e um rótulo curto para o andamento. */
 type ItemDoLote = { pedido: PedidoDaVariacao; rotulo: string };
 
-async function rodarVariacoes(p: { queryClient: QueryClient; clientId: string; cloneId: string; itens: ItemDoLote[]; formato: string; qualidade: Qualidade; atualizar: () => void }) {
+async function rodarVariacoes(p: { queryClient: QueryClient; clientId: string; cloneId: string; itens: ItemDoLote[]; formato: string; qualidade: Qualidade; atualizar: () => void; expressao?: ExpressaoDaVariacao | null }) {
   let feitas = 0;
   let falhas = 0;
   let custo = 0;
   const avisos: string[] = [];
   const rodada = String(Date.now());
-  const chaves = p.itens.map((it, i) => ({ chave: chaveDoAndamento(p.cloneId, "clone-variacao", rodada, String(i)), item: it }));
+  const chaves = p.itens.map((it, i) => ({ chave: chaveDoAndamento(p.cloneId, "clone-variacao", rodada, String(i)), item: it, i }));
   chaves.forEach((k) => marcarAndamento(k.chave, { estado: "gerando", erro: "" }));
-  await emParalelo(chaves, 2, async ({ chave, item }) => {
+  await emParalelo(chaves, 2, async ({ chave, item, i }) => {
     try {
-      const r = await gerarVariacaoDoClone({ modeloId: p.cloneId, pedido: item.pedido, formato: p.formato, qualidade: p.qualidade });
+      // A foto da expressão vai em todas; "guardar no clone" só na primeira (uma vez basta).
+      const expressao = p.expressao && p.expressao.ids.length ? { ids: p.expressao.ids, guardar: !!p.expressao.guardar && i === 0 } : null;
+      const r = await gerarVariacaoDoClone({ modeloId: p.cloneId, pedido: item.pedido, formato: p.formato, qualidade: p.qualidade, expressao });
       if (r.imagem) {
         // Aparece na hora: no clone aberto e no acervo, com a URL da resposta no cache.
         guardarVariacaoDoClone(p.queryClient, p.cloneId, r.imagem, r.url);
@@ -1177,6 +1182,178 @@ function VariacaoAberta({
   );
 }
 
+const ehListaDeIds = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/**
+ * Foto de referência da expressão (26/09, "meu sorriso está diferente"):
+ * 1 ou 2 fotos reais da pessoa com a expressão pedida, só nesta variação
+ * (do acervo, das guardadas no clone ou subindo na hora). "Guardar no clone"
+ * deixa a foto no clone como foto de expressão, com a mesma autorização.
+ * Sem foto aqui, a função procura nas fotos de origem uma em que a pessoa
+ * está sorrindo.
+ */
+function FotoDaExpressao({
+  aberto,
+  ids,
+  onMudar,
+  guardar,
+  onGuardar,
+  bloqueado,
+}: {
+  aberto: CloneAberto;
+  ids: string[];
+  onMudar: (ids: string[]) => void;
+  guardar: boolean;
+  onGuardar: (v: boolean) => void;
+  bloqueado: boolean;
+}) {
+  const { clientId } = useMesa();
+  const queryClient = useQueryClient();
+  const avisarErro = useAvisarErro();
+  const fotos = useFotos(clientId);
+  const todas = fotos.data || [];
+  const [escolhendo, setEscolhendo] = useState(false);
+  const [andamento, setAndamento] = useState<string | null>(null);
+  const guardadas = aberto.fotos_de_expressao;
+  const servem = todas.filter((f) => classeDaFoto(f) === "original" && !problemaDaFotoDeOrigem(f));
+  const fotoDe = (id: string) => todas.find((x) => x.id === id) || guardadas.find((x) => x.id === id) || aberto.reais.find((x) => x.id === id) || null;
+  const cheio = ids.length >= MAX_FOTOS_DA_EXPRESSAO;
+  const novasParaGuardar = ids.filter((id) => !guardadas.some((g) => g.id === id));
+  const somar = (novas: string[]) => {
+    const saida = ids.slice();
+    novas.forEach((id) => {
+      if (saida.length < MAX_FOTOS_DA_EXPRESSAO && saida.indexOf(id) < 0) saida.push(id);
+    });
+    onMudar(saida);
+  };
+  const subir = async (arquivos: File[]) => {
+    const vagas = MAX_FOTOS_DA_EXPRESSAO - ids.length;
+    if (!arquivos.length || andamento || vagas <= 0) return;
+    setAndamento("Subindo fotos");
+    try {
+      const res = await subirOriginais(clientId, arquivos.slice(0, vagas), (feitos, total) => setAndamento(feitos < total ? `Subindo ${feitos} de ${total}` : "Registrando"));
+      acrescentarFotos(queryClient, clientId, res.registradas);
+      invalidarFotos(queryClient, clientId);
+      const boas = res.registradas.filter((f) => !problemaDaFotoDeOrigem(f));
+      const ruim = res.registradas.find((f) => !!problemaDaFotoDeOrigem(f));
+      if (ruim) toast.warning("Foto fora do padrão", { description: `${problemaDaFotoDeOrigem(ruim)} Ela ficou no acervo, mas não vai como expressão.` });
+      if (boas.length) somar(boas.map((f) => f.id));
+      setEscolhendo(false);
+    } catch (e) {
+      avisarErro(e, "Fotos não subiram");
+    } finally {
+      setAndamento(null);
+    }
+  };
+  const tirarDoClone = async (id: string) => {
+    try {
+      await guardarFotosDeExpressaoDoClone(aberto.clone.id, [id], true);
+      mudarCloneAberto(queryClient, aberto.clone.id, (a) => ({ ...a, fotos_de_expressao: a.fotos_de_expressao.filter((f) => f.id !== id) }));
+      invalidarClone(queryClient, clientId, aberto.clone.id);
+    } catch (e) {
+      avisarErro(e, "Foto não saiu do clone");
+    }
+  };
+  const miniatura = (id: string) => {
+    const f = fotoDe(id);
+    return f ? <MiniaturaDaFoto foto={f} selo={false} /> : <span className="block w-full rounded-lg bg-muted" style={{ paddingBottom: "100%" }} />;
+  };
+
+  return (
+    <details className="mt-3 min-w-0" open={ids.length > 0 || undefined} data-foto-da-expressao="">
+      <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">
+        <Smile className="mr-1 inline h-3.5 w-3.5 align-[-2px]" aria-hidden="true" />
+        Foto de referência da expressão{ids.length ? ` (${ids.length})` : " (opcional)"}
+      </summary>
+      <div className="mt-2 min-w-0">
+        <p className={juntar(texto.auxiliar, "mb-1.5 flex items-center")}>
+          Uma foto sua com a expressão pedida, até {MAX_FOTOS_DA_EXPRESSAO}.
+          <AjudaRecolhida className="ml-1">
+            Vai só nesta variação como a expressão real da pessoa: boca, dentes, gengiva, covinhas e como os olhos fecham ao sorrir. Não copia roupa, fundo nem luz. Sem foto aqui, a função procura nas fotos de origem uma em que você está sorrindo.
+          </AjudaRecolhida>
+        </p>
+        <ul className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6" aria-label="Fotos da expressão desta variação">
+          {ids.map((id) => (
+            <li key={id} className="relative min-w-0" data-foto-da-expressao-escolhida={id}>
+              {miniatura(id)}
+              <button
+                type="button"
+                aria-label="Tirar a foto da expressão"
+                title="Tirar desta variação"
+                onClick={() => onMudar(ids.filter((x) => x !== id))}
+                className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+          {!cheio && !bloqueado && (
+            <li className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setEscolhendo((v) => !v)}
+                aria-label="Adicionar foto da expressão"
+                aria-expanded={escolhendo}
+                className="relative block w-full rounded-lg border border-dashed border-primary/50 bg-card text-primary hover:bg-primary/5"
+                style={{ paddingBottom: "100%" }}
+              >
+                <span className="absolute inset-0 flex flex-col items-center justify-center text-[10.5px]">
+                  <Plus className="mb-0.5 h-4 w-4" /> foto
+                </span>
+              </button>
+            </li>
+          )}
+        </ul>
+        {guardadas.length > 0 && (
+          <div className="mt-2 min-w-0" data-expressoes-guardadas="">
+            <p className={juntar(texto.rotulo, "mb-1")}>Guardadas no clone</p>
+            <ul className="grid min-w-0 grid-cols-4 gap-1.5 sm:grid-cols-6" aria-label="Fotos de expressão guardadas no clone">
+              {guardadas.map((g) => {
+                const usada = ids.indexOf(g.id) >= 0;
+                return (
+                  <li key={g.id} className="relative min-w-0" data-expressao-guardada={g.id}>
+                    <button type="button" className={`block w-full rounded-lg ${usada ? "ring-2 ring-primary" : ""}`} onClick={() => (usada ? onMudar(ids.filter((x) => x !== g.id)) : somar([g.id]))} aria-pressed={usada} aria-label={`Usar nesta variação: ${g.nome}`} disabled={bloqueado || (!usada && cheio)}>
+                      <MiniaturaDaFoto foto={g} selo={false} />
+                    </button>
+                    <button type="button" aria-label="Tirar do clone" title="Tirar do clone (a foto continua no acervo)" onClick={() => void tirarDoClone(g.id)} className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        {escolhendo && !cheio && (
+          <div className="mt-2 min-w-0" data-escolha-da-expressao="">
+            <ZonaDeEnvio compacta onArquivos={(a) => void subir(a)} andamento={andamento} />
+            <div className="mt-2">
+              <SeletorDeFotos
+                fotos={servem.filter((f) => ids.indexOf(f.id) < 0)}
+                titulo="Foto sua com a expressão"
+                filtroInicial="original"
+                multiplas={MAX_FOTOS_DA_EXPRESSAO - ids.length > 1}
+                jaEscolhidas={ids}
+                onUsar={(escolhidas) => {
+                  somar(escolhidas);
+                  setEscolhendo(false);
+                }}
+                onFechar={() => setEscolhendo(false)}
+              />
+            </div>
+          </div>
+        )}
+        {novasParaGuardar.length > 0 && (
+          <label className="mt-2 flex min-w-0 items-center text-[12px]">
+            <input type="checkbox" className="mr-1.5 h-3.5 w-3.5 shrink-0" checked={guardar} onChange={(e) => onGuardar(e.target.checked)} disabled={bloqueado} />
+            <span className="min-w-0">Guardar no clone como foto de expressão</span>
+          </label>
+        )}
+      </div>
+    </details>
+  );
+}
+
 function Variacoes({ aberto }: { aberto: CloneAberto }) {
   const { clientId, atualizarCusto } = useMesa();
   const idDoClone = aberto.clone.id;
@@ -1189,6 +1366,9 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
   // O modo (sub-aba) e o pedido escrito ficam lembrados por clone: sair e voltar não perde.
   const [modo, setModo] = useEstadoDaTela<ModoDaVariacao>(`mesa-foto:clones:modo:${idDoClone}`, "prontas", { validar: ehModoDaVariacao });
   const [pedido, setPedido] = useEstadoDaTela<PedidoDaVariacao>(`mesa-foto:clones:pedido:${idDoClone}`, PEDIDO_VAZIO, { validar: ehPedidoDaVariacao, esperaMs: 300 });
+  // Foto de referência da expressão (26/09): lembrada por clone, como o pedido.
+  const [fotosDaExpressao, setFotosDaExpressao] = useEstadoDaTela<string[]>(`mesa-foto:clones:expressao:${idDoClone}`, [], { validar: ehListaDeIds });
+  const [guardarExpressao, setGuardarExpressao] = useState(false);
 
   const [sugestoes, setSugestoes] = useState<SugestaoDoClone[] | null>(null);
   const [marcadasSug, setMarcadasSug] = useState<number[]>([]);
@@ -1203,7 +1383,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
   useSelecaoParaODiretor(clientId, "clones", escolhidas);
   const motor = aberto.motores.find((m) => m.modelo_imagem_id === c.motor_preferido_id) || aberto.motores.find((m) => m.padrao) || null;
   // Identidade que vai em cada variação: a foto real principal e TODAS as vistas aprovadas (até 8).
-  const refs = Math.min(8, 1 + aberto.folha.aprovadas + (modo === "uniforme" ? 1 : 0));
+  const refs = Math.min(8, 1 + aberto.folha.aprovadas + (modo === "uniforme" ? 1 : 0) + fotosDaExpressao.length);
   const presets = aberto.presets.filter((p) => p.id !== PRESET_UNIFORME);
   const uniforme = aberto.presets.find((p) => p.id === PRESET_UNIFORME) || null;
   const chavesDoClone = Object.keys(andamentos).filter((k) => k.indexOf(`${c.id}|clone-variacao|`) === 0);
@@ -1328,6 +1508,7 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           )}
           {modo === "livre" && <CamposDoPedido pedido={pedido} onMudar={setPedido} aberto />}
         </div>
+        <FotoDaExpressao aberto={aberto} ids={fotosDaExpressao} onMudar={setFotosDaExpressao} guardar={guardarExpressao} onGuardar={setGuardarExpressao} bloqueado={bloqueado} />
       </div>
 
       {/* 2. Formato, quantidade, qualidade */}
@@ -1367,7 +1548,10 @@ function Variacoes({ aberto }: { aberto: CloneAberto }) {
           fecharAoConfirmar
           partes={() => partesDoClone(motor ? motor.modelo_imagem_id : null, qualidade, refs, Math.max(1, itensDoLote.length))}
           executar={() => {
-            void rodarVariacoes({ queryClient, clientId, cloneId: c.id, itens: itensDoLote, formato, qualidade, atualizar: atualizarCusto });
+            const expressao = fotosDaExpressao.length ? { ids: fotosDaExpressao, guardar: guardarExpressao } : null;
+            void rodarVariacoes({ queryClient, clientId, cloneId: c.id, itens: itensDoLote, formato, qualidade, atualizar: atualizarCusto, expressao });
+            // Guardar no clone vale uma vez (a próxima rodada já acha a foto guardada).
+            if (guardarExpressao) setGuardarExpressao(false);
             return Promise.resolve({});
           }}
         />

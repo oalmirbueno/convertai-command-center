@@ -40,6 +40,14 @@
  * - clone_imagem_arquivar { modelo_id, imagem_id, origem: 'folha'|'acervo', restaurar? } -> { imagem, clone, folha } (apagar com desfazer)
  * - clone_duplicar { modelo_id, nome?, levar_folha? } -> { clone, copiadas, avisos } (mesmas fotos de origem e a MESMA autorização, conferida de novo)
  * - clones_listar { arquivados: true } lista só os arquivados (para restaurar com clone_editar { arquivar: false }).
+ * 26/09 à noite (pedido do dono: "meu sorriso está bem diferente do da referência"; regras em clones-expressao.ts):
+ * - clone_variacao_gerar e clone_variacao_refazer: pedido com sorriso (termo claro; ambíguo, o Jev decide) leva 1 ou 2
+ *   fotos reais da pessoa sorrindo (de origem ou guardadas no clone, pela leitura guardada ou por uma leitura barata
+ *   uma vez) como "sorriso real desta pessoa"; aceitam expressao_ref_ids[0..2] (foto da expressão mandada na hora) e
+ *   guardar_expressao: true (guarda no clone). Devolvem expressao { tipo, intensidade, origem, fotos } e o custo das
+ *   leituras somado. Sem pedido de expressão nem foto enviada: prompt e entradas iguais a antes.
+ * - clone_expressao_guardar { modelo_id, imagem_ids[1..2], tirar? } -> { fotos_de_expressao } (etiqueta clone_expressao:<clone>)
+ * - clone_ler devolve fotos_de_expressao (as guardadas no clone, com URL).
  */
 
 import {
@@ -114,10 +122,41 @@ import {
   nomeDaCopia,
   novaIdentidadeReal,
   pedidoDaDescricao,
+  problemaDaFotoDeOrigem,
   validarFotosDeOrigem,
   vistaArquivada,
   vistaDesatualizada,
 } from "./clones-edicao.ts";
+import {
+  AVISO_SEM_FOTO_SORRINDO,
+  blocoDaExpressao,
+  type CandidataDaExpressao,
+  detectarPedidoDeExpressao,
+  escolherFotosDaExpressao,
+  ESQUEMA_LEITURA_DE_EXPRESSAO,
+  expressaoDasTags,
+  expressaoPelaLeitura,
+  type ImagemDaExpressaoNoPrompt,
+  LADO_DA_LEITURA_DE_EXPRESSAO,
+  type LeituraDaExpressao,
+  lerFotosDaExpressao,
+  MAX_FOTOS_DE_EXPRESSAO,
+  MAX_FOTOS_DE_EXPRESSAO_GUARDADAS,
+  normalizarLeituraDeExpressao,
+  ordemDoEnvio,
+  type PedidoDeExpressao,
+  perguntaDoSorriso,
+  quantasCabem,
+  semLeitura,
+  SISTEMA_LEITURA_DE_EXPRESSAO,
+  sorrisoPeloJev,
+  TAG_EXPRESSAO_REAL,
+  tagDaExpressaoDoClone,
+  tagsComExpressao,
+  tagsDaFotoDeExpressao,
+  vagasDaExpressao,
+} from "./clones-expressao.ts";
+import { caminhoDaLeitura } from "./diretor-agentico.ts";
 
 const REF_CLONE = "foto_clone";
 const LADO_IDENTIDADE = 1280;
@@ -219,6 +258,13 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     const { data } = await db().from("cliente_imagens").select(f.camposImagem).eq("client_id", c.client_id).contains("tags", [`clone:${c.id}`]).eq("ativa", false)
       .order("atualizado_em", { ascending: false }).limit(24);
     return (data as unknown as ImagemDoAcervoLida[] | null) ?? [];
+  }
+
+  /** Fotos de expressão guardadas no clone (etiqueta clone_expressao:<clone>), ativas. */
+  async function fotosDeExpressaoGuardadas(c: LinhaClone): Promise<ImagemDoAcervoLida[]> {
+    const { data } = await db().from("cliente_imagens").select(f.camposImagem).eq("client_id", c.client_id).contains("tags", [tagDaExpressaoDoClone(c.id)])
+      .order("criado_em", { ascending: false }).limit(MAX_FOTOS_DE_EXPRESSAO_GUARDADAS * 2);
+    return ((data as unknown as ImagemDoAcervoLida[] | null) ?? []).filter((i) => i.ativa !== false);
   }
 
   const comUrl = async <T extends { storage_bucket: string; storage_path: string }>(i: T) => ({ ...i, url: await f.urlAssinada(i.storage_bucket, i.storage_path) });
@@ -428,7 +474,7 @@ export function acoesDeClones(f: FerramentasDaMesa) {
 
   async function cloneLer(ch: Chamador, corpo: Record<string, unknown>) {
     const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
-    const [reais, todas, variacoes, apagadas] = await Promise.all([fotosReais(c), imagensDaFolha(c.id), variacoesDoClone(c), variacoesApagadas(c)]);
+    const [reais, todas, variacoes, apagadas, expressoes] = await Promise.all([fotosReais(c), imagensDaFolha(c.id), variacoesDoClone(c), variacoesApagadas(c), fotosDeExpressaoGuardadas(c)]);
     const folha = ativasDa(todas);
     const arquivadas = todas.filter((i) => vistaArquivada(i)).slice(-24);
     const refs = Math.min(reais.length + folha.filter((i) => i.aprovada === true).length, MAX_IDENTIDADES_NO_GERADOR);
@@ -449,6 +495,8 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       folha: resumoDaFolhaDoClone(folha),
       variacoes: await f.emParalelo(variacoes.slice(0, 60), 6, comUrl),
       variacoes_arquivadas: await f.emParalelo(apagadas.slice(0, 24), 6, comUrl),
+      // Fotos reais da expressão guardadas no clone (26/09): a tela oferece na "Foto da expressão".
+      fotos_de_expressao: await f.emParalelo(expressoes.slice(0, MAX_FOTOS_DE_EXPRESSAO_GUARDADAS), 4, comUrl),
       motores,
       presets: PRESETS_DE_VARIACAO.map((p) => ({ id: p.id, rotulo: p.rotulo, ...p.pedido })),
       formatos: Object.keys(FORMATOS_DA_VARIACAO),
@@ -612,7 +660,224 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     pasta?: string;
     nome?: string;
     referencia?: { tipo: string; id: string };
+    /** Expressão fiel (26/09): só nas ações do clone (aba Clones e o diretor); o Book fica como está. */
+    comExpressao?: boolean;
+    /** "Gerar de novo" com as fotos da expressão guardadas no pedido: a que saiu do acervo fica de fora, sem erro. */
+    expressaoTolerante?: boolean;
   };
+
+  // ---------------------------------------------------------------- expressão fiel (26/09; regras em clones-expressao.ts)
+
+  type ExpressaoDaVariacao = {
+    pedido: PedidoDeExpressao;
+    /** Fotos da expressão desta variação, em ordem (até 2). */
+    escolhidas: ImagemDoAcervoLida[];
+    /** As que a equipe mandou nesta variação. */
+    enviadas: ImagemDoAcervoLida[];
+    custoUsd: number;
+    avisos: string[];
+  };
+
+  /** Leituras de expressão em curso nesta instância (id da foto): duas variações do mesmo lote não pagam duas vezes. */
+  const leiturasDeExpressaoEmCurso = new Map<string, Promise<{ leitura: LeituraDaExpressao | null; custo: number }>>();
+
+  /** A expressão já lida desta foto: etiqueta expressao:*, descrição do "Ler foto" e as observações. */
+  const expressaoJaLida = (i: ImagemDoAcervoLida): LeituraDaExpressao | null =>
+    expressaoDasTags(i.tags) ?? expressaoPelaLeitura(i.descricao, (i.tags ?? []).filter((t) => String(t).indexOf(":") < 0));
+
+  /** A leitura do diretor guardada no Storage (mesa/<cliente>/foto/leituras/<imagem>.json), se houver. */
+  async function expressaoNaLeituraDoDiretor(clientId: string, imagemId: string): Promise<LeituraDaExpressao | null> {
+    try {
+      const { data } = await db().storage.from("mesa").download(caminhoDaLeitura(clientId, imagemId));
+      if (!data) return null;
+      const r = JSON.parse(await data.text()) as Record<string, unknown>;
+      return expressaoPelaLeitura(r.descricao, Array.isArray(r.observado) ? r.observado : []);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Leitura barata por visão (só a expressão, 768 px, resposta curta), uma
+   * vez por foto: o resultado fica na etiqueta expressao:<valor> da foto.
+   */
+  async function lerExpressaoPorVisao(ch: Chamador, c: LinhaClone, img: ImagemDoAcervoLida, leitor: ModeloIa): Promise<{ leitura: LeituraDaExpressao | null; custo: number }> {
+    const foto = await f.baixarReduzida(img.storage_bucket, img.storage_path, LADO_DA_LEITURA_DE_EXPRESSAO, `expressao-${img.nome}`);
+    const saida = await chamarTexto({
+      clientId: c.client_id,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_LEITURA_DE_EXPRESSAO,
+      mensagens: [{ papel: "usuario", conteudo: "Leia a expressão do rosto nesta foto real.", imagens: [foto] }],
+      esquemaJson: ESQUEMA_LEITURA_DE_EXPRESSAO,
+      maxTokensSaida: 1_000,
+      timeoutMs: f.timeoutTextoMs,
+      referencia: { tipo: REF_CLONE, id: c.id },
+      criadoPor: ch.userId,
+    });
+    const leitura = normalizarLeituraDeExpressao(saida.json);
+    if (leitura) {
+      await db().from("cliente_imagens").update({ tags: tagsComExpressao(img.tags, leitura) }).eq("id", img.id).eq("client_id", c.client_id).then(() => null, () => null);
+    }
+    return { leitura, custo: Number(saida.custoUsd) || 0 };
+  }
+
+  /**
+   * O pedido de expressão desta variação e as fotos reais que vão com ele
+   * (nulo = sem expressão: tudo igual a antes). Fotos mandadas na hora valem
+   * como estão (reais, deste cliente); no sorriso, as de origem e as
+   * guardadas no clone que mostram a pessoa sorrindo, pela leitura já
+   * guardada ou por uma leitura barata. Sem laço: lê uma vez e escolhe.
+   */
+  async function expressaoDaVariacao(ch: Chamador, c: LinhaClone, pedido: ReturnType<typeof lerPedidoDeVariacao>, corpo: Record<string, unknown>, soReais: string[] | null, tolerante: boolean): Promise<ExpressaoDaVariacao | null> {
+    const avisos: string[] = [];
+    let custo = 0;
+    // 1) As fotos da expressão que a equipe mandou nesta variação.
+    let enviadasIds: string[] = [];
+    try {
+      enviadasIds = lerFotosDaExpressao(corpo.expressao_ref_ids);
+    } catch (e) {
+      if (!tolerante) throw e;
+    }
+    let enviadas: ImagemDoAcervoLida[] = [];
+    if (enviadasIds.length) {
+      const lidas = await f.lerImagens(c.client_id, enviadasIds);
+      const conferidas = enviadasIds.map((id) => {
+        const a = lidas.find((x) => x.id === id) ?? null;
+        return { id, a, motivo: a ? problemaDaFotoDeOrigem(a) : "foto fora do acervo deste cliente" };
+      });
+      const ruins = conferidas.filter((x) => x.motivo);
+      if (ruins.length && !tolerante) {
+        throw new ErroDeRegra(422, "foto_da_expressao_invalida", `Esta foto não serve de referência da expressão: ${ruins[0].motivo}.`, { imagem_ids: ruins.map((r) => r.id) });
+      }
+      if (ruins.length) avisos.push("Uma foto da expressão saiu do acervo e ficou de fora.");
+      enviadas = conferidas.filter((x) => !x.motivo && x.a).map((x) => x.a!);
+    }
+    // 2) O pedido: termo claro no código; termo ambíguo (simpática, alegre...), o Jev decide.
+    const det = detectarPedidoDeExpressao(pedido);
+    let sorriso = det.sorriso;
+    if (!sorriso && det.ambiguo) {
+      try {
+        const res = await jevPerguntar(perguntaDoSorriso(pedido));
+        const cobrado = await cobrarJev(res, { clientId: c.client_id, tarefa: "estudio", referencia: { tipo: REF_CLONE, id: c.id }, criadoPor: ch.userId });
+        if (cobrado) custo += cobrado.custoUsd;
+        sorriso = sorrisoPeloJev(probabilidadeNoul(res.answers.sorriso), det.texto);
+      } catch {
+        // Jev fora do ar: segue como antes (sem foto de expressão automática).
+      }
+    }
+    if (!sorriso && !enviadas.length) return null;
+    const pe: PedidoDeExpressao = sorriso ?? { tipo: "outra", intensidade: null, texto: det.texto.slice(0, 200), origem: "foto_enviada" };
+    const porId = new Map<string, ImagemDoAcervoLida>();
+    enviadas.forEach((e) => porId.set(e.id, e));
+    const candidatas: CandidataDaExpressao[] = enviadas.map((e) => ({ id: e.id, origem: "enviada" as const, leitura: null }));
+    // 3) Sorriso: as guardadas no clone e as de origem (as desta geração) que mostram a pessoa sorrindo.
+    if (pe.tipo === "sorriso" && enviadas.length < MAX_FOTOS_DE_EXPRESSAO) {
+      const [reais, guardadas] = await Promise.all([fotosReais(c), fotosDeExpressaoGuardadas(c)]);
+      for (const g of guardadas) {
+        if (porId.has(g.id) || problemaDaFotoDeOrigem(g)) continue;
+        porId.set(g.id, g);
+        candidatas.push({ id: g.id, origem: "guardada", leitura: expressaoJaLida(g) });
+      }
+      for (const r of reais) {
+        if (porId.has(r.id) || (soReais && soReais.indexOf(r.id) < 0)) continue;
+        porId.set(r.id, r);
+        candidatas.push({ id: r.id, origem: "origem", principal: r.principal, leitura: expressaoJaLida(r) });
+      }
+      const faltam = semLeitura(candidatas);
+      if (faltam.length) {
+        let leitor: ModeloIa | null = null;
+        let falhou = 0;
+        await f.emParalelo(faltam, 3, async (x) => {
+          const doDiretor = await expressaoNaLeituraDoDiretor(c.client_id, x.id);
+          if (doDiretor) {
+            x.leitura = doDiretor;
+            return;
+          }
+          // Outra variação do mesmo lote já está lendo esta foto: espera a mesma leitura (paga uma vez só).
+          const emCurso = leiturasDeExpressaoEmCurso.get(x.id);
+          const minha = !emCurso;
+          const leitura = emCurso ?? (async () => {
+            leitor = leitor ?? await f.modeloDeTexto("leitura");
+            return await lerExpressaoPorVisao(ch, c, porId.get(x.id)!, leitor);
+          })();
+          if (minha) leiturasDeExpressaoEmCurso.set(x.id, leitura);
+          try {
+            const r = await leitura;
+            if (minha) custo += r.custo;
+            x.leitura = r.leitura;
+          } catch {
+            falhou++;
+          } finally {
+            if (minha) leiturasDeExpressaoEmCurso.delete(x.id);
+          }
+        });
+        if (falhou) avisos.push(`${falhou} ${falhou === 1 ? "foto não foi lida" : "fotos não foram lidas"} agora; na próxima variação tento de novo.`);
+      }
+    }
+    const escolhidas = escolherFotosDaExpressao(pe, candidatas).map((id) => porId.get(id)).filter((x): x is ImagemDoAcervoLida => !!x);
+    return { pedido: pe, escolhidas, enviadas, custoUsd: custo, avisos };
+  }
+
+  /**
+   * Guarda fotos reais no clone como fotos de expressão (etiqueta
+   * clone_expressao:<clone>), com a mesma autorização do clone (registrada
+   * em etica). No sorriso, a foto ganha a etiqueta expressao:sorriso (a
+   * equipe disse que é o sorriso dela; sem leitura paga).
+   */
+  async function guardarFotosDeExpressao(ch: Chamador, c: LinhaClone, imagens: ImagemDoAcervoLida[], pe: PedidoDeExpressao | null): Promise<number> {
+    garantirGeravel(c);
+    const ja = await fotosDeExpressaoGuardadas(c);
+    const novas = imagens.filter((i) => !ja.some((x) => x.id === i.id));
+    if (!novas.length) return 0;
+    if (ja.length + novas.length > MAX_FOTOS_DE_EXPRESSAO_GUARDADAS) {
+      throw new ErroDeRegra(409, "fotos_de_expressao_demais", `Este clone já tem ${ja.length} ${ja.length === 1 ? "foto" : "fotos"} de expressão (máximo ${MAX_FOTOS_DE_EXPRESSAO_GUARDADAS}). Tire uma antes de guardar outra.`);
+    }
+    const ruim = novas.find((i) => problemaDaFotoDeOrigem(i));
+    if (ruim) throw new ErroDeRegra(422, "foto_da_expressao_invalida", `Esta foto não serve de foto de expressão: ${problemaDaFotoDeOrigem(ruim)}.`);
+    const agora = new Date().toISOString();
+    let guardadas = 0;
+    for (const i of novas) {
+      let tags = tagsDaFotoDeExpressao(i.tags, c.id, true);
+      if (pe && pe.tipo === "sorriso" && !expressaoDasTags(i.tags)) tags = tagsComExpressao(tags, "sorriso");
+      const { error } = await db().from("cliente_imagens").update({ tags }).eq("id", i.id).eq("client_id", c.client_id);
+      if (!error) guardadas++;
+    }
+    if (guardadas) {
+      const etica = (c.etica ?? {}) as Record<string, unknown>;
+      const log = Array.isArray(etica.fotos_de_expressao) ? (etica.fotos_de_expressao as unknown[]) : [];
+      const registro = novas.map((i) => ({ imagem_id: i.id, em: agora, por: ch.userId, expressao: pe ? pe.tipo : null, autorizacao: { quem: c.autorizacao?.quem ?? null, data: c.autorizacao?.data ?? null } }));
+      await db().from("foto_modelos").update({ etica: { ...etica, fotos_de_expressao: [...log, ...registro].slice(-20) } }).eq("id", c.id).then(() => null, () => null);
+    }
+    return guardadas;
+  }
+
+  /**
+   * clone_expressao_guardar { modelo_id, imagem_ids[1..2], tirar? } -> { fotos_de_expressao }:
+   * guardar (ou tirar) fotos reais do acervo como fotos de expressão do clone.
+   * Guardar pede a autorização válida do clone; tirar só tira a etiqueta.
+   */
+  async function cloneExpressaoGuardar(ch: Chamador, corpo: Record<string, unknown>) {
+    const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
+    const ids = lerFotosDaExpressao(corpo.imagem_ids);
+    if (!ids.length) throw new ErroDeRegra(400, "fotos_da_expressao_invalidas", "Escolha a foto da expressão.");
+    const lidas = await f.lerImagens(c.client_id, ids);
+    const faltando = ids.filter((id) => !lidas.some((x) => x.id === id));
+    if (faltando.length) throw new ErroDeRegra(404, "imagem_fora_do_cliente", "Há foto que não está no acervo deste cliente.", { imagem_ids: faltando });
+    const avisos: string[] = [];
+    if (corpo.tirar === true) {
+      for (const i of lidas) {
+        if ((i.tags ?? []).indexOf(tagDaExpressaoDoClone(c.id)) < 0) continue;
+        await db().from("cliente_imagens").update({ tags: tagsDaFotoDeExpressao(i.tags, c.id, false) }).eq("id", i.id).eq("client_id", c.client_id);
+      }
+    } else {
+      const n = await guardarFotosDeExpressao(ch, c, lidas, null);
+      if (n) avisos.push(`${n} ${n === 1 ? "foto guardada" : "fotos guardadas"} no clone como foto de expressão, com a mesma autorização.`);
+    }
+    const guardadas = await fotosDeExpressaoGuardadas(c);
+    return f.json({ fotos_de_expressao: await f.emParalelo(guardadas.slice(0, MAX_FOTOS_DE_EXPRESSAO_GUARDADAS), 4, comUrl), avisos, custo_usd: 0 });
+  }
 
   /**
    * Uma variação do clone (UMA foto por chamada), usada pela aba Clones e
@@ -634,12 +899,43 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       throw new ErroDeRegra(409, "sem_logo_da_marca", "O kit da marca não tem a logo oficial em imagem. Defina a logo no Contexto do cliente (ou da marca) antes do uniforme.");
     }
     const estilo = extras.estilo && extras.estilo.imagens.length ? extras.estilo : null;
-    const vagas = (logo ? 1 : 0) + (estilo ? estilo.imagens.length : 0);
     const vistaMaisPerto: VistaDaPersona = pedido.enquadramento === "corpo_inteiro" ? "corpo_inteiro" : pedido.enquadramento === "meio_corpo" ? "meio_corpo" : "frente";
     const soReais = fotosEscolhidasParaGerar(corpo.fotos_reais_ids, c.identidade_real);
+    // Expressão fiel (26/09): sem pedido de expressão nem foto enviada, exp é nulo e tudo segue igual a antes.
+    const exp = extras.comExpressao ? await expressaoDaVariacao(ch, c, pedido, corpo, soReais, extras.expressaoTolerante === true) : null;
+    if (exp) avisos.push(...exp.avisos);
+    // A primeira foto real da identidade (a principal, se estiver nesta geração) já vai anexada: não ocupa lugar novo.
+    const reaisDaGeracao = c.identidade_real.filter((r) => !soReais || soReais.indexOf(r.imagem_id) >= 0);
+    const primeiraReal = (reaisDaGeracao.find((r) => r.principal) ?? reaisDaGeracao[0])?.imagem_id ?? null;
+    const reservadas = exp ? vagasDaExpressao(exp.escolhidas.map((i) => i.id), primeiraReal ? [primeiraReal] : []) : 0;
+    const vagas = (logo ? 1 : 0) + (estilo ? estilo.imagens.length : 0) + reservadas;
     const { fontes, imagens, tracos, puladas } = await identidadesBaixadas(c, vistaMaisPerto, m, "variacao", vagas, soReais);
     if (puladas) avisos.push(`${puladas} ${puladas === 1 ? "vista aprovada foi feita" : "vistas aprovadas foram feitas"} com as fotos antigas e não entrou como identidade. Gere a folha de novo com as fotos novas.`);
-    const referencias = [...imagens, ...(estilo ? estilo.imagens : []), ...(logo ? [logo.imagem] : [])];
+    // Fotos da expressão: a que já vai como identidade é citada pelo número; as outras vão logo depois da identidade.
+    let imagensDaExpressao: ImagemEntrada[] = [];
+    let expressaoNoPrompt: ImagemDaExpressaoNoPrompt[] = [];
+    let usadasNaExpressao: string[] = [];
+    if (exp) {
+      const posicaoNaIdentidade = (id: string) => fontes.findIndex((fo) => fo.tipo === "real" && fo.id === id);
+      const jaAnexadas = exp.escolhidas.filter((i) => posicaoNaIdentidade(i.id) >= 0);
+      const novas = exp.escolhidas.filter((i) => posicaoNaIdentidade(i.id) < 0);
+      const baixadas = await f.emParalelo(novas, 2, (i) => f.baixarReduzida(i.storage_bucket, i.storage_path, LADO_IDENTIDADE, `expressao-${i.nome}`).catch(() => null));
+      const abertas = novas.map((i, k) => ({ id: i.id, imagem: baixadas[k] })).filter((x): x is { id: string; imagem: ImagemEntrada } => !!x.imagem);
+      if (abertas.length < novas.length) avisos.push("Uma foto da expressão não abriu e ficou de fora.");
+      // Identidade, estilo e logo contam primeiro; a expressão só entra se o pedido ficar abaixo de 30 MB (nunca tira o que já ia).
+      const cabem = quantasCabem([...imagens, ...(estilo ? estilo.imagens : []), ...(logo ? [logo.imagem] : [])].map((x) => x.bytes.byteLength), abertas.map((x) => x.imagem.bytes.byteLength));
+      if (cabem < abertas.length) avisos.push("Uma foto da expressão ficou de fora para o envio não passar de 30 MB.");
+      const vao = abertas.slice(0, cabem);
+      imagensDaExpressao = vao.map((x) => x.imagem);
+      expressaoNoPrompt = [
+        ...jaAnexadas.map((i) => ({ indice: posicaoNaIdentidade(i.id) + 1, ja_anexada: true })),
+        ...vao.map((_x, k) => ({ indice: fontes.length + k + 1, ja_anexada: false })),
+      ];
+      usadasNaExpressao = [...jaAnexadas.map((i) => i.id), ...vao.map((x) => x.id)];
+      if (exp.pedido.tipo === "sorriso" && !usadasNaExpressao.length) avisos.push(AVISO_SEM_FOTO_SORRINDO);
+    }
+    const ordem = ordemDoEnvio({ identidade: fontes.length, expressao: imagensDaExpressao.length, estilo: estilo ? estilo.imagens.length : 0, logo: !!logo });
+    const referencias = [...imagens, ...imagensDaExpressao, ...(estilo ? estilo.imagens : []), ...(logo ? [logo.imagem] : [])];
     const prompt = promptDaVariacaoDoClone({
       nome: c.nome,
       fontes,
@@ -647,8 +943,9 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       pedido,
       formato,
       tracos,
-      estilo: estilo ? { inicio: fontes.length + 1, legendas: estilo.legendas } : null,
-      logo: logo ? { indice: referencias.length, paleta: logo.paleta } : null,
+      estilo: estilo ? { inicio: ordem.inicioDoEstilo, legendas: estilo.legendas } : null,
+      logo: logo ? { indice: ordem.indiceDaLogo ?? referencias.length, paleta: logo.paleta } : null,
+      expressao: exp ? blocoDaExpressao(exp.pedido, expressaoNoPrompt) : null,
     });
     if (logo) avisos.push("Uniforme com a logo oficial: confira a logo na roupa (letras, cores e proporção) antes de aprovar.");
     const qualidade = lerQualidade(corpo.qualidade, p.qualidade);
@@ -683,8 +980,8 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       nome: (extras.nome ?? `${c.nome} (variação${rotuloDoPreset ? `: ${rotuloDoPreset}` : ""})`).slice(0, 160),
       pasta: extras.pasta ?? "Mesa Foto / Clones",
       categoria: "pessoa",
-      tags: Array.from(new Set(["mesa_foto", "gerada", "pessoa_real_autorizada", "clone_variacao", `clone:${c.id}`, "tipo:pessoa", ...(logo ? ["uniforme_da_marca"] : []), ...(extras.tags ?? [])])).slice(0, 30),
-      descricao: `Pessoa real (${c.nome}) recriada por IA a partir de fotos reais${fontes.some((x) => x.tipo === "folha") ? " e da folha de identidade aprovada" : ""}, com autorização de uso de imagem de ${c.autorizacao?.data ?? "data registrada"} (${c.autorizacao?.finalidade ?? ""}). ${oQueMudou ? `Mudou: ${oQueMudou}. ` : ""}${logo ? "Uniforme com a logo oficial da marca. " : ""}Motor ${saida.modeloId}. Ao publicar, ligue o rótulo de IA.`.slice(0, 1000),
+      tags: Array.from(new Set(["mesa_foto", "gerada", "pessoa_real_autorizada", "clone_variacao", `clone:${c.id}`, "tipo:pessoa", ...(logo ? ["uniforme_da_marca"] : []), ...(usadasNaExpressao.length ? [TAG_EXPRESSAO_REAL] : []), ...(extras.tags ?? [])])).slice(0, 30),
+      descricao: `Pessoa real (${c.nome}) recriada por IA a partir de fotos reais${fontes.some((x) => x.tipo === "folha") ? " e da folha de identidade aprovada" : ""}, com autorização de uso de imagem de ${c.autorizacao?.data ?? "data registrada"} (${c.autorizacao?.finalidade ?? ""}). ${oQueMudou ? `Mudou: ${oQueMudou}. ` : ""}${logo ? "Uniforme com a logo oficial da marca. " : ""}${usadasNaExpressao.length ? "Expressão copiada de foto real da pessoa. " : ""}Motor ${saida.modeloId}. Ao publicar, ligue o rótulo de IA.`.slice(0, 1000),
       derivada_de: principal?.imagem_id ?? null,
       gerada: true,
       modo: "clone",
@@ -701,8 +998,21 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     c = await prenderMotor(c, saida.modeloId);
     const nova = data as unknown as ImagemDoAcervoLida;
     // O pedido ao lado do arquivo, para "Gerar de novo" repetir a mesma foto (se falhar, a descrição serve de reserva).
-    const doPedido = JSON.stringify({ pedido, formato, qualidade, com_logo: !!logo, com_estilo: !!estilo, fotos_reais_ids: soReais, gerado_em: new Date().toISOString() });
+    const doPedido = JSON.stringify({
+      pedido, formato, qualidade, com_logo: !!logo, com_estilo: !!estilo, fotos_reais_ids: soReais,
+      ...(exp && exp.enviadas.length ? { expressao_ref_ids: exp.enviadas.map((i) => i.id) } : {}),
+      gerado_em: new Date().toISOString(),
+    });
     await db().storage.from("mesa").upload(caminhoDoPedido(caminho), new Blob([doPedido], { type: "application/json" }), { contentType: "application/json", upsert: true }).catch(() => null);
+    // "Guardar no clone como foto de expressão": as fotos mandadas nesta variação ficam no clone (mesma autorização).
+    if (exp && exp.enviadas.length && corpo.guardar_expressao === true) {
+      try {
+        const n = await guardarFotosDeExpressao(ch, c, exp.enviadas, exp.pedido);
+        if (n) avisos.push(`${n === 1 ? "A foto da expressão ficou guardada" : "As fotos da expressão ficaram guardadas"} no clone.`);
+      } catch (e) {
+        avisos.push(e instanceof ErroDeRegra ? e.message : "A foto da expressão não foi guardada no clone.");
+      }
+    }
     const url = await f.urlAssinada("mesa", caminho);
     return {
       imagem: { ...nova, url },
@@ -710,16 +1020,25 @@ export function acoesDeClones(f: FerramentasDaMesa) {
       clone: c,
       pedido,
       identidade: fontes.map((x) => ({ tipo: x.tipo === "real" ? "foto_real" : "vista_aprovada", id: x.id, vista: x.vista })),
+      expressao: exp ? { tipo: exp.pedido.tipo, intensidade: exp.pedido.intensidade, origem: exp.pedido.origem, fotos: usadasNaExpressao } : null,
+      /** Leituras da expressão e o Jev (fora a imagem). */
+      custo_extra_usd: exp ? arred6(exp.custoUsd) : 0,
       saida,
       avisos,
     };
   }
 
+  /** Resposta da geração com o custo das leituras da expressão somado ao da imagem. */
+  const respostaComExtra = (r: { saida: SaidaImagem; custo_extra_usd: number }) => {
+    const base = respostaDaGeracao(r.saida);
+    return r.custo_extra_usd ? { ...base, custo_usd: arred6(base.custo_usd + r.custo_extra_usd) } : base;
+  };
+
   async function cloneVariacaoGerar(ch: Chamador, corpo: Record<string, unknown>) {
     const c = await cloneComAcesso(ch, idDe(corpo.modelo_id, "modelo_id"));
-    const r = await gerarVariacao(ch, c, corpo);
-    const resposta = respostaDaGeracao(r.saida);
-    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, ...resposta, avisos: [...r.avisos, ...resposta.avisos] });
+    const r = await gerarVariacao(ch, c, corpo, { comExpressao: true });
+    const resposta = respostaComExtra(r);
+    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, expressao: r.expressao, ...resposta, avisos: [...r.avisos, ...resposta.avisos] });
   }
 
   // ---------------------------------------------------------------- editar depois de criado (25/09 à noite)
@@ -815,16 +1134,19 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     }
     if (salvo && salvo.com_estilo === true) avisos.push("A foto original veio do Book com referência de estilo; esta sai só com o pedido.");
     const formato = corpo.formato ?? (salvo ? salvo.formato : null) ?? formatoPelaMedida(antiga.largura, antiga.altura);
+    // As fotos da expressão mandadas na variação original vão de novo (a que saiu do acervo fica de fora, sem erro).
+    const expressaoPedida = corpo.expressao_ref_ids !== undefined;
     const r = await gerarVariacao(ch, c, {
       pedido,
       formato,
       qualidade: corpo.qualidade ?? (salvo ? salvo.qualidade : undefined),
       fotos_reais_ids: corpo.fotos_reais_ids,
+      expressao_ref_ids: expressaoPedida ? corpo.expressao_ref_ids : salvo ? salvo.expressao_ref_ids : undefined,
       aplicar_logo: (salvo && salvo.com_logo === true) || (antiga.tags ?? []).includes("uniforme_da_marca") ? true : undefined,
       marca_id: corpo.marca_id,
-    }, { tags: [`refeita_de:${antiga.id}`] });
-    const resposta = respostaDaGeracao(r.saida);
-    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, substitui: antiga.id, ...resposta, avisos: [...avisos, ...r.avisos, ...resposta.avisos] });
+    }, { tags: [`refeita_de:${antiga.id}`], comExpressao: true, expressaoTolerante: !expressaoPedida });
+    const resposta = respostaComExtra(r);
+    return f.json({ imagem: r.imagem, url: r.url, clone: r.clone, pedido: r.pedido, identidade: r.identidade, expressao: r.expressao, substitui: antiga.id, ...resposta, avisos: [...avisos, ...r.avisos, ...resposta.avisos] });
   }
 
   /**
@@ -863,6 +1185,10 @@ export function acoesDeClones(f: FerramentasDaMesa) {
     if (error || !data) throw new ErroDeRegra(503, "gravacao_falhou", `Não foi possível duplicar o clone (${MIGRATION}).`);
     let novo = { ...(data as LinhaClone), identidade_real: Array.isArray((data as LinhaClone).identidade_real) ? (data as LinhaClone).identidade_real : [], invariantes: (data as LinhaClone).invariantes ?? [] };
     const avisos: string[] = [];
+    // As fotos de expressão guardadas valem também para a cópia (a mesma pessoa e a mesma autorização).
+    for (const g of await fotosDeExpressaoGuardadas(c)) {
+      await db().from("cliente_imagens").update({ tags: tagsDaFotoDeExpressao(g.tags, novo.id, true) }).eq("id", g.id).eq("client_id", c.client_id).then(() => null, () => null);
+    }
     let copiadas = 0;
     if (corpo.levar_folha !== false) {
       const aprovadas = ativasDa(await imagensDaFolha(c.id)).filter((i) => i.papel === "vista" && i.aprovada === true && !vistaDesatualizada(i, c.identidade_real));
@@ -1012,15 +1338,17 @@ ${JSON.stringify({ cliente: contexto.dados, campanha: contexto.campanha, pedido_
     if (destino === origem) throw new ErroDeRegra(409, "mesmo_cliente", "O clone já é deste cliente.");
     await f.garantirAcesso(ch, destino);
 
-    // 1) O que vai junto: fotos reais, variações (ativas ou não) e a folha.
-    const [reais, folha, variacoesLidas] = await Promise.all([
+    // 1) O que vai junto: fotos reais, fotos de expressão guardadas, variações (ativas ou não) e a folha.
+    const [reais, folha, variacoesLidas, expressoesLidas] = await Promise.all([
       f.lerImagens(origem, c.identidade_real.map((r) => r.imagem_id)),
       imagensDaFolha(c.id),
       db().from("cliente_imagens").select(f.camposImagem).eq("client_id", origem).contains("tags", [`clone:${c.id}`]).limit(1000)
         .then((r) => (r.data as unknown as ImagemDoAcervoLida[] | null) ?? []),
+      db().from("cliente_imagens").select(f.camposImagem).eq("client_id", origem).contains("tags", [tagDaExpressaoDoClone(c.id)]).limit(20)
+        .then((r) => (r.data as unknown as ImagemDoAcervoLida[] | null) ?? [], () => [] as ImagemDoAcervoLida[]),
     ]);
     const acervo: ImagemDoAcervoLida[] = [];
-    for (const i of [...reais, ...variacoesLidas]) if (!acervo.some((x) => x.id === i.id)) acervo.push(i);
+    for (const i of [...reais, ...expressoesLidas, ...variacoesLidas]) if (!acervo.some((x) => x.id === i.id)) acervo.push(i);
     const ids = acervo.map((i) => i.id);
 
     // 2) O que prende uma foto no cliente antigo (vira cópia).
@@ -1408,6 +1736,7 @@ Não julgue beleza. Português do Brasil, sem travessão. Responda só com o JSO
       clone_imagem_arquivar: cloneImagemArquivar,
       clone_variacao_refazer: cloneVariacaoRefazer,
       clone_duplicar: cloneDuplicar,
+      clone_expressao_guardar: cloneExpressaoGuardar,
     } as Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Promise<Response>>,
     estimar: estimarClones,
     // Para o Book (book.ts): a mesma variação, com as mesmas regras e a mesma autorização.

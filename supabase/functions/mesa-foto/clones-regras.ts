@@ -351,12 +351,15 @@ export function promptDaVariacaoDoClone(e: {
   tracos?: string[];
   logo?: { indice: number; paleta?: string | null } | null;
   estilo?: { inicio: number; legendas: string[] } | null;
+  /** Expressão fiel (26/09, clones-expressao.ts): legendas das fotos da expressão e instruções. Sem ela, o prompt é o de antes. */
+  expressao?: { legendas: string[]; instrucoes: string[] } | null;
 }): string {
   const p = e.pedido;
   const linhas: string[] = [];
   const temFolha = e.fontes.some((f) => f.tipo === "folha");
   linhas.push(`FOTOGRAFIA REAL da pessoa "${e.nome}" (pessoa real com autorização de uso de imagem), nova foto com o MESMO rosto das imagens anexadas.`);
   linhas.push("IMAGENS ANEXADAS, NA ORDEM:", ...legendasDasIdentidades(e.fontes, "variacao"));
+  if (e.expressao) linhas.push(...e.expressao.legendas);
   if (e.estilo && e.estilo.legendas.length) {
     const inicio = e.estilo.inicio;
     e.estilo.legendas.forEach((l, i) => linhas.push(`Imagem ${inicio + i}: REFERÊNCIA SÓ DE ESTILO (${l}): use luz, cenário, composição e clima; nunca copie pessoa, rosto, marca ou texto dela.`));
@@ -375,6 +378,7 @@ export function promptDaVariacaoDoClone(e: {
     ].filter(Boolean).join("; ") || "roupa, cenário e pose novos, coerentes entre si"}.`,
   );
   if (p.livre) linhas.push(`PEDIDO DA EQUIPE: ${p.livre}`);
+  if (e.expressao) linhas.push(...e.expressao.instrucoes);
   if (e.logo) {
     linhas.push(`UNIFORME DA MARCA: roupa profissional e atual${e.logo.paleta ? ` nas cores da marca (${e.logo.paleta})` : " nas cores da marca"}; a logo aparece uma vez, legível, no peito (ou no boné ou avental quando fizer sentido), do tamanho de um bordado real. A única marca na foto é essa logo.`);
   }
