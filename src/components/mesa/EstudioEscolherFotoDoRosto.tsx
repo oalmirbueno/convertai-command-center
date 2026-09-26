@@ -59,7 +59,7 @@ export function estadoDoNavegadorValido(v: unknown): boolean {
 
 const PAPEL_DO_CLONE: Record<FotoDeClone["papel"], string> = { origem: "Foto de origem", gerada: "Gerada", vista: "Vista da folha" };
 
-/** Texto sem acento e em minúsculas, para a busca (sem \p{}, Safari 11). */
+/** Texto sem acento e em minúsculas, para a busca (sem classes Unicode na regex, Safari 11). */
 export function semAcento(t: string): string {
   return (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
