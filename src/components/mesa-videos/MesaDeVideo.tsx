@@ -104,7 +104,8 @@ export default function MesaDeVideo({
   /** Etapas (lazy) para baixar no tempo ocioso. */
   preCarregar: Array<{ preCarregar: () => Promise<unknown> }>;
   Agente: ComponentType<PropsDoAgenteDaMesa>;
-  rotuloDoAgente: string;
+  /** Nome do agente (botão do celular e trilho recolhido); pode mudar por etapa. */
+  rotuloDoAgente: string | ((etapa: string) => string);
   /** Endereço antigo que precisa ir para outro lugar (devolve true quando cuidou). */
   antesDaEtapa?: (etapaUrl: string | null, clientId: string) => boolean;
   /** A etapa aberta. */
@@ -293,7 +294,7 @@ export default function MesaDeVideo({
           <div key={marca ? `${valor.clientId}:${marca.id}` : valor.clientId} className="min-w-0">
             <AreaDeTrabalho
               memoria={`${mesa === "edicao" ? "mesa-edicao" : "mesa-videos"}-agente`}
-              rotuloDaLateral={rotuloDoAgente}
+              rotuloDaLateral={typeof rotuloDoAgente === "function" ? rotuloDoAgente(etapa) : rotuloDoAgente}
               iconeDaLateral={icone}
               rotuloDoPrincipal={titulo}
               memoriaDaRolagem={`${mesa}:${etapa}:${valor.clientId}`}

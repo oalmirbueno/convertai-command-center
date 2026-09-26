@@ -132,7 +132,7 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/me
       editar: () => import("@/components/mesa-edicao/EtapaEditar"),
     },
     sempre: {
-      agente: () => import("@/components/mesa-videos/AgenteDaMesaDeVideo"),
+      agente: () => import("@/components/mesa-edicao/AgenteDaEdicao"),
     },
   },
   // Mesa Publicidade (frente P, 26/09): campanha, direção, tomadas, revisão e envio.

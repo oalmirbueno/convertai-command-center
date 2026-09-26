@@ -13,6 +13,9 @@ import { subirDoEditor } from "@/lib/editor/api";
 import type { ItemDaBiblioteca } from "@/lib/editor/biblioteca";
 import { tempoFino } from "@/lib/editor/tempo";
 import GeracaoComCusto from "./GeracaoComCusto";
+import { useMotoresDaMesa } from "@/lib/mesa-videos/api";
+import { SeletorDeMotor } from "@/components/mesa-videos/PecasDoGerador";
+import { duracaoNoMotor, duracoesDoMotor, motorDoNivel, motorPorId, type NivelDoMotor, type RequisitoDoPedido } from "../../../../supabase/functions/_shared/modelos-de-video";
 
 /**
  * Gerar a partir do editor (frente V-B): troca de câmera (tipo Higgsfield:
@@ -90,6 +93,16 @@ export default function PainelDeGeracao({
   const [q2, setQ2] = useState<Quadro | null | "lendo">(null);
   // O quadro do cursor é pego quando o painel abre e no botão (não a cada quadro tocando).
   const [cursorFixo, setCursorFixo] = useState(cursor);
+  // Frente Q (26/09): continuar, transição e virar clipe precisam do MOTOR (o servidor recusa sem ele).
+  const motores = useMotoresDaMesa();
+  const [nivel, setNivel] = useState<NivelDoMotor>("normal");
+  const [motorId, setMotorId] = useState("");
+  const requisito: RequisitoDoPedido = { modo: pedido.tipo === "transicao_gerar" ? "primeiro_ultimo" : "primeiro_quadro", formato: projeto.formato };
+  const motor = pedido.tipo === "angulo_gerar" ? null : motorPorId(motorId, motores.motores) || motorDoNivel(nivel, requisito, motores.motores);
+  const duracoes = motor ? duracoesDoMotor(motor) : [2, 3, 4, 5, 6, 8, 10];
+  const duracaoNoMotorAtual = motor ? duracaoNoMotor(motor, duracao) : duracao;
+  const estadoDoMotor = motor ? motores.lista.find((x) => x.motor.id === motor.id) || null : null;
+  const motivoDoMotor = pedido.tipo === "angulo_gerar" ? null : !motor ? "Nenhum motor faz isso neste nível." : estadoDoMotor && estadoDoMotor.estado !== "pronto" && estadoDoMotor.estado !== "a_conferir" ? `${motor.rotulo}: ${estadoDoMotor.estado_rotulo.toLowerCase()}${estadoDoMotor.chave ? ` (${estadoDoMotor.chave})` : ""}.` : null;
 
   const clipeAlvo = pedido.tipo === "gerar_cena" ? null : pedido.tipo === "angulo_gerar" ? pedido.clipe || selecao[0] || null : pedido.clipe;
   const chaveDoQuadro = `${pedido.tipo}:${clipeAlvo}:${pedido.tipo === "transicao_gerar" ? pedido.clipeB : ""}:${pedido.tipo === "gerar_cena" ? pedido.item.storage_path : ""}:${pedido.tipo === "angulo_gerar" ? cursorFixo.toFixed(3) : ""}`;
@@ -136,16 +149,16 @@ export default function PainelDeGeracao({
     if (pedido.tipo === "transicao_gerar") {
       const a1 = await subir(q1);
       const b1 = await subir(q2);
-      return { client_id: clientId, quadro_a_path: a1, quadro_b_path: b1, prompt: texto, duracao_s: duracao, formato: projeto.formato, variacoes: 1 };
+      return { client_id: clientId, motor: motor ? motor.id : "", quadro_a_path: a1, quadro_b_path: b1, prompt: texto, duracao_s: duracaoNoMotorAtual, formato: projeto.formato, variacoes: 1 };
     }
     if (pedido.tipo === "continuar_video") {
       const achado = acharClipe(projeto, pedido.clipe);
       const f = achado && achado.clipe.fonte ? projeto.fontes[achado.clipe.fonte] : null;
       const caminho = await subir(q1);
-      return { client_id: clientId, arquivo_id: f ? f.arquivo_id : null, quadro_path: caminho, usar_extensao: true, prompt: texto, duracao_s: duracao, formato: projeto.formato, variacoes: 1 };
+      return { client_id: clientId, motor: motor ? motor.id : "", arquivo_id: f ? f.arquivo_id : null, quadro_path: caminho, usar_extensao: !!(f && f.arquivo_id), prompt: texto, duracao_s: duracaoNoMotorAtual, formato: projeto.formato, variacoes: 1 };
     }
     const caminho = await subir(q1);
-    return { client_id: clientId, modo: "primeiro_quadro", quadro_inicial_path: caminho, prompt: texto, duracao_s: duracao, formato: projeto.formato, variacoes: 1 };
+    return { client_id: clientId, motor: motor ? motor.id : "", modo: "primeiro_quadro", quadro_inicial_path: caminho, prompt: texto, duracao_s: duracaoNoMotorAtual, formato: projeto.formato, variacoes: 1, titulo: pedido.item.nome };
   };
 
   const acao: AcaoDeGeracao = pedido.tipo;
@@ -214,11 +227,14 @@ export default function PainelDeGeracao({
         </>
       )}
       {pedido.tipo !== "angulo_gerar" && (
+        <SeletorDeMotor lista={motores.lista} requisito={requisito} valor={motor ? motor.id : ""} nivel={nivel} onNivel={(n) => { setNivel(n); setMotorId(""); }} onEscolher={setMotorId} />
+      )}
+      {pedido.tipo !== "angulo_gerar" && (
         <div className="grid grid-cols-2 gap-2">
           <label className="block min-w-0">
             <span className={texto.rotulo}>Duração</span>
-            <select className={juntar(campo, "mt-1 h-8")} value={duracao} onChange={(e) => setDuracao(Number(e.target.value))}>
-              {[2, 3, 4, 5, 6, 8, 10].map((n) => (
+            <select className={juntar(campo, "mt-1 h-8")} value={duracaoNoMotorAtual} onChange={(e) => setDuracao(Number(e.target.value))}>
+              {duracoes.map((n) => (
                 <option key={n} value={n}>
                   {n} s
                 </option>
@@ -255,7 +271,7 @@ export default function PainelDeGeracao({
           />
         </label>
       </div>
-      <GeracaoComCusto key={chaveDoQuadro} acao={acao} montarCorpo={montarCorpo} desativado={semQuadro} motivo={semQuadro ? "Esperando o quadro." : null} />
+      <GeracaoComCusto key={`${chaveDoQuadro}:${motor ? motor.id : ""}:${duracaoNoMotorAtual}`} acao={acao} montarCorpo={montarCorpo} desativado={semQuadro || !!motivoDoMotor} motivo={semQuadro ? "Esperando o quadro." : motivoDoMotor} />
     </div>
   );
 }

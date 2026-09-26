@@ -1,6 +1,6 @@
-import { Component, lazy, Suspense, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Film, Loader2, Pencil, X } from "lucide-react";
+import { Film, Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
 import { EstadoVazio } from "@/components/sistema/Estados";
@@ -18,9 +18,9 @@ import type { CenaDoRoteiro } from "@/lib/editor/skills";
  * frente V-B (26/09) pluga aqui o EDITOR DE VÍDEO completo
  * (./editor/EditorDeVideo.tsx, carregado sob demanda).
  *
- * - Sem versão com projeto: mostra a montagem (os melhores takes na ordem das
- *   cenas) só para ler, e "Editar" cria a versão rascunho com esse projeto
- *   (versao_registrar) e abre o editor.
+ * - Sem versão com projeto: cria sozinha a versão rascunho com a montagem (os
+ *   melhores takes na ordem das cenas, versao_registrar) e abre o editor
+ *   (frente Q, 26/09: antes pedia o clique em "Editar").
  * - Com versão editável (rascunho ou em revisão): abre o editor nela (a
  *   última, ou a escolhida, lembrada por cliente). Projeto antigo abre pela
  *   migração do formato (migrarProjeto). O editor salva sozinho por
@@ -139,22 +139,31 @@ function Montagem({ projeto }: { projeto: ProjetoDeEdicao }) {
 
 const editavel = (v: VersaoDeVideo) => !!v.projeto && !motivoParaNaoMudar(v, "decidir");
 
-export default function AreaDoEditor({ projeto, cenas, roteiroId }: { projeto: ProjetoDeEdicao; cenas?: CenaDoRoteiro[] | null; roteiroId?: string | null }) {
+/**
+ * Frente Q (26/09): o editor completo É a etapa Editar. Abre direto na última
+ * versão editável (ou na escolhida); sem nenhuma, cria sozinho uma versão
+ * rascunho com a montagem (os melhores takes na ordem das cenas) e abre. Criar
+ * a versão não gasta nada. "Nova versão" monta de novo a partir de Organizar.
+ */
+export default function AreaDoEditor({ projeto, cenas, roteiroId, agenteNaLateral = true }: { projeto: ProjetoDeEdicao; cenas?: CenaDoRoteiro[] | null; roteiroId?: string | null; agenteNaLateral?: boolean }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
   const versoesQ = useVersoes(clientId);
   const [escolhida, setEscolhida] = useEstadoDaTela<string>(`mesa-edicao:editor:versao:${clientId}`, "");
-  const [aberto, setAberto] = useEstadoDaTela<boolean>(`mesa-edicao:editor:aberto:${clientId}`, false, { validar: (v) => typeof v === "boolean" });
   const [criando, setCriando] = useState(false);
+  const [falhouCriar, setFalhouCriar] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
+  const tentouCriar = useRef(false);
   const navegador = navegadorDoEditor();
 
   const versoes = ((versoesQ.data && versoesQ.data.itens) || []).filter(editavel).sort((a, b) => (a.criado_em < b.criado_em ? 1 : -1));
-  const versao = aberto ? versoes.find((v) => v.id === escolhida) || versoes[0] || null : null;
+  const versao = versoes.find((v) => v.id === escolhida) || versoes[0] || null;
   const migrado = versao ? migrarProjeto(versao.projeto) : null;
+  const temClipe = projeto.trilhas.some((t) => t.clipes.length);
 
   const comecar = async () => {
     setCriando(true);
+    setFalhouCriar(null);
     try {
       const r = await chamarMesaVideos<{ versao: VersaoDeVideo }>({
         acao: "versao_registrar",
@@ -167,41 +176,48 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId }: { projeto: P
       });
       await queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) });
       if (r && r.versao) setEscolhida(r.versao.id);
-      setAberto(true);
     } catch (e) {
+      setFalhouCriar(textoDoErro(e));
       toast.error("Não foi possível abrir o editor", { description: textoDoErro(e), duration: 9000 });
     } finally {
       setCriando(false);
     }
   };
 
-  const fechar = () => {
-    setAberto(false);
-    void queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) });
-  };
+  // Sem versão editável: cria a primeira sozinha (uma vez por abertura; erro não tenta de novo sozinho).
+  const lidas = !versoesQ.isLoading && !versoesQ.isError && !!versoesQ.data;
+  useEffect(() => {
+    if (!lidas || versoes.length || tentouCriar.current || !navegador.ok || !temClipe) return;
+    tentouCriar.current = true;
+    void comecar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lidas, versoes.length, temClipe]);
 
   const recarregar = () => {
     void queryClient.invalidateQueries({ queryKey: chaveDasVersoes(clientId) }).then(() => setRecarga((n) => n + 1));
   };
 
-  if (!versao || !migrado || !migrado.projeto) {
+  if (!versao || !migrado || !migrado.projeto || !navegador.ok) {
+    const lendo = versoesQ.isLoading || criando;
     return (
       <div className="min-w-0">
         <div className="mb-3 flex min-w-0 flex-wrap items-center">
-          {versoes.length > 0 && (
-            <select className={juntar(campo, "mb-1 mr-2 h-8 w-auto max-w-[280px]")} value={escolhida} onChange={(e) => setEscolhida(e.target.value)} aria-label="Versão para editar">
-              {versoes.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.titulo} · v{v.numero}
-                </option>
-              ))}
-            </select>
+          {lendo ? (
+            <span className={juntar(texto.auxiliar, "mb-1 flex items-center")} data-abrindo-editor="">
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              Abrindo o editor
+            </span>
+          ) : (
+            navegador.ok && (
+              <button type="button" className={juntar(botao.primario, "mb-1 h-8")} onClick={() => void comecar()} disabled={criando || !temClipe} data-abrir-editor="">
+                <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                Abrir o editor
+              </button>
+            )
           )}
-          <button type="button" className={juntar(botao.primario, "mb-1 h-8")} onClick={() => (versoes.length ? setAberto(true) : void comecar())} disabled={criando || !navegador.ok || !projeto.trilhas.some((t) => t.clipes.length)} data-abrir-editor="">
-            {criando ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Pencil className="mr-1.5 h-3.5 w-3.5" />}
-            {versoes.length ? "Abrir no editor" : "Editar"}
-          </button>
-          {!navegador.ok && <span className={juntar(texto.auxiliar, "mb-1 ml-2")}>O editor pede um navegador atualizado (Chrome, Edge ou Safari 14+).</span>}
+          {!navegador.ok && <span className={juntar(texto.auxiliar, "mb-1")}>O editor pede um navegador atualizado (Chrome, Edge ou Safari 14+).</span>}
+          {falhouCriar && <span className="mb-1 ml-2 text-[12px] text-destructive">{falhouCriar}</span>}
+          {versoesQ.isError && <span className="mb-1 ml-2 text-[12px] text-destructive">Não deu para ler as versões. Recarregue a página.</span>}
           {versao && migrado && !migrado.projeto && <span className="mb-1 ml-2 text-[12px] text-destructive">O projeto desta versão não abriu.</span>}
         </div>
         <Montagem projeto={projeto} />
@@ -213,7 +229,7 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId }: { projeto: P
     <div className="min-w-0" data-area-do-editor="editor">
       <div className="mb-2 flex min-w-0 items-center">
         {versoes.length > 1 ? (
-          <select className={juntar(campo, "mr-2 h-8 w-auto max-w-[280px]")} value={versao.id} onChange={(e) => setEscolhida(e.target.value)} aria-label="Versão em edição">
+          <select className={juntar(campo, "mr-2 h-8 w-auto min-w-0 max-w-[280px]")} value={versao.id} onChange={(e) => setEscolhida(e.target.value)} aria-label="Versão em edição">
             {versoes.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.titulo} · v{v.numero}
@@ -221,15 +237,15 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId }: { projeto: P
             ))}
           </select>
         ) : (
-          <span className="mr-2 truncate text-[13px] font-medium">
+          <span className="mr-2 min-w-0 truncate text-[13px] font-medium">
             {versao.titulo} · v{versao.numero}
           </span>
         )}
         {migrado.de < 2 && <span className={juntar(etiqueta, "mr-2 bg-muted text-muted-foreground")}>formato antigo, abriu convertido</span>}
         {migrado.aviso && <span className="mr-2 text-[12px] text-amber-500">{migrado.aviso}</span>}
-        <button type="button" className={juntar(botao.discreto, "ml-auto h-8")} onClick={fechar}>
-          <X className="mr-1.5 h-3.5 w-3.5" />
-          Fechar editor
+        <button type="button" className={juntar(botao.discreto, "ml-auto h-8 shrink-0")} onClick={() => void comecar()} disabled={criando || !temClipe} title="Cria outra versão com a montagem de agora (takes e ordem de Organizar)" aria-label="Nova versão" data-nova-versao="">
+          {criando ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Plus className="h-3.5 w-3.5 sm:mr-1.5" />}
+          <span className="hidden sm:inline">Nova versão</span>
         </button>
       </div>
       <LimiteDoEditor
@@ -248,7 +264,7 @@ export default function AreaDoEditor({ projeto, cenas, roteiroId }: { projeto: P
             </div>
           }
         >
-          <EditorDeVideo key={`${versao.id}:${recarga}`} versaoId={versao.id} projetoInicial={migrado.projeto} revisao={migrado.projeto.revisao} cenas={cenas || null} onConflito={recarregar} />
+          <EditorDeVideo key={`${versao.id}:${recarga}`} versaoId={versao.id} projetoInicial={migrado.projeto} revisao={migrado.projeto.revisao} cenas={cenas || null} onConflito={recarregar} agenteNaLateral={agenteNaLateral} />
         </Suspense>
       </LimiteDoEditor>
     </div>

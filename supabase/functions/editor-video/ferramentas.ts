@@ -162,6 +162,8 @@ export function sistemaDoAgente(): string {
     "Regras: fale português do Brasil, frases curtas, sem travessão. Clipes são citados SÓ por apelido (c1, c2); nunca invente id.",
     "Use tempos exatos que você leu (ler_projeto, ler_fala). Sobre imagem, só afirme o que está em ler_visao, citando o tempo. Não viu: diga que não viu.",
     "Planeje, chame as ferramentas, confira o resultado que volta e termine. Prefira uma skill determinística quando ela faz o pedido inteiro.",
+    "Pedido de editar (editar, edição dinâmica, Brabo, deixar dinâmico, cortar, legendar) só termina depois de ferramentas que MUDAM o projeto. Nunca responda só com texto nem diga que abriu algo: edite.",
+    "Edição dinâmica = aplicar_skill brabo. Silêncios = cortar_silencios. Legenda = legendas. Ganchos = punch_in. Sem fala marcada as skills ainda rodam (tempo exato); avise na resposta.",
     `Limites: até ${MAX_PASSOS} passos e ${MAX_FERRAMENTAS} ferramentas por pedido. Nada é aplicado sem o dono clicar em Aplicar.`,
     "Responda sempre no JSON pedido: plano (uma frase), chamadas (ferramenta + argumentos_json), resposta (o que fez ou o que falta, curto) e terminou.",
     "Ferramentas:",

@@ -150,12 +150,14 @@ describe("tela do editor de vídeo", () => {
     await waitFor(() => expect(document.querySelector('[data-apelido="c1"]')!.textContent).toContain("zoom 1.12"));
   });
 
-  it("área do editor: sem versão, mostra a montagem e Editar cria a versão rascunho com o projeto (sem gasto)", async () => {
+  it("área do editor: sem versão, abre direto criando a versão rascunho com o projeto uma vez só (sem gasto)", async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(h(QueryClientProvider, { client: qc }, h(MemoryRouter, null, h(TooltipProvider, null, h(MesaProvider, { valor: valor(), children: h(AreaDoEditor, { projeto: projeto(), roteiroId: null }) })))));
     await waitFor(() => expect(document.querySelector('[data-area-do-editor="reservada"]')).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    // Frente Q (26/09): sem clique em "Editar"; a versão nasce sozinha e a montagem fica à vista enquanto abre.
     await waitFor(() => expect(mock.invoke.mock.calls.filter((c: any[]) => c[1].body.acao === "versao_registrar")).toHaveLength(1));
+    await new Promise((r) => setTimeout(r, 60));
+    expect(mock.invoke.mock.calls.filter((c: any[]) => c[1].body.acao === "versao_registrar")).toHaveLength(1);
     const corpo = mock.invoke.mock.calls.find((c: any[]) => c[1].body.acao === "versao_registrar")![1].body;
     expect(corpo).toMatchObject({ client_id: CLIENTE, estado: "rascunho" });
     expect(corpo.projeto.formato_versao).toBe(2);

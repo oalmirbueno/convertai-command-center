@@ -15,6 +15,7 @@ import { montarPacote } from "../../../supabase/functions/_shared/pacote-de-edic
 import { ehPedidoDeVideo } from "../../../supabase/functions/_shared/pedidos-de-video";
 import { INTENCOES, NENHUMA, intencaoPorPalavras, type MesaDoAgente } from "../../../supabase/functions/_shared/agente-de-video";
 import { entradaDoPacote } from "@/components/mesa-edicao/pacote";
+import { deixarPedidoParaOEditor } from "@/components/mesa-edicao/editor/ponteDoAgente";
 import type { PropsDoAgenteDaMesa } from "./MesaDeVideo";
 import {
   chamarMesaVideos,
@@ -58,7 +59,7 @@ const novoId = () => `m${Date.now().toString(36)}${(contador++).toString(36)}`;
 
 const CAPACIDADES: Record<MesaDoAgente, string[]> = {
   videos: ["abrir a cena certa para gerar", "mandar os vídeos aprovados para a Edição", "abrir o diretor e a troca de ângulo", "resumir o que falta"],
-  edicao: ["separar por roteiro, cena e tomada", "renomear e marcar os melhores takes", "abrir pacote e versões", "resumir o que falta"],
+  edicao: ["separar por roteiro, cena e tomada", "renomear e marcar os melhores takes", "abrir o editor e passar o pedido de edição ao agente editor", "resumir o que falta"],
 };
 
 export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgenteDaMesa) {
@@ -136,7 +137,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
     else responder(a.resumo || "A lista está pronta para confirmar.", { mensagem_id: r.mensagem_id, acao: a });
   };
 
-  const executar = async (intencao: string) => {
+  const executar = async (intencao: string, textoLivre: string | null = null) => {
     if (mesa === "videos") {
       if (intencao === "gerar") {
         const historias = (historiasQ.data && historiasQ.data.historias) || [];
@@ -180,8 +181,10 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
         return responder("Abri a transcrição. Escolha os vídeos e prepare o pedido.");
       }
       if (intencao === "pacote") {
+        // Frente Q (26/09): pedido de editar vai para o agente editor da etapa Editar (nada roda sem o clique).
+        if (textoLivre) deixarPedidoParaOEditor(clientId, textoLivre);
         irPara("editar", { parte: "pacote" });
-        return responder("Abri o pacote de edição dinâmica.");
+        return responder(textoLivre ? "Abri o editor. O agente editor ficou com o seu pedido: confira o modelo e o custo em cima e mande." : "Abri o editor. O pacote para baixar fica embaixo dele.");
       }
       if (intencao === "versoes") {
         irPara("editar", { parte: "versoes" });
@@ -209,7 +212,7 @@ export default function AgenteDaMesaDeVideo({ mesa, etapa, irPara }: PropsDoAgen
           intencao = intencaoPorPalavras(mesa, t);
         }
       }
-      await executar(intencao);
+      await executar(intencao, intencaoPronta ? null : t);
     } catch (e) {
       toast.error("O agente não conseguiu", { description: textoDoErro(e), duration: 9000 });
       responder(`Não consegui agora: ${textoDoErro(e)}`);

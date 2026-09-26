@@ -19,7 +19,7 @@ import { apelidosDoProjeto } from "@/lib/editor/apelidos";
 import type { CenaDoRoteiro, PropostaDaSkill } from "@/lib/editor/skills";
 import { noQuadro, tempoFino } from "@/lib/editor/tempo";
 import ComparadorAntesDepois from "@/components/comparar/ComparadorAntesDepois";
-import { criarRelogio, ehCampoDeTexto, useTempo, useUrlsDasFontes, type Relogio } from "./apoio";
+import { criarRelogio, ehCampoDeTexto, useLarguraMinima, useTempo, useUrlsDasFontes, type Relogio } from "./apoio";
 import Previa, { type ControleDaPrevia } from "./Previa";
 import LinhaDoTempo from "./LinhaDoTempo";
 import Inspector from "./Inspector";
@@ -29,6 +29,7 @@ import PainelDeGeracao, { type PedidoDeGeracao } from "./PainelDeGeracao";
 import PainelTimestamp from "./PainelTimestamp";
 import PainelDeReferencias from "./PainelDeReferencias";
 import AgenteEditor from "./AgenteEditor";
+import { publicarNaPonte, tirarDaPonte } from "./ponteDoAgente";
 
 /**
  * Editor de vídeo da Mesa Edição (frente V-B). Carregado sob demanda (lazy)
@@ -47,7 +48,7 @@ import AgenteEditor from "./AgenteEditor";
  * Ctrl+Shift+Z ou Ctrl+Y refaz; setas andam 1 quadro (Shift: 1 s).
  */
 
-type AbaEsquerda = "midia" | "skills" | "gerar" | "timestamp" | "referencias";
+type AbaEsquerda = "midia" | "skills" | "gerar" | "timestamp" | "referencias" | "ajustes";
 type AbaDireita = "ajustes" | "agente";
 
 const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string }[] = [
@@ -57,6 +58,11 @@ const ABAS_ESQUERDA: { valor: AbaEsquerda; rotulo: string }[] = [
   { valor: "timestamp", rotulo: "Timestamp" },
   { valor: "referencias", rotulo: "Referências" },
 ];
+
+/** Com o agente na lateral da mesa e a janela estreita, os Ajustes viram uma aba da esquerda. */
+const ABAS_COM_AJUSTES: { valor: AbaEsquerda; rotulo: string }[] = ABAS_ESQUERDA.concat([{ valor: "ajustes", rotulo: "Ajustes" }]);
+/** Janela a partir da qual os Ajustes ganham coluna própria mesmo com o agente na lateral. */
+const LARGURA_TRES_COLUNAS = 1680;
 
 const ROTULO_DO_SALVAMENTO: Record<EstadoDoSalvamento, string> = { salvo: "Salvo", pendente: "Salvando em instantes", salvando: "Salvando", erro: "Não salvou", conflito: "Mudou em outro lugar" };
 
@@ -72,18 +78,27 @@ export interface PropsDoEditor {
   revisao: number;
   cenas?: CenaDoRoteiro[] | null;
   onConflito?: () => void;
+  /**
+   * Frente Q (26/09): o agente editor mora na lateral fixa da Mesa Edição
+   * (ponteDoAgente.ts). O editor publica o projeto lá e não mostra a aba
+   * "Agente" na coluna da direita.
+   */
+  agenteNaLateral?: boolean;
 }
 
-export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas, onConflito }: PropsDoEditor) {
+export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas, onConflito, agenteNaLateral = false }: PropsDoEditor) {
   const { clientId } = useMesa();
   const largo = useLargo();
+  const tresColunas = useLarguraMinima(LARGURA_TRES_COLUNAS);
+  const ajustesNaEsquerda = agenteNaLateral && !tresColunas;
+  const abasDaEsquerda = ajustesNaEsquerda ? ABAS_COM_AJUSTES : ABAS_ESQUERDA;
   const [h, setH] = useState<Historico>(() => comecarHistorico(projetoInicial));
   const projeto = h.presente.projeto;
   const relogio = useMemo(() => criarRelogio(0), []);
   const previa = useRef<ControleDaPrevia | null>(null);
   const [selecao, setSelecao] = useState<string[]>([]);
   const [px, setPx] = useEstadoDaTela<number>(`mesa-edicao:editor:zoom:${clientId}`, 40, { validar: (v) => typeof v === "number" && v > 0 });
-  const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba:${clientId}`, "midia", { validar: (v) => ABAS_ESQUERDA.some((a) => a.valor === v) });
+  const [aba, setAba] = useEstadoDaTela<AbaEsquerda>(`mesa-edicao:editor:aba:${clientId}`, "midia", { validar: (v) => ABAS_COM_AJUSTES.some((a) => a.valor === v) });
   const [abaDireita, setAbaDireita] = useEstadoDaTela<AbaDireita>(`mesa-edicao:editor:lado:${clientId}`, "ajustes", { validar: (v) => v === "ajustes" || v === "agente" });
   const [geracao, setGeracao] = useState<PedidoDeGeracao>({ tipo: "angulo_gerar", clipe: null });
   const [extras, setExtras] = useState<ItemDaBiblioteca[]>([]);
@@ -160,6 +175,13 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       return true;
     },
   };
+
+  // Agente na lateral da mesa: publica o projeto e o jeito de aplicar a cada mudança.
+  useEffect(() => {
+    if (!agenteNaLateral) return;
+    publicarNaPonte({ clientId, versaoId, projeto, controle, aplicarProjeto, urls });
+  });
+  useEffect(() => (agenteNaLateral ? () => tirarDaPonte(versaoId) : undefined), [agenteNaLateral, versaoId]);
 
   const principal = trilhaPrincipal(projeto);
   const dividirNoCursor = () => {
@@ -301,21 +323,6 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
     </div>
   );
 
-  const painelEsquerdo =
-    aba === "midia" ? (
-      <Biblioteca projeto={projeto} onInserir={(i, onde) => inserir(i, onde)} onVirarClipe={virarClipe} />
-    ) : aba === "skills" ? (
-      <PainelDeSkills projeto={projeto} contexto={contextoDaSkill} controle={controle} />
-    ) : aba === "gerar" ? (
-      <ComCursor relogio={relogio} passo={0.25}>
-        {(cursor) => <PainelDeGeracao projeto={projeto} urls={urls} urlsExtras={urls} pedido={geracao} selecao={selecao} cursor={cursor} onOps={aplicarOps} />}
-      </ComCursor>
-    ) : aba === "timestamp" ? (
-      <PainelTimestamp projeto={projeto} urls={urls} onAplicarProjeto={aplicarProjeto} />
-    ) : (
-      <PainelDeReferencias projeto={projeto} controle={controle} urlsDoProjeto={urls} />
-    );
-
   const inspector = (
     <ComCursor relogio={relogio} passo={0.25}>
       {(cursor) => (
@@ -334,6 +341,24 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
       )}
     </ComCursor>
   );
+
+  const abaVisivel: AbaEsquerda = aba === "ajustes" && !ajustesNaEsquerda ? "midia" : aba;
+  const painelEsquerdo =
+    abaVisivel === "midia" ? (
+      <Biblioteca projeto={projeto} onInserir={(i, onde) => inserir(i, onde)} onVirarClipe={virarClipe} />
+    ) : abaVisivel === "skills" ? (
+      <PainelDeSkills projeto={projeto} contexto={contextoDaSkill} controle={controle} />
+    ) : abaVisivel === "gerar" ? (
+      <ComCursor relogio={relogio} passo={0.25}>
+        {(cursor) => <PainelDeGeracao projeto={projeto} urls={urls} urlsExtras={urls} pedido={geracao} selecao={selecao} cursor={cursor} onOps={aplicarOps} />}
+      </ComCursor>
+    ) : abaVisivel === "timestamp" ? (
+      <PainelTimestamp projeto={projeto} urls={urls} onAplicarProjeto={aplicarProjeto} />
+    ) : abaVisivel === "ajustes" ? (
+      inspector
+    ) : (
+      <PainelDeReferencias projeto={projeto} controle={controle} urlsDoProjeto={urls} />
+    );
 
   const janelaDeComparar = (
     <Dialog open={!!comparar} onOpenChange={(v) => !v && setComparar(null)}>
@@ -380,7 +405,7 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
             ))}
           </ul>
         </div>
-        <p className={texto.auxiliar}>Linha do tempo, câmera e agente abrem no computador.</p>
+        <p className={texto.auxiliar}>{agenteNaLateral ? "Linha do tempo e câmera abrem no computador. O agente editor fica no botão de baixo." : "Linha do tempo, câmera e agente abrem no computador."}</p>
         <PainelDeSkills projeto={projeto} contexto={contextoDaSkill} controle={controle} />
         {janelaDeComparar}
       </div>
@@ -390,10 +415,20 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
   // ---------------------------------------------------------------- computador e notebook
   return (
     <div className="grid min-w-0 gap-3" style={{ gridTemplateRows: "minmax(0,1fr) 250px", height: "calc(100vh - 150px)", minHeight: 620, maxHeight: 1200 }} data-editor-de-video="completo">
-      <div className="grid min-h-0 min-w-0 gap-3 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[320px_minmax(0,1fr)_340px] desk:grid-cols-[360px_minmax(0,1fr)_380px]">
+      <div
+        className={juntar(
+          "grid min-h-0 min-w-0 gap-3",
+          !agenteNaLateral
+            ? "lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[320px_minmax(0,1fr)_340px] desk:grid-cols-[360px_minmax(0,1fr)_380px]"
+            : ajustesNaEsquerda
+              ? "lg:grid-cols-[260px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] desk:grid-cols-[340px_minmax(0,1fr)]"
+              : "lg:grid-cols-[320px_minmax(0,1fr)_300px]",
+        )}
+        data-agente-na-lateral={agenteNaLateral ? "" : undefined}
+      >
         <div className="flex min-h-0 min-w-0 flex-col">
-          <SeletorCompacto rotulo="Painel do editor" valor={aba} onEscolher={(v) => setAba(v as AbaEsquerda)} opcoes={ABAS_ESQUERDA} larguraTotal />
-          <RegiaoRolavel modo="sempre" className="mt-2 min-h-0 flex-1 pr-1" memoria={`mesa-edicao:editor:rolagem:${aba}:${clientId}`}>
+          <SeletorCompacto rotulo="Painel do editor" valor={abaVisivel} onEscolher={(v) => setAba(v as AbaEsquerda)} opcoes={abasDaEsquerda} larguraTotal />
+          <RegiaoRolavel modo="sempre" className="mt-2 min-h-0 flex-1 pr-1" memoria={`mesa-edicao:editor:rolagem:${abaVisivel}:${clientId}`}>
             {painelEsquerdo}
           </RegiaoRolavel>
         </div>
@@ -403,27 +438,38 @@ export default function EditorDeVideo({ versaoId, projetoInicial, revisao, cenas
             <Previa ref={previa} projeto={projeto} urls={urls} relogio={relogio} />
           </div>
         </div>
-        <div className="flex min-h-0 min-w-0 flex-col">
-          <SeletorCompacto
-            rotulo="Lado direito do editor"
-            valor={abaDireita}
-            onEscolher={(v) => setAbaDireita(v as AbaDireita)}
-            opcoes={[
-              { valor: "ajustes", rotulo: "Ajustes" },
-              { valor: "agente", rotulo: "Agente" },
-            ]}
-            larguraTotal
-          />
-          <div className="mt-2 flex min-h-0 flex-1 flex-col">
-            {abaDireita === "ajustes" ? (
-              <RegiaoRolavel modo="sempre" className="pr-1">
+        {agenteNaLateral ? (
+          !ajustesNaEsquerda && (
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <p className={juntar(texto.rotulo, "mb-2")}>Ajustes</p>
+              <RegiaoRolavel modo="sempre" className="min-h-0 flex-1 pr-1">
                 {inspector}
               </RegiaoRolavel>
-            ) : (
-              <AgenteEditor projeto={projeto} controle={controle} onAplicarProjeto={aplicarProjeto} urls={urls} />
-            )}
+            </div>
+          )
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-col">
+            <SeletorCompacto
+              rotulo="Lado direito do editor"
+              valor={abaDireita}
+              onEscolher={(v) => setAbaDireita(v as AbaDireita)}
+              opcoes={[
+                { valor: "ajustes", rotulo: "Ajustes" },
+                { valor: "agente", rotulo: "Agente" },
+              ]}
+              larguraTotal
+            />
+            <div className="mt-2 flex min-h-0 flex-1 flex-col">
+              {abaDireita === "ajustes" ? (
+                <RegiaoRolavel modo="sempre" className="pr-1">
+                  {inspector}
+                </RegiaoRolavel>
+              ) : (
+                <AgenteEditor projeto={projeto} controle={controle} onAplicarProjeto={aplicarProjeto} urls={urls} />
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <div className="min-h-0 min-w-0">
         <LinhaDoTempo projeto={projeto} relogio={relogio} px={px} setPx={setPx} selecao={selecao} onSelecionar={setSelecao} onOps={aplicarOps} urls={urls} />

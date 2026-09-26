@@ -201,7 +201,7 @@ export default function EtapaEditar({ irPara }: { irPara: IrPara }) {
       <Secao
         titulo="Editor"
         descricao={`${pacote.resumo.takes} ${pacote.resumo.takes === 1 ? "take" : "takes"}${pacote.resumo.duracao_melhores_s ? ` · ${duracaoCurta(pacote.resumo.duracao_melhores_s)}` : ""}`}
-        ajuda="A montagem do projeto de edição: os melhores takes na ordem das cenas. Editar abre o editor completo (linha do tempo, cortes, legendas, skills, troca de câmera, referências e agente), que salva sozinho numa versão rascunho."
+        ajuda="O editor completo abre direto com a montagem (os melhores takes na ordem das cenas): linha do tempo, cortes, legendas, skills, Timestamp, troca de câmera e referências. O agente editor fica na lateral, com o modelo e o custo em cima. Salva sozinho numa versão rascunho."
       >
         {arquivosQ.isLoading ? (
           <div className="h-48 animate-pulse rounded-md bg-muted" aria-busy="true" aria-label="Lendo os vídeos" />

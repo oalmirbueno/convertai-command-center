@@ -110,3 +110,16 @@ export const ehCampoDeTexto = (el: EventTarget | null) => {
   const t = e.tagName.toLowerCase();
   return t === "input" || t === "textarea" || t === "select" || e.isContentEditable;
 };
+
+/** A janela tem pelo menos `px` de largura? Atualiza ao redimensionar. */
+export function useLarguraMinima(px: number): boolean {
+  const medir = () => (typeof window === "undefined" ? false : (window.innerWidth || 0) >= px);
+  const [ok, setOk] = useState(medir);
+  useEffect(() => {
+    const f = () => setOk(medir());
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [px]);
+  return ok;
+}

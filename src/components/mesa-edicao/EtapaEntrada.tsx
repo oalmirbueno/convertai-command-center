@@ -1,22 +1,24 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Film, Loader2, Music, Play, Star, Subtitles, Upload } from "lucide-react";
+import { Copy, Film, Loader2, Music, Play, Star, Subtitles, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useMesa, useUrlDaMesa } from "@/components/mesa/MesaContexto";
-import { textoDoErro } from "@/lib/mesa/api";
+import { textoDoErro, usd } from "@/lib/mesa/api";
+import { supabase } from "@/integrations/supabase/client";
+import { custoDoTimestamp, linhasDeLegenda, srtDasLinhas } from "../../../supabase/functions/editor-video/ferramentas";
+import { guardarFalaDaEntrada, lerFalaDaEntrada, transcreverMidia } from "@/lib/editor/fala";
+import { emPreparacao } from "@/lib/editor/api";
 import Secao from "@/components/sistema/Secao";
 import SeletorCompacto from "@/components/sistema/SeletorCompacto";
 import { CampoDeFormulario } from "@/components/sistema/Formulario";
 import { Carregando, EstadoDeErro, EstadoVazio } from "@/components/sistema/Estados";
 import { useEstadoDaTela } from "@/components/sistema/useEstadoDaTela";
 import { botao, campo, etiqueta, juntar, texto } from "@/components/sistema/estilos";
-import { estimarPedido, normalizarParametros, ROTULO_DO_ESTADO_DO_PEDIDO, textoDaEstimativa } from "../../../supabase/functions/_shared/pedidos-de-video";
 import { AvisoDeAtivacao, SeloDoTipo } from "@/components/mesa-videos/Comuns";
 import type { IrPara } from "@/components/mesa-videos/MesaDeVideo";
 import {
   chamarMesaVideos,
   chaveDosArquivos,
-  chaveDosPedidos,
   duracaoCurta,
   naEntradaDaEdicao,
   subirVideos,
@@ -31,9 +33,9 @@ import { useParte } from "./useParte";
  * Entrada da Mesa Edição (frente E2): subir vídeos de fora (arrastar ou
  * escolher; duas de cada vez, duração e quadro lidos no navegador, hash até
  * 256 MB, uma nova tentativa em falha de rede, aviso antes de sair no meio) e
- * os vídeos gerados que a Mesa Vídeos aprovou. Transcrição e legenda entram
- * como pedido preparado (nada é transcrito nem cobrado ainda). O original
- * nunca muda.
+ * os vídeos gerados que a Mesa Vídeos aprovou. Transcrição e legenda rodam
+ * aqui (frente Q, 26/09): custo antes, clique do dono, fala guardada por take
+ * para o editor. O original nunca muda.
  */
 
 const PARTES = ["videos", "transcricao"] as const;
@@ -84,40 +86,56 @@ export function LinhaDoArquivo({ arquivo, aberto, onAbrir }: { arquivo: ArquivoD
   );
 }
 
+function copiarTexto(t: string) {
+  try {
+    void navigator.clipboard.writeText(t).then(() => toast.success("Copiado"));
+  } catch {
+    toast.error("Não deu para copiar aqui.");
+  }
+}
+
+/**
+ * Transcrição e legenda de verdade (frente Q, 26/09; antes era "pedido
+ * preparado" com executor "em breve"). Por take: custo antes, clique do dono,
+ * só o áudio sai do navegador (Timestamp do editor, Whisper palavra por
+ * palavra, editor-video/timestamp_parte). A fala fica guardada neste navegador
+ * por take: o editor usa sem pagar de novo (legenda, cortes na pausa, Brabo).
+ */
 function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
-  const { clientId } = useMesa();
-  const queryClient = useQueryClient();
+  const { clientId, atualizarCusto } = useMesa();
   const pedidosQ = usePedidos(clientId);
   const [tipo, setTipo] = useEstadoDaTela<"transcrever" | "legendar">(`mesa-edicao:transcricao:tipo:${clientId}`, "transcrever", { validar: (v) => v === "transcrever" || v === "legendar" });
   const [vocabulario, setVocabulario] = useEstadoDaTela<string>(`mesa-edicao:transcricao:vocabulario:${clientId}`, "");
-  const [preparando, setPreparando] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [rodando, setRodando] = useState<{ id: string; texto: string } | null>(null);
+  const [versao, setVersao] = useState(0);
   const takes = videos.filter((a) => a.tipo !== "gerado" && !a.so_no_storage);
-  const pedidos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => (p.tipo === "transcrever" || p.tipo === "legendar") && p.estado !== "cancelado");
+  const antigos = ((pedidosQ.data && pedidosQ.data.itens) || []).filter((p) => (p.tipo === "transcrever" || p.tipo === "legendar") && p.estado !== "cancelado");
+  const marcados = takes.filter((t) => !!lerFalaDaEntrada(clientId, t.id)).length;
 
-  const preparar = async (take: ArquivoDeVideo) => {
-    setPreparando(take.id);
+  const transcrever = async (take: ArquivoDeVideo) => {
+    setConfirmando(null);
+    setRodando({ id: take.id, texto: "Abrindo o vídeo" });
     try {
-      const r = await chamarMesaVideos<{ ja_existia: boolean }>({
-        acao: "pedido_preparar",
-        client_id: clientId,
-        tipo,
-        alvo: { arquivo_id: take.id },
-        parametros: { duracao_s: take.duracao_s, idioma: "pt-BR", vocabulario },
-      });
-      void queryClient.invalidateQueries({ queryKey: chaveDosPedidos(clientId) });
-      toast.success(r.ja_existia ? "Este pedido já estava preparado" : tipo === "legendar" ? "Legenda preparada" : "Transcrição preparada", { description: "Nada foi transcrito nem cobrado. A transcrição chega em breve." });
+      const { data, error } = await supabase.storage.from(take.storage_bucket || "mesa").createSignedUrl(take.storage_path, 3600);
+      if (error || !data || !data.signedUrl) throw new Error("Não foi possível abrir o vídeo agora.");
+      const r = await transcreverMidia({ clientId, url: data.signedUrl, dica: vocabulario, aoAndar: (t) => setRodando({ id: take.id, texto: t.slice(0, 80) }) });
+      if (!guardarFalaDaEntrada(clientId, take.id, r.palavras)) toast.warning("A fala saiu, mas o navegador não guardou.", { description: "Copie o texto agora." });
+      setVersao((v) => v + 1);
+      toast.success(`${r.palavras.length} palavras marcadas`, { description: `${take.nome} · ${usd(r.custo_usd)}. O editor usa essa fala sem pagar de novo.` });
     } catch (e) {
-      toast.error("Não foi possível preparar", { description: textoDoErro(e), duration: 9000 });
+      toast.error("Não foi possível transcrever", { description: emPreparacao(e) ? "Falta publicar a função editor-video." : textoDoErro(e), duration: 9000 });
     } finally {
-      setPreparando(null);
+      setRodando(null);
+      atualizarCusto();
     }
   };
 
   return (
     <Secao
       titulo="Transcrição e legenda"
-      descricao={`${pedidos.length} ${pedidos.length === 1 ? "pedido" : "pedidos"}`}
-      ajuda="Pedido preparado por vídeo: transcrição com tempos ou legenda revisada. Os nomes, marcas e valores da lista são conferidos no áudio."
+      descricao={`${marcados} de ${takes.length} ${takes.length === 1 ? "take marcado" : "takes marcados"}`}
+      ajuda="Marca o tempo de cada palavra da fala (Whisper, US$ 0,006 por minuto). Só o áudio sai do navegador. A fala fica guardada neste navegador por take, e o editor usa para legenda e cortes sem pagar de novo. Os nomes, marcas e valores da lista entram como dica."
       acao={
         <SeletorCompacto
           rotulo="Tipo de pedido"
@@ -129,6 +147,7 @@ function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
           onEscolher={(v) => setTipo(v === "legendar" ? "legendar" : "transcrever")}
         />
       }
+      data-versao-da-fala={versao}
     >
       <CampoDeFormulario rotulo="Nomes, marcas e valores" apoio="Separe por vírgula." className="mb-3">
         <input className={campo} value={vocabulario} maxLength={600} onChange={(e) => setVocabulario(e.target.value)} placeholder="Ex.: nome da loja, produto, preço" />
@@ -138,19 +157,55 @@ function Transcricao({ videos }: { videos: ArquivoDeVideo[] }) {
       ) : (
         <ul className="divide-y divide-border">
           {takes.map((t) => {
-            const doTake = pedidos.filter((p) => p.alvo && p.alvo.arquivo_id === t.id);
-            const est = estimarPedido(tipo, normalizarParametros(tipo, { duracao_s: t.duracao_s, vocabulario }));
+            const fala = lerFalaDaEntrada(clientId, t.id);
+            const custo = custoDoTimestamp("transcrever", t.duracao_s || 0);
+            const antigo = antigos.find((p) => p.alvo && p.alvo.arquivo_id === t.id);
+            const linhas = fala ? linhasDeLegenda(fala) : [];
             return (
-              <li key={t.id} className="flex min-w-0 items-center py-2" data-legenda-do-take={t.id}>
-                <span className="mr-2 min-w-0 flex-1 truncate text-[13px]">{t.nome}</span>
-                {doTake.length ? (
-                  <span className={juntar(etiqueta, "bg-muted text-muted-foreground")}>{ROTULO_DO_ESTADO_DO_PEDIDO[doTake[0].estado] || doTake[0].estado}</span>
-                ) : (
-                  <button type="button" className={juntar(botao.secundario, "h-8 px-2.5 text-[12.5px]")} onClick={() => void preparar(t)} disabled={preparando === t.id} aria-label={`${tipo === "legendar" ? "Preparar legenda" : "Transcrever"} ${t.nome}`}>
-                    {preparando === t.id ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Subtitles className="h-3.5 w-3.5 sm:mr-1.5" />}
-                    <span className="hidden sm:inline">{tipo === "legendar" ? "Legendar" : "Transcrever"}</span>
-                    <span className="ml-1.5 hidden text-[11px] text-muted-foreground md:inline">{textoDaEstimativa(est)}</span>
-                  </button>
+              <li key={t.id} className="min-w-0 py-2" data-legenda-do-take={t.id}>
+                <div className="flex min-w-0 items-center">
+                  <span className="mr-2 min-w-0 flex-1 truncate text-[13px]">{t.nome}</span>
+                  {rodando && rodando.id === t.id ? (
+                    <span className={juntar(texto.auxiliar, "flex shrink-0 items-center")}>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      {rodando.texto}
+                    </span>
+                  ) : fala ? (
+                    <>
+                      <span className={juntar(etiqueta, "mr-1 bg-primary/10 text-primary")}>{fala.length} palavras</span>
+                      <button type="button" className={juntar(botao.discreto, "h-8 px-2 text-[12px]")} onClick={() => copiarTexto(tipo === "legendar" ? srtDasLinhas(linhas) : linhas.map((l) => l.texto).join("\n"))} aria-label={`Copiar ${tipo === "legendar" ? "legenda SRT" : "texto"} de ${t.nome}`}>
+                        <Copy className="h-3.5 w-3.5 sm:mr-1.5" />
+                        <span className="hidden sm:inline">{tipo === "legendar" ? "SRT" : "Texto"}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={juntar(botao.secundario, "h-8 px-2.5 text-[12.5px]")}
+                      onClick={() => setConfirmando(t.id)}
+                      disabled={!!rodando || !t.duracao_s}
+                      aria-label={`${tipo === "legendar" ? "Legendar" : "Transcrever"} ${t.nome}`}
+                      title={t.duracao_s ? undefined : "Sem duração lida: abra o vídeo uma vez para ler."}
+                    >
+                      <Subtitles className="h-3.5 w-3.5 sm:mr-1.5" />
+                      <span className="hidden sm:inline">{tipo === "legendar" ? "Legendar" : "Transcrever"}</span>
+                      <span className="ml-1.5 hidden text-[11px] text-muted-foreground md:inline">{usd(custo)}</span>
+                    </button>
+                  )}
+                </div>
+                {antigo && !fala && <p className={juntar(texto.auxiliar, "mt-1")}>Havia um pedido preparado antes. Agora a transcrição roda aqui.</p>}
+                {confirmando === t.id && (
+                  <div className="mt-2 flex flex-wrap items-center rounded-md bg-muted/50 px-2.5 py-2" data-confirmar-transcricao="">
+                    <span className="mb-1 mr-auto text-[12.5px]">
+                      {tipo === "legendar" ? "Legendar" : "Transcrever"} {duracaoCurta(t.duracao_s)}: <strong className="tabular-nums">{usd(custo)}</strong>
+                    </span>
+                    <button type="button" className={juntar(botao.primario, "mb-1 mr-1 h-8")} onClick={() => void transcrever(t)}>
+                      Marcar por {usd(custo)}
+                    </button>
+                    <button type="button" className={juntar(botao.discreto, "mb-1 h-8")} onClick={() => setConfirmando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
                 )}
               </li>
             );

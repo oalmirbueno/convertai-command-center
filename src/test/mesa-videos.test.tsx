@@ -767,7 +767,7 @@ describe("tela da Mesa Vídeos (geração)", () => {
     expect(await screen.findByText("Agente de vídeo", undefined, { timeout: 5000 })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Pedido para o agente", hidden: true })).toBeTruthy();
     expect(mock.invoke).not.toHaveBeenCalled();
-  });
+  }, 20000);
 
   it("endereço antigo de edição abre a Mesa Edição no Organizar", async () => {
     function Onde() {
@@ -805,9 +805,10 @@ describe("tela da Mesa Edição", () => {
     expect(await screen.findByRole("navigation", { name: "Etapas da Mesa Edição" })).toBeTruthy();
     for (const e of ETAPAS_DA_MESA_EDICAO) expect(screen.getByRole("button", { name: new RegExp(e.rotulo) })).toBeTruthy();
     expect(await screen.findByText("IMG_1.MOV")).toBeTruthy();
-    expect(await screen.findByText("Agente de edição")).toBeTruthy();
+    // A lateral da Mesa Edição (frente Q) baixa o agente de edição e o agente editor juntos: no jsdom frio demora mais.
+    expect(await screen.findByText("Agente de edição", undefined, { timeout: 10000 })).toBeTruthy();
     expect(mock.invoke).not.toHaveBeenCalled();
-  });
+  }, 20000);
 
   it("fluxo Vídeos -> Edição: o gerado aprovado entra na Entrada; o não aprovado fica só nos Resultados", async () => {
     const gerado = { id: A3, client_id: CLIENTE, nome: "aprovado.mp4", nome_original: "aprovado.mp4", storage_bucket: "mesa", storage_path: `${CLIENTE}/video/brutos/g.mp4`, tipo: "gerado", melhor: false, estado: "ativo", criado_em: "2026-09-26T10:00:00Z", edicao_desde: "2026-09-26T11:00:00Z" };

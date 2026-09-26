@@ -12,6 +12,7 @@ import { custoDoTimestamp, juntarPartes, linhasDeLegenda, PROVEDORES_DE_TIMESTAM
 import { extrairAudio, partesDoAudio, suportaExtrairAudio, wavDe } from "@/lib/editor/audio";
 import { chamarEditorVideo, emPreparacao, novoId, subirDoEditor } from "@/lib/editor/api";
 import { segmentosDoSrt } from "@/lib/editor/transcricao";
+import { lerFalaDaEntrada } from "@/lib/editor/fala";
 import { aplicarOperacao, type Operacao } from "@/lib/editor/operacoes";
 import { proporSkill } from "@/lib/editor/skills";
 import { tempoFino } from "@/lib/editor/tempo";
@@ -59,6 +60,9 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
     const p = ((pedidosQ.data && pedidosQ.data.itens) || []).find((x: any) => x.alvo && x.alvo.arquivo_id === f.arquivo_id && x.resultado && typeof x.resultado.srt === "string");
     return p ? String((p as any).resultado.srt) : null;
   }, [f, pedidosQ.data]);
+
+  // Fala que a Entrada já marcou para este arquivo (guardada no navegador): entra de graça.
+  const falaDaEntrada = f && f.arquivo_id ? lerFalaDaEntrada(clientId, f.arquivo_id) : null;
 
   if (!fontes.length) return <EstadoVazio compacto icone={<Timer className="h-5 w-5" />} titulo="Sem vídeo ou áudio no projeto." descricao="Ponha um clipe na linha do tempo." />;
 
@@ -201,6 +205,11 @@ export default function PainelTimestamp({ projeto, urls, onAplicarProjeto }: { p
             {modo === "alinhar" ? "Alinhar texto" : "Transcrever"}
           </button>
           <span className={juntar(texto.auxiliar, "mb-1 truncate")}>{duracao ? `${provedor.split(" (")[0]} · ${usd(custo)}` : "Mídia sem duração lida."}</span>
+          {falaDaEntrada && falaDaEntrada.length > 0 && (
+            <button type="button" className={juntar(botao.discreto, "mb-1 ml-auto h-8")} onClick={() => setFase({ tipo: "pronto", palavras: falaDaEntrada, letras: 0, provedor: "entrada", custo: 0 })} data-fala-da-entrada="">
+              Usar a fala da Entrada (grátis)
+            </button>
+          )}
         </div>
       )}
       {fase.tipo === "erro" && <p className="text-[12px] text-destructive">{fase.texto}</p>}

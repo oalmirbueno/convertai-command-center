@@ -24,7 +24,8 @@ const carregarEditar = () => import("@/components/mesa-edicao/EtapaEditar");
 const EtapaEntrada = lazyComPreCarga("mesa-edicao/entrada", carregarEntrada);
 const EtapaOrganizar = lazyComPreCarga("mesa-edicao/organizar", carregarOrganizar);
 const EtapaEditar = lazyComPreCarga("mesa-edicao/editar", carregarEditar);
-const AgenteDeEdicao = lazyComPreCarga("mesa-edicao/agente", () => import("@/components/mesa-videos/AgenteDaMesaDeVideo"));
+// Frente Q (26/09): na etapa Editar a lateral é o agente editor (modelo e custo em cima).
+const AgenteDeEdicao = lazyComPreCarga("mesa-edicao/agente", () => import("@/components/mesa-edicao/AgenteDaEdicao"));
 
 export { ETAPAS_DA_MESA_EDICAO };
 
@@ -39,7 +40,7 @@ export default function MesaEdicao() {
       vazio={{ titulo: "Escolha um cliente", descricao: "Suba os vídeos, organize por cena e tomada e prepare a edição. Nada gasta sem o seu clique." }}
       preCarregar={[EtapaEntrada, EtapaOrganizar, EtapaEditar, AgenteDeEdicao]}
       Agente={AgenteDeEdicao}
-      rotuloDoAgente="Agente de edição"
+      rotuloDoAgente={(etapa) => (etapa === "editar" ? "Agente editor" : "Agente de edição")}
     >
       {(etapa, irPara) => (
         <>
