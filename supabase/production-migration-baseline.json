@@ -1161,6 +1161,54 @@
       "remote_name": "mesa_ads_vinculos_e_biblioteca",
       "remote_statements_sha256": "185fbe4956cd2a8f5d455506f8ca828a8718b830a4fa5fc2d1d596108a032a95",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925235814",
+      "path": "supabase/migrations/20260925235814_movimentos_do_cliente_bruto_restaurado.sql",
+      "local_sha256": "b16e57eb1b0f3e99b3ece28efa05b32161733509a3519373eef5ec81db999787",
+      "remote_name": "movimentos_do_cliente_bruto_restaurado",
+      "remote_statements_sha256": "919e7affd9f94c6cea3871846ca7653236755c0b07aea045c694a5c964586823",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925235901",
+      "path": "supabase/migrations/20260925235901_central_rapida_e_dossie_limpo.sql",
+      "local_sha256": "b082b8cc250d6b6d625f35d8ada28954b36f07d222dafdce1b657f0209fb1af5",
+      "remote_name": "central_rapida_e_dossie_limpo",
+      "remote_statements_sha256": "24e1013388079e0e64006bb6dc5e03de0e2ca21b348e593209de1d998f41ee6c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260925235943",
+      "path": "supabase/migrations/20260925235943_contexto_estudio_e_agenda_removida.sql",
+      "local_sha256": "ad53ac9979fcd3640d66125e4e54a33626fc4db3abd1e3e62e5d152a134a69be",
+      "remote_name": "contexto_estudio_e_agenda_removida",
+      "remote_statements_sha256": "b953fea78a9ef310a4475fd3d371cf050b2993285620f2eb6438950865b3351c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926000009",
+      "path": "supabase/migrations/20260926000009_mesa_clientes_por_mesa.sql",
+      "local_sha256": "cd6c663a93a7c4c584d856513670eb82d36544f8e9684942c86c0d0ea36a98b1",
+      "remote_name": "mesa_clientes_por_mesa",
+      "remote_statements_sha256": "eacc9996aea83a5c3ac8852b2d47cded285daad9c6d6c72123eb6e9201d17d4f",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926000018",
+      "path": "supabase/migrations/20260926000018_kit_logo_tom.sql",
+      "local_sha256": "b7b28a3eb89b5d47ac3d965987d1dadfdb463564bdac17c30cb57d99d8aff832",
+      "remote_name": "kit_logo_tom",
+      "remote_statements_sha256": "c10f02f41fdeb48cd907a7e4cf5c25af0470faeb098253478218423a85c6926c",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926000032",
+      "path": "supabase/migrations/20260926000032_foto_canvas_cenas_historia_personagem.sql",
+      "local_sha256": "af52d3cf5485fc35aad47ac919ff95221d92fbf992dde183576329ec02e677d6",
+      "remote_name": "foto_canvas_cenas_historia_personagem",
+      "remote_statements_sha256": "fade3618e8acc59155365bc6e75235f180a47a113a1d50ffc9d832e1679a380c",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
