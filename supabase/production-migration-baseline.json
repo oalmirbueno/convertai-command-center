@@ -1273,6 +1273,22 @@
       "remote_name": "hermes_decidir_sem_laco",
       "remote_statements_sha256": "75192e5c93cc9e2781ab5d4ed2e9db8b1d99f601db7044f8e3dd73c559821822",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926034000",
+      "path": "supabase/migrations/20260926034000_hermes_preparar_sem_laco.sql",
+      "local_sha256": "004e5d7491d69d8333dd08f7594711e96c96a96b5d2306b2d37b205392addca8",
+      "remote_name": "hermes_preparar_sem_laco",
+      "remote_statements_sha256": "c6068996433fb7cc8e48c77da7e89684287a88240fe74130bc8fd558dd07c57b",
+      "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260926040000",
+      "path": "supabase/migrations/20260926040000_limpeza_do_hermes_e_notificacoes.sql",
+      "local_sha256": "7631d27c41f720e454516db18283e2c994b89b118a32c4541aa2c4779c2da02c",
+      "remote_name": "limpeza_do_hermes_e_notificacoes",
+      "remote_statements_sha256": "cf4997688f3e3a5fc078df77335256d781de4937d0e53a3f964f5f19f3dafcad",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
