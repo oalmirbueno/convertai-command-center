@@ -49,6 +49,12 @@ export interface CardGerado {
   foto_recomposta?: boolean;
   /** Referências anexadas nesta versão (ids; "g:" = banco da agência). */
   referencias?: string[];
+  /** Fidelidade à referência usada no modo replicar (frente E): identica, proxima, inspirada ou criativa. */
+  fidelidade_referencia?: string;
+  /** O que a capa variou em relação às anteriores (frente E): pose, câmera, texto, elemento, destaque. */
+  variedade?: Record<string, string> | null;
+  /** Quadro da referência prancha usado nesta versão (frente E). */
+  prancha?: { referencia_id: string; tipo: string | null; quadro: number; papel: string }[] | null;
 }
 
 export interface CardDaDirecao {
@@ -70,6 +76,8 @@ export interface CardDaDirecao {
   imagem_anterior?: string;
   /** Fotos reais trazidas pela equipe para compor a lâmina (contrato V5): até 1 fundo e 2 elementos. */
   fotos_livres?: FotoLivre[];
+  /** Fidelidade à referência só desta lâmina (frente E); sem ela, o padrão do trabalho. */
+  fidelidade_referencia?: string;
 }
 
 /** Foto real composta na lâmina: fica como é; o design e o texto vêm em volta ou por cima. */
@@ -95,6 +103,10 @@ export interface Trabalho {
     origem?: "diretor" | "roteiro";
     /** Referências escolhidas para o conjunto (ids de cliente_referencias; "g:" + id para o banco da agência). */
     referencias_ids?: string[];
+    /** Fidelidade à referência padrão do trabalho (frente E); sem ela, Idêntica. */
+    fidelidade_referencia?: string | null;
+    /** Papéis dos quadros de cada referência prancha, marcados pela equipe (frente E). */
+    pranchas?: Record<string, { papeis: string[] }> | null;
   };
   modelo_imagem_id: string | null;
   qualidade: string | null;

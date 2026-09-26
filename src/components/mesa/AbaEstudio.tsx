@@ -79,6 +79,7 @@ import {
 } from "./EstudioSituacao";
 import { useMesa } from "./MesaContexto";
 import EstudioLogoDaLamina from "./EstudioLogoDaLamina";
+import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
 import EstudioRefinarTexto from "./EstudioRefinarTexto";
 import { useModoFoco } from "@/lib/modoFoco";
@@ -1365,6 +1366,18 @@ function DetalheDoItem({
                 motivoDoBloqueio={entregue ? "Trabalho entregue: reabra para corrigir." : "Espere a lâmina terminar."}
               />
             }
+            total={cardsDaDirecao.length}
+            fidelidade={
+              <EstudioFidelidadeDaReferencia
+                compacto
+                alvo="lamina"
+                ordem={cardSelecionado.ordem}
+                escolha={cardSelecionado.fidelidade_referencia}
+                doTrabalho={trabalho.direcao?.fidelidade_referencia}
+                bloqueado={entregue || laminaOcupada(cardSelecionado.ordem)}
+                onSalvar={configurar}
+              />
+            }
             logo={
               laminaLevaLogo(cardSelecionado.ordem, cardsDaDirecao.length) ? (
                 <EstudioLogoDaLamina
@@ -1561,6 +1574,7 @@ function DetalheDoItem({
         entregue={entregue}
         onReabrir={() => void reabrir()}
         referenciaNaHora
+        extrasDoEstudio
       />
     </div>
   ) : null;

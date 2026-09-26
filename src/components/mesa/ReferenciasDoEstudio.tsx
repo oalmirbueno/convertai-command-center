@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { useMesa } from "./MesaContexto";
 import EstudioReferenciaNaHora from "./EstudioReferenciaNaHora";
+import EstudioFidelidadeDaReferencia from "./EstudioFidelidadeDaReferencia";
+import EstudioPranchaDaReferencia from "./EstudioPranchaDaReferencia";
 import SeletorDeReferencias, { MiniaturasEscolhidas, type AbaDoSeletor } from "./SeletorDeReferencias";
 import { gravarTrabalhoNoCache, type TrabalhoGravado } from "./estudioUtil";
 import type { CardDaDirecao, Trabalho } from "./useItensDoMes";
@@ -51,6 +53,7 @@ export default function ReferenciasDoEstudio({
   entregue = false,
   onReabrir,
   referenciaNaHora = false,
+  extrasDoEstudio = false,
 }: {
   trabalho: Trabalho;
   /** Trabalho entregue: a escolha não salva até reabrir (antes a tela marcava e o servidor recusava calado). */
@@ -68,6 +71,12 @@ export default function ReferenciasDoEstudio({
    * Estúdio liga; quem não liga (Estúdio Ads) segue igual.
    */
   referenciaNaHora?: boolean;
+  /**
+   * Frente E (25/09 à noite): a fidelidade à referência (Idêntica, Próxima,
+   * Inspirada, Criativa) e os quadros da referência prancha. Só o Estúdio liga;
+   * quem não liga (Estúdio Ads) segue igual.
+   */
+  extrasDoEstudio?: boolean;
 }) {
   const { clientId } = useMesa();
   const queryClient = useQueryClient();
@@ -121,6 +130,13 @@ export default function ReferenciasDoEstudio({
         setSalvando((n) => n - 1);
       }
     });
+  };
+
+  /** Escolhas sem custo da frente E (fidelidade, papéis dos quadros), pelo mesmo configurar. */
+  const salvarConfig = async (corpo: Record<string, unknown>) => {
+    const r = await chamarFuncao<{ trabalho?: TrabalhoGravado }>("estudio-arte", { acao: "configurar", trabalho_id: trabalho.id, ...corpo });
+    gravarTrabalhoNoCache(queryClient, clientId, r && r.trabalho);
+    onAtualizar();
   };
 
   const resumo = useMemo(() => {
@@ -200,6 +216,33 @@ export default function ReferenciasDoEstudio({
               ? "A lâmina segue o layout desta referência, com as cores, as fontes e a logo da marca, o texto exato e a foto da lâmina."
               : "Com duas: a 1ª dá a estrutura e o layout; a 2ª dá o tratamento da imagem e os elementos gráficos."}
           </p>
+        )}
+        {extrasDoEstudio && escolhidas.length > 0 && (
+          <div className="min-w-0 space-y-2 pt-1">
+            <div className="min-w-0">
+              <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Fidelidade à referência{alvoReal === "lamina" && cardSelecionado ? ` (lâmina ${cardSelecionado.ordem})` : " (trabalho)"}
+              </p>
+              <EstudioFidelidadeDaReferencia
+                alvo={alvoReal}
+                ordem={cardSelecionado ? cardSelecionado.ordem : undefined}
+                escolha={alvoReal === "lamina" && cardSelecionado ? cardSelecionado.fidelidade_referencia : trabalho.direcao?.fidelidade_referencia}
+                doTrabalho={trabalho.direcao?.fidelidade_referencia}
+                bloqueado={entregue}
+                onSalvar={salvarConfig}
+              />
+            </div>
+            {escolhidas.map((id, i) => (
+              <EstudioPranchaDaReferencia
+                key={id}
+                trabalhoId={trabalho.id}
+                referenciaId={id}
+                rotulo={escolhidas.length > 1 ? `${i + 1}ª referência` : "referência"}
+                bloqueado={entregue}
+                onSalvar={salvarConfig}
+              />
+            ))}
+          </div>
         )}
       </div>
 

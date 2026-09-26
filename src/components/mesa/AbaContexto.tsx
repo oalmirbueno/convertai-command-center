@@ -11,6 +11,8 @@ import ContextoRosto from "./ContextoRosto";
 import { MemoriaDoAgente, PromptDoCliente } from "./ContextoAgente";
 import { Hub, useHubsAbertos } from "./ContextoHub";
 import { fimDoCabecalhoFixo } from "./EstudioAltura";
+import ContextoPlanoDoCliente from "./ContextoPlanoDoCliente";
+import type { ModoDoAgente } from "./planoDoClienteApi";
 
 /** O editor em detalhe começa recolhido; os atalhos "Editar" abrem na parte certa. */
 const DETALHES_DE_INICIO: Record<string, boolean> = {};
@@ -107,6 +109,13 @@ export default function AbaContexto() {
   const hubs = useHubsAbertos(DETALHES_DE_INICIO);
   const atual = PARTES.find((p) => p.valor === parte) || PARTES[0];
   const { marca } = useMarcaDaMesa();
+  // Frente C: o agente ao lado vira o agente do cliente (modo plano); o Hub do plano preenche o pedido.
+  const [modoDoAgente, setModoDoAgente] = useState<ModoDoAgente>("marca");
+  const [pedido, setPedido] = useState<{ texto: string; n: number } | null>(null);
+  const pedirAoAgente = (texto: string) => {
+    setModoDoAgente("plano");
+    setPedido({ texto, n: Date.now() });
+  };
 
   const irPara = (p: ParteDoContexto) => {
     setParte(p);
@@ -134,6 +143,15 @@ export default function AbaContexto() {
           </div>
         )}
         <ContextoAutomatico onIrPara={irPara} />
+        <Hub
+          id="ctx-plano"
+          titulo="Plano do cliente"
+          resumo="Começo do cliente, caminho e stack, pacote para LLM externo, identidade visual e organizar arquivos"
+          aberto={hubs.aberto("ctx-plano")}
+          onAlternar={() => hubs.alternar("ctx-plano")}
+        >
+          <ContextoPlanoDoCliente onPedirAoAgente={pedirAoAgente} />
+        </Hub>
         <div ref={detalhes} className="min-w-0 scroll-mt-28 md:scroll-mt-40">
           <Hub
             id="ctx-detalhes"
@@ -150,7 +168,7 @@ export default function AbaContexto() {
         aria-label="Agente de contexto"
         className="min-w-0 lg:sticky lg:top-[var(--topo-da-mesa)] lg:h-[calc(100vh_-_var(--topo-da-mesa)_-_16px)] lg:min-h-[420px]"
       >
-        <AgenteDeContexto preencher />
+        <AgenteDeContexto preencher modo={modoDoAgente} onModo={setModoDoAgente} pedido={pedido} />
       </aside>
     </div>
   );

@@ -155,7 +155,8 @@ describe("auditoria do servidor (23/09 noite)", () => {
   });
   it("atualizar o contexto não apaga o que a equipe ensinou (a menos que venha forcar)", () => {
     expect(contexto).toContain("const mesclado: ContextoConsolidado = forcar || !antigo ? contexto : {");
-    expect(contexto).toContain("contexto: mesclado,");
+    // Frente C (26/09): o que o agente do cliente guardou (nicho, caminho, identidade) também fica.
+    expect(contexto).toContain("contexto: { ...extras, ...mesclado },");
   });
   it("logo gravada por caminho conta e SVG não é oferecido", () => {
     expect(compartilhado).toContain("temLogo: !!(k?.logo_path || k?.logo_file_id)");

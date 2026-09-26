@@ -74,7 +74,7 @@ describe("a etapa baixa junto com a mesa", () => {
   });
 
   it("as chaves da pré-carga são as mesmas das páginas (mesmo download, mesmo módulo)", () => {
-    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx" };
+    const paginas: Record<string, string> = { "/mesa": "src/pages/MesaDoCliente.tsx", "/mesa-ads": "src/pages/MesaAds.tsx", "/mesa-foto": "src/pages/MesaFoto.tsx", "/mesa-videos": "src/pages/MesaVideos.tsx", "/mesa-publicidade": "src/pages/MesaPublicidade.tsx", "/mesa-roteiros": "src/pages/MesaRoteiros.tsx" };
     for (const caminho of Object.keys(MESAS_DO_PAINEL) as Array<keyof typeof MESAS_DO_PAINEL>) {
       const fonte = ler(paginas[caminho]);
       const pre = ler("src/lib/mesa/preCarga.ts");
@@ -177,7 +177,7 @@ describe("tela cheia padrão das mesas", () => {
   });
 
   it("as três mesas usam a mesma peça; o CSS esconde a casca em qualquer largura", () => {
-    for (const p of ["src/pages/MesaDoCliente.tsx", "src/pages/MesaAds.tsx", "src/pages/MesaFoto.tsx"]) {
+    for (const p of ["src/pages/MesaDoCliente.tsx", "src/pages/MesaAds.tsx", "src/pages/MesaFoto.tsx", "src/pages/MesaVideos.tsx", "src/pages/MesaPublicidade.tsx", "src/pages/MesaRoteiros.tsx"]) {
       const fonte = ler(p);
       expect(fonte).toContain("const telaCheia = useTelaCheiaDaMesa();");
       expect(fonte).toContain("<BotaoDeTelaCheia tela={telaCheia}");

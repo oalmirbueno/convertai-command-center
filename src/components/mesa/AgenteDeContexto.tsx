@@ -17,6 +17,7 @@ import {
   type MensagemDoContexto,
   type RespostaDaConversa,
 } from "./contextoDoCliente";
+import { chaveDoPlano, type ModoDoAgente } from "./planoDoClienteApi";
 
 /**
  * Conversa com o agente de contexto: a equipe conta o que sabe da marca e o
@@ -25,8 +26,18 @@ import {
  *
  * Com `preencher`, ocupa a altura toda da coluna (fixa ao lado do contexto):
  * a conversa rola sozinha e a caixa de mensagem fica sempre embaixo.
+ *
+ * Frente C (26/09): o mesmo agente vira o agente do cliente no modo "Plano do
+ * cliente" (mesma conversa): planeja nicho, posicionamento, projeto, marcos,
+ * tarefas e caminho, sempre com o cartão de confirmação. `pedido` preenche a
+ * caixa de mensagem (atalhos do Hub do plano).
  */
-export default function AgenteDeContexto({ preencher = false }: { preencher?: boolean } = {}) {
+export default function AgenteDeContexto({
+  preencher = false,
+  modo = "marca",
+  onModo,
+  pedido = null,
+}: { preencher?: boolean; modo?: ModoDoAgente; onModo?: (m: ModoDoAgente) => void; pedido?: { texto: string; n: number } | null } = {}) {
   const { clientId, catalogo, atualizarCusto } = useMesa();
   const queryClient = useQueryClient();
   const historico = useHistoricoDoContexto(clientId);
@@ -40,6 +51,11 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
   useEffect(() => {
     setTexto("");
   }, [clientId]);
+
+  // Atalho do Hub do plano: preenche a caixa (a pessoa revisa e envia).
+  useEffect(() => {
+    if (pedido && pedido.texto) setTexto(pedido.texto);
+  }, [pedido]);
 
   // Papel próprio no catálogo (contexto); sem padrão, vale o do estrategista.
   const modelo = padraoDoContexto(catalogo);
@@ -63,13 +79,14 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
     setErro(null);
     setTexto("");
     try {
-      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg });
+      const data = await chamarFuncao<RespostaDaConversa>("agente-contexto", { acao: "conversar", client_id: alvo, mensagem: msg, ...(modo === "plano" ? { modo: "plano" } : {}) });
+      const propostas = data && Array.isArray((data as { acoes?: unknown[] }).acoes) ? ((data as { acoes?: unknown[] }).acoes as unknown[]) : data && data.acao ? [data.acao] : [];
       const agora = new Date().toISOString();
       const resposta = String((data && data.resposta) || "Pronto.");
       queryClient.setQueryData<MensagemDoContexto[]>(chaveDoHistorico(alvo), (antes) =>
         (antes || []).concat([
           { papel: "usuario", conteudo: msg, criado_em: agora },
-          { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: data && data.acao ? [data.acao] : [] },
+          { id: data && data.mensagem_id ? String(data.mensagem_id) : undefined, papel: "agente", conteudo: resposta, criado_em: agora, anexos: propostas },
         ]),
       );
       setUltimo({ clientId: alvo, mudou: Array.isArray(data?.mudou) ? data.mudou : [], memorias: Number(data?.memorias || 0) });
@@ -92,8 +109,26 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
         <p className="flex items-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           <MessageSquare className="mr-1.5 h-3.5 w-3.5" /> Agente de contexto
         </p>
+        {onModo && (
+          <div role="tablist" aria-label="Modo do agente" className="mt-2 flex min-w-0">
+            {([["marca", "Marca"], ["plano", "Plano do cliente"]] as Array<[ModoDoAgente, string]>).map(([v, r]) => (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={modo === v}
+                onClick={() => onModo(v)}
+                className={`mr-1.5 shrink-0 rounded-full border px-2.5 py-1 text-[11.5px] transition-colors ${modo === v ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
         <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-          Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte.
+          {modo === "plano"
+            ? "Planeje o cliente de ponta a ponta: nicho, posicionamento, projeto, marcos, tarefas e caminho. O agente lê briefing, dossiê e arquivos quando precisa e só muda algo depois que você confirma."
+            : "Conte o que sabe da marca ou corrija o que estiver errado. O agente grava no kit e ensina o estrategista e o diretor de arte."}
         </p>
       </div>
 
@@ -133,7 +168,10 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
                     observacao="Sem custo. Nada é apagado, e dá para desfazer."
                     onPedido={(p) => chamarAcaoDoAgente("agente-contexto", String(m.id), a.id, p)}
                     onFeito={(p) => {
-                      if (p !== "descartar") invalidar(clientId, { historico: true });
+                      if (p !== "descartar") {
+                        invalidar(clientId, { historico: true });
+                        void queryClient.invalidateQueries({ queryKey: chaveDoPlano(clientId) });
+                      }
                     }}
                   />
                 ))}
@@ -161,15 +199,28 @@ export default function AgenteDeContexto({ preencher = false }: { preencher?: bo
 
       {erro && erro.clientId === clientId && <AvisoDeErro erro={erro.erro} className="mt-3 shrink-0" />}
 
-      <OQuePossoFazer
-        className="mt-3 shrink-0"
-        capacidades={["trocar a logo por uma do acervo", "arquivar referências e fotos", "organizar fotos em pastas", "mover, renomear e arquivar arquivos do workspace"]}
-        atalhos={[
-          { rotulo: "Organizar o workspace", texto: "Organize os arquivos do workspace deste cliente em pastas por assunto." },
-          { rotulo: "Arquivar referências velhas", texto: "Arquive as referências que não combinam mais com a marca." },
-        ]}
-        onAtalho={(t) => setTexto(t)}
-      />
+      {modo === "plano" ? (
+        <OQuePossoFazer
+          className="mt-3 shrink-0"
+          capacidades={["criar ou ajustar projeto, marcos e tarefas com dono e prazo", "preencher nicho, posicionamento e estágio", "guardar decisões no cérebro", "gravar o caminho e o tech stack", "organizar arquivos"]}
+          atalhos={[
+            { rotulo: "Começar o plano", texto: "Comece o plano deste cliente: leia o briefing, o dossiê, o cérebro e os arquivos, proponha o nicho realista para o estágio dele, o posicionamento e o plano do projeto pelo método Acelera, com marcos e tarefas com dono e prazo." },
+            { rotulo: "Caminho e stack", texto: "Proponha o caminho deste cliente: o que fazer primeiro, as ferramentas e o tech stack recomendados, com custo aproximado só quando houver fonte, e por quê." },
+            { rotulo: "Google Meu Negócio", texto: "Coloque no plano a tarefa de criar o Perfil da Empresa no Google deste cliente, com dono e prazo." },
+          ]}
+          onAtalho={(t) => setTexto(t)}
+        />
+      ) : (
+        <OQuePossoFazer
+          className="mt-3 shrink-0"
+          capacidades={["trocar a logo por uma do acervo", "arquivar referências e fotos", "organizar fotos em pastas", "mover, renomear e arquivar arquivos do workspace"]}
+          atalhos={[
+            { rotulo: "Organizar o workspace", texto: "Organize os arquivos do workspace deste cliente em pastas por assunto." },
+            { rotulo: "Arquivar referências velhas", texto: "Arquive as referências que não combinam mais com a marca." },
+          ]}
+          onAtalho={(t) => setTexto(t)}
+        />
+      )}
       <Textarea
         className="mt-2 shrink-0 resize-none"
         value={texto}

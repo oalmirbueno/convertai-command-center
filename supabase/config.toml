@@ -91,6 +91,12 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.mesa-foto]
     verify_jwt = true
+  [functions.mesa-publicidade]
+    verify_jwt = true
+  [functions.mesa-roteiros]
+    verify_jwt = true
+  [functions.mesa-videos]
+    verify_jwt = true
   [functions.notify-admin]
     verify_jwt = true
   [functions.ops-quiz-list]

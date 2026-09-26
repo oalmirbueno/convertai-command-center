@@ -47,6 +47,7 @@ Regra de licença (a mesma da biblioteca da Mesa Foto): **técnica sim, texto li
 | Social media | `_shared/conhecimento-social.ts` | Mês (escrita, temas, diagnóstico) | integrado |
 | Ads | `_shared/conhecimento-ads.ts` | Mesa Ads e agente sênior (base inteira); Estúdio no modo anúncio (anatomia do estático, políticas da Meta, honestidade) | integrado |
 | Biblioteca de prompts da Mesa Foto (138) | `docs/mesa-foto/biblioteca/`, `mesa-foto/biblioteca-semente.ts`, tabela `foto_biblioteca` | Mesa Foto: a equipe escolhe o prompt (guia "biblioteca" vira direção de estilo) e o agente vê os títulos no contexto | integrado como dado |
+| Edição de vídeo: método Brabo (pacote público 2.0 de Fernando Araújo / Brabo Space, sem arquivo de licença: só o método, em palavras próprias) e o kit audiovisual V2 da casa | `_shared/conhecimento-edicao.ts` (índice em `motores.ts`: `mesa_videos.direcao_de_edicao`) | Mesa Vídeos: direção do Pacote para editar (aba Edição) | integrado (frente V2, 25/09). Computador do agente (Cua): avaliado, não instalado, desenho em `docs/motores/COMPUTADOR-DO-AGENTE.md` |
 
 ## 3. Skills do marketingskills no painel
 

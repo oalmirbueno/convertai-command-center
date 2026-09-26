@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { Bookmark, ImagePlus, Scissors, TriangleAlert, X } from "lucide-react";
+import { Bookmark, ImagePlus, Link2, Scissors, TriangleAlert, X } from "lucide-react";
 import { fonteDaGlobal, fonteDaReferencia, PREFIXO_GLOBAL, useGlobaisPorIds, useReferenciasComDestaque } from "@/lib/mesa/referencias";
 import { ImagemDaMesa, useMesa } from "./MesaContexto";
 import { ImagemDeReferencia } from "./SeletorDeReferencias";
 import { useAcervo } from "./SeletorDoAcervo";
 import type { CardDaDirecao, CardGerado } from "./useItensDoMes";
 import { AVISO_CONTINUO_SEM_MODELO } from "./estudioUtil";
+import { seloDaSerie } from "./fidelidadeDaReferencia";
 
 /**
  * O que a próxima geração da lâmina vai usar, mostrado EM CIMA da lâmina
@@ -159,6 +160,42 @@ function MiniDaReferencia({ id, onTirar }: { id: string; onTirar?: () => void })
   );
 }
 
+/** Nome curto da referência (do cliente ou do banco da agência), para o selo da série. */
+function NomeDaReferencia({ id }: { id: string }) {
+  const { clientId } = useMesa();
+  const global = id.indexOf(PREFIXO_GLOBAL) === 0;
+  const refs = useReferenciasComDestaque(clientId, !global);
+  const globais = useGlobaisPorIds(global ? [id] : []);
+  const r = global ? null : (refs.data || []).find((x) => x.id === id) || null;
+  const g = global ? (globais.data || [])[0] || null : null;
+  return <>{g ? g.titulo || "do banco da agência" : r ? r.nome : "escolhida"}</>;
+}
+
+/**
+ * Selo da série nas lâminas 2..N (frente E, 25/09 à noite; dono perguntou se
+ * as lâminas seguintes seguem a capa). Só informação, pela regra do servidor:
+ * sem referência, a lâmina segue a capa (a capa gerada vai anexada e o bloco
+ * da série repete o sistema dela); com referência, segue a referência.
+ */
+export function SeloDaSerie({ card, total, refsDoConjunto }: { card: CardDaDirecao; total: number; refsDoConjunto: string[] | null | undefined }) {
+  const selo = seloDaSerie(card, total, refsDoConjunto);
+  if (!selo) return null;
+  return (
+    <span
+      className="mb-1 mr-3 inline-flex min-w-0 max-w-full items-center rounded-full border border-border bg-secondary/60 px-2 py-0.5 text-[10.5px] text-muted-foreground"
+      data-selo="serie"
+      title={selo.tipo === "capa"
+        ? "Da lâmina 2 em diante, a capa gerada vai junto e esta lâmina repete o sistema visual dela (grid, fontes, cores, elementos)."
+        : "Esta lâmina replica a referência escolhida. As lâminas sem referência seguem a capa."}
+    >
+      <Link2 className="mr-1 h-3 w-3 shrink-0" />
+      <span className="min-w-0 truncate">
+        {selo.tipo === "capa" ? "Segue a capa" : <>Segue a referência <NomeDaReferencia id={selo.referencia || ""} />{selo.daLamina ? "" : " (do conjunto)"}</>}
+      </span>
+    </span>
+  );
+}
+
 type VersaoNaTela = CardGerado & { fundo?: string | null; fora_da_emenda?: boolean };
 
 export default function EstudioBaseDaLamina({
@@ -177,6 +214,8 @@ export default function EstudioBaseDaLamina({
   bloqueado = false,
   logo,
   referenciaNaHora,
+  total,
+  fidelidade,
 }: {
   card: CardDaDirecao;
   refsDoConjunto: string[] | null | undefined;
@@ -204,6 +243,10 @@ export default function EstudioBaseDaLamina({
   logo?: ReactNode;
   /** Referência na hora (arrastar, arquivo, colar imagem ou link), gravada nesta lâmina (26/09). */
   referenciaNaHora?: ReactNode;
+  /** Total de lâminas do trabalho: da lâmina 2 em diante mostra o selo da série (frente E). */
+  total?: number;
+  /** Controle da fidelidade à referência desta lâmina (frente E); só aparece quando a lâmina replica referência. */
+  fidelidade?: ReactNode;
 }) {
   const base = baseDaLamina(card, refsDoConjunto, continuo);
   const foraDaEmenda = !!versao && versao.modo === "panorama" && versao.fora_da_emenda === true;
@@ -215,6 +258,7 @@ export default function EstudioBaseDaLamina({
   return (
     <div className="mb-2 min-w-0 shrink-0 rounded-lg border border-border bg-background px-2.5 py-2" aria-label="Base da próxima geração">
       <div className="flex min-w-0 flex-wrap items-center">
+        {total ? <SeloDaSerie card={card} total={total} refsDoConjunto={refsDoConjunto} /> : null}
         {/* Foto: o rótulo abre a ferramenta; cada miniatura tem o X para tirar da lâmina na hora. */}
         <div className="mb-1 mr-3 flex min-w-0 items-center">
           <button type="button" onClick={onAbrirFotos} className="mr-1.5 rounded-md px-0.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground" title="Escolher a foto desta lâmina">
@@ -263,6 +307,14 @@ export default function EstudioBaseDaLamina({
         </div>
       </div>
       {referenciaNaHora}
+      {fidelidade && base.modo === "replicar_referencia" && (
+        <div className="mt-1.5 flex min-w-0 flex-wrap items-start" data-faixa="fidelidade">
+          <span className="mb-1 mr-1.5 mt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Quanto a lâmina segue a referência: da cópia mais fiel à mais livre">
+            Fidelidade
+          </span>
+          <div className="min-w-0 flex-1">{fidelidade}</div>
+        </div>
+      )}
       {logo && (
         <div className="mt-1.5 flex min-w-0 flex-wrap items-center">
           <span className="mb-1 mr-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground" title="Logo do kit que o gerador desenha junto com a arte">

@@ -29,6 +29,7 @@
  */
 
 import { regrasDoCriativo, TAMANHO_DO_FORMATO, ZONA_SEGURA, type FormatoAds } from "./conhecimento-ads.ts";
+import { type FidelidadeDaReferencia, FIDELIDADES } from "./fidelidade-da-referencia.ts";
 
 /** Formato do criativo de anúncio (o carrossel de anúncio usa lâminas feed 4:5). */
 export type FormatoCriativo = Exclude<FormatoAds, "carrossel">;
@@ -117,6 +118,8 @@ export type CardDirecao = {
   formato?: FormatoCriativo;
   /** Logo do kit escolhida para esta lâmina (sobrepõe a do conjunto); sem ela, a do conjunto ou a que contrasta. */
   logo?: EscolhaDaLogo;
+  /** Fidelidade à referência desta lâmina (sobrepõe o padrão do trabalho); sem ela, o do trabalho ou Idêntica. */
+  fidelidade_referencia?: FidelidadeDaReferencia;
 };
 
 /**
@@ -170,7 +173,7 @@ export function valorDaCor(hex: string | null | undefined): number | null {
  * tela do recorte), nesta ordem de prioridade: fotos do cliente, referências
  * escolhidas pela equipe, logo, capa da série, fonte, arte da marca e selo.
  */
-export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "fonte" | "identidade" | "selo";
+export type TipoDoAnexo = "foto_cliente" | "elemento" | "referencia_equipe" | "logo" | "capa" | "sequencia" | "fonte" | "identidade" | "selo";
 export const MAX_ANEXOS_DA_LAMINA = 6;
 const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   foto_cliente: 0,
@@ -178,11 +181,13 @@ const PRIORIDADE_DO_ANEXO: Record<TipoDoAnexo, number> = {
   referencia_equipe: 2,
   logo: 3,
   capa: 4,
+  // Frente E (25/09): quadro de sequência da prancha de referência, logo depois da capa (lâminas 2..N).
+  sequencia: 4.5,
   fonte: 5,
   identidade: 6,
   selo: 7,
 };
-const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, fonte: 1, identidade: 1, selo: 1 };
+const TETO_DO_TIPO: Record<TipoDoAnexo, number> = { foto_cliente: 1, elemento: 2, referencia_equipe: 2, logo: 1, capa: 1, sequencia: 1, fonte: 1, identidade: 1, selo: 1 };
 
 /** Os anexos que entram, na ordem em que vão (a ordem da lista entre iguais é mantida). */
 export function anexosDaLamina<T extends { tipo: TipoDoAnexo }>(candidatos: T[], opcoes: { base: boolean; max?: number }): T[] {
@@ -1287,6 +1292,14 @@ export type EntradaDoReplicar = {
   quadro: { largura: number; altura: number };
   anuncio?: { formato: FormatoCriativo } | null;
   post?: FormatoDoPost | null;
+  /**
+   * Fidelidade à referência (frente E, 25/09 à noite; fidelidade-da-referencia.ts).
+   * Sem ela, ou "identica", o prompt é o de sempre, byte a byte. Próxima muda o
+   * cabeçalho, o layout (elementos secundários livres) e o assunto (pose e
+   * enquadramento livres). Inspirada e Criativa mudam também o texto (sem
+   * posição), o lugar da logo, o formato e a linha das formas gráficas.
+   */
+  fidelidade?: FidelidadeDaReferencia | null;
 };
 
 /**
@@ -1324,34 +1337,93 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     ? paleta.map((p) => `${p.nome || p.papel || "cor"} ${hexOk(p.hex)}${p.papel ? ` (${p.papel})` : ""}`).join(", ")
     : "a paleta das artes da marca";
 
+  // Fidelidade (frente E): Idêntica (ou nenhuma) é o prompt de sempre; os outros níveis trocam só os blocos abaixo.
+  const fid: FidelidadeDaReferencia = e.fidelidade && FIDELIDADES.indexOf(e.fidelidade) >= 0 ? e.fidelidade : "identica";
+  const solta = fid === "inspirada" || fid === "criativa";
+  const peca = formato ? "peça" : `lâmina${serie ? ` (${e.card.ordem} de ${e.total})` : ""}`;
+  const ref2Solta = r2 ? `Referência 2 (${img(r2.indice)}): dela vem só o acabamento (luz, textura, tratamento de cor e os elementos gráficos).` : "";
+
   // Cabeçalho: o que é a imagem 1 e o que troca.
-  const cabecalho = [
-    `MODO REPLICAR REFERÊNCIA: esta ${formato ? "peça" : `lâmina${serie ? ` (${e.card.ordem} de ${e.total})` : ""}`} é a referência escolhida pela equipe, refeita com o texto, a marca e o assunto deste cliente. Quem olhar as duas lado a lado reconhece o mesmo layout.`,
-    r1 && e.editando
-      ? `A imagem 1 é a BASE A EDITAR: é a referência 1, já no quadro desta lâmina. Mantenha dela a composição, a grade, a posição e a escala de cada bloco, os elementos gráficos, o recorte e o tratamento da imagem e o espaço vazio. Troque só o que está abaixo: o texto, as cores (pelas da marca, na mesma função), as fontes, a marca dela (pela logo oficial) e o assunto.`
-      : r1
-      ? `Referência 1 (${img(r1.indice)}): recrie a lâmina seguindo de perto o layout dela, trocando só o texto, as cores, as fontes, a marca e o assunto como abaixo.`
-      : "",
-    r2 ? `Referência 2 (${img(r2.indice)}): dela vem só o acabamento (luz, textura, tratamento de cor e os elementos gráficos); a posição e o tamanho dos blocos são os da referência 1.` : "",
-  ];
+  const cabecalho = fid === "identica"
+    ? [
+      `MODO REPLICAR REFERÊNCIA: esta ${formato ? "peça" : `lâmina${serie ? ` (${e.card.ordem} de ${e.total})` : ""}`} é a referência escolhida pela equipe, refeita com o texto, a marca e o assunto deste cliente. Quem olhar as duas lado a lado reconhece o mesmo layout.`,
+      r1 && e.editando
+        ? `A imagem 1 é a BASE A EDITAR: é a referência 1, já no quadro desta lâmina. Mantenha dela a composição, a grade, a posição e a escala de cada bloco, os elementos gráficos, o recorte e o tratamento da imagem e o espaço vazio. Troque só o que está abaixo: o texto, as cores (pelas da marca, na mesma função), as fontes, a marca dela (pela logo oficial) e o assunto.`
+        : r1
+        ? `Referência 1 (${img(r1.indice)}): recrie a lâmina seguindo de perto o layout dela, trocando só o texto, as cores, as fontes, a marca e o assunto como abaixo.`
+        : "",
+      r2 ? `Referência 2 (${img(r2.indice)}): dela vem só o acabamento (luz, textura, tratamento de cor e os elementos gráficos); a posição e o tamanho dos blocos são os da referência 1.` : "",
+    ]
+    : fid === "proxima"
+    ? [
+      `MODO REFERÊNCIA PRÓXIMA: esta ${peca} segue o layout e a grade da referência escolhida pela equipe, com o texto, a marca e o assunto deste cliente. Quem olhar as duas reconhece a mesma estrutura, mas não uma cópia: a pose, o enquadramento, os elementos secundários e os detalhes são novos.`,
+      r1 ? `Referência 1 (${img(r1.indice)}): dela vêm a grade, a posição e a escala de cada bloco de texto, o fundo e a proporção de espaço vazio. Não copie dela a pose, o enquadramento exato nem os elementos secundários.` : "",
+      r2 ? `Referência 2 (${img(r2.indice)}): dela vem só o acabamento (luz, textura, tratamento de cor e os elementos gráficos); a posição e o tamanho dos blocos são os da referência 1.` : "",
+    ]
+    : fid === "inspirada"
+    ? [
+      `MODO REFERÊNCIA INSPIRADA: esta ${peca} é uma composição NOVA para este cliente, no estilo da referência escolhida pela equipe. Quem olhar as duas reconhece a mesma família visual (tipografia, sistema gráfico, tratamento), não o mesmo layout.`,
+      r1 ? `Referência 1 (${img(r1.indice)}): é o guia de estilo e do sistema gráfico. Não copie a grade, a posição dos blocos, o enquadramento nem a pose dela.` : "",
+      ref2Solta,
+    ]
+    : [
+      `MODO REFERÊNCIA CRIATIVA: esta ${peca} é uma ideia e uma composição NOVAS para este cliente. Da referência escolhida pela equipe vêm só o clima, a energia e o jeito de usar a cor; nada do layout, da cena nem dos elementos dela.`,
+      r1 ? `Referência 1 (${img(r1.indice)}): só o clima (luz, contraste, ritmo, energia) e o jeito de usar a cor. Não copie a grade, a posição dos blocos, o assunto, a pose nem os elementos gráficos dela.` : "",
+      ref2Solta,
+    ];
 
   // Layout medido (a regra de layout desta lâmina).
   const pos = (c: Caixa) => descreverPosicao(c);
-  const layout: string[] = m
+  const titulosDoMolde = m ? m.blocos.filter((b) => b.papel !== "marca" && b.papel !== "perfil").sort((a, b) => b.altura_da_letra - a.altura_da_letra) : [];
+  const desenho = (b: BlocoDoMolde) => [b.familia, b.largura_da_letra !== "normal" ? b.largura_da_letra : "", `peso ${b.peso}`, b.caixa_alta ? "caixa alta" : ""].filter(Boolean).join(", ");
+  const layout: string[] = fid === "inspirada"
+    ? m
+      ? [
+        "SISTEMA GRÁFICO DA REFERÊNCIA 1 (guia de estilo; a composição desta lâmina é nova)",
+        titulosDoMolde.length
+          ? `- Tipografia: o título no desenho do título dela (${desenho(titulosDoMolde[0])})${titulosDoMolde.length > 1 ? `; os textos menores no desenho dos dela (${desenho(titulosDoMolde[titulosDoMolde.length - 1])})` : ""}, com o mesmo contraste de escala.`
+          : "",
+        m.elementos.length
+          ? `- Elementos gráficos do mesmo tipo, traço e acabamento dos dela, em outra posição e outra composição, nas cores da marca: ${m.elementos.map((x) => x.descricao).join("; ")}.`
+          : "",
+        `- Fundo do mesmo tipo (${m.fundo || "o da referência"})${fundoNaMarca ? `, na marca ${fundoNaMarca}` : ""}.`,
+        m.tratamento ? `- Tratamento: ${m.tratamento}` : "",
+        `- Composição nova: outra grade, outro lugar para o título e para o assunto, outro enquadramento${m.grade ? `; não repita a divisão da tela da referência (${m.grade})` : ""}.`,
+      ]
+      : r1
+      ? [
+        "SISTEMA GRÁFICO DA REFERÊNCIA 1 (guia de estilo; a composição desta lâmina é nova)",
+        "- Absorva dela a tipografia (peso, caixa, largura da letra, contraste de escala), o tipo de elemento gráfico e o tratamento da imagem. A composição é nova: outra grade, outro lugar para o título e para o assunto, outro enquadramento.",
+      ]
+      : []
+    : fid === "criativa"
+    ? r1
+      ? [
+        "CLIMA DA REFERÊNCIA 1 (só inspiração; a ideia e a composição desta lâmina são novas)",
+        m && m.tratamento ? `- Luz e acabamento: ${m.tratamento}` : "- Luz, contraste e acabamento no clima da referência.",
+        "- Cor: a mesma proporção entre fundo, texto e destaque da referência, com as cores da marca.",
+        "- Crie uma ideia visual própria para o tema desta lâmina: outra grade, outro assunto em cena ou outro ponto de vista, outro tipo de elemento gráfico.",
+      ]
+      : []
+    : m
     ? [
       "LAYOUT DA REFERÊNCIA 1 (medido na imagem; é a regra de layout desta lâmina, posições em % do quadro)",
       m.grade ? `- Grade: ${m.grade}` : "",
       `- Fundo: ${m.fundo || "o da referência"}${fundoNaMarca ? `; na marca, ${fundoNaMarca}${m.cor_do_fundo ? ` no lugar de ${m.cor_do_fundo}` : ""}` : ""}.`,
-      m.assunto ? `- Assunto da referência: ${m.assunto.descricao || m.assunto.tipo}, ${pos(m.assunto)}${m.assunto.enquadramento ? `, ${m.assunto.enquadramento}` : ""}.` : "- A referência não tem assunto fotográfico: só fundo, tipografia e elementos gráficos.",
+      m.assunto
+        ? `- Assunto da referência: ${m.assunto.descricao || m.assunto.tipo}, ${pos(m.assunto)}${m.assunto.enquadramento ? `, ${m.assunto.enquadramento}` : ""}.${fid === "proxima" ? " Aqui ele ocupa o mesmo espaço, com outra pose e outro enquadramento." : ""}`
+        : "- A referência não tem assunto fotográfico: só fundo, tipografia e elementos gráficos.",
       m.elementos.length
-        ? `- Elementos gráficos, nos mesmos lugares e na mesma escala, com a cor trocada pela da marca na mesma função: ${m.elementos.map((x) => `${x.descricao} (${pos(x)}${x.cor ? `, ${corDaMarcaNoPapel(x.cor, paleta) || x.cor}` : ""})`).join("; ")}.`
+        ? fid === "proxima"
+          ? `- Elementos gráficos da referência (o principal fica; os secundários podem mudar de forma, quantidade e lugar dentro da mesma grade), com a cor da marca na mesma função: ${m.elementos.map((x) => `${x.descricao} (${pos(x)}${x.cor ? `, ${corDaMarcaNoPapel(x.cor, paleta) || x.cor}` : ""})`).join("; ")}.`
+          : `- Elementos gráficos, nos mesmos lugares e na mesma escala, com a cor trocada pela da marca na mesma função: ${m.elementos.map((x) => `${x.descricao} (${pos(x)}${x.cor ? `, ${corDaMarcaNoPapel(x.cor, paleta) || x.cor}` : ""})`).join("; ")}.`
         : "",
       m.tratamento ? `- Tratamento: ${m.tratamento}` : "",
     ]
     : r1
     ? [
       "LAYOUT DA REFERÊNCIA 1",
-      "- Copie dela a estrutura do layout (grade, divisão da tela, posição de cada bloco de texto e de cada imagem), a escala e a hierarquia da tipografia (qual texto é o maior, peso, caixa alta ou baixa, largura da letra, alinhamento, quebra em linhas), o recorte e o tratamento da imagem e os elementos gráficos, na mesma proporção de espaço vazio.",
+      `- Copie dela a estrutura do layout (grade, divisão da tela, posição de cada bloco de texto e de cada imagem), a escala e a hierarquia da tipografia (qual texto é o maior, peso, caixa alta ou baixa, largura da letra, alinhamento, quebra em linhas), o recorte e o tratamento da imagem e os elementos gráficos, na mesma proporção de espaço vazio.${fid === "proxima" ? " A pose, o enquadramento e os elementos secundários são novos." : ""}`,
     ]
     : [];
 
@@ -1378,7 +1450,24 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
       `${alvo.linhas > 1 && b.texto.indexOf("\n") < 0 && !cresce ? `em cerca de ${alvo.linhas} linhas, ` : ""}alinhado ${alvo.alinhamento === "centro" ? "ao centro" : `à ${alvo.alinhamento}`}` +
       `${fonte ? `, fonte ${fonte} com o desenho da referência (${estilo})` : `, no desenho da referência (${estilo})`}${corNaMarca ? `, cor ${corNaMarca}` : ""}${cresce}.`;
   };
-  const texto = [
+  // Inspirada e Criativa: o texto não tem posição (a composição é nova); na Inspirada o desenho da letra ainda vem do molde.
+  const linhaSolta = (b: BlocoTexto, alvo: BlocoDoMolde | null) => {
+    const titulo = b.papel === "headline" || b.papel === "numero";
+    const fonte = titulo ? fonteTitulo : fonteTexto;
+    const doMolde = fid === "inspirada" ? alvo : null;
+    const t = (doMolde ? textoNoMolde(b, doMolde) : b.texto).replace(/\n/g, " / ");
+    const papel = titulo ? "o maior texto da lâmina" : b.papel === "cta" ? "a chamada para ação, destacada" : b.papel === "selo" ? "texto pequeno de selo" : "menor que o título e agrupado com ele";
+    return `- ${b.papel.toUpperCase()}: "${t}", ${papel}${fonte ? `, fonte ${fonte}` : ""}${doMolde ? `, no desenho da referência (${desenho(doMolde)})` : ""}.`;
+  };
+  const texto = solta
+    ? [
+      "1. TEXTO EXATO (só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
+      ...(mapa && fid === "inspirada" ? mapa.lugares.map((l) => linhaSolta(l.bloco, l.alvo)) : blocos.map((b) => linhaSolta(b, null))),
+      temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
+      "- O lugar de cada bloco segue a composição nova desta lâmina, com hierarquia clara, os blocos no mesmo eixo e respiro em volta.",
+      "- Entrelinha dos títulos de 1,0 a 1,1, sem acento encostando na linha de cima; nenhuma letra cortada nem deformada.",
+    ]
+    : [
     "1. TEXTO EXATO (só isto, com esta grafia e acentuação, e nenhuma outra palavra)",
     ...(mapa ? mapa.lugares.map((l) => linhaDoBloco(l.bloco, l.alvo)) : blocos.map((b) => linhaDoBloco(b, null))),
     temBarra ? "- A barra ( / ) marca a quebra de linha: quebre a linha ali e não desenhe a barra." : "",
@@ -1397,7 +1486,7 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
       quadro: Q,
       logo: e.logo.medida,
       replicar: true,
-      lugarNoMolde: mapa?.marca ?? null,
+      lugarNoMolde: solta ? null : mapa?.marca ?? null,
       anuncio: !!formato,
       descricao: e.logo.descricao,
       fundoDaLamina: fundoNaMarca,
@@ -1419,7 +1508,44 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
   const fotos = e.fotos.filter((f) => f.indice > 0);
   const nomes = fotos.map((f) => img(f.indice)).join(" e ");
   const tema = blocos.find((b) => b.papel === "headline" || b.papel === "numero")?.texto.replace(/\s+/g, " ").trim() || "";
-  const assunto = [
+  const identica = "É a mesma pessoa, idêntica: mesmo rosto, feições, olhos, nariz, boca, tom de pele, cabelo, idade, corpo e roupa. Produto idêntico: mesma forma, cores, rótulo e detalhes.";
+  const naoCopie = "- Não copie da referência: o texto, a logo, o nome ou o site de outra marca, marcas d'água e as pessoas dela.";
+  const semMarca = "sem marca, logo ou texto de outra empresa";
+  const assunto = fid === "proxima"
+    ? [
+      "4. ASSUNTO",
+      fotos.length
+        ? `- A pessoa ou o produto da foto real do cliente (${nomes}) ocupa o espaço do assunto da referência${m && m.assunto ? ` (${pos(m.assunto)})` : ""}, com recorte e escala livres dentro dele. ${identica}`
+        : m && m.assunto
+        ? m.assunto.tipo === "pessoa"
+          ? "- Pessoa: outra pessoa (nunca a da referência), no mesmo espaço, com outra pose, outro gesto e outro ângulo de câmera, a mesma luz, roupa neutra e sem marcas."
+          : `- ${m.assunto.tipo === "cena" ? "Cena" : "Objeto"}: no mesmo espaço, com outro enquadramento, um${m.assunto.tipo === "cena" ? "a cena equivalente" : " objeto neutro"} ligado ao tema${tema ? ` "${tema}"` : " desta lâmina"}, ${semMarca}.`
+        : `- Assunto: o mesmo tipo de assunto da referência, no mesmo espaço e com outro enquadramento; se ela tem pessoa, outra pessoa em outra pose; se tem produto de outra marca, um objeto neutro ligado ao tema, sem marca.`,
+      fotos.length
+        ? "- Pode recortar, reposicionar, mudar a escala e integrar a foto à luz e ao layout da referência; não redesenhe nem troque a pessoa ou o produto, não mude a expressão e não escureça a foto."
+        : "",
+      fotos.length > 1 ? `- Use todas as fotos do cliente (${nomes}), cada uma no espaço de imagem equivalente da referência.` : "",
+      naoCopie,
+    ]
+    : solta
+    ? [
+      "4. ASSUNTO",
+      fotos.length
+        ? `- A pessoa ou o produto da foto real do cliente (${nomes}) é o assunto desta lâmina, num enquadramento novo (não o da referência). ${identica}`
+        : fid === "criativa"
+        ? `- Assunto: o que a ideia pedir para o tema${tema ? ` "${tema}"` : " desta lâmina"} (pessoa, objeto ou cena), pensado para esta lâmina; pessoa, se houver, nunca a da referência; ${semMarca}.`
+        : m && m.assunto
+        ? m.assunto.tipo === "pessoa"
+          ? "- Pessoa: outra pessoa (nunca a da referência), em pose, ângulo e enquadramento novos, com a luz e o tratamento da referência, roupa neutra e sem marcas."
+          : `- ${m.assunto.tipo === "cena" ? "Cena" : "Objeto"}: um${m.assunto.tipo === "cena" ? "a cena" : " objeto neutro"} ligado ao tema${tema ? ` "${tema}"` : " desta lâmina"}, em composição nova, ${semMarca}.`
+        : "- Assunto: o mesmo tipo de assunto da referência, em composição nova; se ela tem pessoa, outra pessoa; se tem produto de outra marca, um objeto neutro ligado ao tema, sem marca.",
+      fotos.length
+        ? "- Pode recortar, reposicionar, mudar a escala e integrar a foto à luz da composição; não redesenhe nem troque a pessoa ou o produto, não mude a expressão e não escureça a foto."
+        : "",
+      fotos.length > 1 ? `- Use todas as fotos do cliente (${nomes}).` : "",
+      naoCopie,
+    ]
+    : [
     "4. ASSUNTO",
     fotos.length
       ? `- A pessoa ou o produto da foto real do cliente (${nomes}) entra no lugar do assunto da referência${m && m.assunto ? ` (${pos(m.assunto)})` : ""}, com o mesmo enquadramento e a mesma escala. É a mesma pessoa, idêntica: mesmo rosto, feições, olhos, nariz, boca, tom de pele, cabelo, idade, corpo e roupa. Produto idêntico: mesma forma, cores, rótulo e detalhes.`
@@ -1435,13 +1561,21 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     "- Não copie da referência: o texto, a logo, o nome ou o site de outra marca, marcas d'água e as pessoas dela.",
   ];
 
-  const formatoTxt = [
+  const formatoTxt = solta
+    ? [
+      "5. FORMATO",
+      `- Arte ${Q.largura} x ${Q.altura}, usando o quadro inteiro, sem bordas vazias. Margens de segurança: ${px(margens.x, Q.largura)} px nas laterais, ${px(margens.topo, Q.altura)} px no topo e ${px(margens.base, Q.altura)} px na base.`,
+      capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed." : "",
+      formato ? regrasDoCriativo(formato) : "",
+    ]
+    : [
     "5. FORMATO",
     `- Arte ${Q.largura} x ${Q.altura}, usando o quadro inteiro, sem bordas vazias. Margens de segurança: ${px(margens.x, Q.largura)} px nas laterais, ${px(margens.topo, Q.altura)} px no topo e ${px(margens.base, Q.altura)} px na base. Onde a referência encosta texto ou logo na borda, aproxime do lugar dela sem passar da margem.`,
     capa ? "- Esta é a capa: a headline continua a maior da série e legível na miniatura do feed, na posição em que a referência põe o título." : "",
     formato ? regrasDoCriativo(formato) : "",
   ];
 
+  const proibicoes = blocoDasProibicoes({ serie, replicar: true });
   const prompt = [
     ...cabecalho,
     ...layout,
@@ -1450,10 +1584,15 @@ export function promptDoReplicar(e: EntradaDoReplicar): { prompt: string; textoE
     ...marca,
     ...assunto,
     ...formatoTxt,
-    blocoDasProibicoes({ serie, replicar: true }),
+    // Inspirada e Criativa podem ter formas novas (a variedade pede outro elemento gráfico), sempre nas cores da marca.
+    solta ? proibicoes.replace(FORMAS_SO_DA_REFERENCIA, FORMAS_NO_ESTILO) : proibicoes,
   ].filter((l) => l !== "").join("\n");
-  return { prompt, textoExato: textoExatoNoMolde(e.card.texto_exato, mapa), mapa };
+  const mapaUsado = fid === "criativa" ? null : mapa;
+  return { prompt, textoExato: textoExatoNoMolde(e.card.texto_exato, mapaUsado), mapa: mapaUsado };
 }
+
+const FORMAS_SO_DA_REFERENCIA = "Faixas e formas gráficas só as da referência, nas cores da marca.";
+const FORMAS_NO_ESTILO = "Faixas e formas gráficas no estilo da referência ou da marca, sempre nas cores da marca.";
 
 /**
  * Série do carrossel sem precisar do contínuo (pedido do dono em 25/09:

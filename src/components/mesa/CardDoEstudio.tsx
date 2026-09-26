@@ -25,6 +25,7 @@ import Moldura45 from "./Moldura45";
 import { funcaoDaLamina } from "./PranchetaDoEstudio";
 import SeletorDoAcervo, { FotoDoAcervo, useAcervo } from "./SeletorDoAcervo";
 import type { Area } from "./estudioUtil";
+import { rotuloDaVersao } from "./fidelidadeDaReferencia";
 import type { CardDaDirecao, CardGerado, Verificacao } from "./useItensDoMes";
 
 /**
@@ -594,6 +595,12 @@ export default function CardDoEstudio({
                 <p className="mt-1 truncate text-[10.5px] text-muted-foreground">
                   <span className="font-medium text-foreground">v{v.versao}</span> {v.versao === ultima?.versao ? "atual" : v.origem === "ajuste" ? "ajuste" : ""}
                 </p>
+                {rotuloDaVersao(v) && (
+                  <p className="truncate text-[10px] text-muted-foreground" data-versao-fidelidade={v.fidelidade_referencia} title="Fidelidade à referência usada nesta versão">
+                    {rotuloDaVersao(v)}
+                    {v.prancha && v.prancha.length ? ` · quadro ${v.prancha[0].quadro}` : ""}
+                  </p>
+                )}
               </li>
             ))}
           </ul>

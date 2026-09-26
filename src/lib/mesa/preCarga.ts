@@ -35,7 +35,7 @@ interface MesaDoPainel {
   semCliente?: Record<string, Carregar>;
 }
 
-export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto", MesaDoPainel> = {
+export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto" | "/mesa-videos" | "/mesa-publicidade" | "/mesa-roteiros", MesaDoPainel> = {
   "/mesa": {
     prefixo: "mesa",
     pagina: () => import("@/pages/MesaDoCliente"),
@@ -97,6 +97,60 @@ export const MESAS_DO_PAINEL: Record<"/mesa" | "/mesa-ads" | "/mesa-foto", MesaD
       "agente-diretor": () => import("@/components/mesa-foto/AgenteDiretor"),
     },
   },
+  // Mesa Vídeos (frente V2, 25/09): acervo, história, roteiro e cenas, edição e versões.
+  "/mesa-videos": {
+    prefixo: "mesa-videos",
+    pagina: () => import("@/pages/MesaVideos"),
+    parametro: "etapa",
+    padrao: "acervo",
+    onde: "mesa-videos:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      acervo: () => import("@/components/mesa-videos/EtapaAcervo"),
+      historia: () => import("@/components/mesa-videos/EtapaHistoria"),
+      roteiros: () => import("@/components/mesa-videos/EtapaRoteiros"),
+      edicao: () => import("@/components/mesa-videos/EtapaEdicao"),
+      memoria: () => import("@/components/mesa-videos/EtapaMemoria"),
+    },
+  },
+  // Mesa Publicidade (frente P, 26/09): campanha, direção, tomadas, revisão e envio.
+  "/mesa-publicidade": {
+    prefixo: "mesa-publicidade",
+    pagina: () => import("@/pages/MesaPublicidade"),
+    parametro: "etapa",
+    padrao: "campanha",
+    onde: "mesa-publicidade:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      campanha: () => import("@/components/mesa-publicidade/EtapaCampanha"),
+      direcao: () => import("@/components/mesa-publicidade/EtapaDirecao"),
+      tomadas: () => import("@/components/mesa-publicidade/EtapaTomadas"),
+      revisao: () => import("@/components/mesa-publicidade/EtapaRevisao"),
+      envio: () => import("@/components/mesa-publicidade/EtapaEnvio"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-publicidade/AgenteDaPublicidade"),
+    },
+  },
+  // Mesa Roteiros (frente R2, 26/09): agenda, roteiro, revisão, PDF e modelos.
+  "/mesa-roteiros": {
+    prefixo: "mesa-roteiros",
+    pagina: () => import("@/pages/MesaRoteiros"),
+    parametro: "etapa",
+    padrao: "agenda",
+    onde: "mesa-roteiros:onde:",
+    campoOnde: "etapa",
+    etapas: {
+      agenda: () => import("@/components/mesa-roteiros/EtapaAgenda"),
+      roteiro: () => import("@/components/mesa-roteiros/EtapaRoteiro"),
+      revisao: () => import("@/components/mesa-roteiros/EtapaRevisao"),
+      pdf: () => import("@/components/mesa-roteiros/EtapaPdf"),
+      modelos: () => import("@/components/mesa-roteiros/EtapaModelos"),
+    },
+    sempre: {
+      agente: () => import("@/components/mesa-roteiros/AgenteRoteirista"),
+    },
+  },
 };
 
 type Caminho = keyof typeof MESAS_DO_PAINEL;
@@ -106,7 +160,7 @@ export const chaveDaEtapa = (caminho: Caminho, etapa: string) => `${MESAS_DO_PAI
 
 function mesaDoCaminho(caminho: string): Caminho | null {
   const limpo = (caminho || "").replace(/\/+$/, "") || "/";
-  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" ? limpo : null;
+  return limpo === "/mesa" || limpo === "/mesa-ads" || limpo === "/mesa-foto" || limpo === "/mesa-videos" || limpo === "/mesa-publicidade" || limpo === "/mesa-roteiros" ? limpo : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -187,6 +241,9 @@ function paginaDaMesa(caminho: Caminho) {
 export const PaginaMesaDoCliente = paginaDaMesa("/mesa");
 export const PaginaMesaAds = paginaDaMesa("/mesa-ads");
 export const PaginaMesaFoto = paginaDaMesa("/mesa-foto");
+export const PaginaMesaVideos = paginaDaMesa("/mesa-videos");
+export const PaginaMesaPublicidade = paginaDaMesa("/mesa-publicidade");
+export const PaginaMesaRoteiros = paginaDaMesa("/mesa-roteiros");
 
 /** Primeira etapa de cada mesa, baixada no tempo ocioso do painel. */
 const PRIMEIRAS: Array<[Caminho, string]> = [

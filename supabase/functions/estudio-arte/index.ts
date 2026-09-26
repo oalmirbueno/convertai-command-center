@@ -147,6 +147,35 @@ import {
   type TipoDoAnexo,
   valorDaCor,
 } from "../_shared/direcao-arte.ts";
+import {
+  blocoDaVariedade,
+  capasNoHistorico,
+  type EscolhaDeVariedade,
+  escolherVariedade,
+  type FidelidadeDaReferencia,
+  fidelidadeDaLamina,
+  fidelidadeDaReferencia,
+  rotuloDaReferenciaNaFidelidade,
+  serieNaFidelidade,
+  soltaAComposicao,
+  zonaDaCaixa,
+} from "../_shared/fidelidade-da-referencia.ts";
+import {
+  continuidadeDaPrancha,
+  ESQUEMA_PRANCHA,
+  type LeituraDaPrancha,
+  normalizarPrancha,
+  notaDoQuadro,
+  papeisDaEquipe,
+  type PapelDoQuadro,
+  pareceArteUnica,
+  pranchaComAjustes,
+  quadroDaLamina,
+  retanguloDoQuadro,
+  serieComQuadroDaPrancha,
+  SISTEMA_PRANCHA,
+  VERSAO_DA_PRANCHA,
+} from "../_shared/prancha-de-referencias.ts";
 import { caminhoDoArquivo, lerContextoConsolidado, sincronizarAcervo, sincronizarReferencias } from "../_shared/contexto-cliente.ts";
 import {
   type AlvoDaMarca,
@@ -475,6 +504,14 @@ type Direcao = {
   reaberturas?: Reabertura[] | null;
   /** Logo do kit escolhida para o conjunto (26/09); a da lâmina (card.logo) vale no lugar dela. Sem ela: a que contrasta. */
   logo_escolhida?: EscolhaDaLogo | null;
+  /**
+   * Frente E (25/09 à noite): padrão do trabalho para a fidelidade à
+   * referência (identica, proxima, inspirada, criativa); a da lâmina
+   * (card.fidelidade_referencia) vale no lugar dele. Sem ele: Idêntica.
+   */
+  fidelidade_referencia?: FidelidadeDaReferencia | null;
+  /** Papéis dos quadros das referências prancha marcados pela equipe (capa, sequencia, fora), por referência. */
+  pranchas?: Record<string, { papeis: PapelDoQuadro[] }> | null;
 };
 
 type Reabertura = {
@@ -1202,6 +1239,202 @@ async function moldeDaReferencia(t: Trabalho, ref: Referencia, imagem: ImagemEnt
   } catch {
     return null;
   }
+}
+
+// ------------------------------------------------ prancha de referências (frente E)
+//
+// Dono, 25/09 à noite: "às vezes eu coloco várias artes dentro de uma imagem:
+// um print de um perfil do Instagram com várias capas, ou a sequência de um
+// carrossel num print". A leitura da prancha (_shared/prancha-de-referencias.ts)
+// fica num arquivo próprio (prancha-<ref>.json): as leituras de molde que já
+// existem não mudam nem são lidas de novo. Só a ação "prancha" (a tela, ao
+// escolher a referência) faz a leitura por visão; a geração só usa a guardada,
+// então a referência simples (sem leitura de prancha) segue exatamente igual.
+
+const caminhoDaPrancha = (clientId: string, refId: string) => `${pastaDasLeituras(clientId)}/prancha-${refId.replace(/[^0-9a-z-]/gi, "-")}.json`;
+
+/** Leitura da prancha já guardada (sem IA). Null quando ainda não foi lida. */
+async function pranchaGuardada(clientId: string, refId: string): Promise<LeituraDaPrancha | null> {
+  const g = await leituraGuardada(caminhoDaPrancha(clientId, refId));
+  if (!g || g.versao !== VERSAO_DA_PRANCHA) return null;
+  return normalizarPrancha(g.leitura);
+}
+
+/** Lê por visão se a referência é uma prancha (uma vez, guardada). Falha: null (a referência segue simples). */
+async function lerPrancha(t: Trabalho, ref: Referencia, imagem: ImagemEntrada, criadoPor: string): Promise<LeituraDaPrancha | null> {
+  try {
+    const leitor = await modeloDoPapel("leitura");
+    const r = await chamarTexto({
+      clientId: t.client_id,
+      tarefa: "leitura_referencia",
+      agente: "leitor",
+      modeloId: leitor.id,
+      sistema: SISTEMA_PRANCHA,
+      mensagens: [{ papel: "usuario", conteudo: "Esta imagem é uma arte só ou uma prancha com várias artes? Se for prancha, marque cada quadro.", imagens: [imagem] }],
+      esquemaJson: ESQUEMA_PRANCHA,
+      maxTokensSaida: 3_000,
+      referencia: { tipo: "estudio_trabalho", id: t.id },
+      criadoPor,
+    });
+    const bruto = (r.json ?? {}) as Record<string, unknown>;
+    await guardarLeitura(caminhoDaPrancha(t.client_id, ref.id), { versao: VERSAO_DA_PRANCHA, referencia_id: ref.id, lido_em: new Date().toISOString(), leitura: bruto });
+    return normalizarPrancha(bruto);
+  } catch {
+    return null;
+  }
+}
+
+/** Os ajustes de prancha do trabalho com o de uma referência trocado (null tira), no máximo 12 referências. */
+function pranchasComAjuste(atual: Direcao["pranchas"], refId: string, papeis: PapelDoQuadro[] | null): Record<string, { papeis: PapelDoQuadro[] }> {
+  const saida: Record<string, { papeis: PapelDoQuadro[] }> = {};
+  for (const [id, v] of Object.entries(atual && typeof atual === "object" ? atual : {})) {
+    const p = v ? papeisDaEquipe(v.papeis) : null;
+    if (p && id !== refId) saida[id] = { papeis: p };
+  }
+  if (papeis) saida[refId] = { papeis };
+  return Object.fromEntries(Object.entries(saida).slice(-12));
+}
+
+/** Papéis dos quadros marcados pela equipe neste trabalho (direcao.pranchas). */
+const papeisDoTrabalho = (t: Trabalho, refId: string): PapelDoQuadro[] | null => {
+  const p = t.direcao.pranchas && typeof t.direcao.pranchas === "object" ? t.direcao.pranchas[refId] : null;
+  return p ? papeisDaEquipe(p.papeis) : null;
+};
+
+type QuadroNaLamina = { leitura: LeituraDaPrancha; quadro: ReturnType<typeof quadroDaLamina> };
+
+/** As referências prancha (já lidas) e o quadro de cada uma para esta lâmina; as simples não entram no mapa. */
+async function quadrosDasPranchas(t: Trabalho, refs: Referencia[], ordem: number, versoesAntes: number): Promise<Map<string, QuadroNaLamina>> {
+  const mapa = new Map<string, QuadroNaLamina>();
+  const lidas = await Promise.all(refs.map((r) => pranchaGuardada(t.client_id, r.id).catch(() => null)));
+  refs.forEach((r, i) => {
+    const l = lidas[i];
+    if (!l || !l.prancha) return;
+    const leitura = pranchaComAjustes(l, papeisDoTrabalho(t, r.id));
+    mapa.set(r.id, { leitura, quadro: quadroDaLamina(leitura, ordem, versoesAntes) });
+  });
+  return mapa;
+}
+
+/** O quadro recortado da imagem da prancha (imagem-local, com o teto de pixels). Falha: null. */
+async function recortarQuadro(imagem: ImagemEntrada, q: { x0: number; y0: number; x1: number; y1: number }, nome: string): Promise<ImagemEntrada | null> {
+  try {
+    const img = await decodificar(imagem.bytes);
+    const r = retanguloDoQuadro(q, img.width, img.height);
+    if (!r) return null;
+    return { bytes: await img.crop(r.x, r.y, r.largura, r.altura).encode(1), mime: "image/png", nome: `${nomeSeguro(nome)}.png` };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Capa feita de uma prancha (a versão guarda prancha): o quadro de sequência
+ * dela para a lâmina `ordem`, recortado, para as lâminas que não replicam.
+ */
+async function sequenciaDaCapa(t: Trabalho, capa: VersaoCard, ordem: number): Promise<{ imagem: ImagemEntrada; nota: string } | null> {
+  const marcas = (capa as unknown as { prancha?: { referencia_id?: string }[] }).prancha;
+  const refId = Array.isArray(marcas) && marcas.length && typeof marcas[0].referencia_id === "string" ? marcas[0].referencia_id : null;
+  if (!refId) return null;
+  const [ref] = await referenciasPorId(t.client_id, [refId]);
+  if (!ref) return null;
+  const q = (await quadrosDasPranchas(t, [ref], ordem, 0)).get(ref.id);
+  if (!q || !q.quadro || q.quadro.papel !== "sequencia") return null;
+  const inteira = await imagemDaReferencia(ref).catch(() => null);
+  const recorte = inteira ? await recortarQuadro(inteira, q.leitura.quadros[q.quadro.indice], `sequencia-${ordem}`) : null;
+  return recorte ? { imagem: recorte, nota: notaDoQuadro(q.quadro, q.leitura.tipo) } : null;
+}
+
+/**
+ * prancha { trabalho_id, referencia_id, forcar? } (frente E): a leitura da
+ * prancha da referência, com os papéis marcados neste trabalho. Lê por visão
+ * só quando ainda não leu e a imagem não tem cara de arte única (print de
+ * celular, carrossel lado a lado); `forcar` lê mesmo assim. Sem custo quando
+ * já está guardada.
+ */
+async function pranchaDaReferencia(ch: Chamador, corpo: Record<string, unknown>) {
+  const t = await trabalhoComAcesso(ch, texto(corpo.trabalho_id, 64));
+  const refId = texto(corpo.referencia_id, 80);
+  const [ref] = refId ? await referenciasPorId(t.client_id, [refId]) : [];
+  if (!ref) throw new ErroEstudio(404, "referencia_inexistente", "Referência não encontrada para este cliente.");
+  let leitura = await pranchaGuardada(t.client_id, ref.id);
+  let dimensoes: { largura: number; altura: number } | null = null;
+  let url: string | null = null;
+  let leuAgora = false;
+  const forcar = corpo.forcar === true;
+  if (!leitura || leitura.prancha || forcar) {
+    const imagem = await imagemDaReferencia(ref).catch(() => null);
+    dimensoes = imagem ? dimensoesDoCabecalho(imagem.bytes) : null;
+    // Sem leitura: lê quando não tem cara de arte única. Com `forcar`, lê de novo (a equipe pediu).
+    if (imagem && (forcar || (!leitura && !pareceArteUnica(dimensoes)))) {
+      const nova = await lerPrancha(t, ref, imagem, ch.userId);
+      leuAgora = !!nova;
+      if (nova) leitura = nova;
+    }
+  }
+  if (leitura && leitura.prancha && ref.storage_path) url = await urlAssinada(ref.storage_path).catch(() => null);
+  const papeis = papeisDoTrabalho(t, ref.id);
+  return json({
+    referencia_id: ref.id,
+    lida: !!leitura,
+    leu_agora: leuAgora,
+    prancha: leitura && leitura.prancha ? pranchaComAjustes(leitura, papeis) : null,
+    papeis_da_equipe: papeis,
+    parece_arte_unica: dimensoes ? pareceArteUnica(dimensoes) : null,
+    dimensoes,
+    url,
+  });
+}
+
+/**
+ * Variedade com memória (frente E; fidelidade-da-referencia.ts): as últimas
+ * capas do cliente (as versões gravadas: referencias, molde_lido, modo,
+ * fidelidade_referencia e variedade), principalmente as da mesma referência,
+ * e o que variar agora, escolhido em código (sem IA). Sem o histórico (falha
+ * de leitura), o bloco sai do mesmo jeito, sem o que já foi feito.
+ */
+async function variedadeDaCapa(
+  t: Trabalho,
+  fidelidade: FidelidadeDaReferencia,
+  refId: string,
+  molde: MoldeDaReferencia | null,
+  paleta: MarcaParaDirecao["paleta"],
+  temFoto: boolean,
+): Promise<{ bloco: string; escolha: EscolhaDeVariedade; historico: { capas: number; mesma_referencia: number } }> {
+  let trabalhos: { cards?: unknown }[] = [];
+  try {
+    const { data } = await servico()
+      .from("estudio_trabalhos")
+      .select("cards")
+      .eq("client_id", t.client_id)
+      .order("atualizado_em", { ascending: false })
+      .limit(15);
+    trabalhos = (data as { cards?: unknown }[] | null) ?? [];
+  } catch {
+    trabalhos = [];
+  }
+  const historico = capasNoHistorico(trabalhos, refId);
+  const titulo = molde ? molde.blocos.filter((b) => b.papel !== "marca" && b.papel !== "perfil").sort((a, b) => b.altura_da_letra - a.altura_da_letra)[0] ?? null : null;
+  const escolha = escolherVariedade({
+    fidelidade,
+    historico,
+    paleta,
+    temPessoa: temFoto || !!(molde && molde.assunto && molde.assunto.tipo === "pessoa"),
+    temFoto,
+    soTipografia: !!molde && !molde.assunto && !temFoto,
+    tituloDaReferencia: titulo,
+  });
+  const zt = zonaDaCaixa(titulo);
+  const za = molde && molde.assunto ? zonaDaCaixa(molde.assunto) : null;
+  const layout = [
+    zt ? `título ${zt.texto}` : "",
+    molde && molde.assunto ? `${molde.assunto.descricao || molde.assunto.tipo}${za ? ` ${za.texto}` : ""}${molde.assunto.enquadramento ? `, ${molde.assunto.enquadramento}` : ""}` : "",
+  ].filter(Boolean).join("; ");
+  return {
+    bloco: blocoDaVariedade({ fidelidade, historico, escolha, layoutDaReferencia: layout || null }),
+    escolha,
+    historico: { capas: historico.length, mesma_referencia: historico.filter((h) => h.mesmaReferencia).length },
+  };
 }
 
 /**
@@ -1975,6 +2208,8 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         imagens_ids: c.imagens_ids?.length ? c.imagens_ids : velho?.imagens_ids,
         referencias_ids: velho?.referencias_ids,
         fotos_livres: velho?.fotos_livres,
+        // Frente E: a fidelidade escolhida na lâmina também fica.
+        ...(velho && velho.fidelidade_referencia ? { fidelidade_referencia: velho.fidelidade_referencia } : {}),
       };
     });
     const atualizado = await mutarTrabalho(existente.id, (x) => ({
@@ -1982,6 +2217,9 @@ async function preparar(ch: Chamador, corpo: Record<string, unknown>) {
         ...direcao,
         cards: cardsMesclados,
         referencias_ids: anterior.referencias_ids,
+        // Frente E: a fidelidade do trabalho e os papéis dos quadros das pranchas ficam.
+        ...(anterior.fidelidade_referencia ? { fidelidade_referencia: anterior.fidelidade_referencia } : {}),
+        ...(anterior.pranchas ? { pranchas: anterior.pranchas } : {}),
         pedido: instrucao || null,
         // Direção nova, cena nova: o fundo contínuo nasce de novo (e um trecho atrasado não volta).
         panorama: panoramaApagado(anterior.panorama),
@@ -2922,6 +3160,21 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const elementos = livres.filter((f) => f.papel === "elemento").slice(0, 2);
   // Referências escolhidas pela equipe: com elas a lâmina replica o layout da referência (fora do contínuo).
   const refsDaEquipe = await referenciasDaEquipe(t, card);
+  // Frente E (25/09 à noite): fidelidade à referência (Idêntica, o padrão, é o
+  // caminho de sempre) e referência prancha (print com várias artes: vira o
+  // quadro desta lâmina; a simples segue igual).
+  const fidelidade = fidelidadeDaLamina(card, t.direcao);
+  const versoesDaLamina = t.cards.filter((c) => c.ordem === ordem).length;
+  const quadrosDaPrancha = refsDaEquipe.length ? await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina) : new Map<string, QuadroNaLamina>();
+  // Prancha sem quadro para esta lâmina (perfil só com capas, da lâmina 2 em diante): sai desta lâmina, que segue a capa.
+  for (let i = refsDaEquipe.length - 1; i >= 0; i--) {
+    const q = quadrosDaPrancha.get(refsDaEquipe[i].id);
+    if (q && !q.quadro) refsDaEquipe.splice(i, 1);
+  }
+  const notaDaPrancha = (r: Referencia) => {
+    const q = quadrosDaPrancha.get(r.id);
+    return q && q.quadro ? `. Esta imagem é o ${notaDoQuadro(q.quadro, q.leitura.tipo)} da referência escolhida` : "";
+  };
   let baseFoto: Uint8Array | null = foto ? await fotoRealNaLamina(foto, quadro.largura, quadro.altura) : null;
   if (!baseFoto && fundoLivre) {
     try {
@@ -3039,9 +3292,9 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     refsDaEquipe.forEach((ref, i) => {
       candidatos.push({
         tipo: "referencia_equipe",
-        rotulo: i === 0
+        rotulo: (rotuloDaReferenciaNaFidelidade(fidelidade, i) || (i === 0
           ? "REFERÊNCIA 1 escolhida pela equipe: o molde desta lâmina (layout, grade, escala e posição de cada bloco)"
-          : "REFERÊNCIA 2 escolhida pela equipe: só o acabamento (luz, textura, tratamento de cor e elementos gráficos)",
+          : "REFERÊNCIA 2 escolhida pela equipe: só o acabamento (luz, textura, tratamento de cor e elementos gráficos)")) + notaDaPrancha(ref),
         carregar: async () => {
           const img = imagensDasRefs[i];
           if (!img) throw new Error("referencia_sem_arquivo");
@@ -3054,9 +3307,28 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // Replicar (27/09): cada referência é aberta uma vez (anexo e molde) e o molde
   // (layout medido por visão, guardado) é lido junto com a logo, em paralelo.
   const imagensDasRefs = replicar ? await Promise.all(refsDaEquipe.map((r) => imagemDaReferencia(r).catch(() => null))) : [];
+  // Prancha (frente E): a imagem da referência vira o quadro desta lâmina, recortado; o molde é lido e guardado por quadro.
+  for (let i = 0; i < imagensDasRefs.length; i++) {
+    const q = quadrosDaPrancha.get(refsDaEquipe[i].id);
+    const img = imagensDasRefs[i];
+    if (!q || !q.quadro || !img) continue;
+    const recorte = await recortarQuadro(img, q.leitura.quadros[q.quadro.indice], `quadro-${q.quadro.indice + 1}`);
+    if (recorte) {
+      imagensDasRefs[i] = recorte;
+      continue;
+    }
+    // Sem o recorte, a imagem inteira, como antes (e a legenda sem a nota do quadro).
+    const nota = notaDaPrancha(refsDaEquipe[i]);
+    quadrosDaPrancha.delete(refsDaEquipe[i].id);
+    for (const c of candidatos) if (c.ref === refsDaEquipe[i] && nota) c.rotulo = c.rotulo.split(nota).join("");
+  }
+  const refDoMolde = (r: Referencia): Referencia => {
+    const q = quadrosDaPrancha.get(r.id);
+    return q && q.quadro ? { ...r, id: `${r.id}-q${q.quadro.indice + 1}` } : r;
+  };
   const [anexoLogo, moldes] = await Promise.all([
     logo ? anexoDaLogo(t, logo, marca.nomeCliente, ch.userId) : Promise.resolve(null),
-    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refsDaEquipe[i], img, ch.userId) : Promise.resolve(null)))),
+    Promise.all(imagensDasRefs.map((img, i) => (img ? moldeDaReferencia(t, refDoMolde(refsDaEquipe[i]), img, ch.userId) : Promise.resolve(null)))),
   ]);
   // Logo achatada no fundo de contraste, com o texto dela na legenda (dono, 26/09: "a logo não tem nada a ver").
   if (logo && anexoLogo) candidatos.push({ tipo: "logo", rotulo: anexoLogo.legenda, carregar: async () => anexoLogo.imagem });
@@ -3071,6 +3343,28 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         ? "CAPA desta série (lâmina 1), guia do sistema do texto: siga só a tipografia, as cores do texto e os elementos gráficos do texto dela; NÃO copie a cena nem a foto dela, a cena desta lâmina é a imagem 1"
         : `CAPA desta série (lâmina 1), já aprovada: é o guia do sistema visual; repita o grid, as margens, as linhas, formas e elementos gráficos (mesmo traço, espessura e cor), a tipografia, a paleta, o tratamento e a mesma protagonista, cenário e luz; não copie o texto nem a composição exata dela${ordem === total ? "; o final fecha voltando a ela" : ""}`,
       carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
+    });
+  }
+  // Frente E: replicando um quadro de sequência da prancha, ou em Inspirada e
+  // Criativa (composição nova), a capa gerada vai junto para a série parecer uma
+  // só. Em Idêntica e Próxima com referência simples nada muda (sem capa).
+  const quadroDeSequencia = replicar && capa
+    ? Array.from(quadrosDaPrancha.values()).find((q) => !!q.quadro && q.quadro.papel === "sequencia") ?? null
+    : null;
+  if (capa && replicar && (quadroDeSequencia || soltaAComposicao(fidelidade))) {
+    candidatos.push({
+      tipo: "capa",
+      rotulo: "CAPA desta série (lâmina 1), já gerada: mantenha dela a marca aplicada (cores, fontes, tratamento, a mesma pessoa e o mesmo cenário); o layout desta lâmina não é o da capa; não copie o texto dela",
+      carregar: async () => ({ bytes: await baixar("mesa", capa.storage_path), mime: "image/png", nome: "card-1-capa.png" }),
+    });
+  }
+  // Frente E (d): capa feita de uma prancha; nas lâminas 2..N que não replicam, o quadro de sequência dela vai como guia.
+  const sequencia = capa && !replicar && !cenaFixa ? await sequenciaDaCapa(t, capa, ordem).catch(() => null) : null;
+  if (sequencia) {
+    candidatos.push({
+      tipo: "sequencia",
+      rotulo: `${sequencia.nota}: guia de como este carrossel continua depois da capa; siga a divisão, o ritmo e o lugar do texto e da imagem dele, com o sistema visual da capa; não copie o texto nem a marca dele`,
+      carregar: async () => sequencia.imagem,
     });
   }
   const [amostra] = await amostrasDasFontes(fontes);
@@ -3114,6 +3408,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   const refsNoPrompt: { indice: number; molde: MoldeDaReferencia | null; id: string }[] = [];
   let indiceDaLogo: number | null = null;
   let indiceDaCapa: number | null = null;
+  let indiceDaSequencia: number | null = null;
   const escolhidosDaLamina = anexosDaLamina(candidatos, { base: temBase });
   // Replicar (26/09, "tem que ser quase idêntico à referência"): a referência 1
   // vira a IMAGEM 1, a que o gerador EDITA; assim o layout dela fica e só trocam
@@ -3133,6 +3428,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     const indice = imagens.length + deslocamento;
     if (c.tipo === "logo") indiceDaLogo = indice;
     if (c.tipo === "capa") indiceDaCapa = indice;
+    if (c.tipo === "sequencia") indiceDaSequencia = indice;
     if (c.ref) idsReferencias.push(c.ref.id);
     if (c.fotoReplicar) fotosReplicar.push({ indice, ...c.fotoReplicar });
     if (c.tipo === "referencia_equipe" && c.ref) {
@@ -3177,6 +3473,7 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
     blocoDoEstiloPedido(t.direcao.estilo_pedido),
     preferencias,
     replicar ? "" : blocoDaSerie({ ordem, total, capa: indiceDaCapa, cenaFixa }),
+    replicar ? "" : serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia }),
     blocoDeVariacao(versoesAntes, !!baseFoto || !!recorteNaLamina, replicar, ordem, total > 1 && ordem > 1),
   ].filter(Boolean).join("\n\n");
   const comum = {
@@ -3207,7 +3504,8 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
   // tipografia grande e detalhe que a média borrava. A foto é recomposta, nunca escurecida.
   if (replicar) {
     // A referência 1 (imagem 1) é o molde editado, no quadro da lâmina; o resto segue como referência.
-    const editando = refsNoPrompt[0].indice === 1 && imagens.length > 0;
+    // Frente E: só Idêntica edita a referência; nos outros níveis ela vai como anexo (imagem 1) e o layout fica mais livre.
+    const editando = refsNoPrompt[0].indice === 1 && imagens.length > 0 && fidelidade === "identica";
     let molde: Uint8Array | null = null;
     let origemDoMolde: { largura: number; altura: number } | null = null;
     if (editando) {
@@ -3233,11 +3531,21 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
       quadro: quadro.final,
       anuncio: quadro.formato ? { formato: quadro.formato } : null,
       post: quadro.post,
+      fidelidade,
     });
+    // Frente E: variedade com memória (só na capa, fora de Idêntica) e a continuidade da série (prancha ou composição nova).
+    const variedade = fidelidade !== "identica" && capaDaSerie
+      ? await variedadeDaCapa(t, fidelidade, refsNoPrompt[0].id, refsNoPrompt[0].molde, marca.paleta, fotosReplicar.length > 0)
+      : null;
+    const continuidade = quadroDeSequencia && quadroDeSequencia.quadro
+      ? continuidadeDaPrancha({ ordem, total, capa: indiceDaCapa, quadro: quadroDeSequencia.quadro })
+      : serieNaFidelidade({ fidelidade, ordem, total, capa: indiceDaCapa });
     const prompt = [
       replica.prompt,
       preferencias ? `As regras abaixo, aprendidas com o cliente, valem desde que não mudem o layout da referência.\n${preferencias}` : "",
-      blocoDeVariacao(versoesAntes, false, true, ordem, false),
+      variedade ? variedade.bloco : "",
+      continuidade,
+      soltaAComposicao(fidelidade) ? blocoDeVariacao(versoesAntes, false, false, ordem, false) : blocoDeVariacao(versoesAntes, false, true, ordem, false),
       regrasDeRender(t, { ...card, texto_exato: replica.textoExato }, legendas, regraDaLogo, true),
     ].filter(Boolean).join("\n\n");
     const qualidadeDoReplicar: Qualidade = "alta";
@@ -3257,6 +3565,19 @@ async function gerarCard(ch: Chamador, corpo: Record<string, unknown>) {
         referencias_jev: escolhida.jev,
         tamanho: img.tamanho,
         modo: "replicar_referencia",
+        // Frente E: o nível de fidelidade (Idêntica é o de sempre), a variedade escolhida e o quadro da prancha.
+        fidelidade_referencia: fidelidade,
+        ...(variedade ? { variedade: variedade.escolha, variedade_historico: variedade.historico } : {}),
+        ...(quadrosDaPrancha.size
+          ? {
+            prancha: Array.from(quadrosDaPrancha.entries()).filter(([, q]) => !!q.quadro).map(([id, q]) => ({
+              referencia_id: id,
+              tipo: q.leitura.tipo,
+              quadro: q.quadro!.indice + 1,
+              papel: q.quadro!.papel,
+            })),
+          }
+          : {}),
         molde_editado: !!molde,
         // Molde medido por visão (layout da referência como especificação): quais referências tinham.
         molde_lido: refsNoPrompt.map((r) => ({ referencia_id: r.id, lido: !!r.molde })),
@@ -4711,6 +5032,19 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
     if (!e) throw new ErroEstudio(400, "logo_invalida", "Logo inválida. Use auto, principal ou alternativa.");
     logoConjunto = e;
   }
+  // Frente E: fidelidade à referência do conjunto (null volta para Idêntica) e os papéis dos quadros de uma referência prancha.
+  let fidelidadeConjunto: FidelidadeDaReferencia | null | undefined;
+  if (conjunto && conjunto.fidelidade_referencia !== undefined) {
+    fidelidadeConjunto = conjunto.fidelidade_referencia === null ? null : fidelidadeDaReferencia(conjunto.fidelidade_referencia);
+    if (conjunto.fidelidade_referencia !== null && !fidelidadeConjunto) throw new ErroEstudio(400, "fidelidade_invalida", "Fidelidade inválida. Use identica, proxima, inspirada ou criativa.");
+  }
+  let pranchaPedida: { refId: string; papeis: PapelDoQuadro[] | null } | undefined;
+  if (conjunto && conjunto.prancha && typeof conjunto.prancha === "object") {
+    const p = conjunto.prancha as Record<string, unknown>;
+    const refId = texto(p.referencia_id, 80);
+    if (!refId || !(UUID.test(refId) || (refId.startsWith("g:") && UUID.test(refId.slice(2))))) throw new ErroEstudio(400, "referencia_invalida", "Referência inválida.");
+    pranchaPedida = { refId, papeis: p.papeis === null ? null : papeisDaEquipe(p.papeis) };
+  }
   const infinito = conjunto && typeof conjunto.carrossel_infinito === "boolean" ? conjunto.carrossel_infinito : undefined;
   // Formato do post orgânico (4:5, 3:4, 1:1 ou 9:16), para o conjunto inteiro. O anúncio tem formato por card.
   let formatoNovo: FormatoDoPost | undefined;
@@ -4729,6 +5063,8 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
   let fotosLivres: FotoLivre[] | undefined;
   // Logo da lâmina: null tira a escolha (a lâmina segue a do conjunto).
   let logoCard: EscolhaDaLogo | null | undefined;
+  // Fidelidade da lâmina (frente E): null tira a escolha (a lâmina segue o padrão do trabalho).
+  let fidelidadeCard: FidelidadeDaReferencia | null | undefined;
   if (cardPedido) {
     ordem = lerOrdem(cardPedido);
     cardDaDirecao(t, ordem);
@@ -4743,6 +5079,10 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       logoCard = cardPedido.logo === null ? null : escolhaDaLogo(cardPedido.logo);
       if (cardPedido.logo !== null && !logoCard) throw new ErroEstudio(400, "logo_invalida", "Logo inválida. Use auto, principal ou alternativa.");
     }
+    if (cardPedido.fidelidade_referencia !== undefined) {
+      fidelidadeCard = cardPedido.fidelidade_referencia === null ? null : fidelidadeDaReferencia(cardPedido.fidelidade_referencia);
+      if (cardPedido.fidelidade_referencia !== null && !fidelidadeCard) throw new ErroEstudio(400, "fidelidade_invalida", "Fidelidade inválida. Use identica, proxima, inspirada ou criativa.");
+    }
     if (cardPedido.texto_exato !== undefined) {
       novoTexto = texto(cardPedido.texto_exato, 1200);
       if (!novoTexto) throw new ErroEstudio(400, "texto_vazio", "O texto da lâmina não pode ficar vazio.");
@@ -4756,6 +5096,8 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
       if (imagens !== undefined) mudou.imagens_ids = imagens;
       if (refsCard !== undefined) mudou.referencias_ids = refsCard;
       if (fotosLivres !== undefined) mudou.fotos_livres = fotosLivres;
+      if (fidelidadeCard === null) delete mudou.fidelidade_referencia;
+      else if (fidelidadeCard !== undefined) mudou.fidelidade_referencia = fidelidadeCard;
       if (logoCard === null) delete mudou.logo;
       else if (logoCard !== undefined) mudou.logo = logoCard;
       if (novoTexto !== undefined && novoTexto !== c.texto_exato) {
@@ -4777,6 +5119,9 @@ async function configurar(ch: Chamador, corpo: Record<string, unknown>) {
         ...(formatoNovo !== undefined ? { formato: formatoNovo } : {}),
         // Logo do kit escolhida para o conjunto: vale na próxima geração (as versões ficam).
         ...(logoConjunto !== undefined ? { logo_escolhida: logoConjunto } : {}),
+        // Frente E: fidelidade padrão do trabalho (null = Idêntica) e papéis dos quadros de uma prancha (null tira o ajuste).
+        ...(fidelidadeConjunto !== undefined ? { fidelidade_referencia: fidelidadeConjunto } : {}),
+        ...(pranchaPedida !== undefined ? { pranchas: pranchasComAjuste(x.direcao.pranchas, pranchaPedida.refId, pranchaPedida.papeis) } : {}),
       },
     };
   });
@@ -5570,6 +5915,7 @@ const ACOES: Record<string, (ch: Chamador, corpo: Record<string, unknown>) => Pr
   aplicar_mudancas: aplicarMudancas,
   reabrir,
   logos: logosDoTrabalho,
+  prancha: pranchaDaReferencia,
   refinar_texto: refinarTexto,
   executar_acao_agente: executarAcaoDoDiretor,
   desfazer_acao_agente: desfazerAcaoDoDiretor,

@@ -5,6 +5,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { criarQueryClient, LimpezaDoCacheAoTrocarDeUsuario, opcoesDePersistencia } from "@/lib/mesa/cachePersistido";
 import { PaginaMesaAds, PaginaMesaDoCliente, PaginaMesaFoto } from "@/lib/mesa/preCarga";
+import { PaginaMesaVideos } from "@/lib/mesa/preCarga";
+import { PaginaMesaPublicidade } from "@/lib/mesa/preCarga";
+import { PaginaMesaRoteiros } from "@/lib/mesa/preCarga";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -70,6 +73,9 @@ const Novidades = lazy(() => import("@/pages/Novidades"));
 const MesaDoCliente = PaginaMesaDoCliente;
 const MesaAds = PaginaMesaAds;
 const MesaFoto = PaginaMesaFoto;
+const MesaVideos = PaginaMesaVideos;
+const MesaPublicidade = PaginaMesaPublicidade;
+const MesaRoteiros = PaginaMesaRoteiros;
 
 // Padrões do painel e o cache da Mesa guardado no navegador: ver
 // src/lib/mesa/cachePersistido.ts (o que vai, por quanto tempo e para quem).
@@ -301,6 +307,12 @@ export function AppRoutes() {
         <Route path="/mesa-ads" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaAds /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         {/* Mesa Foto: estúdio fotográfico (docs/mesa-foto/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
         <Route path="/mesa-foto" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaFoto /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Vídeos: acervo, história, edição e versões (docs/mesa-videos/CONTRATO.md). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-videos" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaVideos /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Publicidade: dirige campanhas de produto (kit publicidade; supabase/functions/mesa-publicidade). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-publicidade" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaPublicidade /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
+        {/* Mesa Roteiros: agenda, roteiro, revisão salva e PDF (supabase/functions/mesa-roteiros). Mesmos papéis e o mesmo esqueleto da Mesa. */}
+        <Route path="/mesa-roteiros" element={<>{["admin", "manager", "design"].includes(profile?.role || "") ? <Suspense fallback={<EsqueletoDaMesa />}><MesaRoteiros /></Suspense> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/central" element={<>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</>} />
         <Route path="/onde-estamos" element={<ClientJourneyUpdates />} />
         <Route path="/novidades" element={<Novidades />} />

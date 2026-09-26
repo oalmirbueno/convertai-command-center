@@ -3,17 +3,20 @@ import { propsDePreCarga } from "@/lib/mesa/preCarga";
 
 /**
  * Troca rápida entre as três mesas do mesmo cliente: Mesa (orgânico),
- * Mesa Ads (tráfego pago) e Mesa Foto (estúdio fotográfico). A mesa aberta
+ * Mesa Ads (tráfego pago), Mesa Foto (estúdio fotográfico) e Mesa Vídeos. A mesa aberta
  * aparece marcada e sem link. Some no celular, onde a barra é curta.
  * Mouse em cima (ou foco) já baixa a outra mesa: o clique abre na hora.
  */
 
-export type QualMesa = "mesa" | "ads" | "foto";
+export type QualMesa = "mesa" | "ads" | "foto" | "videos" | "publicidade" | "roteiros";
 
 export const MESAS: { valor: QualMesa; rotulo: string; titulo: string; caminho: string }[] = [
   { valor: "mesa", rotulo: "Mesa", titulo: "Abrir a Mesa do cliente (conteúdo orgânico)", caminho: "/mesa" },
   { valor: "ads", rotulo: "Mesa Ads", titulo: "Abrir a Mesa Ads (criativos de anúncio)", caminho: "/mesa-ads" },
   { valor: "foto", rotulo: "Mesa Foto", titulo: "Abrir a Mesa Foto (estúdio fotográfico)", caminho: "/mesa-foto" },
+  { valor: "videos", rotulo: "Mesa Vídeos", titulo: "Abrir a Mesa Vídeos (acervo, história, edição e versões)", caminho: "/mesa-videos" },
+  { valor: "publicidade", rotulo: "Publicidade", titulo: "Abrir a Mesa Publicidade (campanhas de produto)", caminho: "/mesa-publicidade" },
+  { valor: "roteiros", rotulo: "Roteiros", titulo: "Abrir a Mesa Roteiros (roteiros de vídeo para gravar)", caminho: "/mesa-roteiros" },
 ];
 
 /** Endereço da mesa do cliente; com marca (cliente com Acerbi e CME), a marca vai junto. */

@@ -33,6 +33,11 @@ import {
   type TarefaAds,
 } from "./conhecimento-dos-agentes.ts";
 import { VERSAO_CONHECIMENTO_REPOSITORIOS } from "./conhecimento-repositorios.ts";
+import { conhecimentoDoPlano } from "./conhecimento-do-plano.ts";
+import { NOMES_DAS_FERRAMENTAS } from "./ferramentas-do-cliente.ts";
+import { conhecimentoEdicao } from "./conhecimento-edicao.ts";
+import { conhecimentoPublicidade } from "./conhecimento-publicidade.ts";
+import { conhecimentoRoteiros } from "./conhecimento-roteiros.ts";
 
 export const VERSAO_DOS_MOTORES = `2026-09-25.1 (repositórios ${VERSAO_CONHECIMENTO_REPOSITORIOS})`;
 
@@ -215,6 +220,16 @@ export const FONTES: Record<string, Fonte> = {
     estado: "integrado",
     nota: "docs/conhecimento/pedro-sobral.md e natalia-torres.md.",
   },
+  // Frente C (26/09): agente do cliente (modo plano do agente de contexto).
+  metodo_da_casa_plano: {
+    id: "metodo_da_casa_plano",
+    tipo: "base_da_casa",
+    nome: "Método da casa para o começo do cliente (nicho, estágio, plano ACELERA, caminho e stack)",
+    licenca: "texto próprio",
+    uso: "comeco_do_cliente e caminho_e_stack em conhecimento-do-plano.ts",
+    estado: "integrado",
+    nota: "Agente do cliente (agente-contexto, modo plano).",
+  },
   pesquisa_social: {
     id: "pesquisa_social",
     tipo: "base_da_casa",
@@ -223,6 +238,44 @@ export const FONTES: Record<string, Fonte> = {
     uso: "conhecimento-social.ts",
     estado: "integrado",
     nota: "docs/conhecimento/conteudo-viral.md.",
+  },
+  // Mesa Vídeos (frente V2, 25/09): edição
+  brabo_edicao_dinamica: {
+    id: "brabo_edicao_dinamica",
+    tipo: "pacote_de_skills",
+    nome: "Edição dinâmica Brabo com IA, pacote público 2.0 (Fernando Araújo / Brabo Space)",
+    licenca: "sem arquivo de licença no pacote (material de estudo); marcas e bibliotecas de terceiros com seus direitos",
+    uso: "só o método, resumido em palavras próprias em conhecimento-edicao.ts; nenhum texto, código de composição ou mídia copiado",
+    estado: "integrado",
+    nota: "Direção do Pacote para editar da Mesa Vídeos (aba Edição).",
+  },
+  kit_audiovisual: {
+    id: "kit_audiovisual",
+    tipo: "base_da_casa",
+    nome: "Kit do Estúdio Audiovisual V2 (25/09/2026)",
+    licenca: "texto próprio",
+    uso: "agentes de montagem, legendas, sincronismo e organizador de acervo, resumidos em conhecimento-edicao.ts; papéis de roteiro, modos, inteligência editorial, técnicas e direção de gravação (com o documento de roteiro modelo do dono) em conhecimento-roteiros.ts",
+    estado: "integrado",
+    nota: "Takes e montagem no Pacote para editar; organizador de takes em organizador-de-takes.ts. Mesa Roteiros: roteirista e agente (só o método; os prompts do kit são proposta).",
+  },
+  kit_publicidade: {
+    id: "kit_publicidade",
+    tipo: "base_da_casa",
+    nome: "Kit de pesquisa da Mesa de Publicidade (24/09/2026)",
+    licenca: "texto próprio com fontes públicas citadas no kit",
+    uso: "método de campanha, territórios, tomadas, revisão e receitas por categoria em conhecimento-publicidade.ts",
+    estado: "integrado",
+    nota: "Mesa Publicidade (diretor de campanha e agente). As receitas entram como dado na mensagem do diretor.",
+  },
+  // Frente R2 (26/09): Mesa Roteiros (o kit_audiovisual acima também alimenta conhecimento-roteiros.ts).
+  skills_de_video: {
+    id: "skills_de_video",
+    tipo: "pacote_de_skills",
+    nome: "Skill hyperframes-creative (referências story-spine e narration)",
+    licenca: "uso interno da máquina; resumo próprio",
+    uso: "ROTEIRO_DE_VIDEO em conhecimento-marketing.ts (ritmo de fala, valor antes da evidência, estrutura curta)",
+    estado: "integrado",
+    nota: "Mesa Roteiros. Antes estava escrito e sem motor.",
   },
 };
 
@@ -264,6 +317,10 @@ export const ORIGEM_DOS_BLOCOS: Record<string, { modulo: string; fontes: string[
   ganchos_por_tipo: { modulo: "conhecimento-social.ts", fontes: ["pesquisa_social"], skills: [] },
   carrossel_de_retencao: { modulo: "conhecimento-social.ts", fontes: ["pesquisa_social"], skills: [] },
   checklist_salva_e_envia: { modulo: "conhecimento-social.ts", fontes: ["pesquisa_social"], skills: [] },
+  // conhecimento-do-plano.ts (frente C, agente do cliente)
+  comeco_do_cliente: { modulo: "conhecimento-do-plano.ts", fontes: ["metodo_da_casa_plano"], skills: [] },
+  caminho_e_stack: { modulo: "conhecimento-do-plano.ts", fontes: ["metodo_da_casa_plano"], skills: [] },
+  seo_essencial: { modulo: "conhecimento-marketing.ts", fontes: ["anthropic_marketing"], skills: ["seo-audit"] },
   // conhecimento-repositorios.ts (Frente W)
   matriz_de_ganchos: { modulo: "conhecimento-repositorios.ts", fontes: ["marketingskills"], skills: ["ad-creative"] },
   portfolio_de_estaticos: { modulo: "conhecimento-repositorios.ts", fontes: ["marketingskills"], skills: ["ad-creative"] },
@@ -278,6 +335,28 @@ export const ORIGEM_DOS_BLOCOS: Record<string, { modulo: string; fontes: string[
   estrategia_de_conteudo: { modulo: "conhecimento-repositorios.ts", fontes: ["marketingskills"], skills: ["content-strategy", "social"] },
   foto_de_produto_com_verdade: { modulo: "conhecimento-repositorios.ts", fontes: ["foto_de_produto_jeremygdm", "gpt_image_2_evolink"], skills: [] },
   imagem_e_titulo: { modulo: "conhecimento-repositorios.ts", fontes: ["marketingskills", "foto_de_produto_jeremygdm"], skills: ["ad-creative"] },
+  // conhecimento-edicao.ts (frente V2, Mesa Vídeos)
+  edicao_da_fala_a_imagem: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_tres_modos: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_ilustracao_explica_o_verbo: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_legenda_e_lettering: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica", "kit_audiovisual"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_tempo_e_movimento: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_sincronia: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica", "kit_audiovisual"], skills: ["brabo-edicao-video-dinamica"] },
+  edicao_montagem_e_takes: { modulo: "conhecimento-edicao.ts", fontes: ["kit_audiovisual"], skills: [] },
+  edicao_revisao_honesta: { modulo: "conhecimento-edicao.ts", fontes: ["brabo_edicao_dinamica"], skills: ["brabo-edicao-video-dinamica"] },
+  // conhecimento-publicidade.ts (frente P, 26/09)
+  verdade_do_produto: { modulo: "conhecimento-publicidade.ts", fontes: ["kit_publicidade"], skills: [] },
+  territorios_criativos: { modulo: "conhecimento-publicidade.ts", fontes: ["kit_publicidade"], skills: [] },
+  plano_de_tomadas_publicitarias: { modulo: "conhecimento-publicidade.ts", fontes: ["kit_publicidade"], skills: [] },
+  produto_antes_da_estetica: { modulo: "conhecimento-publicidade.ts", fontes: ["kit_publicidade"], skills: [] },
+  aprovacoes_separadas: { modulo: "conhecimento-publicidade.ts", fontes: ["kit_publicidade"], skills: [] },
+  // conhecimento-roteiros.ts (frente R2, 26/09)
+  papeis_do_roteiro: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
+  modos_do_roteiro: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
+  inteligencia_editorial: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
+  tecnicas_editoriais: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
+  direcao_de_gravacao: { modulo: "conhecimento-roteiros.ts", fontes: ["kit_audiovisual"], skills: [] },
+  roteiro_de_video: { modulo: "conhecimento-marketing.ts", fontes: ["skills_de_video"], skills: ["hyperframes-creative"] },
 };
 
 /** O checklist de criativo do objetivo entra com id checklist_<objetivo> e vem dos especialistas. */
@@ -320,7 +399,7 @@ export const SKILLS_MARKETINGSKILLS: Record<string, SkillMapeada> = {
   "marketing-plan": { estado: "coberto", blocos: [], nota: "plano_de_campanha e o ciclo do painel; o plano anual de cliente é da Central (outra frente)." },
   "marketing-ideas": { estado: "coberto", blocos: [], nota: "Ideias de SaaS; o Mês já propõe temas com datas, mistura e pesquisa." },
   emails: { estado: "coberto", blocos: [], nota: "SEQUENCIAS_DE_MENSAGEM em conhecimento-marketing.ts (ainda sem motor que use)." },
-  "seo-audit": { estado: "coberto", blocos: [], nota: "SEO_ESSENCIAL em conhecimento-marketing.ts (ainda sem motor que use)." },
+  "seo-audit": { estado: "integrado", blocos: ["seo_essencial"], nota: "SEO_ESSENCIAL chega ao agente do cliente (Perfil da Empresa no Google e site no plano)." },
   video: { estado: "nao_se_aplica", blocos: [], nota: "O painel não produz vídeo (o Mês só aceita carrossel e estático)." },
   image: { estado: "nao_se_aplica", blocos: [], nota: "Escolha de ferramenta e de modelo; o modelo do painel é escolha do dono." },
   cro: { estado: "nao_se_aplica", blocos: [], nota: "Otimização de página do site; o painel não edita páginas." },
@@ -369,6 +448,8 @@ export type Motor = {
   montar: (objetivo?: unknown) => ConhecimentoMontado;
   /** Blocos que nunca podem faltar, com qualquer objetivo. */
   promete: string[];
+  /** Ferramentas internas de leitura que o motor pode pedir (ferramentas-do-cliente.ts). */
+  ferramentas?: string[];
 };
 
 const ADS = "supabase/functions/mesa-ads/index.ts";
@@ -376,6 +457,9 @@ const ESTUDIO = "supabase/functions/estudio-arte/index.ts";
 const CALENDARIO = "supabase/functions/agente-calendario/index.ts";
 const FOTO = "supabase/functions/mesa-foto/index.ts";
 const CONTEXTO = "supabase/functions/agente-contexto/index.ts";
+const VIDEOS = "supabase/functions/mesa-videos/index.ts";
+const PUBLICIDADE = "supabase/functions/mesa-publicidade/index.ts";
+const ROTEIROS = "supabase/functions/mesa-roteiros/index.ts";
 
 const BASE_ADS = ["conhecimento-ads.ts: CONHECIMENTO_ESTRATEGISTA_ADS (inteira, antes)", "mesa-ads: REGRAS_DA_EXECUCAO (depois)"];
 
@@ -506,6 +590,78 @@ export const MOTORES: readonly Motor[] = [
     montar: () => conhecimentoContexto(),
     promete: ["voz_de_marca", "contexto_de_marketing", "posicionamento_e_concorrencia", "objecoes_e_voz_do_cliente", "pesquisa_de_cliente", "identidade_de_marca"],
   },
+  // Frente C (26/09): o agente de contexto promovido a agente do cliente (modo plano, mesma conversa).
+  {
+    id: "contexto.plano",
+    nome: "Agente do cliente: começo, plano ACELERA, caminho e tech stack",
+    funcao: "agente-contexto",
+    ligacao: {
+      arquivo: CONTEXTO,
+      trechos: ["const CONHECIMENTO_DO_PLANO = conhecimentoDoPlano().texto;", "    SISTEMA_DO_PLANO,", "    CONHECIMENTO_DO_PLANO,", "blocoDasFerramentas(),", "executarLeituras(db, clientId, pedidos"],
+    },
+    bases: ["agente-contexto: SISTEMA_DO_PLANO", "metodo-acelera.ts: blocoDoMetodoParaPrompt (fase do cliente)", "plano-do-cliente.ts: apelidos de projetos, marcos, tarefas e equipe"],
+    montar: () => conhecimentoDoPlano(),
+    promete: ["comeco_do_cliente", "caminho_e_stack", "contexto_de_marketing", "posicionamento_e_concorrencia", "plano_de_campanha", "seo_essencial", "pesquisa_de_cliente", "identidade_de_marca"],
+    ferramentas: [...NOMES_DAS_FERRAMENTAS],
+  },
+  {
+    id: "mesa_videos.direcao_de_edicao",
+    nome: "Mesa Vídeos: direção de edição do Pacote para editar",
+    funcao: "mesa-videos",
+    ligacao: {
+      arquivo: VIDEOS,
+      trechos: ['const CONHECIMENTO_DA_EDICAO = conhecimentoEdicao("pacote").texto;', 'pacote.arquivos["direcao.md"].indexOf(CONHECIMENTO_DA_EDICAO) < 0'],
+    },
+    bases: ["pacote-de-edicao.ts: roteiro, takes, decupagem, legendas e edl.json no formato dos projetos Remotion do dono (sem IA nesta versão)"],
+    montar: () => conhecimentoEdicao("pacote"),
+    promete: [
+      "edicao_da_fala_a_imagem", "edicao_tres_modos", "edicao_ilustracao_explica_o_verbo", "edicao_legenda_e_lettering", "edicao_tempo_e_movimento",
+      "edicao_sincronia", "edicao_montagem_e_takes", "edicao_revisao_honesta",
+    ],
+  },
+  {
+    id: "mesa_publicidade.diretor",
+    nome: "Mesa Publicidade: diretor de campanha (três territórios)",
+    funcao: "mesa-publicidade",
+    ligacao: { arquivo: PUBLICIDADE, trechos: ['const CONHECIMENTO_DO_DIRETOR = conhecimentoPublicidade("diretor").texto;', "sistema: SISTEMA_DO_DIRETOR"] },
+    bases: ["mesa-publicidade: SISTEMA_DO_DIRETOR (regras da saída)", "receita da categoria como dado na mensagem (conhecimento-publicidade.ts)"],
+    montar: () => conhecimentoPublicidade("diretor"),
+    promete: [
+      "verdade_do_produto", "territorios_criativos", "plano_de_tomadas_publicitarias", "produto_antes_da_estetica", "aprovacoes_separadas",
+      "identidade_de_marca", "anti_generico", "foto_de_produto_com_verdade",
+    ],
+  },
+  {
+    id: "mesa_publicidade.agente",
+    nome: "Mesa Publicidade: agente da mesa (conversa e ações confirmadas)",
+    funcao: "mesa-publicidade",
+    ligacao: { arquivo: PUBLICIDADE, trechos: ['const CONHECIMENTO_DO_AGENTE = conhecimentoPublicidade("agente").texto;', "sistema: sistemaDoAgente(c, comAcoes)"] },
+    bases: ["mesa-publicidade: SISTEMA_DO_AGENTE e o contrato comum das ações (acoes-do-agente.ts)"],
+    montar: () => conhecimentoPublicidade("agente"),
+    promete: ["verdade_do_produto", "produto_antes_da_estetica", "aprovacoes_separadas", "territorios_criativos"],
+  },
+  // Frente R2 (26/09): Mesa Roteiros. O roteirista escreve; o agente conversa e propõe ações confirmadas.
+  {
+    id: "mesa_roteiros.roteirista",
+    nome: "Mesa Roteiros: roteirista (gerar, refazer gancho, mudar tom)",
+    funcao: "mesa-roteiros",
+    ligacao: { arquivo: ROTEIROS, trechos: ["const CONHECIMENTO_DO_ROTEIRO = conhecimentoRoteiros().texto;", "sistema: `${SISTEMA_ROTEIRISTA}\\n\\n${CONHECIMENTO_DO_ROTEIRO}`"] },
+    bases: ["mesa-roteiros: SISTEMA_ROTEIRISTA (regras da saída) e o papel do modo (roteiro-modelo.ts, MODOS_DE_ROTEIRO)"],
+    montar: (objetivo) => conhecimentoRoteiros(objetivo),
+    promete: [
+      "papeis_do_roteiro", "modos_do_roteiro", "inteligencia_editorial", "tecnicas_editoriais", "direcao_de_gravacao",
+      "roteiro_de_video", "cta_principios", "voz_de_marca", "anti_generico",
+    ],
+  },
+  {
+    id: "mesa_roteiros.agente",
+    nome: "Mesa Roteiros: agente da mesa (conversa e ações confirmadas)",
+    funcao: "mesa-roteiros",
+    ligacao: { arquivo: ROTEIROS, trechos: ["const CONHECIMENTO_DO_ROTEIRO = conhecimentoRoteiros().texto;", "sistema: `${SISTEMA_AGENTE}\\n\\n${CONHECIMENTO_DO_ROTEIRO}"] },
+    bases: ["mesa-roteiros: SISTEMA_AGENTE e o contrato comum das ações (acoes-do-agente.ts)"],
+    montar: (objetivo) => conhecimentoRoteiros(objetivo),
+    promete: ["papeis_do_roteiro", "modos_do_roteiro", "inteligencia_editorial", "roteiro_de_video"],
+  },
 ];
 
 /**
@@ -519,6 +675,64 @@ export const SEM_BASE_DE_PROPOSITO: Record<string, string> = {
   "central.rituais": "Esteira, coach e rituais (dossiê) são das frentes R e S; conhecimentoMarketingPara(\"dossie\") existe mas não está ligado.",
   mcp: "O MCP não tem prompt próprio: as ações de mesa passam pela ponte (mcp-mesas-ponte.ts) e chamam as funções acima, que já montam o conhecimento.",
 };
+
+/**
+ * Mudanças no texto ao gerador do Estúdio (estudio.gerador continua sem base
+ * de marketing; ver SEM_BASE_DE_PROPOSITO). Cada item diz o que mudou, onde a
+ * ligação está e o que prova que o caminho aprovado pelo dono não mudou. O
+ * teste src/test/estudio-fidelidade-referencia.test.ts cobra os trechos.
+ */
+export type MudancaDoGerador = {
+  id: string;
+  em: string;
+  pedido: string;
+  o_que: string;
+  /** Módulo puro com a regra (texto do prompt montado em código, sem IA). */
+  modulo: string;
+  ligacao: { arquivo: string; trechos: string[] };
+  /** O que não muda (o teste compara o prompt de hoje, byte a byte). */
+  intocado: string;
+};
+
+export const MUDANCAS_DO_GERADOR_DO_ESTUDIO: readonly MudancaDoGerador[] = [
+  {
+    id: "fidelidade_da_referencia",
+    em: "2026-09-25",
+    pedido: "Dono: \"pode ter o negócio da referência extremamente idêntica, mais ou menos, ser criativo junto, ter os controles que eu consiga aumentar e diminuir\".",
+    o_que: "Quatro níveis no modo replicar referência (Idêntica, Próxima, Inspirada, Criativa), por lâmina (card.fidelidade_referencia) com padrão do trabalho (direcao.fidelidade_referencia). Fora de Idêntica a referência não é editada (vai como anexo) e promptDoReplicar troca só os blocos do nível. O nível fica na versão (fidelidade_referencia).",
+    modulo: "_shared/fidelidade-da-referencia.ts e promptDoReplicar (direcao-arte.ts)",
+    ligacao: {
+      arquivo: ESTUDIO,
+      trechos: [
+        "const fidelidade = fidelidadeDaLamina(card, t.direcao);",
+        "const editando = refsNoPrompt[0].indice === 1 && imagens.length > 0 && fidelidade === \"identica\";",
+        "fidelidade_referencia: fidelidade,",
+      ],
+    },
+    intocado: "Idêntica (o padrão): prompt, anexos e edição da referência iguais aos de 25/09 (src/test/fixtures/replicar-identica-hoje.json).",
+  },
+  {
+    id: "variedade_com_memoria",
+    em: "2026-09-25",
+    pedido: "Dono: \"ele entender o que já foi feito, para não ficar fazendo sempre a mesma coisa\".",
+    o_que: "Na capa, fora de Idêntica: lê as últimas capas do cliente nas versões gravadas (referencias, molde_lido, modo, fidelidade_referencia, variedade), principalmente as da mesma referência, e escolhe em código o que variar (pose, câmera, posição do texto, elemento gráfico, cor de destaque da paleta). Bloco VARIEDADE no prompt; a escolha fica na versão (variedade).",
+    modulo: "_shared/fidelidade-da-referencia.ts (capasNoHistorico, escolherVariedade, blocoDaVariedade)",
+    ligacao: { arquivo: ESTUDIO, trechos: ["await variedadeDaCapa(t, fidelidade, refsNoPrompt[0].id", "variedade ? variedade.bloco : \"\","] },
+    intocado: "Idêntica não lê o histórico nem ganha bloco; sem IA extra.",
+  },
+  {
+    id: "prancha_de_referencias",
+    em: "2026-09-25",
+    pedido: "Dono: \"às vezes eu coloco várias artes dentro de uma imagem: um print de um perfil do Instagram com várias capas, ou a sequência de um carrossel num print\".",
+    o_que: "Leitura por visão da prancha (uma vez, prancha-<ref>.json), quadros recortados em código: a capa usa um quadro de capa e a lâmina k o quadro de sequência k (ciclando); a capa feita de prancha passa o quadro de sequência às lâminas que não replicam (bloco da série).",
+    modulo: "_shared/prancha-de-referencias.ts",
+    ligacao: {
+      arquivo: ESTUDIO,
+      trechos: ["await quadrosDasPranchas(t, refsDaEquipe, ordem, versoesDaLamina)", "prancha: pranchaDaReferencia,", "serieComQuadroDaPrancha({ ordem, total, sequencia: indiceDaSequencia })"],
+    },
+    intocado: "Referência simples (sem leitura de prancha, ou lida como arte única) segue igual; a geração nunca dispara a leitura da prancha.",
+  },
+];
 
 // ------------------------------------------------------------------ consultas
 
@@ -543,6 +757,11 @@ export function fontesDoMotor(id: string): string[] {
   const m = motor(id);
   if (!m) return [];
   return Array.from(new Set(m.promete.flatMap((b) => origemDoBloco(b)?.fontes ?? [])));
+}
+
+/** Ferramentas internas de leitura de um motor (vazio quando ele não pede leitura). */
+export function ferramentasDoMotor(id: string): string[] {
+  return motor(id)?.ferramentas?.slice() ?? [];
 }
 
 /** Motores alcançados por uma fonte. */

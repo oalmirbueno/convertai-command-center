@@ -395,7 +395,10 @@ describe("rota, casca e troca entre mesas", () => {
     expect(screen.getByRole("combobox", { name: /Cliente: Loja Sintética/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Saldo e gasto do mês" })).toBeTruthy();
     const troca = screen.getByRole("navigation", { name: "Trocar de mesa" });
-    expect(within(troca).getAllByRole("link").map((l) => l.textContent)).toEqual(["Mesa", "Mesa Ads"]);
+    // As outras mesas viram link (a lista cresce com as mesas novas); a aberta não.
+    const links = within(troca).getAllByRole("link").map((l) => l.textContent);
+    expect(links).toEqual(expect.arrayContaining(["Mesa", "Mesa Ads", "Mesa Vídeos"]));
+    expect(links).not.toContain("Mesa Foto");
     expect(within(troca).getByText("Mesa Foto").getAttribute("aria-current")).toBe("page");
     // Barra do kit e do ensaio.
     // A barra é carregada sob demanda (lazyComPreCarga): no teste o primeiro import pode passar de 1 s.

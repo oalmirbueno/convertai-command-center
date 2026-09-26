@@ -88,3 +88,65 @@ Regra única, igual na tela e na função: `grupoNaMesaDeVideos` (`canvas/histor
 - Nunca trocar o motor que o dono escolheu; a rota (OpenRouter ou outra) é só caminho.
 - Tudo o que sai é gerado e entra no acervo marcado como gerado; pessoa sintética pede o rótulo de IA ao publicar.
 - Pessoa real só com autorização registrada; nunca menor, nunca semelhança com pessoa pública.
+
+## 7. V2: o que foi construído (frente V2, 25/09 à noite)
+
+A Mesa Vídeos existe em `/mesa-videos`. Ela usa o mesmo esqueleto das outras mesas: rota, pré-carga, troca de mesas, tela cheia, seletor de clientes (valor `videos`) e custo à vista. Abrir a mesa só lê dados: nada gera nem gasta sem clique.
+
+| Etapa | O que faz | Onde |
+|---|---|---|
+| Acervo | Mostra as fotos que servem a vídeo, pela regra `grupoNaMesaDeVideos` (cenas, personagens, clones autorizados e produtos; referência da internet fica fora). Também mostra as gravações brutas subidas em `mesa/<cliente>/video/brutos/`, com duração e quadro lidos no navegador e SHA-256 até 256 MB. O original nunca muda. | `src/components/mesa-videos/EtapaAcervo.tsx` |
+| História | Mostra as cenas da view `foto_cenas_da_historia`, na ordem, com a foto de cada uma. "Animar cena" vira **pedido preparado**: duração, câmera, fala, trilha e efeitos, com custo estimado pela tabela de referência do kit. O executor fica "em breve" enquanto não houver motor de vídeo (tipo `video`) no `ia_modelos`. Nada é escrito em `dados.cena.animacao`: o pedido mora em `video_pedidos`. | `EtapaHistoria.tsx`, `_shared/pedidos-de-video.ts` |
+| Roteiro e cenas | Liga cada cena do roteiro aprovado (Mesa Roteiros) a uma cena da História. Os dois lados se ligam só por `roteiro_id` e `cena_ref`. | `EtapaRoteiros.tsx`, `_shared/roteiros-para-video.ts` |
+| Edição | Três partes, descritas logo abaixo da tabela. | `EtapaEdicao.tsx`, `_shared/organizador-de-takes.ts`, `_shared/pacote-de-edicao.ts`, `_shared/conhecimento-edicao.ts` |
+| Versões | Memória por vídeo: versões, comentário com o tempo do vídeo, custo e aprovação. Versão aprovada é imutável (a função e um gatilho no banco travam); rejeitar pede motivo. | `EtapaMemoria.tsx`, `_shared/memoria-de-video.ts` |
+
+A aba Edição tem três partes:
+
+- **Organizador de takes.** Renomeia no padrão `roteiro_c01_t01.ext`, agrupa por roteiro e cena e marca os melhores. A proposta segue o contrato comum: apelidos, cartão Confirmar/Cancelar e Desfazer, com propostas guardadas em `video_acoes`. As edições pontuais também oferecem desfazer.
+- **Legenda.** Entra como pedido preparado.
+- **Pacote para editar.** É um ZIP com:
+  - `roteiro.md`;
+  - `takes.csv`;
+  - `decupagem.csv`;
+  - `direcao.md` (método Brabo destilado mais a nota da equipe);
+  - `referencias.md`;
+  - `edl.json` no formato dos projetos Remotion do dono;
+  - legendas;
+  - `links.txt` (vence em 24 h);
+  - `LEIA-ME.md` com as pendências.
+
+**Roteiros aprovados.** A Mesa Roteiros publica a view `roteiros_aprovados_para_video`: `id, client_id, titulo, aprovado_em, cenas[{ ref, ordem, titulo, fala, visual }]`. O SQL `V2-02-roteiros-para-video.sql` monta essa view a partir de `roteiros.versoes` na versão aprovada. Sem a view, a mesa segue sem roteiro e avisa.
+
+**Função `mesa-videos`** (`verify_jwt = true`). Faz toda a escrita; a tela lê pelas tabelas, com RLS em que a equipe lê e só a service_role escreve. Ações:
+
+- `arquivo_registrar`, `arquivo_editar`;
+- `takes_organizar_propor`, `executar_acao_agente`, `desfazer_acao_agente`;
+- `pedido_preparar`, `pedido_cancelar`;
+- `vinculo_salvar`, `vinculo_remover`;
+- `pacote_montar`;
+- `versao_registrar`, `versao_feedback`, `versao_decidir`;
+- `computador_pedir`, `computador_decidir` (fila do computador do agente, **desligada**; desenho em `docs/motores/COMPUTADOR-DO-AGENTE.md`).
+
+**Banco.** O SQL `V2-01-mesa-videos.sql` cria:
+
+- `video_arquivos`, `video_vinculos`, `video_pedidos`, `video_acoes`, `video_versoes` e `agente_computador_tarefas`;
+- o valor `videos` no seletor de clientes;
+- as travas do Storage para a gravação bruta.
+
+**Modo degradado, sem o SQL.**
+
+- Fotos e História aparecem normais.
+- As gravações aparecem pela pasta do Storage.
+- O resto avisa que falta ativar o banco.
+
+**Continua valendo daqui para frente:**
+
+- custo antes de gerar;
+- uma geração por chamada;
+- sem laço de correção;
+- motor escolhido pelo dono;
+- gerado marcado como gerado;
+- pessoa real só com autorização.
+
+Quando houver motor de vídeo, o pedido preparado vira execução com confirmação e custo na hora. Esse caminho ainda não tem código no `ia-motor`.
