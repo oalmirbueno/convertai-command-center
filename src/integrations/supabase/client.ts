@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
 import { criarFetchComPrazo } from './fetchComPrazo';
+import { criarTravaDoLogin } from './travaDoLogin';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -15,6 +16,8 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: brokeredPreviewStorage(),
     persistSession: true,
     autoRefreshToken: true,
+    // Trava entre abas que nunca prende o envio (travaDoLogin.ts, 26/09).
+    lock: criarTravaDoLogin(),
   },
   // Login com prazo: pedido de renovação preso não trava mais o painel na logo (fetchComPrazo.ts).
   global: { fetch: criarFetchComPrazo() },

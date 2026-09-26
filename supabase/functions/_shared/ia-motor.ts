@@ -512,14 +512,18 @@ export function ehDiretoSemCredito(err: unknown, m: ModeloIa): boolean {
   return m.provedor !== "openrouter" && err instanceof IaMotorErro && err.codigo === "provedor_sem_credito";
 }
 
-/** O OpenRouter recusou por falta de credito (402) ou chave invalida (401). */
+/** O OpenRouter recusou por falta de credito (402), chave invalida (401) ou limite de gasto da chave (403). */
 export function ehOpenRouterSemCredito(err: unknown, m: ModeloIa): boolean {
   if (m.provedor !== "openrouter" || !(err instanceof IaMotorErro) || err.codigo !== "provedor_erro") return false;
   const status = Number(err.detalhes.status_provedor);
-  return status === 402 || status === 401;
+  return status === 402 || status === 401 || err.detalhes.limite_da_chave === true;
 }
 
 function erroOpenRouterSemCredito(err: IaMotorErro, pedido: ModeloIa): IaMotorErro {
+  // Limite da chave: a frase já diz onde mexer (não é recarga da conta).
+  if (err.detalhes.limite_da_chave === true) {
+    return new IaMotorErro("openrouter_sem_credito", err.message, { modelo_id: pedido.id, status_provedor: err.detalhes.status_provedor ?? null, limite_da_chave: true });
+  }
   return new IaMotorErro(
     "openrouter_sem_credito",
     "O OpenRouter recusou a chamada por falta de credito ou chave invalida, e este modelo nao tem equivalente direto com chave. Recarregue em https://openrouter.ai/settings/credits ou confira a chave do OpenRouter.",
@@ -617,6 +621,23 @@ async function buscar(provedor: Provedor, url: string, init: RequestInit, timeou
       const corpo = await res.json() as { error?: { message?: string } | string; message?: string };
       msg = typeof corpo.error === "string" ? corpo.error : corpo.error?.message || corpo.message || "";
     } catch { /* corpo sem JSON */ }
+    // Chave do OpenRouter no limite de gasto DELA (limite por chave, não o saldo da conta). 26/09: a conta
+    // estava recarregada e o painel dizia "sem crédito"; o motivo real era "Key limit exceeded (total limit)".
+    if (provedor === "openrouter" && (res.status === 403 || res.status === 402) && /key limit/i.test(String(msg))) {
+      throw new IaMotorErro("provedor_erro", "A chave que o painel usa na OpenRouter chegou ao limite de gasto dela (o limite é da chave, não o saldo da conta). Aumente ou tire o limite da chave em openrouter.ai/settings/keys.", {
+        provedor,
+        status_provedor: res.status,
+        limite_da_chave: true,
+      });
+    }
+    // Limite de uso do provedor por minuto (429 sem falar de cobrança): não é falta de crédito.
+    if (res.status === 429 && !/credit|billing|insufficient|saldo|payment/i.test(String(msg))) {
+      throw new IaMotorErro("provedor_erro", `O provedor do modelo está no limite de uso neste momento (${provedor} 429). Tente de novo em instantes ou escolha outro modelo no seletor.`, {
+        provedor,
+        status_provedor: res.status,
+        limite_de_uso: true,
+      });
+    }
     // Conta do provedor sem crédito (a da agência ou a do cliente): mensagem clara, não o texto cru.
     if ((res.status === 429 || res.status === 402) && /credit|quota|billing|insufficient|saldo/i.test(String(msg))) {
       const onde = provedor === "openai" ? " em platform.openai.com, Billing" : provedor === "anthropic" ? " em console.anthropic.com, Billing" : "";

@@ -312,9 +312,12 @@ describe("catalogo que se atualiza sozinho", () => {
 describe("reserva por credito: OpenRouter 402 ou 401 cai no direto na mesma chamada", () => {
   const reserva = motor.slice(motor.indexOf("async function comReservaOpenRouter<R>("), motor.indexOf("// ---------------------------------------------------------------- utilidades"));
 
-  it("so 402 e 401 do OpenRouter disparam a reserva", () => {
+  it("so 402, 401 e o limite de gasto da chave (403 'Key limit exceeded') do OpenRouter disparam a reserva", () => {
     expect(motor).toContain('if (m.provedor !== "openrouter" || !(err instanceof IaMotorErro) || err.codigo !== "provedor_erro") return false;');
-    expect(motor).toContain("return status === 402 || status === 401;");
+    expect(motor).toContain("return status === 402 || status === 401 || err.detalhes.limite_da_chave === true;");
+    // 26/09: limite da chave não é "sem crédito" da conta; 429 sem cobrança é limite de uso do provedor.
+    expect(motor).toContain("/key limit/i.test(String(msg))");
+    expect(motor).toContain("limite_de_uso: true");
     expect(reserva).toContain("if (!ehOpenRouterSemCredito(err, rota.m)) throw err;");
   });
 
