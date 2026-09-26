@@ -42,6 +42,7 @@ import {
 } from "../_shared/ia-motor.ts";
 import { JevErro, jevPerguntar } from "../_shared/jev.ts";
 import { dimensoesDoCabecalho } from "../_shared/imagem-local.ts";
+import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import {
   artesAprovadas,
   caminhoDoArquivo,
@@ -1041,20 +1042,15 @@ const SISTEMA_ACERVO = `Você organiza o acervo de fotos reais de um cliente de 
 - tags: 3 a 6 palavras curtas em minúsculas.
 Não invente o que não aparece. Sem travessão.`;
 
-/** Imagem reduzida pela transformação do Storage (menos tokens); sem ela, a original. */
+/**
+ * Imagem reduzida a 640 px (menos tokens). Desde 26/09 sem a transformação do
+ * Storage (cota estourada): a miniatura gravada pelo painel ao lado do
+ * original ou o original reduzido aqui quando é pequeno o bastante
+ * (_shared/imagem-reduzida.ts); sem isso, a original, como antes.
+ */
 async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada | null> {
-  try {
-    const { data, error } = await servico().storage.from(bucket).download(caminho, {
-      transform: { width: 640, height: 640, resize: "contain", format: "origin" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      const mime = mimeDe(bytes);
-      if (mime && bytes.byteLength <= MAX_BYTES) return { bytes, mime, nome };
-    }
-  } catch {
-    // cai na original
-  }
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, 640, 640, { maxBytes: 30 * 1024 * 1024 });
+  if (r && r.cabe && r.bytes.byteLength <= MAX_BYTES && mimeDe(r.bytes)) return { bytes: r.bytes, mime: mimeDe(r.bytes)!, nome };
   return await baixarImagem(bucket, caminho, nome);
 }
 

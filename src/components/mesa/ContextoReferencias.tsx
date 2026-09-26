@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, FolderSync, Loader2, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -143,6 +144,7 @@ export default function ContextoReferencias() {
         const caminho = `${clientId}/referencias/${id}.${ext}`;
         const { error } = await supabase.storage.from("mesa").upload(caminho, f, { contentType: f.type || `image/${ext}`, upsert: false });
         if (error) throw error;
+        gravarCopiasSemEsperar("mesa", caminho, f, { nome: f.name, mime: f.type });
         const { error: erroLinha } = await (supabase as any)
           .from("cliente_referencias")
           // Com outra marca aberta no topo (ex.: CME), a referência nasce dela.

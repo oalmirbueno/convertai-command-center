@@ -60,6 +60,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { carregarModelo, chamarImagem, chamarTexto, cobrarJev, IaMotorErro, modeloPadrao, type ImagemEntrada, type ModeloIa } from "../_shared/ia-motor.ts";
 import { decodificar, logoLimpa } from "../_shared/imagem-local.ts";
+import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 import { jevPerguntar, JevErro, notaScore, type PerguntaJev } from "../_shared/jev.ts";
 import {
   createEditorialItem,
@@ -2659,18 +2660,18 @@ async function fotosDoAcervoParaOPlano(servico: SupabaseClient, clientId: string
     .slice(0, limite);
 }
 
-/** Foto reduzida para o modelo ler (lado maior 768): transformação do bucket, senão redução local. */
+/**
+ * Foto reduzida para o modelo ler (lado maior 768). Desde 26/09 sem a
+ * transformação do Storage (cota estourada): a miniatura gravada pelo painel
+ * ao lado do original ou o original reduzido aqui quando é pequeno o bastante
+ * (_shared/imagem-reduzida.ts); senão, a redução local de sempre.
+ */
 async function fotoParaLeitura(servico: SupabaseClient, f: FotoDaCampanha, nome: string): Promise<ImagemEntrada | null> {
   const lado = 768;
   try {
-    const { data, error } = await servico.storage.from(f.storage_bucket || "mesa").download(f.storage_path, {
-      transform: { width: lado, height: lado, resize: "contain" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      const mime = mimeDaImagem(bytes);
-      if (mime && bytes.byteLength <= 3 * 1024 * 1024) return { bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
-    }
+    const r = await reduzidaSemTransformacao(servico, f.storage_bucket || "mesa", f.storage_path, lado, lado, { maxBytes: 30 * 1024 * 1024 });
+    const mime = r && r.cabe ? mimeDaImagem(r.bytes) : null;
+    if (r && mime && r.bytes.byteLength <= 3 * 1024 * 1024) return { bytes: r.bytes, mime, nome: `${nome}.${mime.split("/")[1]}` };
   } catch {
     // cai no original
   }

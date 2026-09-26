@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Library, Link2, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useMesa } from "@/components/mesa/MesaContexto";
@@ -115,6 +116,7 @@ export default function ReferenciasDoCriativo({
         const caminho = `${clientId}/referencias/${id}.${ext}`;
         const { error } = await supabase.storage.from("mesa").upload(caminho, f, { contentType: f.type || `image/${ext}`, upsert: false });
         if (error) throw error;
+        gravarCopiasSemEsperar("mesa", caminho, f, { nome: f.name, mime: f.type });
         const { error: erroLinha } = await (supabase as any)
           .from("cliente_referencias")
           .insert({ id, client_id: clientId, origem: "upload", papel: "tecnica", storage_path: caminho, tags: ["mesa-ads"] });

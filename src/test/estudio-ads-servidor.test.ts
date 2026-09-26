@@ -112,7 +112,7 @@ describe("Estúdio Ads: tamanho por formato", () => {
     expect(corpoDe("laminaFinal")).toContain("Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01");
     // O Storage só reduz a foto inteira; o recorte com foco no tamanho do card é feito na função.
     expect(corpoDe("fotoRealNaLamina")).toContain("return await fotoDoBucketNaLamina(a.storage_bucket, a.storage_path, largura, altura);");
-    expect(corpoDe("fotoDoBucketNaLamina")).toContain("return await fotoNaLamina(reduzida ?? await baixar(bucket, caminho), largura, altura);");
+    expect(corpoDe("fotoDoBucketNaLamina")).toContain("return await fotoNaLamina(reduzida ? reduzida.bytes : await baixar(bucket, caminho), largura, altura);");
     expect(imagemLocal).toContain("export async function fotoNaLamina(bytes: Uint8Array, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA)");
     expect(imagemLocal).toContain("return await cobrirComFoco(await decodificar(bytes), largura, altura).encode(1);");
   });

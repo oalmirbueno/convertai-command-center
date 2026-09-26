@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -70,6 +71,7 @@ export default function ContextoRosto() {
     try {
       const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: arquivo.type || `image/${ext}`, upsert: false });
       if (error) throw error;
+      gravarCopiasSemEsperar("mesa", caminho, arquivo, { nome: arquivo.name, mime: arquivo.type });
       const { error: erroLinha } = await (supabase as any).from("cliente_rostos").insert({
         id,
         client_id: clientId,

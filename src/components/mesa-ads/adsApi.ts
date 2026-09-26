@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import {
   chamarFuncao,
   ErroDaMesa,
@@ -1046,6 +1047,7 @@ export async function adicionarPrint(clientId: string, arquivo: File) {
   const tipo = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
   const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
   if (error) throw error;
+  gravarCopiasSemEsperar("mesa", caminho, arquivo, { nome: arquivo.name, mime: tipo });
   const nome = String(arquivo.name || "").replace(/\.[a-z0-9]+$/i, "").trim();
   const { error: erroInsert } = await sb()
     .from("ads_referencias")

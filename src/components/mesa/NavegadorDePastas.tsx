@@ -62,11 +62,11 @@ function MiniaturaDeArquivo({ arquivo }: { arquivo: ArquivoDePasta }) {
     fileUrl: arquivo.file_url,
     storageBucket: arquivo.storage_bucket,
     storagePath: arquivo.storage_path,
-    transform: { width: 240, height: 240, resize: "contain" },
+    miniatura: true,
   });
   if (error) return <div className="flex h-full w-full items-center justify-center text-[10.5px] text-muted-foreground">indisponível</div>;
   if (!url) return <div className="h-full w-full animate-pulse bg-muted" />;
-  return <img src={url} alt={arquivo.file_name} loading="lazy" className="h-full w-full object-contain p-1" />;
+  return <img src={url} alt={arquivo.file_name} loading="lazy" decoding="async" className="h-full w-full object-contain p-1" />;
 }
 
 function CartaoDeImagem({

@@ -48,9 +48,11 @@ describe("foto real: recorte pelo foco e logo gerada na área dela", () => {
   it("a foto entra na lâmina recortada pelo foco, não pelo centro cego", () => {
     expect(imagem).toContain("return await cobrirComFoco(await decodificar(bytes), largura, altura).encode(1);");
     expect(imagem).toContain("const y = Math.max(0, Math.min(a - altura, Math.round(fy * a - altura * 0.42)));");
-    // O Storage só reduz (contain); o "cover" dele cortava pelo centro.
+    // A foto chega só reduzida (contain em 2000 x 2500, sem cortar); o "cover" pelo centro cortava cabeças.
+    // 26/09: sem a transformação do Storage (cota estourada), pela cópia do painel ou redução local.
     const fotoReal = estudio.slice(estudio.indexOf("async function fotoRealNaLamina("), estudio.indexOf("async function modeloDoPapel("));
-    expect(fotoReal).toContain('transform: { width: 2000, height: 2500, resize: "contain", format: "origin" }');
+    expect(fotoReal).toContain("await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM })");
+    expect(fotoReal).not.toContain("transform:");
     expect(fotoReal).not.toContain('resize: "cover"');
   });
 

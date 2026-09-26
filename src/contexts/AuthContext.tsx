@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsProfile } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { safeSessionStorage } from "@/lib/safeStorage";
+import { definirAutoMiniaturas } from "@/lib/miniaturas";
 import { isAuthRetryableFetchError } from "@supabase/supabase-js";
 import type { AuthError, User } from "@supabase/supabase-js";
 
@@ -161,6 +162,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Mesmo perfil de antes (volta para a aba do navegador dispara SIGNED_IN
       // de novo): mantém o objeto, senão toda tela que depende do perfil
       // recomeçava como se o painel tivesse reiniciado (24/09/2026).
+      // Equipe grava as miniaturas que faltam das imagens que abre (cota de transformação, 26/09).
+      definirAutoMiniaturas(next.role !== "client", next.role === "admin");
       const igual = !!profileRef.current && JSON.stringify(profileRef.current) === JSON.stringify(next);
       if (!igual) {
         profileRef.current = next;
@@ -267,6 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (event === "SIGNED_OUT") {
         sessaoRespondeu.current = true;
+        definirAutoMiniaturas(false);
         setUser(null);
         setProfile(null);
         profileRef.current = null;
@@ -367,6 +371,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    definirAutoMiniaturas(false);
     setUser(null);
     setProfile(null);
     profileRef.current = null;

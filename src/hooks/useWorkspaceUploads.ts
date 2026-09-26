@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { confirmStoredObject } from "@/lib/fileRecordActions";
 
 export type UploadItem = {
@@ -172,6 +173,7 @@ export function useWorkspaceUploads() {
           }
         }
         uploadedObject = true;
+        gravarCopiasSemEsperar("workspace", key, file, { nome: file.name, mime: file.type });
         await finalizeWorkspaceNode({
           key,
           file,

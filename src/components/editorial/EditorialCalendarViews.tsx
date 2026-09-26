@@ -478,8 +478,7 @@ export function EditorialFileThumbnail({
     fileUrl: file?.file_url,
     storageBucket: file?.storage_bucket,
     storagePath: file?.storage_path,
-    transform:
-      kind === "image" ? { width: 640, quality: 74, resize: "cover" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
   const fileCount = file

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { resolveFileUrl } from "@/lib/fileUrls";
+import { urlLeve } from "@/lib/miniaturas";
 import { textoDoErro } from "@/lib/mesa/api";
 import { imagensDoWorkspace, pastasDoWorkspace, RAIZ, useArvoreDoWorkspace, type NoDoWorkspace } from "@/lib/mesa/pastas";
 import {
@@ -106,8 +107,9 @@ export const PINTEREST_URL = "https://www.pinterest.com/";
 type Etapa = "mini" | "original" | "externa";
 
 /**
- * Miniatura com reserva: URL assinada já reduzida, depois a original e, por
- * fim, a imagem pública (url_origem). O banco da agência vai direto na
+ * Miniatura com reserva: a miniatura gravada ao lado do original (sem a
+ * transformação do Storage; cai na original quando não existe), depois a
+ * original e, por fim, a imagem pública (url_origem). O banco da agência vai direto na
  * pública (a assinatura de "globais/" é recusada pelo bucket).
  */
 export function ImagemDeReferencia({ fonte, alt, largura = 320, className = "" }: { fonte: FonteDaImagem | null; alt: string; largura?: number; className?: string }) {
@@ -133,16 +135,16 @@ export function ImagemDeReferencia({ fonte, alt, largura = 320, className = "" }
   const assinar = (etapa === "mini" || etapa === "original") && !!caminho;
 
   const url = useQuery({
-    queryKey: ["mesa", "url", bucket, caminho, etapa === "mini" ? `mini-${largura}-cover` : "original"],
+    queryKey: ["mesa", "url", bucket, caminho, etapa === "mini" ? "leve" : "original"],
     enabled: assinar,
     staleTime: 45 * 60_000,
     gcTime: 55 * 60_000,
     retry: 0,
     queryFn: async () => {
       const c = String(caminho);
-      const transform = etapa === "mini" ? { width: largura, height: largura, resize: "cover" as const, quality: 70 } : null;
-      if (c.indexOf("://") > 0) return resolveFileUrl({ fileUrl: c, transform });
-      const { data, error } = await (supabase.storage.from(bucket) as any).createSignedUrl(c, 3600, transform ? { transform } : undefined);
+      if (c.indexOf("://") > 0) return resolveFileUrl({ fileUrl: c, miniatura: etapa === "mini" });
+      if (etapa === "mini") return (await urlLeve(bucket, c, 3600)).url;
+      const { data, error } = await supabase.storage.from(bucket).createSignedUrl(c, 3600);
       if (error || !data?.signedUrl) throw error || new Error("Imagem indisponível");
       return String(data.signedUrl);
     },

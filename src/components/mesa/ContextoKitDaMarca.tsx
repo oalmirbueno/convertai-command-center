@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -180,6 +181,7 @@ export default function ContextoKitDaMarca({ marca }: { marca: MarcaDoCliente })
       const tipo = extFinal === "jpg" || extFinal === "jpeg" ? "image/jpeg" : `image/${extFinal}`;
       const { error: erroEnvio } = await supabase.storage.from("mesa").upload(caminho, pronta.blob, { contentType: tipo, upsert: false });
       if (erroEnvio) throw erroEnvio;
+      gravarCopiasSemEsperar("mesa", caminho, pronta.blob, { mime: tipo });
       const campos = alternativa ? { logo_alt_path: caminho, logo_alt_file_id: null } : { logo_path: caminho, logo_file_id: null };
       const { error } = await (supabase as any)
         .from("cliente_marcas")

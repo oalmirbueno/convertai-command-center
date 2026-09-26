@@ -59,12 +59,12 @@ function ApprovalThumb({ file }: { file: any }) {
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    transform: kind === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
 
   if (kind === "image" && url) {
-    return <img src={url} alt={file.file_name} className="w-full h-full object-contain" loading="lazy" />;
+    return <img src={url} alt={file.file_name} className="w-full h-full object-contain" loading="lazy" decoding="async" />;
   }
   if (kind === "video" && url) {
     return <video src={`${url}#t=0.1`} className="w-full h-full bg-black object-contain" muted playsInline preload="metadata" />;

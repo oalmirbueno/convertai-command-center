@@ -1372,3 +1372,211 @@ function aplicarBordas(a: Image, f: Image, fracao = 0.07, penaPx = 24) {
     }
   }
 }
+
+// ------------------------------------------------ redução local (sem a transformação do Storage)
+
+/**
+ * 26/09: o projeto passou da cota de "Storage Image Transformations" (1.212
+ * imagens de origem no ciclo contra 100 incluídas). Toda redução que as
+ * funções pediam ao Storage (`download(..., { transform })`) passa a ser feita
+ * aqui, sem custo por imagem.
+ *
+ * Limite de CPU (2 s por chamada): a imagem que já cabe no tamanho pedido
+ * volta como veio, sem abrir (só o cabeçalho é lido). Acima de
+ * MAX_PIXELS_PARA_REDUZIR a redução não é tentada e quem chamou usa o
+ * original, como já era o caminho quando a transformação falhava.
+ */
+export const MAX_PIXELS_PARA_REDUZIR = 24_000_000;
+
+/** Tipo pela assinatura dos bytes (PNG, JPEG, WebP, GIF). */
+export function mimeDaImagem(b: Uint8Array): string | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return "image/gif";
+  return null;
+}
+
+/** Para cada índice de origem: destino inicial, peso nele (o resto vai ao seguinte) e a soma de pesos por destino. */
+function mapaDoEixo(n: number, m: number) {
+  const s = n / m;
+  const d0 = new Int32Array(n);
+  const w0 = new Float32Array(n);
+  const soma = new Float64Array(m);
+  for (let i = 0; i < n; i++) {
+    const d = Math.min(m - 1, Math.floor(i / s));
+    const limite = (d + 1) * s;
+    const w = i + 1 <= limite ? 1 : Math.max(0, limite - i);
+    d0[i] = d;
+    w0[i] = w;
+    soma[d] += w;
+    if (w < 1 && d + 1 < m) soma[d + 1] += 1 - w;
+  }
+  return { d0, w0, soma };
+}
+
+/**
+ * Redução por média de área (cada pixel de destino é a média ponderada dos
+ * pixels de origem que ele cobre), com alfa pré-multiplicado para a borda de
+ * logo transparente não escurecer. Só reduz: eixo que pediria ampliação fica
+ * no tamanho de origem. Memória: duas linhas de acumulação, não a imagem toda.
+ */
+export function reduzirPorArea(img: Image, largura: number, altura: number): Image {
+  const sw = img.width, sh = img.height;
+  const dw = Math.max(1, Math.min(sw, Math.round(largura)));
+  const dh = Math.max(1, Math.min(sh, Math.round(altura)));
+  if (dw === sw && dh === sh) return img;
+  const mx = mapaDoEixo(sw, dw), my = mapaDoEixo(sh, dh);
+  const src = img.bitmap;
+  const saida = new Image(dw, dh);
+  const ob = saida.bitmap;
+  const linha = new Float64Array(dw * 4);
+  let atual = new Float64Array(dw * 4);
+  let proxima = new Float64Array(dw * 4);
+  let linhaAtual = 0;
+  const escrever = (dy: number, acc: Float64Array) => {
+    const wy = my.soma[dy];
+    const base = dy * dw * 4;
+    for (let x = 0; x < dw; x++) {
+      const j = x * 4;
+      const peso = wy * mx.soma[x];
+      const a = acc[j + 3];
+      const o = base + j;
+      if (a > 0 && peso > 0) {
+        ob[o] = Math.min(255, Math.round(acc[j] / a));
+        ob[o + 1] = Math.min(255, Math.round(acc[j + 1] / a));
+        ob[o + 2] = Math.min(255, Math.round(acc[j + 2] / a));
+        ob[o + 3] = Math.min(255, Math.round(a / peso));
+      } else {
+        ob[o] = 0;
+        ob[o + 1] = 0;
+        ob[o + 2] = 0;
+        ob[o + 3] = 0;
+      }
+    }
+  };
+  const avancar = () => {
+    escrever(linhaAtual, atual);
+    const t = atual;
+    atual = proxima;
+    proxima = t;
+    proxima.fill(0);
+    linhaAtual++;
+  };
+  for (let y = 0; y < sh; y++) {
+    linha.fill(0);
+    const base = y * sw * 4;
+    for (let x = 0; x < sw; x++) {
+      const i = base + x * 4;
+      const a = src[i + 3];
+      if (a === 0) continue;
+      const r = src[i] * a, g = src[i + 1] * a, b = src[i + 2] * a;
+      const d = mx.d0[x], w = mx.w0[x];
+      const j = d * 4;
+      linha[j] += r * w;
+      linha[j + 1] += g * w;
+      linha[j + 2] += b * w;
+      linha[j + 3] += a * w;
+      if (w < 1 && d + 1 < dw) {
+        const v = 1 - w;
+        linha[j + 4] += r * v;
+        linha[j + 5] += g * v;
+        linha[j + 6] += b * v;
+        linha[j + 7] += a * v;
+      }
+    }
+    const e = my.d0[y], v = my.w0[y];
+    while (linhaAtual < e) avancar();
+    for (let k = 0; k < linha.length; k++) atual[k] += linha[k] * v;
+    if (v < 1 && e + 1 < dh) {
+      const r = 1 - v;
+      for (let k = 0; k < linha.length; k++) proxima[k] += linha[k] * r;
+    }
+  }
+  while (linhaAtual < dh) avancar();
+  return saida;
+}
+
+/** Tamanho "contain" (cabe inteiro na caixa, sem ampliar e sem cortar). */
+export function tamanhoQueCabe(largura: number, altura: number, maxL: number, maxA: number): { largura: number; altura: number } {
+  const escala = Math.min(1, maxL / largura, maxA / altura);
+  return { largura: Math.max(1, Math.round(largura * escala)), altura: Math.max(1, Math.round(altura * escala)) };
+}
+
+export type ImagemReduzida = { bytes: Uint8Array; mime: string; largura: number; altura: number; reduziu: boolean };
+
+/**
+ * Reduz para caber em maxL x maxA (contain, sem ampliar), no mesmo formato de
+ * origem (JPEG continua JPEG; PNG continua PNG, com a transparência).
+ * - Já cabe: devolve os mesmos bytes sem abrir (reduziu: false).
+ * - Grande demais para abrir no limite de CPU, formato que não abre aqui
+ *   (WebP, GIF) ou arquivo corrompido: null, e quem chamou usa o original.
+ */
+export async function reduzirParaCaber(
+  bytes: Uint8Array,
+  maxL: number,
+  maxA: number,
+  opcoes: { qualidadeJpeg?: number; maxPixels?: number } = {},
+): Promise<ImagemReduzida | null> {
+  const mime = mimeDaImagem(bytes);
+  if (!mime) return null;
+  const d = dimensoesDoCabecalho(bytes);
+  if (d && d.largura <= maxL && d.altura <= maxA) return { bytes, mime, largura: d.largura, altura: d.altura, reduziu: false };
+  if (mime !== "image/png" && mime !== "image/jpeg") return null;
+  if (!d || d.largura * d.altura > (opcoes.maxPixels ?? MAX_PIXELS_PARA_REDUZIR)) return null;
+  try {
+    const img = await decodificar(bytes);
+    const r = reduzirImagemParaCaber(img, maxL, maxA);
+    const saida = mime === "image/jpeg" ? await r.encodeJPEG(opcoes.qualidadeJpeg ?? 90) : await r.encode(1);
+    return { bytes: saida, mime, largura: r.width, altura: r.height, reduziu: true };
+  } catch {
+    return null;
+  }
+}
+
+/** Mesma redução "contain" sobre uma imagem já aberta (sem codificar de novo). */
+export function reduzirImagemParaCaber(img: Image, maxL: number, maxA: number): Image {
+  const alvo = tamanhoQueCabe(img.width, img.height, maxL, maxA);
+  return reduzirPorArea(img, alvo.largura, alvo.altura);
+}
+
+/**
+ * Recorte "cover" pelo centro na proporção largura x altura, sem ampliar:
+ * corta o excesso no tamanho nativo e só reduz (média de área) se o recorte
+ * passar de `folga` vezes o alvo. A lâmina que já está na proporção volta
+ * como veio (sem abrir e sem perder nitidez). Quando recorta, sai PNG. Null
+ * quando não abre (quem chamou usa o original).
+ */
+export async function recortarNaProporcao(
+  bytes: Uint8Array,
+  largura: number,
+  altura: number,
+  opcoes: { folga?: number; maxPixels?: number } = {},
+): Promise<ImagemReduzida | null> {
+  const mime = mimeDaImagem(bytes);
+  const d = dimensoesDoCabecalho(bytes);
+  if (!mime || !d) return null;
+  const alvo = largura / altura;
+  const folga = opcoes.folga ?? 1.25;
+  if (Math.abs(d.largura / d.altura - alvo) < 0.005 && d.largura <= largura * folga) {
+    return { bytes, mime, largura: d.largura, altura: d.altura, reduziu: false };
+  }
+  if (mime !== "image/png" && mime !== "image/jpeg") return null;
+  if (d.largura * d.altura > (opcoes.maxPixels ?? MAX_PIXELS_PARA_REDUZIR)) return null;
+  try {
+    const img = await decodificar(bytes);
+    let cl = img.width, ca = Math.round(img.width / alvo);
+    if (ca > img.height) {
+      ca = img.height;
+      cl = Math.round(img.height * alvo);
+    }
+    const recorte = cl === img.width && ca === img.height
+      ? img
+      : img.clone().crop(Math.floor((img.width - cl) / 2), Math.floor((img.height - ca) / 2), cl, ca);
+    const final = cl > largura * folga ? reduzirPorArea(recorte, largura, altura) : recorte;
+    return { bytes: await final.encode(1), mime: "image/png", largura: final.width, altura: final.height, reduziu: true };
+  } catch {
+    return null;
+  }
+}

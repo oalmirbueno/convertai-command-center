@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, Loader2, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { chamarFuncao, textoDoErro } from "@/lib/mesa/api";
 import { Ampliar, type ImagemAmpliavel } from "./Ampliar";
@@ -113,6 +114,7 @@ export async function gravarLogoReduzida(clientId: string, userId: string | null
   const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-reduzida.png`;
   const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
   if (envio.error) throw envio.error;
+  gravarCopiasSemEsperar("mesa", destino, png, { mime: "image/png" });
   const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
   const { error: erroKit } = await (supabase as any)
     .from("cliente_kit_marca")
@@ -125,6 +127,7 @@ export async function gravarBlobDaLogo(clientId: string, userId: string | null |
   const destino = `${clientId}/marca/${alternativa ? "logo-alternativa" : "logo"}-${Date.now()}-${sufixo}.png`;
   const envio = await supabase.storage.from("mesa").upload(destino, png, { contentType: "image/png", upsert: true });
   if (envio.error) throw envio.error;
+  gravarCopiasSemEsperar("mesa", destino, png, { mime: "image/png" });
   const campos = alternativa ? { logo_alt_path: destino, logo_alt_file_id: null } : { logo_path: destino, logo_file_id: null };
   const { error: erroKit } = await (supabase as any)
     .from("cliente_kit_marca")

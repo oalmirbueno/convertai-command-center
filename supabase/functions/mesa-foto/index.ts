@@ -261,6 +261,7 @@ import {
   telaDeTrabalho,
 } from "./imagem.ts";
 import { abrirFoto, avisoDoRecorte, fracaoTransparenteDe, LADO_DO_RECORTE, recortePreservandoOriginal, telaDoRecorte } from "./recorte.ts";
+import { reduzidaSemTransformacao } from "../_shared/imagem-reduzida.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -471,24 +472,18 @@ async function baixar(bucket: string, caminho: string, max = MAX_BYTES_ORIGINAL)
 }
 
 /**
- * Imagem reduzida (lado maior até `lado`) para visão e fontes do gerador:
- * pede à transformação do Storage e, sem ela, reduz aqui.
+ * Imagem reduzida (lado maior até `lado`) para visão e fontes do gerador.
+ * Desde 26/09 sem a transformação do Storage (cota estourada): a cópia leve
+ * gravada pelo painel ao lado do original ou o original reduzido aqui quando
+ * é pequeno o bastante (_shared/imagem-reduzida.ts); grande demais, reduz
+ * aqui como já era quando a transformação falhava.
  */
 async function baixarReduzida(bucket: string, caminho: string, lado: number, nome: string): Promise<ImagemEntrada> {
-  try {
-    const { data, error } = await servico().storage.from(bucket).download(caminho, {
-      transform: { width: lado, height: lado, resize: "contain", format: "origin" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      const mime = mimeDe(bytes);
-      const d = mime ? dimensoesDaImagem(bytes) : null;
-      if (mime && d && Math.max(d.largura, d.altura) <= lado + 2) return { bytes, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
-    }
-  } catch {
-    // cai no original abaixo
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, { maxBytes: MAX_BYTES_ORIGINAL });
+  if (r && r.cabe && r.largura && r.altura && Math.max(r.largura, r.altura) <= lado + 2) {
+    return { bytes: r.bytes, mime: r.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(r.mime)}` };
   }
-  const original = await baixar(bucket, caminho);
+  const original = r ? r.bytes : await baixar(bucket, caminho);
   if (!mimeDe(original)) throw new ErroHttp(415, "imagem_invalida", `O arquivo ${nome} não é uma imagem reconhecida.`);
   const png = await reduzir(original, lado);
   return { bytes: png, mime: "image/png", nome: `${nomeSeguro(nome)}.png` };

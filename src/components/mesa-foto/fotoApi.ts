@@ -1,6 +1,7 @@
 import { acaoDoAnexo, type AcaoDoAgente } from "@/lib/agentes/acoesDoAgente";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import {
   chamarFuncao,
   ErroDaMesa,
@@ -1488,6 +1489,7 @@ export async function subirOriginais(
           .from("mesa")
           .upload(caminho, item.arquivo, { contentType: CONTEUDO_DA_EXTENSAO[item.ext] || "image/jpeg", upsert: false });
         if (error) throw error;
+        gravarCopiasSemEsperar("mesa", caminho, item.arquivo, { nome: item.arquivo.name, mime: CONTEUDO_DA_EXTENSAO[item.ext] || "image/jpeg" });
         subidos.push({ caminho, nome: item.arquivo.name || caminho.split("/").pop() || "foto" });
       } catch (e: any) {
         recusadas.push({ nome: item.arquivo.name || "imagem", motivo: (e && e.message) || "não subiu" });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { resolverReferencia, type ReferenciaDoCliente } from "@/components/mesa/contextoDoCliente";
 import { useMarcaDaMesa } from "@/components/mesa/MesaContexto";
@@ -252,6 +253,7 @@ export async function subirReferencia(clientId: string, arquivo: File): Promise<
   const tipo = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
   const { error: erroUpload } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
   if (erroUpload) throw erroUpload;
+  gravarCopiasSemEsperar("mesa", caminho, arquivo, { nome: arquivo.name, mime: tipo });
   const { data, error } = await (supabase as any)
     .from("cliente_referencias")
     // Com outra marca aberta no topo (ex.: CME), a referência nasce dela.

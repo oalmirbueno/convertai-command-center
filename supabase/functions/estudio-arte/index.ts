@@ -257,7 +257,9 @@ import {
   LARGURA_LAMINA,
   tamanhoDoTrecho,
   telaDoTrecho,
+  recortarNaProporcao,
 } from "../_shared/imagem-local.ts";
+import { reduzidaSemTransformacao, type ResultadoDaReducao } from "../_shared/imagem-reduzida.ts";
 import {
   geracaoDoPanorama,
   modeloFazPanorama,
@@ -983,22 +985,15 @@ async function baixarLogo(clientId: string, kit: Kit, alternativa = false): Prom
 }
 
 /**
- * Logo reduzida pelo Storage (até 1024 px, sem cortar): arquivo de logo de
- * 7.800 px levava mais de 1 s de CPU só para abrir. Sem a transformação, o original.
+ * Logo reduzida (até 1024 px, sem cortar): arquivo de logo de 7.800 px levava
+ * mais de 1 s de CPU só para abrir. Desde 26/09 sem a transformação do
+ * Storage (cota estourada): a cópia média em PNG gravada pelo painel ou o
+ * original reduzido aqui (imagem-reduzida.ts); grande demais para abrir, o
+ * original, como antes.
  */
 async function baixarLogoReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada> {
-  try {
-    const { data, error } = await servico().storage.from(bucket).download(caminho, {
-      transform: { width: 1024, height: 1024, resize: "contain", format: "origin" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      const mime = mimeDe(bytes);
-      if (mime) return { bytes, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
-    }
-  } catch {
-    // sem a transformação: o original abaixo
-  }
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM });
+  if (r) return { bytes: r.bytes, mime: r.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(r.mime)}` };
   return await baixarImagem(bucket, caminho, nome);
 }
 
@@ -1662,48 +1657,39 @@ const resumoDaFoto = (a: ImagemAcervo) =>
 
 /**
  * Foto real já no formato da lâmina (1088 x 1360 por padrão; o criativo de
- * anúncio passa o tamanho do formato), recortada pelo foco da foto. O Storage
- * só reduz a foto inteira (contain, sem cortar: o "cover" dele cortava pelo
- * centro e decapitava quem estava no alto de uma foto de Reels) e o recorte
- * com foco é feito aqui.
+ * anúncio passa o tamanho do formato), recortada pelo foco da foto. A foto
+ * chega reduzida inteira (contain, sem cortar: o "cover" pelo centro
+ * decapitava quem estava no alto de uma foto de Reels) e o recorte com foco é
+ * feito aqui.
  */
 async function fotoRealNaLamina(a: ImagemAcervo, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
   return await fotoDoBucketNaLamina(a.storage_bucket, a.storage_path, largura, altura);
 }
 
 /**
- * Bytes da foto já reduzidos pelo Storage (contain em 2000 x 2500, sem
- * cortar), ou null. As fotos da Mesa Foto chegam a 4K: decodificar o original
- * aqui estourava o limite de CPU da função.
+ * Foto reduzida inteira (contain em 2000 x 2500, sem cortar). As fotos da
+ * Mesa Foto chegam a 4K: decodificar o original aqui estourava o limite de
+ * CPU da função. Desde 26/09 sem a transformação do Storage (cota estourada):
+ * vem a cópia média de 2048 px gravada pelo painel ao lado do original
+ * (aceita até 5% acima da caixa, sem abrir de novo) ou o original reduzido
+ * aqui quando é pequeno o bastante (imagem-reduzida.ts). "cabe: false" traz o
+ * original sem reduzir, o mesmo caminho de quando a transformação falhava.
+ * Null: nada legível (quem chama baixa o original e responde o erro certo).
  */
-async function baixarReduzida(bucket: string, caminho: string): Promise<Uint8Array | null> {
-  try {
-    const { data, error } = await servico().storage.from(bucket).download(caminho, {
-      transform: { width: 2000, height: 2500, resize: "contain", format: "origin" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      if (mimeDe(bytes)) return bytes;
-    }
-  } catch {
-    // sem a transformação: o original
-  }
-  return null;
+async function baixarReduzida(bucket: string, caminho: string): Promise<ResultadoDaReducao | null> {
+  return await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM });
 }
 
 /** Foto (do acervo ou trazida pela equipe) no formato da lâmina, recortada pelo foco. */
 async function fotoDoBucketNaLamina(bucket: string, caminho: string, largura = LARGURA_LAMINA, altura = ALTURA_LAMINA): Promise<Uint8Array> {
   const reduzida = await baixarReduzida(bucket, caminho);
-  return await fotoNaLamina(reduzida ?? await baixar(bucket, caminho), largura, altura);
+  return await fotoNaLamina(reduzida ? reduzida.bytes : await baixar(bucket, caminho), largura, altura);
 }
 
 /** Foto de pessoa ou objeto anexada ao gerador como é (reduzida quando dá, sem decodificar aqui). */
 async function imagemReduzida(bucket: string, caminho: string, nome: string): Promise<ImagemEntrada> {
   const reduzida = await baixarReduzida(bucket, caminho);
-  if (reduzida) {
-    const mime = mimeDe(reduzida)!;
-    return { bytes: reduzida, mime, nome: `${nomeSeguro(nome)}.${extensaoDe(mime)}` };
-  }
+  if (reduzida) return { bytes: reduzida.bytes, mime: reduzida.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(reduzida.mime)}` };
   return await baixarImagem(bucket, caminho, nome);
 }
 
@@ -4314,32 +4300,27 @@ function legendaComHashtags(legendaTexto: string | null, hashtags: string[] | nu
 
 /**
  * Lamina no formato final: 4:5 (1080 x 1350) por padrao; o criativo de
- * anuncio passa o quadro do formato (1080 x 1080 ou 1080 x 1920). O corte e a
- * escala ficam com a transformacao de imagem do Storage (cover pelo centro,
- * sem gastar CPU da funcao). Se a transformacao nao estiver disponivel no
- * plano, entra a lamina como foi gerada e a resposta avisa.
+ * anuncio passa o quadro do formato (1080 x 1080 ou 1080 x 1920).
+ *
+ * 26/09: sem a transformacao de imagem do Storage (cota estourada). A lamina
+ * ja nasce no quadro do formato (1088 x 1360, 1088 x 1088, 1088 x 1920): na
+ * proporcao do alvo, vai como foi gerada, sem abrir, sem reamostrar e sem
+ * gastar CPU (o entregar passa por ate 10 laminas numa chamada so). Fora da
+ * proporcao, o recorte pelo centro e feito aqui (imagem-local.ts). Se nem
+ * isso der, entra a lamina como foi gerada e a resposta avisa.
  */
 async function laminaFinal(
   caminho: string,
   alvo: { largura: number; altura: number } = { largura: LARGURA_FINAL, altura: ALTURA_FINAL },
 ): Promise<{ bytes: Uint8Array; largura: number | null; altura: number | null; redimensionada: boolean }> {
-  try {
-    const { data, error } = await servico().storage.from("mesa").download(caminho, {
-      transform: { width: alvo.largura, height: alvo.altura, resize: "cover", format: "origin" },
-    });
-    if (!error && data) {
-      const bytes = new Uint8Array(await data.arrayBuffer());
-      const d = dimensoesPng(bytes);
-      // Aceita qualquer tamanho na proporcao do alvo (o Storage pode nao ampliar alem do original).
-      if (d && Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01) {
-        return { bytes, largura: d.largura, altura: d.altura, redimensionada: true };
-      }
-    }
-  } catch {
-    // cai no original abaixo
-  }
   const original = await baixar("mesa", caminho);
-  const d = dimensoesPng(original);
+  const d = dimensoesDoCabecalho(original);
+  // Aceita qualquer tamanho na proporcao do alvo (ate 1,5 vez o alvo; acima disso reduz).
+  if (d && Math.abs(d.largura / d.altura - alvo.largura / alvo.altura) < 0.01 && d.largura <= alvo.largura * 1.5) {
+    return { bytes: original, largura: d.largura, altura: d.altura, redimensionada: true };
+  }
+  const recorte = await recortarNaProporcao(original, alvo.largura, alvo.altura, { folga: 1.5 });
+  if (recorte) return { bytes: recorte.bytes, largura: recorte.largura, altura: recorte.altura, redimensionada: true };
   return { bytes: original, largura: d?.largura ?? null, altura: d?.altura ?? null, redimensionada: false };
 }
 
@@ -4472,7 +4453,7 @@ async function entregar(ch: Chamador, corpo: Record<string, unknown>) {
     file_ids: fileIds,
     formatos,
     aviso: formatos.some((f) => !f.redimensionada)
-      ? "A transformação de imagem do Storage não respondeu: parte das artes foi entregue no tamanho em que foi gerada."
+      ? "Parte das artes não pôde ser recortada no formato final e foi entregue no tamanho em que foi gerada."
       : null,
   });
 }
@@ -4597,7 +4578,7 @@ async function entregarAnuncio(ch: Chamador, t: Trabalho, corpo: Record<string, 
     file_ids: fileIds,
     arquivos,
     aviso: semRecorte
-      ? "A transformação de imagem do Storage não respondeu: parte dos criativos foi entregue no tamanho gerado."
+      ? "Parte dos criativos não pôde ser recortada no formato final e foi entregue no tamanho gerado."
       : null,
   });
 }

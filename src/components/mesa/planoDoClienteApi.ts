@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { chamarFuncao } from "@/lib/mesa/api";
 import { readFileContext } from "@/lib/fileContext";
 // Só o endereço do worker (uma linha); o leitor de PDF baixa quando um PDF é importado.
@@ -238,6 +239,7 @@ export async function importarBrandBook(clientId: string, arquivos: File[], aoAv
     aoAvancar && aoAvancar(`Guardando ${f.name}...`);
     const envio = await supabase.storage.from("mesa").upload(caminho, f, { contentType: f.type || "application/octet-stream", upsert: false });
     if (envio.error) throw envio.error;
+    gravarCopiasSemEsperar("mesa", caminho, f, { nome: f.name, mime: f.type });
     enviados.push({ caminho, nome: f.name, mime: f.type || "" });
     const ehPdf = /pdf$/i.test(f.type || "") || /\.pdf$/i.test(f.name);
     if (ehPdf) {

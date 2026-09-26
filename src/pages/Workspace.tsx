@@ -38,6 +38,7 @@ import { StudioPanel } from "@/components/workspace/StudioPanel";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, mensagemDaFuncao, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { urlsLevesEmLote } from "@/lib/miniaturas";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -239,7 +240,7 @@ export default function Workspace() {
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
-  // Separate cache for small thumbnail URLs (image transform). Keeping full-res
+  // Separate cache for small thumbnail URLs (miniatura). Keeping full-res
   // URLs distinct in `signedUrls` ensures the preview modal never renders the
   // downscaled cover instead of the actual file.
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
@@ -671,10 +672,11 @@ export default function Workspace() {
     (async () => {
       const jobs: Promise<any>[] = [];
       if (imgTargets.length) {
-        jobs.push((supabase.storage.from("workspace") as any).createSignedUrls(
-          imgTargets.map(n => n.storage_path!), 3600,
-          { transform: { width: 400, quality: 70, resize: "cover" } }
-        ).then((r: any) => ({ kind: "cover", data: r?.data })));
+        // Capa leve sem a transformação do Storage: a miniatura gravada ao
+        // lado do original quando existe, senão o original (src/lib/miniaturas.ts).
+        jobs.push(urlsLevesEmLote("workspace", imgTargets.map(n => n.storage_path!), 3600)
+          .then((mapa) => ({ kind: "cover", data: Object.keys(mapa).map((path) => ({ path, signedUrl: mapa[path] })) }))
+          .catch(() => ({ kind: "cover", data: [] })));
       }
       if (vidTargets.length) {
         jobs.push(supabase.storage.from("workspace").createSignedUrls(
@@ -2757,13 +2759,14 @@ function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
   const ref = storageRefFromFile({ fileUrl: node.__external_url, storageBucket: node.__storage_bucket, storagePath: node.__storage_path });
   const k = kindOf(node);
   const Icon = iconFor(node);
-  const { url } = useResolvedFileUrl({
-    fileUrl: cover || node.__external_url,
+  const resolvida = useResolvedFileUrl({
+    fileUrl: cover ? null : node.__external_url,
     storageBucket: cover ? null : ref?.bucket,
     storagePath: cover ? null : ref?.path,
-    transform: k === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    miniatura: k === "image",
     expiresIn: 3600,
   });
+  const url = cover || resolvida.url;
   if (!url) {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-secondary">

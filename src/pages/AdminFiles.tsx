@@ -4,6 +4,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,7 +125,7 @@ function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: s
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    transform: kind === "image" ? { width: 640, quality: 72, resize: "contain" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
   // A capa mostra a peca INTEIRA: nada de zoom nem corte. Imagem e video
@@ -977,6 +978,7 @@ export default function AdminFiles() {
             );
           }
         }
+        gravarCopiasSemEsperar("files", path, file, { nome: file.name, mime: file.type });
 
         const fileName = i === 0
           ? (uploadName || file.name)

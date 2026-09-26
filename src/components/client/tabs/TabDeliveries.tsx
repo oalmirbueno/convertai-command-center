@@ -117,7 +117,7 @@ function DeliveryThumb({ file }: { file: any }) {
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    transform: kind === "image" ? { width: 320, height: 320, quality: 72, resize: "cover" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
 

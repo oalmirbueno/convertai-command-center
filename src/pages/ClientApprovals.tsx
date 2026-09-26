@@ -52,7 +52,7 @@ function ApprovalFileThumb({ file, className = "w-full h-full" }: { file: any; c
     fileUrl: file.file_url,
     storageBucket: file.storage_bucket,
     storagePath: file.storage_path,
-    transform: kind === "image" ? { width: 640, height: 640, quality: 72, resize: "cover" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
 

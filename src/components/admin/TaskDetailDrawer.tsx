@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
@@ -569,6 +570,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         const path = `task-attachments/${task.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("files").upload(path, file);
         if (uploadError) { toast.error(`Erro ao enviar ${file.name}`); continue; }
+        gravarCopiasSemEsperar("files", path, file, { nome: file.name, mime: file.type });
         await supabase.from("task_attachments").insert({
           task_id: task.id, file_name: file.name, file_url: `files://${path}`,
           file_type: file.type, file_size: file.size, uploaded_by: user.id,

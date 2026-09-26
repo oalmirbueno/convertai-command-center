@@ -1,12 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-
-type TransformOptions = {
-  width?: number;
-  height?: number;
-  quality?: number;
-  resize?: "cover" | "contain" | "fill";
-};
+import { urlLeve } from "@/lib/miniaturas";
 
 type ResolveInput = {
   fileUrl?: string | null;
@@ -15,7 +9,12 @@ type ResolveInput = {
 };
 
 type UseResolvedInput = ResolveInput & {
-  transform?: TransformOptions | null;
+  /**
+   * Imagem para grade/cartão: usa a miniatura gravada ao lado do original
+   * (src/lib/miniaturas.ts) quando existe, senão o original. Nunca pede a
+   * transformação de imagem do Storage (cota estourada em 26/09/2026).
+   */
+  miniatura?: boolean;
   expiresIn?: number;
 };
 
@@ -74,12 +73,13 @@ export function isDirectFileUrl(value?: string | null) {
 
 export async function resolveFileUrl(input: UseResolvedInput): Promise<string> {
   const ref = storageRefFromFile(input);
+  if (ref && input.miniatura) {
+    return (await urlLeve(ref.bucket, ref.path, input.expiresIn || 3600)).url;
+  }
   if (ref) {
-    const options = input.transform ? { transform: input.transform } : undefined;
-    const { data, error } = await (supabase.storage.from(ref.bucket) as any).createSignedUrl(
+    const { data, error } = await supabase.storage.from(ref.bucket).createSignedUrl(
       ref.path,
       input.expiresIn || 3600,
-      options,
     );
     if (error || !data?.signedUrl) {
       throw error || new Error("URL indisponível");
@@ -96,7 +96,7 @@ export function useResolvedFileUrl(input: UseResolvedInput) {
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
 
-  const transformKey = useMemo(() => JSON.stringify(input.transform || null), [input.transform]);
+  const miniatura = !!input.miniatura;
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export function useResolvedFileUrl(input: UseResolvedInput) {
 
     return () => { alive = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input.fileUrl, input.storageBucket, input.storagePath, input.expiresIn, transformKey, version]);
+  }, [input.fileUrl, input.storageBucket, input.storagePath, input.expiresIn, miniatura, version]);
 
   return { url, loading, error, reload };
 }

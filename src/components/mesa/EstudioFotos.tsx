@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Check, ClipboardPaste, ImagePlus, Images, Loader2, Lock, Maximize2, RefreshCw, Scissors, Sparkles, TriangleAlert, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chamarFuncao, ErroDaMesa, textoDoErro } from "@/lib/mesa/api";
@@ -195,6 +196,7 @@ export async function subirFoto(clientId: string, arquivo: Blob, ext: string): P
   const caminho = caminhoDaFoto(clientId, novoId(), ext);
   const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: TIPO_DA_EXTENSAO[ext] || "image/jpeg", upsert: false });
   if (error) throw error;
+  gravarCopiasSemEsperar("mesa", caminho, arquivo, { mime: TIPO_DA_EXTENSAO[ext] || "image/jpeg" });
   return caminho;
 }
 

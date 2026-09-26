@@ -200,11 +200,11 @@ function SlideThumb({ slide }: { slide: Slide }) {
     fileUrl: slide.file_url,
     storageBucket: slide.storage_bucket,
     storagePath: slide.storage_path,
-    transform: kind === "image" ? { width: 320, height: 320, quality: 70, resize: "cover" } : null,
+    miniatura: kind === "image",
     expiresIn: 3600,
   });
 
-  if (url && kind === "image") return <img src={url} alt={slide.file_name} loading="lazy" className="h-full w-full object-cover" />;
+  if (url && kind === "image") return <img src={url} alt={slide.file_name} loading="lazy" decoding="async" className="h-full w-full object-cover" />;
   if (url && kind === "video") {
     return (
       <>

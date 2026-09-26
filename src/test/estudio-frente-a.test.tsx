@@ -290,7 +290,9 @@ describe("2. logo sem caixa branca, gerada junto com a arte em todos os modos (2
     expect(imagemLocal).toContain("const fonte = opcoes.aparar ? aparadaPeloAlfa(img) ?? img : img;");
     expect(corpoDe("baixarLogo")).toContain("await logoLimpa(bruta.bytes, { aparar: true });");
     expect(imagemLocal).toContain("const a = Math.min(1, distancia(i) / 70);");
-    expect(corpoDe("baixarLogoReduzida")).toContain('transform: { width: 1024, height: 1024, resize: "contain", format: "origin" }');
+    // 26/09: reduzida a 1024 sem a transformação do Storage (cópia PNG do painel ou redução local).
+    expect(corpoDe("baixarLogoReduzida")).toContain("reduzidaSemTransformacao(servico(), bucket, caminho, 1024, 1024, { copiaSoEmPng: true, maxBytes: MAX_BYTES_IMAGEM })");
+    expect(corpoDe("baixarLogoReduzida")).not.toContain("transform:");
     // A caixa da logo vai para dentro do recorte central quando a arte volta em 2:3.
     expect(imagemLocal).toContain("export function caixaNoQuadroCentral(");
   });

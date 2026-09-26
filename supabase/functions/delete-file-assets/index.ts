@@ -98,7 +98,13 @@ async function removeObjects(admin: any, refs: Array<{ bucket: string; path: str
     if (!list.length) continue;
     const { error } = await admin.storage.from(bucket).remove(list);
     if (error) errors.push(`${bucket}: ${error.message}`);
-    else removed += list.length;
+    else {
+      removed += list.length;
+      // Cópias leves gravadas pelo painel ao lado do original (src/lib/miniaturas.ts).
+      // Melhor esforço: a ausência delas não é erro.
+      const copias = list.flatMap((p) => [`${p}.mini.jpg`, `${p}.media.jpg`]);
+      await admin.storage.from(bucket).remove(copias).catch(() => undefined);
+    }
   }
   return { removed, errors };
 }

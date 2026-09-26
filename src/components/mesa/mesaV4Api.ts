@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import {
   chamarFuncao,
   extensao,
@@ -296,6 +297,7 @@ export async function subirAnexo(clientId: string, arquivo: File): Promise<strin
   const tipo = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
   const { error } = await supabase.storage.from("mesa").upload(caminho, arquivo, { contentType: tipo, upsert: false });
   if (error) throw error;
+  gravarCopiasSemEsperar("mesa", caminho, arquivo, { nome: arquivo.name, mime: tipo });
   return caminho;
 }
 

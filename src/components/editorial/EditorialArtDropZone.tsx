@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Images, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { gravarCopiasSemEsperar } from "@/lib/miniaturas";
 import {
   confirmStoredObject,
   createFileRecord,
@@ -144,6 +145,7 @@ export default function EditorialArtDropZone({
           const estado = await confirmStoredObject("files", path);
           if (estado !== "exists") throw storageError;
         }
+        gravarCopiasSemEsperar("files", path, file, { nome: file.name, mime: file.type });
 
         const inserted = await createFileRecord({
           id: fileId,

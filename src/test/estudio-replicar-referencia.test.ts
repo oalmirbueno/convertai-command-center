@@ -97,8 +97,9 @@ describe("servidor: a referência escolhida pela equipe não é mais descartada 
     expect(estudio).toContain("continue seguindo a referência escolhida de perto, com a mesma estrutura de layout");
   });
 
-  it("foto grande (Mesa Foto 4K) é reduzida pelo Storage antes de decodificar (limite de CPU)", () => {
-    expect(estudio).toContain('transform: { width: 2000, height: 2500, resize: "contain", format: "origin" }');
+  it("foto grande (Mesa Foto 4K) chega reduzida antes de decodificar (limite de CPU), sem a transformação do Storage", () => {
+    expect(estudio).toContain("await reduzidaSemTransformacao(servico(), bucket, caminho, 2000, 2500, { folga: 1.05, maxBytes: MAX_BYTES_IMAGEM })");
+    expect(estudio).not.toContain("transform: {");
     expect(gerar).toContain('await fotoDoBucketNaLamina("mesa", fundoLivre.caminho, quadro.largura, quadro.altura)');
     expect(gerar).toContain('imagemReduzida("mesa", el.caminho, "elemento-real")');
   });
