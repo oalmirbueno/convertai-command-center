@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, ExternalLink, FlaskConical, KeyRound, Loader2, ShieldAlert, Undo2, X, Zap } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ExternalLink, FlaskConical, KeyRound, Loader2, ShieldAlert, Undo2, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useAvisarErro } from "@/components/mesa/Custo";
@@ -34,30 +34,52 @@ const variacao = (v: number | null) => (v === null ? "" : `${v > 0 ? "+" : ""}${
 
 function Numero({ rotulo, valor, sub }: { rotulo: string; valor: string; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-lg bg-background px-2.5 py-1.5">
+    <div className="min-w-0">
       <p className="truncate text-[10.5px] text-muted-foreground">{rotulo}</p>
-      <p className="truncate text-[13.5px] font-semibold tabular-nums">{valor}</p>
+      <p className="truncate text-[13px] font-semibold tabular-nums">{valor}</p>
       {sub && <p className="truncate text-[10.5px] text-muted-foreground">{sub}</p>}
     </div>
   );
 }
 
-/** "O que ele viu": os números que o agente recebeu, com a fonte, o período e a hora da coleta. */
-export function NumerosQueEleViu({ n }: { n: NumerosVistos }) {
+/**
+ * "O que ele viu": uma linha com os números principais (fonte e período à
+ * vista); abre para o detalhe (comparação, CTR, onde está o dinheiro).
+ */
+export function NumerosQueEleViu({ n, carregando = false }: { n: NumerosVistos; carregando?: boolean }) {
+  const [aberto, setAberto] = useState(false);
   const cmp = n.comparacao;
+  const resumo = [
+    `${brl(n.gasto)} investidos`,
+    n.resultados !== null ? `${inteiro(n.resultados)} ${n.resultado_rotulo ? n.resultado_rotulo.toLowerCase() : "resultados"}` : "",
+    n.custo_por_resultado !== null ? `${brl(n.custo_por_resultado)} cada` : "",
+  ].filter(Boolean).join(" · ");
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-2.5" aria-label="O que o agente viu">
-      <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">O que ele viu</p>
-      <div className="mt-1.5 grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-4">
-        <Numero rotulo="Investido" valor={brl(n.gasto)} sub={cmp && cmp.gasto_pct !== null ? `${variacao(cmp.gasto_pct)} vs. antes` : undefined} />
-        <Numero rotulo={n.resultado_rotulo ? `Resultados (${n.resultado_rotulo})` : "Resultados"} valor={inteiro(n.resultados)} sub={cmp && cmp.resultados_pct !== null ? `${variacao(cmp.resultados_pct)} vs. antes` : undefined} />
-        <Numero rotulo="Custo por resultado" valor={brl(n.custo_por_resultado)} sub={cmp && cmp.custo_por_resultado_pct !== null ? `${variacao(cmp.custo_por_resultado_pct)} vs. antes` : undefined} />
-        <Numero rotulo="CTR do link" valor={porcento(n.ctr_link_pct)} sub={n.cpm !== null ? `CPM ${brl(n.cpm)}` : undefined} />
-      </div>
-      {n.mix.length > 0 && (
-        <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
-          Onde o dinheiro está: {n.mix.map((m) => `${m.rotulo} ${Math.round(m.pct)}%`).join(" · ")}
-        </p>
+    <section className="min-w-0" aria-label="O que o agente viu">
+      <button type="button" className="flex w-full min-w-0 items-start text-left" onClick={() => setAberto(!aberto)} aria-expanded={aberto}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">O que ele viu{carregando ? " (lendo a conta...)" : ""}</span>
+          <span className="block text-[12.5px] font-medium tabular-nums [overflow-wrap:anywhere]">{resumo}</span>
+          <span className="block text-[10.5px] text-muted-foreground">
+            Fonte: {n.fonte}
+            {n.periodo ? `, de ${dataCurta(n.periodo.inicio)} a ${dataCurta(n.periodo.fim)} (${n.periodo.dias} dias)` : ""}
+            {n.atualizado_em ? `, coletado ${tempoDesde(n.atualizado_em)}` : ""}.
+          </span>
+        </span>
+        <ChevronDown className={`ml-2 mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${aberto ? "rotate-180" : ""}`} />
+      </button>
+      {aberto && (
+        <div className="mt-2 min-w-0 space-y-1.5">
+          <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+            <Numero rotulo="Investido" valor={brl(n.gasto)} sub={cmp && cmp.gasto_pct !== null ? `${variacao(cmp.gasto_pct)} vs. antes` : undefined} />
+            <Numero rotulo={n.resultado_rotulo ? `Resultados (${n.resultado_rotulo})` : "Resultados"} valor={inteiro(n.resultados)} sub={cmp && cmp.resultados_pct !== null ? `${variacao(cmp.resultados_pct)} vs. antes` : undefined} />
+            <Numero rotulo="Custo por resultado" valor={brl(n.custo_por_resultado)} sub={cmp && cmp.custo_por_resultado_pct !== null ? `${variacao(cmp.custo_por_resultado_pct)} vs. antes` : undefined} />
+            <Numero rotulo="CTR do link" valor={porcento(n.ctr_link_pct)} sub={n.cpm !== null ? `CPM ${brl(n.cpm)}` : undefined} />
+          </div>
+          {n.mix.length > 0 && (
+            <p className="text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">Onde o dinheiro está: {n.mix.map((m) => `${m.rotulo} ${Math.round(m.pct)}%`).join(" · ")}</p>
+          )}
+        </div>
       )}
       {n.alertas.map((a, k) => (
         <p key={k} className="mt-1 flex items-start text-[11.5px] leading-snug text-warning">
@@ -65,11 +87,6 @@ export function NumerosQueEleViu({ n }: { n: NumerosVistos }) {
           <span className="min-w-0 [overflow-wrap:anywhere]">{a}</span>
         </p>
       ))}
-      <p className="mt-1.5 text-[10.5px] text-muted-foreground">
-        Fonte: {n.fonte}
-        {n.periodo ? `, de ${dataCurta(n.periodo.inicio)} a ${dataCurta(n.periodo.fim)} (${n.periodo.dias} dias)` : ""}
-        {n.atualizado_em ? `, coletado ${tempoDesde(n.atualizado_em)}` : ""}.
-      </p>
     </section>
   );
 }
@@ -134,7 +151,9 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const [marcados, setMarcados] = useState<string[]>(() => itensDisponiveis(acoes).map((i) => i.id));
   const [fazendo, setFazendo] = useState<"confirmar" | "descartar" | "desfazer" | null>(null);
   const estado = estadoDasAcoes(atual);
-  const semGestao = atual.gestao && !atual.gestao.disponivel && atual.itens.some((i) => i.na_meta);
+  const ensaio = atual.modo === "ensaio";
+  const semGestao = !ensaio && atual.gestao && !atual.gestao.disponivel && atual.itens.some((i) => i.na_meta && !i.ensaio);
+  const confirmaveis = itensDisponiveis(atual).length;
 
   const agir = async (tipo: "confirmar" | "descartar" | "desfazer") => {
     setFazendo(tipo);
@@ -165,20 +184,28 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
   const alternar = (id: string) => setMarcados((m) => (m.indexOf(id) >= 0 ? m.filter((x) => x !== id) : m.concat([id])));
 
   return (
-    <section className="min-w-0 rounded-xl border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado}>
-      <p className="flex items-center text-[12px] font-semibold">
+    <section className="min-w-0 rounded-xl border border-primary/30 bg-card p-3" aria-label="Ações propostas" data-acoes-conta={estado} data-modo={atual.modo}>
+      <p className="flex min-w-0 flex-wrap items-center text-[12.5px] font-semibold">
         <Zap className="mr-1.5 h-3.5 w-3.5 text-primary" />
         Ações propostas · {atual.itens.length}
+        {ensaio && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[10.5px] font-medium text-warning">Modo ensaio</span>}
       </p>
       {atual.resumo && <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{atual.resumo}</p>}
+      {ensaio && estado === "aberta" && (
+        <p className="mt-1.5 text-[11.5px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
+          Sem permissão de gestão, os itens da Meta mostram como seria feito, sem mexer na conta. Ative em Gestão de campanhas, nesta aba.
+        </p>
+      )}
       {semGestao && estado === "aberta" && <AvisoDeGestao motivo={atual.gestao ? atual.gestao.motivo : null} />}
-      <ul className="mt-2 space-y-1.5">
+      <ul className="mt-2 divide-y divide-border border-y border-border">
         {atual.itens.map((i) => {
           const r = i.resultado;
-          const pode = estado === "aberta" && !i.indisponivel;
+          const pode = estado === "aberta" && !i.indisponivel && !i.ensaio;
           return (
-            <li key={i.id} className="flex min-w-0 items-start rounded-lg border border-border bg-background px-2.5 py-2">
-              {estado === "aberta" ? (
+            <li key={i.id} className="flex min-w-0 items-start py-2" data-ensaio={i.ensaio ? "" : undefined}>
+              {estado === "aberta" && i.ensaio ? (
+                <span className="mr-2 mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border border-dashed border-warning" aria-hidden="true" />
+              ) : estado === "aberta" ? (
                 <input
                   type="checkbox"
                   className="mr-2 mt-0.5 shrink-0"
@@ -200,6 +227,7 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
                   {i.criativo ? <span className="font-normal text-muted-foreground">{` com ${i.criativo.nome}`}</span> : null}
                 </span>
                 <AntesDepois i={i} />
+                {i.ensaio && estado === "aberta" && <span className="mt-0.5 inline-block rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">Seria feito assim</span>}
                 {i.motivo && <span className="mt-0.5 block text-muted-foreground [overflow-wrap:anywhere]">{i.motivo}</span>}
                 {i.indisponivel && estado === "aberta" && <span className="mt-0.5 block text-[11.5px] text-warning [overflow-wrap:anywhere]">{i.indisponivel}</span>}
                 {r && !r.ok && estado !== "aberta" && r.motivo && <span className="mt-0.5 block text-[11.5px] text-destructive [overflow-wrap:anywhere]">{r.motivo}</span>}
@@ -225,13 +253,17 @@ export function CartaoDasAcoes({ mensagemId, acoes, onPlanoPronto }: { mensagemI
       <div className="mt-2.5 flex min-w-0 flex-wrap items-center">
         {estado === "aberta" && (
           <>
-            <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" disabled={!marcados.length || !!fazendo} onClick={() => void agir("confirmar")}>
-              {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
-              Confirmar {marcados.length}
-            </Button>
+            {confirmaveis > 0 || !ensaio ? (
+              <Button type="button" size="sm" className="mb-1 mr-1.5 h-8" disabled={!marcados.length || !!fazendo} onClick={() => void agir("confirmar")}>
+                {fazendo === "confirmar" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1.5 h-3.5 w-3.5" />}
+                Confirmar {marcados.length}
+              </Button>
+            ) : (
+              <span className="mb-1 mr-2 text-[11.5px] text-muted-foreground">Ensaio: nada para confirmar agora.</span>
+            )}
             <Button type="button" size="sm" variant="ghost" className="mb-1 h-8 text-muted-foreground" disabled={!!fazendo} onClick={() => void agir("descartar")}>
               {fazendo === "descartar" && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Cancelar
+              {confirmaveis > 0 || !ensaio ? "Cancelar" : "Dispensar"}
             </Button>
             <span className="mb-1 ml-auto text-[11px] text-muted-foreground">Sem custo de IA. Antes de mexer, o painel relê cada item na Meta: se mudou, não faz.</span>
           </>

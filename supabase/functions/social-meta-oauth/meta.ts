@@ -24,6 +24,16 @@ export const META_REQUIRED_SCOPES = [
  */
 export const META_OPTIONAL_SCOPES = ["ads_read"] as const;
 
+/**
+ * Gestão de campanhas (pedido do dono em 26/09: "deixar a função toda
+ * preparada, porque só está em leitura"). Pedida SÓ no login de anúncios com
+ * gestao=true (ads_start), nunca no login do Instagram. Com o Facebook Login
+ * for Business, quem decide o que aparece na tela da Meta é a configuração
+ * (config_id): se ads_management não estiver lá, a Meta ignora este pedido e
+ * o painel mostra, depois do login, exatamente o que faltou (/me/permissions).
+ */
+export const META_ESCOPOS_DE_GESTAO = ["ads_management"] as const;
+
 export type MetaPlatform = "facebook" | "instagram";
 
 export type SanitizedMetaResource = {
@@ -117,6 +127,8 @@ export function buildFacebookLoginUrl(input: {
   graphVersion: string;
   redirectUri: string;
   state: string;
+  /** Escopos a mais, só quando o login pede (ex.: ads_management no login de anúncios com gestão). */
+  extraScopes?: readonly string[];
 }): string {
   const graphVersion = normalizeGraphVersion(input.graphVersion);
   validateMetaRedirectUri(input.redirectUri);
@@ -132,9 +144,10 @@ export function buildFacebookLoginUrl(input: {
   url.searchParams.set("redirect_uri", input.redirectUri);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", input.state);
+  const extras = (input.extraScopes || []).filter((s) => /^[a-z_]{3,60}$/.test(s));
   url.searchParams.set(
     "scope",
-    [...META_REQUIRED_SCOPES, ...META_OPTIONAL_SCOPES].join(","),
+    ([...META_REQUIRED_SCOPES, ...META_OPTIONAL_SCOPES] as string[]).concat(extras).join(","),
   );
   return url.toString();
 }

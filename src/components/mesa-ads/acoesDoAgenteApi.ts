@@ -54,6 +54,8 @@ export interface ItemDaAcao {
   para: { status?: string; orcamento_diario_brl?: number; nome?: string } | null;
   limitado: boolean;
   indisponivel: string | null;
+  /** Modo ensaio: proposto sem permissão de gestão; a tela mostra "Seria feito assim", sem executar. */
+  ensaio: boolean;
   resultado: { ok: boolean; motivo: string; criado: Record<string, string>; desfeito: boolean; motivo_desfazer: string } | null;
 }
 
@@ -62,6 +64,7 @@ export interface AcoesDaConta {
   itens: ItemDaAcao[];
   ignorados: string[];
   gestao: { disponivel: boolean; motivo: string | null } | null;
+  modo: "real" | "ensaio";
   executada_em: string | null;
   descartada_em: string | null;
   desfeita_em: string | null;
@@ -120,6 +123,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
         para: Object.keys(para).length ? { status: txt(para.status) || undefined, orcamento_diario_brl: num(para.orcamento_diario_brl) ?? undefined, nome: txt(para.nome) || undefined } : null,
         limitado: !!i.limitado,
         indisponivel: txt(i.indisponivel) || null,
+        ensaio: !!i.ensaio,
         resultado: r
           ? { ok: !!r.ok, motivo: txt(r.motivo), criado: obj(r.criado) as Record<string, string>, desfeito: !!r.desfeito, motivo_desfazer: txt(r.motivo_desfazer) }
           : null,
@@ -133,6 +137,7 @@ export function normalizarAcoesDaConta(bruto: unknown): AcoesDaConta | null {
     itens,
     ignorados: lista(o.ignorados).map(txt).filter(Boolean),
     gestao: g ? { disponivel: !!g.disponivel, motivo: txt(g.motivo) || null } : null,
+    modo: o.modo === "ensaio" || itens.some((i) => i.ensaio) ? "ensaio" : "real",
     executada_em: txt(o.executada_em) || null,
     descartada_em: txt(o.descartada_em) || null,
     desfeita_em: txt(o.desfeita_em) || null,
@@ -167,8 +172,53 @@ export function estadoDasAcoes(a: AcoesDaConta): "aberta" | "feita" | "descartad
   return a.desfeita_em ? "desfeita" : a.executada_em ? "feita" : a.descartada_em ? "descartada" : "aberta";
 }
 
-/** Itens que dá para marcar agora (os indisponíveis ficam de fora, com o motivo à vista). */
-export const itensDisponiveis = (a: AcoesDaConta) => a.itens.filter((i) => !i.indisponivel);
+/** Itens que dá para marcar agora (indisponíveis e de ensaio ficam de fora, com o motivo à vista). */
+export const itensDisponiveis = (a: AcoesDaConta) => a.itens.filter((i) => !i.indisponivel && !i.ensaio);
+
+// ------------------------------------------------------------------ gestão de campanhas
+
+export interface SituacaoDaGestao {
+  disponivel: boolean;
+  motivo: string | null;
+  faltam: string[];
+  escopos: string[] | null;
+  conferido_em: string | null;
+  tem_token: boolean;
+  /** A conferência fica guardada no banco (SQL X2); sem ele, só na memória da função. */
+  guardada: boolean;
+}
+
+export function normalizarGestao(bruto: unknown): SituacaoDaGestao | null {
+  const g = obj(obj(bruto).gestao);
+  if (!Object.keys(g).length) return null;
+  return {
+    disponivel: !!g.disponivel,
+    motivo: txt(g.motivo) || null,
+    faltam: lista(g.faltam).map(txt).filter(Boolean),
+    escopos: Array.isArray(g.escopos) ? lista(g.escopos).map(txt).filter(Boolean) : null,
+    conferido_em: txt(g.conferido_em) || null,
+    tem_token: !!g.tem_token,
+    guardada: !!g.guardada,
+  };
+}
+
+export const chaveDaGestao = (clientId: string | null) => ["mesa", "ads", "gestao", clientId || "carteira"] as const;
+
+/** Situação da gestão (usa a última conferência guardada; conferir pergunta à Meta agora). */
+export async function lerGestao(clientId: string | null, conferir = false): Promise<SituacaoDaGestao | null> {
+  const corpo: Record<string, unknown> = {};
+  if (clientId) corpo.client_id = clientId;
+  if (conferir) corpo.conferir = true;
+  return normalizarGestao(await chamarAds<any>("gestao_status", corpo));
+}
+
+export const chaveDosNumeros = (clientId: string, dias: number) => ["mesa", "ads", "numeros-do-agente", clientId, dias] as const;
+
+/** O que o agente vai ver (grátis; a tela mostra enquanto ele pensa). */
+export async function lerNumerosDoAgente(clientId: string, dias: number): Promise<NumerosVistos | null> {
+  const data = await chamarAds<any>("conta_numeros", { client_id: clientId, dias });
+  return normalizarNumerosVistos(data && data.numeros);
+}
 
 export const temDesfazer = (a: AcoesDaConta) =>
   a.itens.some((i) => i.resultado && i.resultado.ok && !i.resultado.desfeito && ["pausar", "ativar", "orcamento", "renomear", "vincular_criativo"].indexOf(i.tipo) >= 0);

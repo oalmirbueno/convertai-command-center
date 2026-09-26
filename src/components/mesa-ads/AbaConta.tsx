@@ -34,6 +34,7 @@ import JanelaDaReferencia from "./JanelaDaReferencia";
 import { PainelDaEvolucao, PainelDoDesempenho, ResumoDaConta, SaldosDasContas, TabelaDeCampanhas, TendenciaDiaria } from "./ContaPaineis";
 import { PERIODOS_DA_CONTA_V4, type PeriodoDaConta } from "./contaApi";
 import AgenteSenior from "./AgenteSenior";
+import AtivarGestao from "./AtivarGestao";
 import { BaixarPacoteDeOtimizacao, ImportarPacote } from "./PacoteDeOtimizacao";
 import { FiltroDeObjetivo, PainelDeResultados, ResumoDoTopo } from "./ResultadosClaros";
 import { chaveDosResultados, lerContaComResultados, type GrupoDeObjetivo } from "./resultadosApi";
@@ -312,7 +313,7 @@ export default function AbaConta({
   /** Plano de teste criado já preenchido pelo agente sênior: abre no Plano de teste. */
   onAbrirPlano?: (planoId: string) => void;
 } = {}) {
-  const { clientId, catalogo } = useMesa();
+  const { clientId, catalogo, isAdmin } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
   const [dias, setDias] = useState<PeriodoDaConta>(14);
@@ -500,6 +501,7 @@ export default function AbaConta({
           </details>
 
           <section className="min-w-0 space-y-2" aria-label="Otimização">
+            <AtivarGestao clientId={clientId} podeConectar={isAdmin} compacto />
             <AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} onPlanoPronto={onAbrirPlano} />
             <div className="flex min-w-0 flex-wrap items-center">
               <BaixarPacoteDeOtimizacao dias={diasDoAgente} className="mb-1 mr-2" />

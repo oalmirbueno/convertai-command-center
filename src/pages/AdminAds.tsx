@@ -24,6 +24,7 @@ import CampanhasAtivas from "@/components/ads/CampanhasAtivas";
 import LogoDoCliente, { useIdentidadesDosClientes } from "@/components/admin/LogoDoCliente";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import AtivarGestao from "@/components/mesa-ads/AtivarGestao";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService } from "@/lib/clientFlags";
 import {
@@ -909,6 +910,9 @@ export default function AdminAds() {
           queryClient.invalidateQueries({ queryKey: ["ads-connection"] });
         }}
       />
+
+      {/* 26/09: gestão de campanhas pelo agente da Mesa Ads (token da carteira). */}
+      <AtivarGestao clientId={null} podeConectar={profile?.role === "admin"} compacto />
 
       {erroDosDias && (
         <p className="rounded-xl border border-destructive/30 bg-card px-4 py-3 text-[12px] text-destructive">

@@ -197,8 +197,13 @@ import {
   type AcoesDaConta,
   alvosComApelido,
   blocoDosAlvos,
+  CacheCurto,
   CAMPOS_DO_ESTADO,
+  conferenciaValida,
   criativosComApelido,
+  escoposConcedidos,
+  gestaoDosEscopos,
+  marcarEnsaio,
   desfazerNaMeta,
   estadoLido,
   executarNaMeta,
@@ -4298,6 +4303,7 @@ async function contaSincronizar(_servico: SupabaseClient, chamador: Chamador, co
   await exigirAcessoAoCliente(chamador, clientId);
   // Como o usuário (JWT dele): a RPC confere is_staff(auth.uid()). Nunca com a chave de serviço.
   const { data, error } = await clienteDoChamador(chamador.token).rpc("collect_ads_now");
+  esquecerContextoDoCliente(clientId);
   if (error) throw new ErroHttp(503, "sincronizacao_falhou", "A sincronização com a Meta não respondeu agora. Tente de novo em instantes.", { detalhe: error.message });
   const r = data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : { resultado: data ?? null };
   return json({ ...r, custo_usd: 0 });
@@ -5646,7 +5652,35 @@ const metricasCurtas = (x: MetricasDaConta) => ({
  * evolução (código), criativos da Mesa Ads, oferta escolhida, briefing,
  * contexto da Mesa e da marca, cérebro do cliente e planos recentes.
  */
-async function contextoDoAgenteSenior(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>) {
+/**
+ * Leituras da conta em cache curto (5 min) na memória da função: a segunda
+ * mensagem seguida, e a leitura dos números enquanto o agente pensa, não
+ * refazem tudo. Sincronizar e executar ações esquecem o cache do cliente.
+ */
+const contextosEmCache = new CacheCurto<Awaited<ReturnType<typeof lerContextoDoAgenteSenior>>>(5 * 60_000, 30);
+const chaveDoContexto = (clientId: string, corpo: Record<string, unknown>) =>
+  `${clientId}|${periodoDoPedido({ dias: corpo.dias ?? 30 }, DIAS_DESEMPENHO, 30, hojeSaoPaulo()).dias}|${String(corpo.marca_id ?? "")}|${String(corpo.project_id ?? "")}`;
+function esquecerContextoDoCliente(clientId: string) {
+  contextosEmCache.esquecer(`${clientId}|`);
+}
+
+function contextoDoAgenteSenior(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>) {
+  return contextosEmCache.obter(chaveDoContexto(clientId, corpo), () => lerContextoDoAgenteSenior(servico, clientId, corpo));
+}
+
+/**
+ * conta_numeros { client_id, dias? } -> { numeros, custo_usd: 0 }: o que o
+ * agente vai ver (a tela mostra enquanto ele pensa). Grátis, sem IA, e aquece
+ * o cache da conversa.
+ */
+async function contaNumeros(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = String(corpo.client_id ?? "");
+  await exigirAcessoAoCliente(chamador, clientId);
+  const c = await contextoDoAgenteSenior(servico, clientId, corpo);
+  return json({ numeros: numerosVistos(c.conta), custo_usd: 0 });
+}
+
+async function lerContextoDoAgenteSenior(servico: SupabaseClient, clientId: string, corpo: Record<string, unknown>) {
   const periodo = periodoDoPedido({ dias: corpo.dias ?? 30 }, DIAS_DESEMPENHO, 30, hojeSaoPaulo());
   const [ctx, conta, briefing, ofertasQ, criativosQ, planosQ, desempenho] = await Promise.all([
     montarContextoAds(servico, clientId, marcaDoPedido(servico, clientId, corpo)),
@@ -5865,17 +5899,70 @@ async function tokenDeAnuncios(servico: SupabaseClient, clientId: string): Promi
   return typeof data === "string" && data.trim() ? data.trim() : null;
 }
 
-type AcessoDeGestao = { grafo: GrafoMeta | null; gestao: { disponivel: boolean; motivo: string | null } };
+type Gestao = { disponivel: boolean; motivo: string | null; faltam: string[]; escopos: string[] | null; conferido_em: string | null; tem_token: boolean; guardada: boolean };
+type AcessoDeGestao = { grafo: GrafoMeta | null; gestao: Gestao };
 
-/** O grafo da Meta com o token do cofre e se ele tem ads_management (/me/permissions). */
-async function acessoDeGestao(servico: SupabaseClient, clientId: string): Promise<AcessoDeGestao> {
-  const token = await tokenDeAnuncios(servico, clientId);
-  if (!token) {
-    return { grafo: null, gestao: { disponivel: false, motivo: "Não há acesso de anúncios no cofre para este cliente. Conecte a conta de anúncios com permissão de gestão." } };
+/** A conferência guardada no banco vale 6 h; a da memória da função, 10 min (sem o SQL X2). */
+const VALIDADE_DA_CONFERENCIA_MS = 6 * 3600_000;
+const conferenciasEmMemoria = new CacheCurto<{ escopos: string[] | null; em: string }>(10 * 60_000);
+
+/** Token do cliente para a gestão: com o id e a última conferência (SQL X2); sem ele, o da Biblioteca. */
+async function tokenDeGestao(servico: SupabaseClient, clientId: string | null): Promise<{ token: string | null; tokenId: string | null; escopos: string[] | null; conferidoEm: string | null; guardada: boolean }> {
+  const { data, error } = await servico.rpc("ads_token_de_gestao", { _client_id: clientId });
+  if (!error) {
+    const linha = (Array.isArray(data) ? data[0] : data) as { token_id?: string; token?: string; escopos?: string[] | null; conferido_em?: string | null } | null;
+    const token = linha && typeof linha.token === "string" && linha.token.trim() ? linha.token.trim() : null;
+    return { token, tokenId: linha?.token_id ?? null, escopos: Array.isArray(linha?.escopos) ? linha!.escopos! : null, conferidoEm: linha?.conferido_em ?? null, guardada: true };
   }
-  const grafo = grafoDaMeta(token);
-  const permissoes = await grafo.ler("me/permissions", "permission,status").catch(() => null);
-  return { grafo, gestao: permissaoDeGestao(permissoes) };
+  // Sem o SQL X2: mesma porta da Biblioteca (a carteira vale para /anuncios sem cliente).
+  const token = await tokenDeAnuncios(servico, clientId ?? "00000000-0000-0000-0000-000000000000");
+  return { token, tokenId: null, escopos: null, conferidoEm: null, guardada: false };
+}
+
+/**
+ * O grafo da Meta com o token do cofre e a gestão (ads_management). Sem
+ * `conferir`, usa a última conferência guardada (6 h) ou a da memória (10
+ * min), para a tela não perguntar à Meta a cada abertura; com `conferir`,
+ * pergunta a /me/permissions e guarda o resultado.
+ */
+async function acessoDeGestao(servico: SupabaseClient, clientId: string | null, opcoes: { conferir?: boolean } = {}): Promise<AcessoDeGestao> {
+  const t = await tokenDeGestao(servico, clientId);
+  if (!t.token) {
+    return {
+      grafo: null,
+      gestao: { disponivel: false, motivo: "Não há acesso de anúncios no cofre para este cliente. Conecte a conta de anúncios com permissão de gestão.", faltam: ["ads_read", "ads_management"], escopos: null, conferido_em: null, tem_token: false, guardada: t.guardada },
+    };
+  }
+  const grafo = grafoDaMeta(t.token);
+  let escopos = t.escopos;
+  let em = t.conferidoEm;
+  if (opcoes.conferir || !conferenciaValida(em, Date.now(), VALIDADE_DA_CONFERENCIA_MS)) {
+    const chave = t.tokenId ?? `cliente:${clientId ?? "carteira"}`;
+    if (opcoes.conferir) conferenciasEmMemoria.esquecer(chave);
+    const lida = await conferenciasEmMemoria.obter(chave, async () => {
+      const bruto = await grafo.ler("me/permissions", "permission,status").catch(() => null);
+      const concedidos = escoposConcedidos(bruto);
+      if (concedidos && t.tokenId) await servico.rpc("ads_token_registrar_escopos", { _token_id: t.tokenId, _escopos: concedidos });
+      return { escopos: concedidos, em: new Date().toISOString() };
+    });
+    escopos = lida.escopos;
+    em = lida.em;
+  }
+  const g = gestaoDosEscopos(escopos);
+  return { grafo, gestao: { ...g, escopos, conferido_em: em, tem_token: true, guardada: t.guardada } };
+}
+
+/**
+ * gestao_status { client_id?, conferir? } -> { gestao, custo_usd: 0 }
+ * Situação da gestão de campanhas (a tela "Ativar gestão"): disponível ou
+ * exatamente o que falta, com a hora da última conferência. Sem client_id
+ * (tela /anuncios), o token da carteira. Grátis.
+ */
+async function gestaoStatus(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const clientId = corpo.client_id ? String(corpo.client_id) : null;
+  if (clientId) await exigirAcessoAoCliente(chamador, clientId);
+  const acesso = await acessoDeGestao(servico, clientId, { conferir: corpo.conferir === true });
+  return json({ gestao: acesso.gestao, custo_usd: 0 });
 }
 
 /** Números das contas de anúncio da Meta ligadas ao cliente (sem "act_"): toda escrita confere contra elas. */
@@ -5901,22 +5988,23 @@ async function criativosParaAcoes(servico: SupabaseClient, clientId: string) {
 
 /**
  * Fotografia das ações da Meta na hora da proposta: o estado lido vira o
- * "antes" (e o orçamento é recalculado sobre o real, com o teto). Sem token ou
- * sem ads_management, os itens da Meta ficam indisponíveis com o motivo.
+ * "antes" (e o orçamento é recalculado sobre o real, com o teto). Sem
+ * ads_management, modo ensaio (marcarEnsaio): a lista fica igual, com antes e
+ * depois quando o token lê, e a tela mostra "Seria feito assim".
  */
 async function prepararAcoesDaConta(servico: SupabaseClient, clientId: string, acoes: AcoesDaConta | null): Promise<AcoesDaConta | null> {
   if (!acoes) return null;
   if (!acoes.itens.some((i) => i.na_meta)) return acoes;
   const acesso = await acessoDeGestao(servico, clientId);
-  if (!acesso.grafo) return { ...acoes, gestao: acesso.gestao, itens: acoes.itens.map((i) => (i.na_meta ? { ...i, indisponivel: acesso.gestao.motivo } : i)) };
+  const gestao = { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo };
+  if (!acesso.grafo) return marcarEnsaio(acoes, gestao);
   const grafo = acesso.grafo;
   const itens = await Promise.all(acoes.itens.map(async (i) => {
     if (!i.na_meta || !i.alvo) return i;
     const lido = await grafo.ler(i.alvo.meta_id, CAMPOS_DO_ESTADO(i.alvo.nivel)).catch(() => null);
-    const f = fotografar(i, estadoLido(lido));
-    return f.indisponivel || acesso.gestao.disponivel ? f : { ...f, indisponivel: acesso.gestao.motivo };
+    return fotografar(i, estadoLido(lido));
   }));
-  return { ...acoes, itens, gestao: acesso.gestao };
+  return marcarEnsaio({ ...acoes, itens }, gestao);
 }
 
 /** O que o agente viu: números do código, com o período e a hora da coleta (a tela mostra a fonte). */
@@ -6107,7 +6195,7 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
   const escolhidos = Array.isArray(corpo.itens) ? new Set(corpo.itens.map(String)) : null;
   const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
   const precisaMeta = itensDaMensagem.some((i) => i.na_meta && (!escolhidos || escolhidos.has(i.id)));
-  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
+  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
   const itens: ItemDaAcaoNaConta[] = [];
   // Um de cada vez: a Meta limita chamadas por conta, e a ordem da lista é a ordem da confirmação.
   for (const i of itensDaMensagem) {
@@ -6117,7 +6205,9 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
     }
     const inicio = Date.now();
     let resultado: NonNullable<ItemDaAcaoNaConta["resultado"]>;
-    if (i.na_meta) {
+    if (i.na_meta && i.ensaio) {
+      resultado = { ok: false, motivo: "Proposta feita em modo ensaio (sem gestão). Com a gestão ativa, peça de novo ao agente para fazer de verdade." };
+    } else if (i.na_meta) {
       if (!acesso || !acesso.grafo || !acesso.gestao.disponivel) {
         resultado = { ok: false, motivo: (acesso && acesso.gestao.motivo) || "Sem permissão de gestão na Meta." };
       } else {
@@ -6142,7 +6232,8 @@ async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, co
   }
   const feitos = itens.filter((i) => i.resultado && i.resultado.ok).length;
   const tentados = itens.filter((i) => !escolhidos || escolhidos.has(i.id)).length;
-  const novo = await gravar({ ...anexo, itens, gestao: acesso ? acesso.gestao : acoes.gestao, executada_em: new Date().toISOString(), executada_por: chamador.userId });
+  esquecerContextoDoCliente(m.client_id);
+  const novo = await gravar({ ...anexo, itens, gestao: acesso ? { disponivel: acesso.gestao.disponivel, motivo: acesso.gestao.motivo } : acoes.gestao, executada_em: new Date().toISOString(), executada_por: chamador.userId });
   if (m.conversa_id) {
     await registrarMensagens(servico, m.conversa_id, m.client_id, [{
       papel: "sistema",
@@ -6160,7 +6251,7 @@ async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, co
   if (acoes.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Estas ações já foram desfeitas.");
   const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
   const precisaMeta = itensDaMensagem.some((i) => i.na_meta && temReverso(i));
-  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
+  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id, { conferir: true }), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
   let voltaram = 0;
   const itens: ItemDaAcaoNaConta[] = [];
   for (const i of itensDaMensagem) {
@@ -6585,6 +6676,9 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   conta_acao_executar: contaAcaoExecutar,
   conta_acao_desfazer: contaAcaoDesfazer,
   plano_do_agente: planoDoAgente,
+  // 26/09 (rodada 2): gestão preparada (conferência guardada) e os números do agente antes da resposta.
+  gestao_status: gestaoStatus,
+  conta_numeros: contaNumeros,
   kit_recepcao_gerar: kitRecepcaoGerar,
   kit_agenda: kitAgenda,
 };
@@ -6599,7 +6693,7 @@ const ACOES_LONGAS = new Set([
   "referencia_abrir", "referencia_importar_url", "biblioteca_do_nicho", "copy_pacote", "pacote_enviar",
   "evolucao", "desempenho_cliente",
   "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
-  "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar",
+  "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar", "conta_numeros",
   "referencia_para_estudio",
 ]);
 

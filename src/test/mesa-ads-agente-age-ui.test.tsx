@@ -32,6 +32,8 @@ import type { ModeloIa } from "@/lib/mesa/api";
 import AgenteSenior from "@/components/mesa-ads/AgenteSenior";
 import KitDeRecepcao from "@/components/mesa-ads/KitDeRecepcao";
 import TesteDoAgente from "@/components/mesa-ads/TesteDoAgente";
+import AtivarGestao from "@/components/mesa-ads/AtivarGestao";
+import { etapaDaResposta, inicioDaUltimaTroca } from "@/components/mesa-ads/AgenteSenior";
 import { normalizarPlano } from "@/components/mesa-ads/adsApi";
 import { proximoDiaUtil, roteiroComercialEmTexto, normalizarKit } from "@/components/mesa-ads/acoesDoAgenteApi";
 
@@ -199,5 +201,86 @@ describe("teste montado pelo agente (tela)", () => {
     expect(screen.getByText("Espera vende")).toBeTruthy();
     expect(screen.getAllByText("A definir").length).toBe(2);
     expect(screen.getByText(/Verba diária do teste/)).toBeTruthy();
+  });
+});
+
+describe("rodada 2: ensaio, gestão, partes e histórico", () => {
+  it("modo ensaio: mostra como seria, sem caixa de marcar nem Confirmar para os itens da Meta", async () => {
+    const base = mensagemComAcoes({ disponivel: false, motivo: "só leitura" });
+    responder({
+      conta_conversa_ler: { ...base, mensagens: base.mensagens.map((m) => ({ ...m, acoes: { ...m.acoes, modo: "ensaio", itens: m.acoes.itens.map((i) => ({ ...i, ensaio: true })) } })) },
+    });
+    montar(h(AgenteSenior, {}));
+    expect(await screen.findByText("Modo ensaio")).toBeTruthy();
+    expect(screen.getAllByText("Seria feito assim")).toHaveLength(2);
+    expect(screen.queryByLabelText(/Marcar: Pausar/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+    expect(screen.getByText(/Ensaio: nada para confirmar agora/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Dispensar" })).toBeTruthy();
+  });
+
+  it("gestão: mostra só leitura, o que falta e os 3 passos; conferir agora mostra Gestão ativa", async () => {
+    let conferidas = 0;
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
+      if (body.acao !== "gestao_status") return { data: { ok: true }, error: null };
+      if (body.conferir) conferidas++;
+      return {
+        data: body.conferir
+          ? { gestao: { disponivel: true, motivo: null, faltam: [], escopos: ["ads_management", "ads_read"], conferido_em: new Date().toISOString(), tem_token: true, guardada: true } }
+          : { gestao: { disponivel: false, motivo: "O acesso de anúncios deste cliente só tem leitura (ads_read).", faltam: ["ads_management"], escopos: ["ads_read"], conferido_em: new Date().toISOString(), tem_token: true, guardada: true } },
+        error: null,
+      };
+    });
+    montar(h(AtivarGestao, { clientId: CLIENTE, podeConectar: true }));
+    expect(await screen.findByText("Só leitura")).toBeTruthy();
+    expect(screen.getByText("Falta:").parentElement!.textContent).toContain("ads_management (gerenciar anúncios)");
+    expect(screen.getByRole("button", { name: /Conectar pedindo gestão/ })).toBeTruthy();
+    expect(screen.getByText(/Revisão do app/)).toBeTruthy();
+    expect(chamadas("mesa-ads", "gestao_status")[0]).toEqual({ acao: "gestao_status", client_id: CLIENTE });
+    fireEvent.click(screen.getByRole("button", { name: /Conferir agora/ }));
+    expect(await screen.findByText("Gestão ativa")).toBeTruthy();
+    expect(conferidas).toBe(1);
+    expect(screen.queryByRole("button", { name: /Conectar pedindo gestão/ })).toBeNull();
+  });
+
+  it("sem ser admin, pede a um admin em vez do botão de conectar", async () => {
+    responder({ gestao_status: { gestao: { disponivel: false, motivo: null, faltam: ["ads_read", "ads_management"], escopos: null, conferido_em: null, tem_token: false, guardada: false } } });
+    montar(h(AtivarGestao, { clientId: null, podeConectar: false }));
+    expect(await screen.findByText("Sem acesso de anúncios")).toBeTruthy();
+    expect(screen.getByText(/Peça a um admin/)).toBeTruthy();
+    expect(screen.getByText(/SQL pendente/)).toBeTruthy();
+    expect(chamadas("mesa-ads", "gestao_status")[0]).toEqual({ acao: "gestao_status" });
+  });
+
+  it("ao enviar, os números da conta aparecem antes da resposta do agente", async () => {
+    let soltar: (v: unknown) => void = () => undefined;
+    mock.invoke.mockImplementation(async (_f: string, { body }: any) => {
+      if (body.acao === "conta_conversa_ler") return { data: { conversa_id: "conv-1", mensagens: [] }, error: null };
+      if (body.acao === "conta_numeros") return { data: mensagemComAcoes({ disponivel: true, motivo: null }).mensagens[0].numeros ? { numeros: mensagemComAcoes({ disponivel: true, motivo: null }).mensagens[0].numeros } : {}, error: null };
+      if (body.acao === "conta_conversar") return new Promise((r) => { soltar = () => r({ data: { conversa_id: "conv-1" }, error: null }); });
+      return { data: { ok: true }, error: null };
+    });
+    montar(h(AgenteSenior, { dias: 30 }));
+    await screen.findByText(/Peça o que fazer com a conta/);
+    fireEvent.change(screen.getByLabelText("Mensagem ao agente sênior"), { target: { value: "Otimize" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Enviar/ }));
+    expect(await screen.findByText(/O que ele viu \(lendo a conta\.\.\.\)/)).toBeTruthy();
+    expect(chamadas("mesa-ads", "conta_numeros")).toEqual([{ acao: "conta_numeros", client_id: CLIENTE, dias: 30 }]);
+    expect(screen.getByRole("status").textContent).toMatch(/Lendo a conta/);
+    soltar(null);
+  });
+
+  it("histórico: só a última troca à vista; as anteriores abrem num clique", async () => {
+    const m = (id: string, papel: string, conteudo: string) => ({ id, papel, conteudo, criado_em: "2026-09-25T10:00:00Z", estrategia: null });
+    responder({ conta_conversa_ler: { conversa_id: "c", mensagens: [m("1", "usuario", "Pergunta velha"), m("2", "agente", "Resposta velha"), m("3", "usuario", "Pergunta nova"), m("4", "agente", "Resposta nova")] } });
+    montar(h(AgenteSenior, {}));
+    expect(await screen.findByText("Resposta nova")).toBeTruthy();
+    expect(screen.queryByText("Resposta velha")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Conversas anteriores \(1\)/ }));
+    expect(screen.getByText("Resposta velha")).toBeTruthy();
+    expect(inicioDaUltimaTroca([{ papel: "agente" }])).toBe(0);
+    expect(etapaDaResposta(2, true)).toMatch(/Lendo/);
+    expect(etapaDaResposta(20, true)).toMatch(/Pesquisando/);
+    expect(etapaDaResposta(20, false)).toMatch(/Escrevendo/);
   });
 });

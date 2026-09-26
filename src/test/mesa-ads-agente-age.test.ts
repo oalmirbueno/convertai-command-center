@@ -18,7 +18,13 @@ import {
   planoDeTesteDaEstrategia,
   specComNovaArte,
   temReverso,
+  CacheCurto,
+  conferenciaValida,
+  escoposConcedidos,
+  gestaoDosEscopos,
+  marcarEnsaio,
 } from "../../supabase/functions/mesa-ads/acoes-conta";
+import { buildFacebookLoginUrl, META_ESCOPOS_DE_GESTAO } from "../../supabase/functions/social-meta-oauth/meta";
 import { canalDoDestino, itemDaAgendaDoKit, normalizarKit, objecoesDoBriefing, pedidoDoKit } from "../../supabase/functions/mesa-ads/kit-recepcao";
 import { normalizarEstrategia, tarefaDoAgenteSenior } from "../../supabase/functions/mesa-ads/agente-senior";
 
@@ -354,5 +360,73 @@ describe("fonte do servidor", () => {
     expect(conversar).toContain("blocoDosAlvos(alvos, criativosComRef)");
     expect(conversar).toContain("prepararAcoesDaConta(");
     expect(fonte).not.toMatch(/tokenDeAnuncios\([^)]*\)[^;\n]*json\(/);
+  });
+});
+
+describe("gestão preparada (rodada 2)", () => {
+  it("lê os escopos concedidos e diz exatamente o que falta", () => {
+    expect(escoposConcedidos({ data: [{ permission: "ads_read", status: "granted" }, { permission: "ads_management", status: "declined" }, { permission: "ads_read", status: "granted" }] })).toEqual(["ads_read"]);
+    expect(escoposConcedidos("nada")).toBeNull();
+    expect(gestaoDosEscopos(["ads_read"])).toMatchObject({ disponivel: false, faltam: ["ads_management"] });
+    expect(gestaoDosEscopos(["ads_management", "ads_read", "business_management"])).toEqual({ disponivel: true, motivo: null, faltam: [] });
+    expect(gestaoDosEscopos([]).faltam).toEqual(["ads_read", "ads_management"]);
+    expect(gestaoDosEscopos(null).disponivel).toBe(false);
+  });
+
+  it("a conferência guardada vale pelo prazo (a tela não pergunta à Meta a cada abertura)", () => {
+    const agora = Date.parse("2026-09-26T12:00:00Z");
+    expect(conferenciaValida("2026-09-26T09:00:00Z", agora, 6 * 3600_000)).toBe(true);
+    expect(conferenciaValida("2026-09-26T05:00:00Z", agora, 6 * 3600_000)).toBe(false);
+    expect(conferenciaValida(null, agora, 6 * 3600_000)).toBe(false);
+    expect(conferenciaValida("2026-09-27T05:00:00Z", agora, 6 * 3600_000)).toBe(false);
+  });
+
+  it("modo ensaio: sem gestão, os itens da Meta ficam na lista marcados, e os do painel seguem reais", () => {
+    const a = normalizarAcoesDaConta([{ tipo: "pausar", ref: "n1", motivo: "x" }, { tipo: "tarefa_equipe", texto: "Conferir", motivo: "y" }], alvos, criativos)!;
+    const ensaio = marcarEnsaio(a, { disponivel: false, motivo: "só leitura" });
+    expect(ensaio.modo).toBe("ensaio");
+    expect(ensaio.itens.map((i) => !!i.ensaio)).toEqual([true, false]);
+    expect(ensaio.itens[0].indisponivel).toBeNull();
+    const real = marcarEnsaio(a, { disponivel: true, motivo: null });
+    expect(real.modo).toBe("real");
+    expect(real.itens.some((i) => i.ensaio)).toBe(false);
+  });
+
+  it("cache curto reaproveita a leitura no prazo, junta chamadas iguais e esquece por cliente", async () => {
+    let agora = 0;
+    let leituras = 0;
+    const c = new CacheCurto<number>(1000, 10, () => agora);
+    const ler = async () => ++leituras;
+    const [a, b] = await Promise.all([c.obter("cli-1|30", ler), c.obter("cli-1|30", ler)]);
+    expect([a, b, leituras]).toEqual([1, 1, 1]);
+    agora = 500;
+    expect(await c.obter("cli-1|30", ler)).toBe(1);
+    agora = 1500;
+    expect(await c.obter("cli-1|30", ler)).toBe(2);
+    c.esquecer("cli-1|");
+    expect(await c.obter("cli-1|30", ler)).toBe(3);
+    await expect(c.obter("erro", async () => { throw new Error("x"); })).rejects.toThrow("x");
+    expect(await c.obter("erro", async () => 9)).toBe(9);
+  });
+
+  it("login de anúncios com gestão pede ads_management a mais; o do Instagram não muda", () => {
+    const base = { appId: "1", configId: "2", graphVersion: "v21.0", redirectUri: "https://aceleriq.online/oauth/meta/callback", state: "s" };
+    const normal = new URL(buildFacebookLoginUrl(base)).searchParams.get("scope") || "";
+    const gestao = new URL(buildFacebookLoginUrl({ ...base, extraScopes: META_ESCOPOS_DE_GESTAO })).searchParams.get("scope") || "";
+    expect(normal).not.toContain("ads_management");
+    expect(gestao).toBe(`${normal},ads_management`);
+  });
+
+  it("fonte: gestao_status e conta_numeros registrados, execução confere na hora e recusa item de ensaio", () => {
+    const fonte = ler("supabase/functions/mesa-ads/index.ts");
+    expect(fonte).toContain("gestao_status: gestaoStatus");
+    expect(fonte).toContain("conta_numeros: contaNumeros");
+    const executar = fonte.slice(fonte.indexOf("async function contaAcaoExecutar("), fonte.indexOf("async function contaAcaoDesfazer("));
+    expect(executar).toContain("acessoDeGestao(servico, m.client_id, { conferir: true })");
+    expect(executar).toMatch(/i\.na_meta && i\.ensaio/);
+    expect(fonte).toContain('servico.rpc("ads_token_registrar_escopos"');
+    expect(fonte).toContain("esquecerContextoDoCliente(clientId);");
+    const oauth = ler("supabase/functions/social-meta-oauth/index.ts");
+    expect(oauth).toContain("handleAdsStart(config, caller, admin, body.gestao === true)");
   });
 });

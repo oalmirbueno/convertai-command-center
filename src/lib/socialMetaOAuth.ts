@@ -330,10 +330,13 @@ export function esquecerLoginDeAnuncios(state: string) {
   }
 }
 
-/** Abre o login SÓ para anúncios. Não encosta em nenhuma conexão social. */
-export async function startAdsOAuth() {
+/**
+ * Abre o login SÓ para anúncios. Não encosta em nenhuma conexão social.
+ * Com gestao, pede também ads_management (gestão de campanhas pela Mesa Ads).
+ */
+export async function startAdsOAuth(opcoes: { gestao?: boolean } = {}) {
   const payload = await invokeMetaOAuth(
-    { action: "ads_start" },
+    opcoes.gestao ? { action: "ads_start", gestao: true } : { action: "ads_start" },
     "Não foi possível iniciar a conexão de anúncios.",
   );
   const state = requiredText(

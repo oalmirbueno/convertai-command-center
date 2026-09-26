@@ -1,40 +1,43 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Briefcase, ExternalLink, FlaskConical, Loader2 } from "lucide-react";
+import { Briefcase, ChevronDown, ExternalLink, FlaskConical } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { AvisoDeErro, BotaoComCusto } from "@/components/mesa/Custo";
 import { useMesa } from "@/components/mesa/MesaContexto";
-import { Cronometro } from "@/components/mesa/Cronometro";
+import { Cronometro, useSegundos } from "@/components/mesa/Cronometro";
 import { brl, chamarAds, humanizar, partesDoPlanoV2, rotuloDoObjetivo, type PedidoDePlano } from "./adsApi";
-import { chavesAgente, lerConversaDoAgente, partesDoAgenteSenior, ROTULO_DA_GRAVIDADE, type EstrategiaSenior } from "./agenteSeniorApi";
+import { chavesAgente, lerConversaDoAgente, partesDoAgenteSenior, ROTULO_DA_GRAVIDADE, type EstrategiaSenior, type MensagemDoAgenteSenior } from "./agenteSeniorApi";
 import { BotaoDoPlanoDoAgente, CartaoDasAcoes, NumerosQueEleViu } from "./AcoesDoAgente";
-import type { AcoesDaConta, NumerosVistos } from "./acoesDoAgenteApi";
+import { chaveDosNumeros, lerNumerosDoAgente, type AcoesDaConta, type NumerosVistos } from "./acoesDoAgenteApi";
 
 /**
  * Agente sênior de tráfego (pedido do dono em 26/09/2026): conversa com o
- * contexto inteiro do cliente (conta ao vivo, evolução, criativos da Mesa
- * Ads, oferta, briefing, contexto da marca, cérebro e o método dos
- * especialistas), pesquisa o nicho na web e na Biblioteca de Anúncios quando
- * o token permite, e devolve a estratégia estruturada. Uma chamada por
- * mensagem, custo à vista.
+ * contexto inteiro do cliente, pesquisa o nicho e devolve a estratégia
+ * estruturada. Uma chamada por mensagem, custo à vista.
  *
- * 25/09 à noite ("se ele for agente nosso, agêntico, fica muito top"; "deixa
- * esse agente mais claro"): cada resposta vem em blocos, nesta ordem: o que
- * ele viu (números do código com fonte e período), o que recomenda
- * (diagnóstico e escalar, manter, cortar), as ações propostas em cartão
- * (Confirmar, Cancelar, Desfazer; AcoesDoAgente.tsx) e o plano de teste já
- * preenchido. A estratégia completa (reestruturação e próximos criativos)
- * fica recolhida. "Direto às ações" pede menos conversa.
+ * 25/09 à noite: agêntico. Cada resposta vem em blocos: o que ele viu
+ * (números do código com fonte e período), o que recomenda, as ações num só
+ * cartão (Confirmar, Cancelar, Desfazer; AcoesDoAgente.tsx) e o plano de teste
+ * já preenchido. "Direto às ações" pede menos conversa.
+ *
+ * 26/09 ("está meio poluído, meio desorganizado; bem mais rápido, mais bonito,
+ * mais confortável"): uma coluna só, sem caixa dentro de caixa (a resposta do
+ * agente é texto com uma linha de destaque à esquerda; o único cartão é o das
+ * ações); números do que ele viu numa linha que abre; conversas antigas
+ * recolhidas (fica à vista a última troca); atalhos em chips pequenos. Mais
+ * rápido: a conversa vem do cache persistido da Mesa; ao enviar, os números
+ * da conta aparecem logo (conta_numeros, que também aquece o cache do
+ * servidor) e o andamento diz em que parte ele está.
  * No celular a conversa não tem rolagem própria (o dedo rola a página); da
  * tela média para cima, a caixa tem altura máxima e rolagem só dela.
  */
 
 const ATALHOS = [
-  { rotulo: "Otimizar a conta agora", texto: "Otimize a conta: o que pausar, onde subir a verba e o que testar. Traga as ações prontas para eu confirmar." },
-  { rotulo: "Analisar com foco em mensagem", texto: "Analise a conta inteira com foco em mensagem e vendas. O que está só gerando engajamento e como transformar isso em conversa e venda?" },
-  { rotulo: "Migrar de engajamento para mensagem", texto: "A maioria das campanhas é de engajamento. Monte a migração para campanha de mensagens sem perder o que funciona, com conjuntos, verba e anúncios." },
-  { rotulo: "O que cortar e escalar", texto: "Quais anúncios cortar, manter e escalar agora, com os números?" },
-  { rotulo: "Montar o próximo teste", texto: "Monte o próximo plano de teste com os criativos que devem vencer, já com público, verba, duração e critério de vitória." },
+  { rotulo: "Otimizar a conta", texto: "Otimize a conta: o que pausar, onde subir a verba e o que testar. Traga as ações prontas para eu confirmar." },
+  { rotulo: "Foco em mensagem", texto: "Analise a conta inteira com foco em mensagem e vendas. O que está só gerando engajamento e como transformar isso em conversa e venda?" },
+  { rotulo: "Engajamento para mensagem", texto: "A maioria das campanhas é de engajamento. Monte a migração para campanha de mensagens sem perder o que funciona, com conjuntos, verba e anúncios." },
+  { rotulo: "Cortar e escalar", texto: "Quais anúncios cortar, manter e escalar agora, com os números?" },
+  { rotulo: "Próximo teste", texto: "Monte o próximo plano de teste com os criativos que devem vencer, já com público, verba, duração e critério de vitória." },
 ];
 
 const CHAVE_DO_MODO = "mesa-ads:agente-senior:agir";
@@ -47,12 +50,24 @@ function lerModoAgir(): boolean {
   }
 }
 
+/** Em que parte a resposta está (pelo tempo; o servidor responde tudo no fim, com fôlego). */
+export function etapaDaResposta(segundos: number, pesquisar: boolean): string {
+  if (segundos < 6) return "Lendo a conta e os criativos";
+  if (pesquisar && segundos < 45) return "Pesquisando o nicho e a Biblioteca de Anúncios";
+  if (segundos < (pesquisar ? 110 : 70)) return "Escrevendo a análise e as ações";
+  return "Conferindo as ações na Meta";
+}
+
+function Titulo({ children }: { children: ReactNode }) {
+  return <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
+}
+
 function Grupo({ titulo, tom, itens }: { titulo: string; tom: string; itens: { chave: string; titulo: string; texto: string }[] }) {
   if (!itens.length) return null;
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-card p-2.5">
+    <div className="min-w-0">
       <p className={`text-[10.5px] font-semibold uppercase tracking-wider ${tom}`}>{titulo} ({itens.length})</p>
-      <ul className="mt-1 space-y-1.5">
+      <ul className="mt-0.5 space-y-1">
         {itens.map((i) => (
           <li key={i.chave} className="min-w-0 text-[12px] leading-snug">
             <span className="block truncate font-medium">{i.titulo}</span>
@@ -81,7 +96,7 @@ function TextoCurto({ texto }: { texto: string }) {
   const [aberto, setAberto] = useState(false);
   const longo = texto.length > 320;
   return (
-    <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">
+    <p className="whitespace-pre-wrap text-[13px] leading-relaxed [overflow-wrap:anywhere]">
       {longo && !aberto ? `${texto.slice(0, 300).replace(/\s+\S*$/, "")}...` : texto}
       {longo && (
         <button type="button" className="ml-1 text-[11.5px] font-medium text-primary hover:underline" onClick={() => setAberto(!aberto)}>
@@ -90,10 +105,6 @@ function TextoCurto({ texto }: { texto: string }) {
       )}
     </p>
   );
-}
-
-function Titulo({ children }: { children: ReactNode }) {
-  return <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>;
 }
 
 /** O plano de teste que o agente montou, em linhas curtas, com o botão que já cria o plano preenchido. */
@@ -113,14 +124,14 @@ function PlanoDeTesteNaTela({ e, mensagemId, onPlanoPronto }: { e: EstrategiaSen
       ] as [string, string][]).filter((l) => !!l[1])
     : [["Criativos", e.proximos_criativos.map((c) => c.titulo).join("; ")]];
   return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-2.5" aria-label="Plano de teste do agente">
+    <section className="min-w-0" aria-label="Plano de teste do agente">
       <div className="flex min-w-0 flex-wrap items-center">
         <p className="mb-1 mr-2 flex items-center text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
           <FlaskConical className="mr-1 h-3.5 w-3.5 text-primary" /> Plano de teste
         </p>
         {mensagemId && <BotaoDoPlanoDoAgente mensagemId={mensagemId} onPlanoPronto={onPlanoPronto} className="mb-1 ml-auto" />}
       </div>
-      <dl className="min-w-0 space-y-1 text-[12px] leading-snug">
+      <dl className="min-w-0 space-y-0.5 text-[12px] leading-snug">
         {linhas.map(([r, v]) => (
           <div key={r} className="flex min-w-0 flex-col sm:flex-row">
             <dt className="shrink-0 text-muted-foreground sm:mr-2 sm:w-36">{r}</dt>
@@ -156,8 +167,9 @@ export function EstrategiaNaTela({
 }) {
   const { catalogo } = useMesa();
   const re = e.reestruturacao;
+  const temGrupos = e.escalar.length + e.manter.length + e.cortar.length > 0;
   return (
-    <div className="min-w-0 space-y-2.5">
+    <div className="min-w-0 space-y-3">
       {numeros && <NumerosQueEleViu n={numeros} />}
 
       <section className="min-w-0 space-y-2" aria-label="O que o agente recomenda">
@@ -176,11 +188,13 @@ export function EstrategiaNaTela({
             ))}
           </ul>
         )}
-        <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-3">
-          <Grupo titulo="Escalar" tom="text-success" itens={e.escalar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: [x.porque, x.como].filter(Boolean).join(" ") }))} />
-          <Grupo titulo="Manter" tom="text-foreground" itens={e.manter.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
-          <Grupo titulo="Cortar" tom="text-destructive" itens={e.cortar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
-        </div>
+        {temGrupos && (
+          <div className="grid min-w-0 grid-cols-1 gap-3 pt-1 md:grid-cols-3">
+            <Grupo titulo="Escalar" tom="text-success" itens={e.escalar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: [x.porque, x.como].filter(Boolean).join(" ") }))} />
+            <Grupo titulo="Manter" tom="text-foreground" itens={e.manter.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
+            <Grupo titulo="Cortar" tom="text-destructive" itens={e.cortar.map((x) => ({ chave: x.ad_id, titulo: nomeDe(x.ad_id), texto: x.porque }))} />
+          </div>
+        )}
       </section>
 
       {acoes && mensagemId && <CartaoDasAcoes mensagemId={mensagemId} acoes={acoes} onPlanoPronto={onPlanoPronto} />}
@@ -188,7 +202,7 @@ export function EstrategiaNaTela({
       <PlanoDeTesteNaTela e={e} mensagemId={mensagemId} onPlanoPronto={onPlanoPronto} />
 
       {e.pesquisa.length > 0 && (
-        <div className="min-w-0 rounded-lg border border-border bg-card p-2.5">
+        <section className="min-w-0">
           <Titulo>O que a pesquisa mostrou</Titulo>
           <ul className="space-y-1">
             {e.pesquisa.map((p, k) => (
@@ -197,15 +211,15 @@ export function EstrategiaNaTela({
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
       {(re.porque || re.campanhas.length > 0 || e.proximos_criativos.length > 0 || e.perguntas.length > 0) && (
-        <details className="min-w-0 rounded-lg border border-border bg-card px-2.5 py-2">
+        <details className="min-w-0 border-t border-border pt-2">
           <summary className="cursor-pointer text-[12px] font-medium text-muted-foreground">Estratégia completa (estrutura da campanha, próximos criativos e perguntas)</summary>
-          <div className="mt-2 min-w-0 space-y-2.5">
+          <div className="mt-2 min-w-0 space-y-3">
             {(re.porque || re.campanhas.length > 0) && (
-              <div className="min-w-0 rounded-lg border border-primary/30 bg-primary/5 p-2.5">
+              <div className="min-w-0">
                 <p className="text-[10.5px] font-semibold uppercase tracking-wider text-primary">Reestruturação recomendada</p>
                 <p className="mt-1 text-[12px] leading-snug">
                   {re.objetivo && <span className="mr-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10.5px] text-primary">{rotuloDoObjetivo(re.objetivo)}</span>}
@@ -265,14 +279,14 @@ export function EstrategiaNaTela({
                     </span>
                   )}
                 </div>
-                <ul className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
+                <ul className="min-w-0 divide-y divide-border">
                   {e.proximos_criativos.map((c, k) => (
-                    <li key={k} className="min-w-0 rounded-lg border border-border bg-card p-2.5 text-[12px] leading-snug">
+                    <li key={k} className="min-w-0 py-1.5 text-[12px] leading-snug">
                       <p className="font-semibold [overflow-wrap:anywhere]">{c.titulo}</p>
-                      <p className="mt-0.5 text-muted-foreground [overflow-wrap:anywhere]">{c.angulo}</p>
-                      <p className="mt-1 [overflow-wrap:anywhere]"><span className="font-medium">Gancho:</span> {c.gancho_verbal}</p>
+                      <p className="text-muted-foreground [overflow-wrap:anywhere]">{c.angulo}</p>
+                      <p className="[overflow-wrap:anywhere]"><span className="font-medium">Gancho:</span> {c.gancho_verbal}</p>
                       <p className="[overflow-wrap:anywhere]"><span className="font-medium">Visual:</span> {c.gancho_visual}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         {[humanizar(c.formato), c.estilo_visual ? humanizar(c.estilo_visual) : "", c.objetivo ? rotuloDoObjetivo(c.objetivo) : "", c.cta_meta, c.base_ad_id ? `a partir de ${nomeDe(c.base_ad_id)}` : ""].filter(Boolean).join(" · ")}
                       </p>
                     </li>
@@ -293,12 +307,39 @@ export function EstrategiaNaTela({
   );
 }
 
-function Bolha({ papel, children }: { papel: "usuario" | "agente"; children: ReactNode }) {
+function FalaDaEquipe({ children }: { children: ReactNode }) {
   return (
-    <div className={`min-w-0 rounded-2xl px-3 py-2 text-[12.5px] leading-relaxed [overflow-wrap:anywhere] ${papel === "usuario" ? "ml-8 rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-muted text-foreground"}`}>
-      {children}
+    <div className="flex min-w-0 justify-end">
+      <div className="min-w-0 max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3 py-1.5 text-[12.5px] leading-relaxed text-primary-foreground [overflow-wrap:anywhere]">{children}</div>
     </div>
   );
+}
+
+/** A resposta do agente: sem caixa, com uma linha de destaque à esquerda. */
+function FalaDoAgente({ children }: { children: ReactNode }) {
+  return <div className="min-w-0 border-l-2 border-primary/40 pl-3 text-[12.5px] leading-relaxed [overflow-wrap:anywhere]">{children}</div>;
+}
+
+/** Quantas mensagens ficam à vista: a última troca (pedido da equipe, resposta e avisos depois dela). */
+export function inicioDaUltimaTroca(mensagens: { papel: string }[]): number {
+  for (let k = mensagens.length - 1; k >= 0; k--) if (mensagens[k].papel === "usuario") return k;
+  return 0;
+}
+
+function Esqueleto() {
+  return (
+    <div className="space-y-2" aria-busy="true" aria-label="Lendo a conversa">
+      <div className="ml-auto h-7 w-2/5 animate-pulse rounded-2xl bg-muted" />
+      <div className="h-3 w-3/4 animate-pulse rounded bg-muted" />
+      <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
+      <div className="h-16 w-full animate-pulse rounded-xl bg-muted/70" />
+    </div>
+  );
+}
+
+function Andamento({ desde, pesquisar }: { desde: number; pesquisar: boolean }) {
+  const s = useSegundos(desde);
+  return <Cronometro desde={desde} rotulo={etapaDaResposta(s, pesquisar)} previsao={pesquisar ? "1 a 4 minutos" : "1 a 2 minutos"} />;
 }
 
 export default function AgenteSenior({
@@ -323,16 +364,22 @@ export default function AgenteSenior({
   const [pesquisar, setPesquisar] = useState(true);
   const [agir, setAgir] = useState(lerModoAgir);
   const [envio, setEnvio] = useState<{ mensagem: string; desde: number } | null>(null);
+  const [numerosDoEnvio, setNumerosDoEnvio] = useState<NumerosVistos | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   const listaRef = useRef<HTMLDivElement>(null);
   const botaoRef = useRef<HTMLSpanElement>(null);
+  // Persistida no navegador (cache da Mesa): abre na hora com a última conversa e relê por trás.
   const conversa = useQuery({ queryKey: chavesAgente.conversa(clientId), queryFn: () => lerConversaDoAgente(clientId), staleTime: 60_000, retry: false });
-  const mensagens = conversa.data ? conversa.data.mensagens : [];
+  const mensagens: MensagemDoAgenteSenior[] = conversa.data ? conversa.data.mensagens : [];
+  const corte = inicioDaUltimaTroca(mensagens);
+  const antigas = mensagens.slice(0, corte);
+  const recentes = mensagens.slice(corte);
 
   useEffect(() => {
     const el = listaRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [mensagens.length, !!envio]);
+  }, [mensagens.length, !!envio, !!numerosDoEnvio]);
 
   const mudarAgir = (v: boolean) => {
     setAgir(v);
@@ -346,8 +393,14 @@ export default function AgenteSenior({
   const enviar = async () => {
     const mensagem = texto.trim();
     setEnvio({ mensagem, desde: Date.now() });
+    setNumerosDoEnvio(null);
     setTexto("");
     setAviso(null);
+    // Primeira parte da resposta: os números que o agente vai ler (grátis, do cache de 5 min).
+    void queryClient
+      .fetchQuery({ queryKey: chaveDosNumeros(clientId, dias), queryFn: () => lerNumerosDoAgente(clientId, dias), staleTime: 5 * 60_000 })
+      .then((n) => setNumerosDoEnvio(n))
+      .catch(() => undefined);
     try {
       const corpo: Record<string, unknown> = {
         client_id: clientId,
@@ -368,60 +421,67 @@ export default function AgenteSenior({
       throw e;
     } finally {
       setEnvio(null);
+      setNumerosDoEnvio(null);
     }
   };
   const podeEnviar = !!texto.trim() && !envio;
 
+  const mostrar = (m: MensagemDoAgenteSenior) => {
+    if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
+    if (m.papel === "usuario") return <FalaDaEquipe key={m.id}><p className="whitespace-pre-wrap">{m.conteudo}</p></FalaDaEquipe>;
+    return (
+      <FalaDoAgente key={m.id}>
+        {m.estrategia ? (
+          <EstrategiaNaTela e={m.estrategia} nomeDe={nomeDe} onCriarPlano={onCriarPlano} mensagemId={m.id} numeros={m.numeros} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />
+        ) : (
+          <p className="whitespace-pre-wrap">{m.conteudo}</p>
+        )}
+      </FalaDoAgente>
+    );
+  };
+
   return (
     <section className={`flex min-w-0 flex-col rounded-xl border border-border bg-card ${className}`} aria-label="Agente sênior de tráfego">
-      <div className="flex min-w-0 items-center border-b border-border px-4 py-3">
-        <span className="mr-2.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
-          <Briefcase className="h-3.5 w-3.5 text-primary" />
-        </span>
+      <div className="flex min-w-0 items-center px-4 pb-2 pt-3">
+        <Briefcase className="mr-2 h-4 w-4 shrink-0 text-primary" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold">Agente sênior de tráfego</span>
-          <span className="block text-[11.5px] text-muted-foreground">
-            Lê a conta, diz o que viu e o que recomenda, e prepara as ações na campanha. Nada muda na conta sem você confirmar.
-          </span>
+          <span className="block truncate text-[14px] font-semibold">Agente sênior de tráfego</span>
+          <span className="block text-[11.5px] text-muted-foreground">Lê a conta, recomenda e prepara as ações. Nada muda sem você confirmar.</span>
         </span>
       </div>
 
-      <div ref={listaRef} className="min-w-0 space-y-3 px-4 py-3 sm:max-h-[620px] sm:overflow-y-auto sm:overscroll-contain" aria-live="polite" aria-label="Conversa com o agente sênior">
-        {conversa.isLoading && (
-          <p className="text-[12px] text-muted-foreground">
-            <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" /> Lendo a conversa...
-          </p>
-        )}
+      <div ref={listaRef} className="min-w-0 space-y-4 border-t border-border px-4 py-3 sm:max-h-[640px] sm:overflow-y-auto sm:overscroll-contain" aria-live="polite" aria-label="Conversa com o agente sênior">
+        {conversa.isLoading && <Esqueleto />}
         {conversa.isError && <AvisoDeErro erro={conversa.error} />}
         {conversa.data && mensagens.length === 0 && !envio && (
-          <p className="px-1 py-4 text-center text-[12px] leading-relaxed text-muted-foreground">
-            Peça o que fazer com a conta. Ele mostra os números que leu, o que recomenda e as ações prontas para confirmar (pausar, mudar verba, duplicar o vencedor, subir criativo da Mesa, levar ao plano de teste).
+          <p className="py-3 text-center text-[12px] leading-relaxed text-muted-foreground">
+            Peça o que fazer com a conta. Ele mostra o que leu, o que recomenda e as ações prontas para confirmar.
           </p>
         )}
-        {mensagens.map((m) => {
-          if (m.papel === "sistema") return <p key={m.id} className="text-center text-[11px] text-muted-foreground">{m.conteudo}</p>;
-          if (m.papel === "usuario") return <Bolha key={m.id} papel="usuario"><p className="whitespace-pre-wrap">{m.conteudo}</p></Bolha>;
-          return (
-            <Bolha key={m.id} papel="agente">
-              {m.estrategia ? (
-                <EstrategiaNaTela e={m.estrategia} nomeDe={nomeDe} onCriarPlano={onCriarPlano} mensagemId={m.id} numeros={m.numeros} acoes={m.acoes} onPlanoPronto={onPlanoPronto} />
-              ) : (
-                <p className="whitespace-pre-wrap">{m.conteudo}</p>
-              )}
-            </Bolha>
-          );
-        })}
+        {antigas.length > 0 && (
+          <div className="min-w-0">
+            <button type="button" className="flex items-center text-[11.5px] font-medium text-muted-foreground hover:text-foreground" onClick={() => setHistoricoAberto(!historicoAberto)} aria-expanded={historicoAberto}>
+              <ChevronDown className={`mr-1 h-3.5 w-3.5 transition-transform ${historicoAberto ? "rotate-180" : ""}`} />
+              {historicoAberto ? "Esconder conversas anteriores" : `Conversas anteriores (${antigas.filter((m) => m.papel === "usuario").length || antigas.length})`}
+            </button>
+            {historicoAberto && <div className="mt-3 min-w-0 space-y-4 opacity-90">{antigas.map(mostrar)}</div>}
+          </div>
+        )}
+        {recentes.map(mostrar)}
         {envio && (
-          <div className="min-w-0 space-y-2">
-            {envio.mensagem && <Bolha papel="usuario"><p className="whitespace-pre-wrap">{envio.mensagem}</p></Bolha>}
-            <div className="rounded-2xl rounded-bl-md bg-muted px-3 py-2">
-              <Cronometro desde={envio.desde} rotulo={pesquisar ? "Lendo a conta e pesquisando o nicho" : "Lendo a conta"} previsao="pode levar de 1 a 4 minutos" />
-            </div>
+          <div className="min-w-0 space-y-3">
+            {envio.mensagem && <FalaDaEquipe><p className="whitespace-pre-wrap">{envio.mensagem}</p></FalaDaEquipe>}
+            <FalaDoAgente>
+              <div className="space-y-2">
+                {numerosDoEnvio ? <NumerosQueEleViu n={numerosDoEnvio} carregando /> : <div className="h-8 w-3/4 animate-pulse rounded bg-muted" />}
+                <Andamento desde={envio.desde} pesquisar={pesquisar} />
+              </div>
+            </FalaDoAgente>
           </div>
         )}
       </div>
 
-      <div className="space-y-2 border-t border-border px-3 pb-3 pt-2.5">
+      <div className="space-y-2 border-t border-border px-3 pb-3 pt-2">
         {aviso && <p className="text-[11px] text-muted-foreground">{aviso}</p>}
         <div className="flex flex-wrap" role="group" aria-label="Atalhos para o agente sênior">
           {ATALHOS.map((a) => (
@@ -429,7 +489,8 @@ export default function AgenteSenior({
               key={a.rotulo}
               type="button"
               onClick={() => setTexto(a.texto)}
-              className="mb-1 mr-1 max-w-full truncate rounded-full border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+              title={a.texto}
+              className="mb-1 mr-1 max-w-full truncate rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
             >
               {a.rotulo}
             </button>
@@ -446,10 +507,10 @@ export default function AgenteSenior({
                 if (b) b.click();
               }
             }}
-            rows={3}
+            rows={2}
             aria-label="Mensagem ao agente sênior"
             placeholder="Ex.: pausa o que gasta sem conversa e sobe a verba do vencedor"
-            className="max-h-40 min-h-[64px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="max-h-40 min-h-[52px] resize-none border-0 bg-transparent px-1 py-1 text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <div className="mt-1 flex min-w-0 flex-wrap items-center">
             <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="Resposta em até 2 frases, com as ações prontas para confirmar">

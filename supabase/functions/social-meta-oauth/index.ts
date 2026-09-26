@@ -3,6 +3,7 @@ import {
   buildAllowedOrigins,
   buildFacebookLoginUrl,
   createAppSecretProof,
+  META_ESCOPOS_DE_GESTAO,
   missingMetaScopes,
   normalizeGraphVersion,
   parseManagedPages,
@@ -801,6 +802,7 @@ async function handleAdsStart(
   config: RuntimeConfig,
   caller: SupabaseClient,
   admin: SupabaseClient,
+  gestao = false,
 ): Promise<JsonRecord> {
   await rpcOrThrow(
     admin,
@@ -827,6 +829,7 @@ async function handleAdsStart(
       graphVersion: config.metaGraphVersion,
       redirectUri: config.metaRedirectUri,
       state,
+      extraScopes: gestao ? META_ESCOPOS_DE_GESTAO : undefined,
     }),
     state,
   };
@@ -1057,7 +1060,7 @@ Deno.serve(async (req) => {
     let result: JsonRecord;
     if (action === "ads_start") {
       const config = loadMetaConfig(supabaseConfig);
-      result = await handleAdsStart(config, caller, admin);
+      result = await handleAdsStart(config, caller, admin, body.gestao === true);
     } else if (action === "ads_complete") {
       const config = loadMetaConfig(supabaseConfig);
       result = await handleAdsComplete(body, config, admin, userId);

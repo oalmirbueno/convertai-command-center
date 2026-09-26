@@ -146,8 +146,13 @@ export type ItemDaAcaoNaConta = {
   de: Estado | null;
   para: Para | null;
   limitado: boolean;
-  /** Por que o item não pode ser feito agora (token só de leitura, orçamento em outro nível...). */
+  /** Por que o item não pode ser feito agora (já pausado, orçamento em outro nível...). */
   indisponivel: string | null;
+  /**
+   * Modo ensaio: sem permissão de gestão, o agente propõe igual e o cartão
+   * mostra "Seria feito assim", sem executar (a execução recusa).
+   */
+  ensaio?: boolean;
   resultado?: ResultadoDoItem;
 };
 
@@ -157,6 +162,8 @@ export type AcoesDaConta = {
   itens: ItemDaAcaoNaConta[];
   ignorados: string[];
   gestao: { disponivel: boolean; motivo: string | null } | null;
+  /** "ensaio" quando algum item da Meta foi proposto sem permissão de gestão. */
+  modo?: "real" | "ensaio";
   executada_em?: string;
   executada_por?: string;
   descartada_em?: string;
@@ -381,18 +388,77 @@ const brl = (v: number | null) => (v === null ? "sem orçamento" : `R$ ${v.toFix
 
 // ------------------------------------------------------------------ permissão
 
-/** /me/permissions do token: ads_management concedido libera a escrita. */
-export function permissaoDeGestao(bruto: unknown): { disponivel: boolean; motivo: string | null } {
+/** Permissões concedidas (status granted) na resposta de /me/permissions; null quando a resposta não veio. */
+export function escoposConcedidos(bruto: unknown): string[] | null {
   const data = bruto && typeof bruto === "object" && Array.isArray((bruto as Record<string, unknown>).data) ? (bruto as { data: Record<string, unknown>[] }).data : null;
-  if (!data) return { disponivel: false, motivo: "Não foi possível conferir as permissões do token na Meta." };
-  const concedidas = new Set(data.filter((p) => p && p.status === "granted").map((p) => String(p.permission)));
-  if (concedidas.has("ads_management")) return { disponivel: true, motivo: null };
+  if (!data) return null;
+  return [...new Set(data.filter((p) => p && p.status === "granted").map((p) => String(p.permission)))].sort();
+}
+
+/** Escopos que a escrita precisa (ads_read para reler o estado, ads_management para mudar). */
+export const ESCOPOS_DA_GESTAO = ["ads_read", "ads_management"];
+
+/** Gestão a partir da lista de escopos concedidos: disponível ou exatamente o que falta. */
+export function gestaoDosEscopos(escopos: string[] | null): { disponivel: boolean; motivo: string | null; faltam: string[] } {
+  if (!escopos) return { disponivel: false, motivo: "Não foi possível conferir as permissões do token na Meta.", faltam: ESCOPOS_DA_GESTAO.slice() };
+  const faltam = ESCOPOS_DA_GESTAO.filter((e) => escopos.indexOf(e) < 0);
+  if (!faltam.length) return { disponivel: true, motivo: null, faltam };
   return {
     disponivel: false,
-    motivo: concedidas.has("ads_read")
+    faltam,
+    motivo: escopos.indexOf("ads_read") >= 0
       ? "O acesso de anúncios deste cliente só tem leitura (ads_read). Para o agente mexer na campanha, conecte com permissão de gestão (ads_management)."
       : "O token de anúncios não tem permissão de gestão (ads_management).",
   };
+}
+
+/** /me/permissions do token: ads_management concedido libera a escrita. */
+export function permissaoDeGestao(bruto: unknown): { disponivel: boolean; motivo: string | null } {
+  const g = gestaoDosEscopos(escoposConcedidos(bruto));
+  return { disponivel: g.disponivel, motivo: g.motivo };
+}
+
+/** A conferência guardada ainda vale? (a tela não pergunta à Meta a cada abertura) */
+export function conferenciaValida(conferidoEm: string | null | undefined, agoraMs: number, validadeMs: number): boolean {
+  const t = conferidoEm ? Date.parse(conferidoEm) : NaN;
+  return Number.isFinite(t) && agoraMs - t >= 0 && agoraMs - t < validadeMs;
+}
+
+/**
+ * Modo ensaio: sem gestão, os itens da Meta continuam na lista, com o antes
+ * e o depois, marcados "ensaio" (a tela mostra "Seria feito assim" e a
+ * execução recusa). Os itens do painel (plano, tarefa, vínculo) seguem reais.
+ */
+export function marcarEnsaio(acoes: AcoesDaConta, gestao: { disponivel: boolean; motivo: string | null }): AcoesDaConta {
+  if (gestao.disponivel) return { ...acoes, gestao, modo: "real" };
+  const itens = acoes.itens.map((i) => (i.na_meta ? { ...i, ensaio: true } : i));
+  return { ...acoes, itens, gestao, modo: itens.some((i) => i.na_meta) ? "ensaio" : "real" };
+}
+
+/**
+ * Cache curto na memória da função (a mesma instância atende pedidos
+ * seguidos): leituras iguais dentro do prazo reaproveitam o resultado, e
+ * duas chamadas ao mesmo tempo esperam a mesma leitura.
+ */
+export class CacheCurto<T> {
+  private mapa = new Map<string, { em: number; valor: Promise<T> }>();
+  constructor(private prazoMs: number, private maximo = 50, private relogio: () => number = () => Date.now()) {}
+  obter(chave: string, ler: () => Promise<T>): Promise<T> {
+    const agora = this.relogio();
+    const guardado = this.mapa.get(chave);
+    if (guardado && agora - guardado.em < this.prazoMs) return guardado.valor;
+    const valor = ler();
+    this.mapa.set(chave, { em: agora, valor });
+    valor.catch(() => this.mapa.delete(chave));
+    if (this.mapa.size > this.maximo) {
+      const velha = this.mapa.keys().next().value;
+      if (velha !== undefined) this.mapa.delete(velha);
+    }
+    return valor;
+  }
+  esquecer(prefixo: string) {
+    for (const k of [...this.mapa.keys()]) if (k.indexOf(prefixo) === 0) this.mapa.delete(k);
+  }
 }
 
 // ------------------------------------------------------------------ Meta (grafo injetável)
