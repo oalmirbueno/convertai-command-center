@@ -302,7 +302,16 @@ function PainelDaAnalise({
   );
 }
 
-export default function AbaConta({ onCriarPlano, onImportado }: { onCriarPlano?: (p: PedidoDePlano) => void; onImportado?: (planoId: string) => void } = {}) {
+export default function AbaConta({
+  onCriarPlano,
+  onImportado,
+  onAbrirPlano,
+}: {
+  onCriarPlano?: (p: PedidoDePlano) => void;
+  onImportado?: (planoId: string) => void;
+  /** Plano de teste criado já preenchido pelo agente sênior: abre no Plano de teste. */
+  onAbrirPlano?: (planoId: string) => void;
+} = {}) {
   const { clientId, catalogo } = useMesa();
   const queryClient = useQueryClient();
   const avisarErro = useAvisarErro();
@@ -491,7 +500,7 @@ export default function AbaConta({ onCriarPlano, onImportado }: { onCriarPlano?:
           </details>
 
           <section className="min-w-0 space-y-2" aria-label="Otimização">
-            <AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} />
+            <AgenteSenior nomeDe={nomeDe} dias={diasDoAgente} onCriarPlano={onCriarPlano} onPlanoPronto={onAbrirPlano} />
             <div className="flex min-w-0 flex-wrap items-center">
               <BaixarPacoteDeOtimizacao dias={diasDoAgente} className="mb-1 mr-2" />
               <ImportarPacote onImportado={onImportado} className="mb-1" />

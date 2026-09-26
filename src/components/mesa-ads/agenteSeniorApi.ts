@@ -6,6 +6,7 @@
  */
 import { padraoPara, type ModeloIa, type ParteDaEstimativa } from "@/lib/mesa/api";
 import { chamarAds } from "./adsApi";
+import { normalizarAcoesDaConta, normalizarNumerosVistos, type AcoesDaConta, type NumerosVistos } from "./acoesDoAgenteApi";
 
 export interface EstrategiaSenior {
   resposta: string;
@@ -24,6 +25,16 @@ export interface EstrategiaSenior {
   proximos_criativos: { titulo: string; angulo: string; gancho_verbal: string; gancho_visual: string; formato: string; estilo_visual: string; objetivo: string; cta_meta: string; base_ad_id: string; porque: string }[];
   pesquisa: { achado: string; fonte: string }[];
   perguntas: string[];
+  /** O teste que o agente montou (hipótese, variável, público, verba, duração, métrica e critério). */
+  plano_de_teste: {
+    hipotese: string;
+    variavel: string;
+    publico: string;
+    orcamento_diario_brl: number | null;
+    duracao_dias: number | null;
+    metrica_decisao: string;
+    criterio_vitoria: string;
+  } | null;
 }
 
 export interface MensagemDoAgenteSenior {
@@ -32,6 +43,10 @@ export interface MensagemDoAgenteSenior {
   conteudo: string;
   criado_em: string;
   estrategia: EstrategiaSenior | null;
+  /** O que o agente viu (números do código, com fonte e período). */
+  numeros: NumerosVistos | null;
+  /** Ações propostas na conta, com o estado de cada uma. */
+  acoes: AcoesDaConta | null;
 }
 
 const lista = (v: unknown): any[] => (Array.isArray(v) ? v : []);
@@ -74,6 +89,19 @@ export function normalizarEstrategiaSenior(bruto: unknown): EstrategiaSenior | n
     }).filter((c) => !!c.titulo),
     pesquisa: lista(r.pesquisa).map((p) => ({ achado: txt(obj(p).achado), fonte: txt(obj(p).fonte) })).filter((p) => !!p.achado),
     perguntas: lista(r.perguntas).map(txt).filter(Boolean),
+    plano_de_teste: (() => {
+      const t = obj(r.plano_de_teste);
+      if (!Object.keys(t).length) return null;
+      return {
+        hipotese: txt(t.hipotese),
+        variavel: txt(t.variavel),
+        publico: txt(t.publico),
+        orcamento_diario_brl: valor(t.orcamento_diario_brl),
+        duracao_dias: valor(t.duracao_dias),
+        metrica_decisao: txt(t.metrica_decisao),
+        criterio_vitoria: txt(t.criterio_vitoria),
+      };
+    })(),
   };
 }
 
@@ -85,7 +113,15 @@ export function normalizarMensagensDoAgente(bruto: unknown): { conversa_id: stri
       .map((m) => {
         const o = obj(m);
         const papel = o.papel === "usuario" || o.papel === "agente" ? o.papel : "sistema";
-        return { id: txt(o.id), papel, conteudo: txt(o.conteudo), criado_em: txt(o.criado_em), estrategia: normalizarEstrategiaSenior(o.estrategia) } as MensagemDoAgenteSenior;
+        return {
+          id: txt(o.id),
+          papel,
+          conteudo: txt(o.conteudo),
+          criado_em: txt(o.criado_em),
+          estrategia: normalizarEstrategiaSenior(o.estrategia),
+          numeros: normalizarNumerosVistos(o.numeros),
+          acoes: normalizarAcoesDaConta(o.acoes),
+        } as MensagemDoAgenteSenior;
       })
       .filter((m) => !!m.id && (!!m.conteudo || !!m.estrategia)),
   };

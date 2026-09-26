@@ -45,6 +45,9 @@ import {
 import { Andamento, BarraDeNota, BarraDePolitica, pilula, SeloDeEvidencia, useAndamento } from "./Comuns";
 import ConversaDoPlano from "./ConversaDoPlano";
 import AgenteSenior from "./AgenteSenior";
+import KitDeRecepcao from "./KitDeRecepcao";
+import TesteDoAgente from "./TesteDoAgente";
+import { gerarKit, kitDoAngulo, partesDoKit } from "./acoesDoAgenteApi";
 
 /**
  * Etapa 3, Plano de teste: ângulos realmente diferentes (situação × mecanismo
@@ -367,6 +370,8 @@ export default function AbaPlano({
   // Sem escolha explícita, o tom sai do pedido escrito ("mais agressivo") e, sem nada, direto.
   const [tomEscolhido, setTomEscolhido] = useState<TomDoCriativo | null>(null);
   const [tomDaProducao, setTomDaProducao] = useState<TomDoCriativo>("direto");
+  // 25/09: o kit de recepção (post que recebe quem veio do anúncio e roteiro de vendas) sai junto com os criativos.
+  const [comKit, setComKit] = useState(true);
   const tom: TomDoCriativo = tomEscolhido || tomDoPedido(pedido) || "direto";
 
   const lista = planos.data || [];
@@ -487,6 +492,17 @@ export default function AbaPlano({
   };
 
   const alternar = <T,>(l: T[], v: T) => (l.indexOf(v) >= 0 ? l.filter((x) => x !== v) : l.concat([v]));
+  // Ângulos marcados ainda sem kit de recepção (o kit sai junto com a produção, em paralelo).
+  const semKit = plano ? plano.angulos.filter((a) => marcados.indexOf(a.id) >= 0 && !kitDoAngulo(a)).map((a) => a.id) : [];
+  const gerarKitsDosAngulos = (planoId: string, ids: string[]) => {
+    void Promise.all(ids.map((id) => gerarKit(planoId, id).then(() => true, () => false))).then((r) => {
+      mesa.atualizarCusto();
+      void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
+      const ok = r.filter(Boolean).length;
+      if (ok) toast.success(ok === 1 ? "Kit de recepção pronto" : `${ok} kits de recepção prontos`, { description: "No Estúdio Ads, embaixo do criativo, e no Plano de teste." });
+      if (ok < r.length) toast.warning(`${r.length - ok} kit(s) não saíram`, { description: "Gere de novo pelo botão do ângulo." });
+    });
+  };
   const angulosOrdenados = plano ? plano.angulos : [];
 
   return (
@@ -644,10 +660,11 @@ export default function AbaPlano({
             )}
 
             <TestarPrimeiro plano={plano} />
+            <TesteDoAgente plano={plano} />
 
             {/* v5: o agente sênior revisa o plano com a conta ao vivo (abre sob demanda: não lê nada antes do clique). */}
             {agenteAberto ? (
-              <AgenteSenior planoId={plano.id} />
+              <AgenteSenior planoId={plano.id} onPlanoPronto={(id) => onPlano(id)} />
             ) : (
               <button
                 type="button"
@@ -664,7 +681,10 @@ export default function AbaPlano({
 
             <div className="grid min-w-0 grid-cols-1 gap-3 2xl:grid-cols-2">
               {angulosOrdenados.map((a, i) => (
-                <CartaoDoAngulo key={a.id} angulo={a} indice={i} marcado={marcados.indexOf(a.id) >= 0} onMarcar={() => setMarcados((m) => alternar(m, a.id))} referencias={referencias.data || []} />
+                <div key={a.id} className="min-w-0 space-y-2">
+                  <CartaoDoAngulo angulo={a} indice={i} marcado={marcados.indexOf(a.id) >= 0} onMarcar={() => setMarcados((m) => alternar(m, a.id))} referencias={referencias.data || []} />
+                  <KitDeRecepcao plano={plano} angulo={a} compacto />
+                </div>
               ))}
             </div>
 
@@ -691,6 +711,10 @@ export default function AbaPlano({
                     );
                   })}
                 </div>
+                <label className="mb-1 mr-3 inline-flex min-w-0 items-center text-[11.5px] text-muted-foreground" title="O post que recebe quem veio do anúncio e o roteiro de atendimento e vendas de cada ângulo">
+                  <input type="checkbox" className="mr-1.5" checked={comKit} onChange={(e) => setComKit(e.target.checked)} />
+                  Com o kit de recepção
+                </label>
                 <div className="mb-1 mr-3 flex min-w-0 items-center">
                   <span className="mr-1.5 text-[11.5px] text-muted-foreground">Tom</span>
                   <SeletorDeTom valor={tomDaProducao} onMudar={setTomDaProducao} rotulo="Tom dos criativos" />
@@ -706,11 +730,12 @@ export default function AbaPlano({
                     descricao={`Para cada ângulo e formato: a copy do anúncio no tom ${rotuloDoTom(tomDaProducao).toLowerCase()} (conferida pelo Jev, com aviso de genérico) e a direção de arte no Estúdio Ads, pronta para gerar.`}
                     className="ml-2 h-9"
                     disabled={pecas === 0}
-                    partes={() => partesDaProducao(catalogo, pecas)}
+                    partes={() => partesDaProducao(catalogo, pecas).concat(comKit && semKit.length ? partesDoKit(catalogo, semKit.length) : [])}
                     executar={produzir}
                     aoConcluir={() => {
                       void queryClient.invalidateQueries({ queryKey: chavesAds.criativos(clientId) });
                       void queryClient.invalidateQueries({ queryKey: chavesAds.planos(clientId) });
+                      if (comKit && semKit.length) gerarKitsDosAngulos(plano.id, semKit);
                       onProduzido(plano.id);
                     }}
                   />

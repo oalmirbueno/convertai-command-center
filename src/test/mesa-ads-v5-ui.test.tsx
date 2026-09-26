@@ -195,9 +195,11 @@ describe("agente sênior de tráfego (tela)", () => {
         ],
       },
       conta_conversar: { conversa_id: "conv-1", resposta: "ok", estrategia: {}, pesquisa: { web: true, biblioteca: { consultada: false, motivo: "Não há token de anúncios no cofre para este cliente.", anuncios: [] } }, custo_usd: 0.08 },
+      plano_do_agente: { plano: { id: "p-9" }, lacunas: [], ja_existia: false, custo_usd: 0 },
     });
     const onCriarPlano = vi.fn();
-    montar(h(AgenteSenior, { nomeDe: (id: string) => (id === "3" ? "Chama no WhatsApp" : `Anúncio ${id}`), planoId: "p-1", dias: 30, onCriarPlano }));
+    const onPlanoPronto = vi.fn();
+    montar(h(AgenteSenior, { nomeDe: (id: string) => (id === "3" ? "Chama no WhatsApp" : `Anúncio ${id}`), planoId: "p-1", dias: 30, onCriarPlano, onPlanoPronto }));
     expect(await screen.findByText("Reestruturação recomendada")).toBeTruthy();
     expect(screen.getByText("Escalar (1)")).toBeTruthy();
     expect(screen.getAllByText("Chama no WhatsApp").length).toBeGreaterThan(0);
@@ -208,7 +210,12 @@ describe("agente sênior de tráfego (tela)", () => {
     await waitFor(() => expect(chamadasDe("conta_conversar")).toHaveLength(1));
     expect(chamadasDe("conta_conversar")[0]).toEqual({ acao: "conta_conversar", client_id: CLIENTE, mensagem: "Monte a campanha de vendas", conversa_id: "conv-1", plano_id: "p-1", dias: 30, pesquisar: true });
     expect(await screen.findByText(/Biblioteca de Anúncios: Não há token/)).toBeTruthy();
+    // 25/09 à noite: "Levar ao Plano de teste" cria o plano já preenchido (sem IA) e abre no Plano de teste.
     fireEvent.click(screen.getByRole("button", { name: /Levar ao Plano de teste/ }));
+    await waitFor(() => expect(chamadasDe("plano_do_agente")).toEqual([{ acao: "plano_do_agente", mensagem_id: "m2" }]));
+    await waitFor(() => expect(onPlanoPronto).toHaveBeenCalledWith("p-9"));
+    // A geração de ângulos novos com IA continua, na estratégia completa.
+    fireEvent.click(screen.getByRole("button", { name: /Gerar ângulos novos com IA/ }));
     await waitFor(() => expect(onCriarPlano).toHaveBeenCalledTimes(1));
     expect(onCriarPlano.mock.calls[0][0]).toMatchObject({ objetivo: "mensagens", rotulo: "Próximos criativos do agente sênior" });
     expect(onCriarPlano.mock.calls[0][0].pedido).toContain("Relógio");

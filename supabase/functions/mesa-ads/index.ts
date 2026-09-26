@@ -86,6 +86,19 @@
  * - pacote_importar { pacote, confirmar? }: lê o retorno do agente externo e
  *   cria o plano com os criativos para o Estúdio Ads.
  *
+ * 25/09 à noite (agente que age; acoes-conta.ts e kit-recepcao.ts, sem SQL novo):
+ * - conta_conversar devolve também numeros (o que o agente viu, com fonte e
+ *   período), plano_de_teste e as acoes propostas (apelidos c1/g1/n1/k1
+ *   traduzidos no servidor, estado lido na Meta como "antes"; anexo acoes_conta).
+ * - conta_acao_executar { mensagem_id, itens?, descartar? } e
+ *   conta_acao_desfazer { mensagem_id }: só com ads_management no token do
+ *   cofre; relê cada item na Meta, recusa se mudou, confere a conta do
+ *   cliente, orçamento com teto de 30% por vez, auditLog em cada escrita.
+ * - plano_do_agente { mensagem_id }: o Plano de teste já preenchido, sem IA.
+ * - kit_recepcao_gerar { plano_id, angulo_id } e kit_agenda { plano_id,
+ *   angulo_id, data | desfazer }: post de recepção e roteiro comercial do
+ *   ângulo; o post entra na agenda pelo createEditorialItem.
+ *
  * Regras: só dado real; toda leitura e escrita presa ao client_id; nenhuma
  * falha responde 200; toda ação que gasta devolve custo_usd e saldo_usd;
  * números de conta vêm do código, nunca da IA; relógio de 400 s controlado
@@ -180,6 +193,27 @@ import {
 import { impressaoDaImagem } from "./vinculo-imagem.ts";
 import { anunciosDaBiblioteca, type AnuncioDaBiblioteca, ESQUEMA_AGENTE_SENIOR, estrategiaEmMarkdown, normalizarEstrategia, tarefaDoAgenteSenior } from "./agente-senior.ts";
 import { validarRetorno } from "./pacote-retorno.ts";
+import {
+  type AcoesDaConta,
+  alvosComApelido,
+  blocoDosAlvos,
+  CAMPOS_DO_ESTADO,
+  criativosComApelido,
+  desfazerNaMeta,
+  estadoLido,
+  executarNaMeta,
+  fotografar,
+  grafoDaMeta,
+  type GrafoMeta,
+  type ItemDaAcaoNaConta,
+  normalizarAcoesDaConta,
+  permissaoDeGestao,
+  planoDeTesteDaEstrategia,
+  temReverso,
+} from "./acoes-conta.ts";
+import { ESQUEMA_KIT_RECEPCAO, itemDaAgendaDoKit, type KitDeRecepcao, normalizarKit, pedidoDoKit } from "./kit-recepcao.ts";
+import { createEditorialItem, createEditorialItemSchema, WriteError, type WriteCtx } from "../_shared/mcp-write-services.ts";
+import { auditLog } from "../_shared/mcp-audit.ts";
 import { gravarNoCerebro, resumoDoCerebro } from "../_shared/cerebro-nas-mesas.ts";
 import {
   alertaDePolitica,
@@ -5521,14 +5555,34 @@ async function conversaDoAgenteSenior(servico: SupabaseClient, clientId: string,
   return (data as { id: string }).id;
 }
 
-type MensagemDoAgente = { id: string; papel: string; conteudo: string; criado_em: string; estrategia: Record<string, unknown> | null };
+type MensagemDoAgente = {
+  id: string;
+  papel: string;
+  conteudo: string;
+  criado_em: string;
+  estrategia: Record<string, unknown> | null;
+  /** O que o agente viu (números do código, com período e data da coleta). */
+  numeros: Record<string, unknown> | null;
+  /** As ações propostas na conta (acoes-conta.ts), com o estado de cada uma. */
+  acoes: Record<string, unknown> | null;
+};
 
 async function mensagensDoAgenteSenior(servico: SupabaseClient, conversaId: string, limite = 60): Promise<MensagemDoAgente[]> {
   const { data } = await servico.from("agente_mensagens").select("id, papel, conteudo, anexos, criado_em").eq("conversa_id", conversaId)
     .order("criado_em", { ascending: false }).limit(limite);
   return ((data as { id: string; papel: string; conteudo: string; anexos: unknown; criado_em: string }[] | null) ?? []).reverse().map((m) => {
-    const anexo = (Array.isArray(m.anexos) ? m.anexos : []).find((a) => a && typeof a === "object" && (a as Record<string, unknown>).tipo === "estrategia") as Record<string, unknown> | undefined;
-    return { id: m.id, papel: m.papel, conteudo: m.conteudo, criado_em: m.criado_em, estrategia: anexo && anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null };
+    const anexos = (Array.isArray(m.anexos) ? m.anexos : []) as Record<string, unknown>[];
+    const anexo = anexos.find((a) => a && typeof a === "object" && a.tipo === "estrategia");
+    const acoes = anexos.find((a) => a && typeof a === "object" && a.tipo === "acoes_conta") ?? null;
+    return {
+      id: m.id,
+      papel: m.papel,
+      conteudo: m.conteudo,
+      criado_em: m.criado_em,
+      estrategia: anexo && anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null,
+      numeros: anexo && anexo.numeros && typeof anexo.numeros === "object" ? anexo.numeros as Record<string, unknown> : null,
+      acoes,
+    };
   });
 }
 
@@ -5673,11 +5727,20 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     if (plano.client_id !== clientId) throw new ErroHttp(403, "plano_de_outro_cliente", "Este plano é de outro cliente.");
   }
   const conversaId = (await conversaDoAgenteSenior(servico, clientId, corpo.conversa_id, chamador.userId)) as string;
-  const [c, historico, modeloEscolhido] = await Promise.all([
+  const modoAgir = corpo.modo === "agir";
+  const [c, historico, modeloEscolhido, criativosDaMesa] = await Promise.all([
     contextoDoAgenteSenior(servico, clientId, corpo),
     mensagensDoAgenteSenior(servico, conversaId, HISTORICO_DO_AGENTE_SENIOR),
     resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+    criativosParaAcoes(servico, clientId),
   ]);
+  // Apelidos (c1, g1, n1, k1): o agente nunca vê nem devolve id da Meta nem UUID (acoes-conta.ts).
+  const alvos = alvosComApelido({
+    campanhas: c.conta.campanhas.map((x) => ({ campaign_id: x.campaign_id, nome: x.nome, status: x.status, orcamento_diario: x.orcamento_diario })),
+    conjuntos: c.conta.conjuntos.map((x) => ({ adset_id: x.adset_id, nome: x.nome, campanha: x.campanha })),
+    anuncios: c.conta.anuncios.map((x) => ({ ad_id: x.ad_id, nome: x.nome, status: x.status, campanha: x.campanha })),
+  });
+  const criativosComRef = criativosComApelido(criativosDaMesa);
   const cobranca = { clientId, referencia: { tipo: REF_CLIENTE, id: clientId }, criadoPor: chamador.userId };
   const achado = await nichoDoCliente(c.ctx, c.briefing, cobranca, corpo.nicho);
   const termos = [achado.nicho?.nome, String((c.briefing?.oferta ?? {}).produto ?? "")].filter(Boolean).join(" ");
@@ -5695,7 +5758,7 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
       ...historico.filter((m) => m.papel === "usuario" || m.papel === "agente").map((m) => ({ papel: m.papel === "usuario" ? "usuario" as const : "agente" as const, conteudo: m.conteudo.slice(0, 3000) })),
       {
         papel: "usuario",
-        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano })}`,
+        conteudo: `CONTEXTO (calculado pelo painel; use SÓ estes números):\n${JSON.stringify(contexto)}\n\nNICHO: ${achado.nicho ? textoDoNicho(achado.nicho) : "não identificado; deduza pelo contexto e diga a dúvida em perguntas"}\n\nMENSAGEM DA EQUIPE: ${mensagem}\n${blocoDosAlvos(alvos, criativosComRef)}\n${tarefaDoAgenteSenior({ pesquisaWeb: pesquisar, bibliotecaConsultada: !!(biblioteca && biblioteca.anuncios.length), temPlano: !!plano, modoAgir })}`,
       },
     ],
     raciocinio: modeloEscolhido.raciocinio,
@@ -5709,13 +5772,20 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
   const nomes = new Map(c.conta.anuncios.map((a) => [a.ad_id, a.nome ?? `Anúncio ${a.ad_id}`]));
   const markdown = estrategiaEmMarkdown(estrategia, (id) => nomes.get(id) ?? id);
   const custo = arred6(s.custoUsd + achado.custo);
+  // Ações propostas: só a lista, com o estado lido na Meta; a equipe confirma (conta_acao_executar).
+  const bruto = (s.json && typeof s.json === "object" ? s.json : {}) as Record<string, unknown>;
+  const acoes = await prepararAcoesDaConta(servico, clientId, normalizarAcoesDaConta(bruto.acoes, alvos, criativosComRef, bruto.resumo_das_acoes));
+  const numeros = numerosVistos(c.conta);
   await registrarMensagens(servico, conversaId, clientId, [
     { papel: "usuario", conteudo: mensagem },
     {
       papel: "agente",
       conteudo: markdown || estrategia.resposta || "Sem resposta.",
       uso_id: s.usoId,
-      anexos: [{ tipo: "estrategia", estrategia, periodo: c.conta.periodo, plano_id: plano?.id ?? null, biblioteca: biblioteca ? { consultada: biblioteca.consultada, motivo: biblioteca.motivo, total: biblioteca.anuncios.length } : null }],
+      anexos: [
+        { tipo: "estrategia", estrategia, numeros, periodo: c.conta.periodo, plano_id: plano?.id ?? null, biblioteca: biblioteca ? { consultada: biblioteca.consultada, motivo: biblioteca.motivo, total: biblioteca.anuncios.length } : null },
+        ...(acoes ? [acoes] : []),
+      ],
     },
   ]);
   return json({
@@ -5723,6 +5793,8 @@ async function contaConversar(servico: SupabaseClient, chamador: Chamador, corpo
     resposta: estrategia.resposta,
     estrategia,
     markdown,
+    acoes,
+    numeros,
     mix_objetivos: c.conta.mix_objetivos,
     nicho: achado.nicho ? { id: achado.nicho.id, nome: achado.nicho.nome } : null,
     pesquisa: { web: pesquisar, biblioteca },
@@ -5776,6 +5848,536 @@ async function pacoteOtimizacaoDados(servico: SupabaseClient, chamador: Chamador
     custo_usd: 0,
   });
 }
+
+// ---- ações do agente sênior na conta (pedido do dono em 25/09; acoes-conta.ts)
+
+const PRINCIPAL_MESA_ADS = "mesa:mesa-ads";
+const STATUS_APROVADOS = ["pronto", "no_ar", "pausado"];
+
+/**
+ * Token de anúncios do cliente (conta própria primeiro, depois o da carteira),
+ * pela mesma porta estreita da Biblioteca (só a chave de serviço chama). Fica
+ * no servidor: vai direto para o grafo da Meta e nunca para a resposta.
+ */
+async function tokenDeAnuncios(servico: SupabaseClient, clientId: string): Promise<string | null> {
+  const { data, error } = await servico.rpc("ads_token_para_biblioteca", { _client_id: clientId });
+  if (error) return null;
+  return typeof data === "string" && data.trim() ? data.trim() : null;
+}
+
+type AcessoDeGestao = { grafo: GrafoMeta | null; gestao: { disponivel: boolean; motivo: string | null } };
+
+/** O grafo da Meta com o token do cofre e se ele tem ads_management (/me/permissions). */
+async function acessoDeGestao(servico: SupabaseClient, clientId: string): Promise<AcessoDeGestao> {
+  const token = await tokenDeAnuncios(servico, clientId);
+  if (!token) {
+    return { grafo: null, gestao: { disponivel: false, motivo: "Não há acesso de anúncios no cofre para este cliente. Conecte a conta de anúncios com permissão de gestão." } };
+  }
+  const grafo = grafoDaMeta(token);
+  const permissoes = await grafo.ler("me/permissions", "permission,status").catch(() => null);
+  return { grafo, gestao: permissaoDeGestao(permissoes) };
+}
+
+/** Números das contas de anúncio da Meta ligadas ao cliente (sem "act_"): toda escrita confere contra elas. */
+async function contasMetaDoCliente(servico: SupabaseClient, clientId: string): Promise<Set<string>> {
+  const { data } = await servico.from("external_accounts").select("external_id").eq("client_id", clientId).eq("platform", "meta_ads");
+  return new Set(((data as { external_id: string | null }[] | null) ?? []).map((c) => String(c.external_id ?? "").replace(/^act_/, "")).filter(Boolean));
+}
+
+/** Criativos da Mesa Ads para as ações, com "arte aprovada" (entregue ou status pronto, no ar ou pausado com arte). */
+async function criativosParaAcoes(servico: SupabaseClient, clientId: string) {
+  const { data } = await servico.from("ads_criativos").select("id, nome, formato, ad_id, trabalho_id, status").eq("client_id", clientId).order("criado_em", { ascending: false }).limit(60);
+  const lista = (data as { id: string; nome: string | null; formato: string; ad_id: string | null; trabalho_id: string | null; status: string | null }[] | null) ?? [];
+  const ids = [...new Set(lista.map((c) => c.trabalho_id).filter((x): x is string => !!x))];
+  const { data: ts } = ids.length
+    ? await servico.from("estudio_trabalhos").select("id, cards, direcao").eq("client_id", clientId).in("id", ids)
+    : { data: [] as { id: string; cards: unknown; direcao: unknown }[] };
+  const arte = new Map(((ts as { id: string; cards: unknown; direcao: unknown }[] | null) ?? []).map((t) => [t.id, arteDoTrabalho(t)]));
+  return lista.map((c) => {
+    const a = c.trabalho_id ? arte.get(c.trabalho_id) ?? null : null;
+    return { id: c.id, nome: c.nome, formato: c.formato, ad_id: c.ad_id, tem_arte: !!a && (a.bucket === "files" || STATUS_APROVADOS.indexOf(String(c.status ?? "")) >= 0) };
+  });
+}
+
+/**
+ * Fotografia das ações da Meta na hora da proposta: o estado lido vira o
+ * "antes" (e o orçamento é recalculado sobre o real, com o teto). Sem token ou
+ * sem ads_management, os itens da Meta ficam indisponíveis com o motivo.
+ */
+async function prepararAcoesDaConta(servico: SupabaseClient, clientId: string, acoes: AcoesDaConta | null): Promise<AcoesDaConta | null> {
+  if (!acoes) return null;
+  if (!acoes.itens.some((i) => i.na_meta)) return acoes;
+  const acesso = await acessoDeGestao(servico, clientId);
+  if (!acesso.grafo) return { ...acoes, gestao: acesso.gestao, itens: acoes.itens.map((i) => (i.na_meta ? { ...i, indisponivel: acesso.gestao.motivo } : i)) };
+  const grafo = acesso.grafo;
+  const itens = await Promise.all(acoes.itens.map(async (i) => {
+    if (!i.na_meta || !i.alvo) return i;
+    const lido = await grafo.ler(i.alvo.meta_id, CAMPOS_DO_ESTADO(i.alvo.nivel)).catch(() => null);
+    const f = fotografar(i, estadoLido(lido));
+    return f.indisponivel || acesso.gestao.disponivel ? f : { ...f, indisponivel: acesso.gestao.motivo };
+  }));
+  return { ...acoes, itens, gestao: acesso.gestao };
+}
+
+/** O que o agente viu: números do código, com o período e a hora da coleta (a tela mostra a fonte). */
+function numerosVistos(conta: Awaited<ReturnType<typeof lerContaAoVivo>>) {
+  const t = conta.totais;
+  const cmp = conta.comparacao as Record<string, unknown> | null;
+  return {
+    fonte: "Meta Ads, coletado pelo painel",
+    periodo: conta.periodo,
+    atualizado_em: conta.atualizado_em,
+    gasto: t.gasto,
+    resultados: t.resultados,
+    resultado_rotulo: t.resultado_rotulo,
+    custo_por_resultado: t.custo_por_resultado,
+    ctr_link_pct: t.ctr_saida_pct,
+    cpm: t.cpm,
+    frequencia: t.frequencia_media,
+    comparacao: cmp ? { gasto_pct: cmp.gasto_pct ?? null, resultados_pct: cmp.resultados_pct ?? null, custo_por_resultado_pct: cmp.custo_por_resultado_pct ?? null } : null,
+    mix: conta.mix_objetivos.por_grupo.slice(0, 4).map((g) => ({ rotulo: g.rotulo, pct: g.pct, gasto: g.gasto, resultados: g.resultados })),
+    alertas: conta.mix_objetivos.alertas.slice(0, 2),
+    anuncios_ativos: conta.anuncios.filter((a) => a.status === "ACTIVE").length,
+  };
+}
+
+/** Mensagem do agente sênior com o anexo pedido, o acesso conferido e o jeito de regravar o anexo. */
+async function anexoDaMensagemDoAgente(servico: SupabaseClient, chamador: Chamador, mensagemId: unknown, tipo: "acoes_conta" | "estrategia") {
+  const id = String(mensagemId ?? "");
+  if (!UUID.test(id)) throw new ErroHttp(400, "mensagem_invalida", "mensagem_id precisa ser um UUID.");
+  const { data: msg, error } = await servico.from("agente_mensagens").select("id, client_id, conversa_id, anexos").eq("id", id).maybeSingle();
+  if (error) throw new ErroHttp(503, "mensagem_indisponivel", "Não foi possível ler a mensagem do agente.");
+  if (!msg) throw new ErroHttp(404, "mensagem_inexistente", "Mensagem não encontrada.");
+  const m = msg as { id: string; client_id: string; conversa_id: string; anexos: unknown };
+  await exigirAcessoAoCliente(chamador, m.client_id);
+  const anexos = Array.isArray(m.anexos) ? (m.anexos as Record<string, unknown>[]) : [];
+  const i = anexos.findIndex((a) => a && a.tipo === tipo);
+  if (i < 0) throw new ErroHttp(404, "anexo_inexistente", tipo === "acoes_conta" ? "Esta mensagem não tem ações na conta." : "Esta mensagem não tem a estratégia do agente.");
+  const gravar = async (novo: Record<string, unknown>) => {
+    // Relê os anexos logo antes: outra gravação na mesma mensagem (o plano criado por um item) não se perde.
+    const { data: fresca } = await servico.from("agente_mensagens").select("anexos").eq("id", m.id).maybeSingle();
+    const atuais = Array.isArray((fresca as { anexos?: unknown } | null)?.anexos) ? ((fresca as { anexos: Record<string, unknown>[] }).anexos) : anexos;
+    const lista = atuais.slice();
+    const k = lista.findIndex((a) => a && a.tipo === tipo);
+    if (k >= 0) lista[k] = novo;
+    else lista.push(novo);
+    const { error: e } = await servico.from("agente_mensagens").update({ anexos: lista }).eq("id", m.id).eq("client_id", m.client_id);
+    if (e) throw new ErroHttp(503, "mensagem_nao_salva", "A ação foi feita, mas o registro na conversa não foi salvo. Recarregue a tela antes de repetir.");
+    return novo;
+  };
+  return { m, anexo: anexos[i], gravar };
+}
+
+/** Arte (base64) e copy do criativo da Mesa, para subir como anúncio novo. */
+async function apoioDoCriativo(servico: SupabaseClient, clientId: string, criativoId: string) {
+  const c = await carregarCriativo(servico, criativoId).catch(() => null);
+  if (!c || c.client_id !== clientId) return null;
+  const { data: t } = c.trabalho_id
+    ? await servico.from("estudio_trabalhos").select("id, cards, direcao").eq("id", c.trabalho_id).eq("client_id", clientId).maybeSingle()
+    : { data: null };
+  const arte = arteDoTrabalho(t as { cards?: unknown; direcao?: unknown } | null);
+  const copy = c.copy ?? {};
+  return {
+    nome: c.nome || "Criativo da Mesa Ads",
+    copy: {
+      texto_principal: typeof copy.texto_principal === "string" ? copy.texto_principal : null,
+      titulo: typeof copy.titulo === "string" ? copy.titulo : null,
+      descricao: typeof copy.descricao === "string" ? copy.descricao : null,
+    },
+    imagemBase64: async () => {
+      if (!arte) return null;
+      const { data, error } = await servico.storage.from(arte.bucket).download(arte.caminho);
+      if (error || !data) return null;
+      const b = new Uint8Array(await data.arrayBuffer());
+      if (b.byteLength > 8 * 1024 * 1024) return null;
+      let s = "";
+      for (let k = 0; k < b.length; k += 0x8000) s += String.fromCharCode(...b.subarray(k, k + 0x8000));
+      return btoa(s);
+    },
+  };
+}
+
+/** Projeto ativo do cliente (a tarefa e o post da agenda sempre têm projeto). */
+async function projetoAtivo(servico: SupabaseClient, clientId: string): Promise<string | null> {
+  const { data } = await servico.from("projects").select("id, status, updated_at").eq("client_id", clientId).is("deleted_at", null).order("updated_at", { ascending: false }).limit(20);
+  const fechados = ["done", "completed", "concluido", "concluded", "cancelled", "canceled", "cancelado", "archived", "arquivado"];
+  const p = ((data as { id: string; status: string | null }[] | null) ?? []).find((x) => fechados.indexOf(String(x.status ?? "").toLowerCase()) < 0);
+  return p ? p.id : null;
+}
+
+/**
+ * Cria o plano de teste já preenchido a partir da estratégia de uma mensagem
+ * (plano_do_agente e o item plano_de_teste). Idempotente: a mensagem guarda o
+ * plano criado e o segundo clique devolve o mesmo.
+ */
+async function criarPlanoDoAgente(servico: SupabaseClient, chamador: Chamador, mensagemId: unknown): Promise<{ plano: Plano; lacunas: string[]; ja_existia: boolean }> {
+  const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, mensagemId, "estrategia");
+  if (typeof anexo.plano_criado_id === "string" && UUID.test(anexo.plano_criado_id)) {
+    const existente = await carregarPlano(servico, anexo.plano_criado_id).catch(() => null);
+    if (existente && existente.client_id === m.client_id) return { plano: existente, lacunas: Array.isArray(existente.estrutura.lacunas) ? existente.estrutura.lacunas as string[] : [], ja_existia: true };
+  }
+  const e = anexo.estrategia && typeof anexo.estrategia === "object" ? anexo.estrategia as Record<string, unknown> : null;
+  if (!e) throw new ErroHttp(404, "estrategia_inexistente", "Esta mensagem não tem a estratégia do agente.");
+  const numeros = (anexo.numeros && typeof anexo.numeros === "object" ? anexo.numeros : {}) as Record<string, unknown>;
+  const periodo = (numeros.periodo && typeof numeros.periodo === "object" ? numeros.periodo : {}) as Record<string, unknown>;
+  const briefing = await carregarBriefing(servico, m.client_id).catch(() => null);
+  const gasto = numeroOuNulo(numeros.gasto);
+  const dias = numeroOuNulo(periodo.dias);
+  const re = (e.reestruturacao && typeof e.reestruturacao === "object" ? e.reestruturacao : {}) as Record<string, unknown>;
+  const montado = planoDeTesteDaEstrategia({
+    reestruturacao: {
+      objetivo: typeof re.objetivo === "string" ? re.objetivo : null,
+      campanhas: (Array.isArray(re.campanhas) ? re.campanhas : []) as never,
+      verba_total_diaria_brl: numeroOuNulo(re.verba_total_diaria_brl),
+    },
+    proximos_criativos: (Array.isArray(e.proximos_criativos) ? e.proximos_criativos : []) as never,
+    plano_de_teste: (e.plano_de_teste && typeof e.plano_de_teste === "object" ? e.plano_de_teste : null) as never,
+  }, {
+    objetivoDoBriefing: typeof (briefing?.objetivo ?? {}).acao === "string" ? String((briefing?.objetivo ?? {}).acao) : null,
+    publicoDoBriefing: typeof (briefing?.publico ?? {}).quem === "string" ? String((briefing?.publico ?? {}).quem) : null,
+    custoToleravel: numeroOuNulo((briefing?.objetivo ?? {}).custo_toleravel_brl),
+    custoMedioConta: numeroOuNulo(numeros.custo_por_resultado),
+    gastoMedioDiario: gasto !== null && dias ? gasto / dias : null,
+    hoje: hojeSaoPaulo(),
+  });
+  const { data, error } = await servico.from("ads_planos").insert({
+    client_id: m.client_id,
+    briefing_id: briefing?.id ?? null,
+    nome: montado.nome,
+    status: "rascunho",
+    angulos: montado.angulos,
+    estrutura: { ...montado.estrutura, mensagem_id: m.id, criado_do_agente_em: new Date().toISOString() },
+    pedido: "Montado pelo agente sênior de tráfego a partir da análise da conta.",
+    custo_usd: 0,
+    criado_por: chamador.userId,
+  }).select("*").single();
+  if (error || !data) throw new ErroHttp(503, "plano_nao_salvo", "Não foi possível criar o plano de teste.");
+  const plano = data as Plano;
+  await gravar({ ...anexo, plano_criado_id: plano.id }).catch(() => null);
+  return { plano, lacunas: montado.lacunas, ja_existia: false };
+}
+
+/** plano_do_agente { mensagem_id } -> { plano, lacunas, ja_existia, custo_usd: 0 }: o Plano de teste já preenchido, sem IA. */
+async function planoDoAgente(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const r = await criarPlanoDoAgente(servico, chamador, corpo.mensagem_id);
+  await auditLog({
+    correlationId: crypto.randomUUID(), toolName: "mesa_ads_plano_do_agente", origin: PRINCIPAL_MESA_ADS,
+    keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["ads:mesa"],
+    input: { client_id: r.plano.client_id, mensagem_id: corpo.mensagem_id, ja_existia: r.ja_existia },
+    success: true, statusCode: 200, durationMs: 0, resultRef: r.plano.id,
+  });
+  return json({ plano: r.plano, lacunas: r.lacunas, ja_existia: r.ja_existia, custo_usd: 0 });
+}
+
+/** Itens que não são da Meta: plano de teste, tarefa da equipe, vínculo anúncio x criativo. */
+async function executarItemInterno(servico: SupabaseClient, chamador: Chamador, m: { id: string; client_id: string }, i: ItemDaAcaoNaConta): Promise<NonNullable<ItemDaAcaoNaConta["resultado"]>> {
+  try {
+    if (i.tipo === "plano_de_teste") {
+      const r = await criarPlanoDoAgente(servico, chamador, m.id);
+      return { ok: true, feito_em: new Date().toISOString(), criado: { plano_id: r.plano.id } };
+    }
+    if (i.tipo === "tarefa_equipe") {
+      const t = await criarTarefaDoGestor(servico, chamador, m.client_id, i.texto || "Tarefa do agente sênior", `${i.motivo || ""}\n\nCriada pelo agente sênior de tráfego (Mesa Ads) com a confirmação da equipe.`.trim());
+      return t.tarefa_id ? { ok: true, feito_em: new Date().toISOString(), criado: { tarefa_id: t.tarefa_id }, motivo: t.aviso ?? undefined } : { ok: false, motivo: t.aviso || "A tarefa não foi criada." };
+    }
+    if (i.tipo === "vincular_criativo" && i.alvo && i.criativo) {
+      await vinculoConfirmar(servico, chamador, { client_id: m.client_id, criativo_id: i.criativo.id, ad_id: i.alvo.meta_id });
+      return { ok: true, feito_em: new Date().toISOString() };
+    }
+    return { ok: false, motivo: "Ação desconhecida." };
+  } catch (e) {
+    return { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível fazer." };
+  }
+}
+
+/**
+ * conta_acao_executar { mensagem_id, itens?: string[], descartar? }: o botão
+ * Confirmar da equipe. Cada item: relê o estado na Meta, recusa se mudou
+ * desde a proposta, escreve e grava no auditLog. Sem ads_management, os itens
+ * da Meta voltam com o motivo (nada é escrito). Dá para desfazer o que tem
+ * reverso (conta_acao_desfazer).
+ */
+async function contaAcaoExecutar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, corpo.mensagem_id, "acoes_conta");
+  const acoes = anexo as unknown as AcoesDaConta;
+  if (acoes.executada_em) throw new ErroHttp(409, "acao_ja_feita", "Estas ações já foram confirmadas.");
+  if (acoes.descartada_em) throw new ErroHttp(409, "acao_descartada", "Estas ações foram canceladas. Peça de novo ao agente.");
+  if (corpo.descartar === true) return json({ anexo: await gravar({ ...anexo, descartada_em: new Date().toISOString(), descartada_por: chamador.userId }), custo_usd: 0 });
+
+  const escolhidos = Array.isArray(corpo.itens) ? new Set(corpo.itens.map(String)) : null;
+  const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
+  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && (!escolhidos || escolhidos.has(i.id)));
+  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
+  const itens: ItemDaAcaoNaConta[] = [];
+  // Um de cada vez: a Meta limita chamadas por conta, e a ordem da lista é a ordem da confirmação.
+  for (const i of itensDaMensagem) {
+    if (escolhidos && !escolhidos.has(i.id)) {
+      itens.push({ ...i, resultado: { ok: false, motivo: "Não marcado nesta confirmação." } });
+      continue;
+    }
+    const inicio = Date.now();
+    let resultado: NonNullable<ItemDaAcaoNaConta["resultado"]>;
+    if (i.na_meta) {
+      if (!acesso || !acesso.grafo || !acesso.gestao.disponivel) {
+        resultado = { ok: false, motivo: (acesso && acesso.gestao.motivo) || "Sem permissão de gestão na Meta." };
+      } else {
+        const apoio = i.tipo === "trocar_criativo" && i.criativo ? await apoioDoCriativo(servico, m.client_id, i.criativo.id) : null;
+        resultado = await executarNaMeta(i, acesso.grafo, apoio, contas);
+        if (resultado.ok && i.tipo === "trocar_criativo" && i.criativo && resultado.criado && resultado.criado.anuncio_id) {
+          await servico.from("ads_criativos").update({ ad_id: resultado.criado.anuncio_id }).eq("id", i.criativo.id).eq("client_id", m.client_id).is("ad_id", null);
+        }
+      }
+    } else {
+      resultado = await executarItemInterno(servico, chamador, m, i);
+    }
+    itens.push({ ...i, resultado });
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: `mesa_ads_acao_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
+      keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: [i.na_meta ? "ads:write" : "ads:mesa"],
+      input: { client_id: m.client_id, mensagem_id: m.id, item: i.id, tipo: i.tipo, alvo: i.alvo, criativo_id: i.criativo ? i.criativo.id : null, de: i.de, para: i.para },
+      success: !!resultado.ok, statusCode: resultado.ok ? 200 : 409, durationMs: Date.now() - inicio,
+      errorCode: resultado.ok ? null : "nao_feito", errorMessage: resultado.ok ? null : resultado.motivo ?? null,
+      resultRef: (resultado.criado && (resultado.criado.anuncio_id || resultado.criado.plano_id || resultado.criado.tarefa_id)) || (i.alvo ? i.alvo.meta_id : m.id),
+    });
+  }
+  const feitos = itens.filter((i) => i.resultado && i.resultado.ok).length;
+  const tentados = itens.filter((i) => !escolhidos || escolhidos.has(i.id)).length;
+  const novo = await gravar({ ...anexo, itens, gestao: acesso ? acesso.gestao : acoes.gestao, executada_em: new Date().toISOString(), executada_por: chamador.userId });
+  if (m.conversa_id) {
+    await registrarMensagens(servico, m.conversa_id, m.client_id, [{
+      papel: "sistema",
+      conteudo: `Conta: ${feitos} de ${tentados} ${tentados === 1 ? "ação feita" : "ações feitas"}${tentados - feitos ? `; ${tentados - feitos} não ${tentados - feitos === 1 ? "pôde" : "puderam"} (motivo no cartão)` : ""}.${itens.some(temReverso) ? " Dá para desfazer." : ""}`,
+    }]);
+  }
+  return json({ anexo: novo, feitos, falhas: tentados - feitos, custo_usd: 0 });
+}
+
+/** conta_acao_desfazer { mensagem_id }: volta pausar, ativar, orçamento, nome e vínculo, só onde ninguém mexeu depois. */
+async function contaAcaoDesfazer(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { m, anexo, gravar } = await anexoDaMensagemDoAgente(servico, chamador, corpo.mensagem_id, "acoes_conta");
+  const acoes = anexo as unknown as AcoesDaConta;
+  if (!acoes.executada_em) throw new ErroHttp(409, "acao_nao_feita", "Estas ações ainda não foram confirmadas.");
+  if (acoes.desfeita_em) throw new ErroHttp(409, "acao_ja_desfeita", "Estas ações já foram desfeitas.");
+  const itensDaMensagem = Array.isArray(acoes.itens) ? acoes.itens : [];
+  const precisaMeta = itensDaMensagem.some((i) => i.na_meta && temReverso(i));
+  const [acesso, contas] = precisaMeta ? await Promise.all([acessoDeGestao(servico, m.client_id), contasMetaDoCliente(servico, m.client_id)]) : [null, new Set<string>()];
+  let voltaram = 0;
+  const itens: ItemDaAcaoNaConta[] = [];
+  for (const i of itensDaMensagem) {
+    if (!temReverso(i)) {
+      itens.push(i);
+      continue;
+    }
+    let r: { ok: boolean; motivo?: string };
+    if (i.na_meta) {
+      r = acesso && acesso.grafo && acesso.gestao.disponivel ? await desfazerNaMeta(i, acesso.grafo, contas) : { ok: false, motivo: (acesso && acesso.gestao.motivo) || "Sem permissão de gestão na Meta." };
+    } else {
+      try {
+        await vinculoDesfazer(servico, chamador, { client_id: m.client_id, criativo_id: i.criativo?.id, ad_id: i.alvo?.meta_id, recusar: false });
+        r = { ok: true };
+      } catch (e) {
+        r = { ok: false, motivo: e instanceof Error ? e.message : "Não foi possível desfazer." };
+      }
+    }
+    if (r.ok) voltaram++;
+    itens.push({ ...i, resultado: { ...(i.resultado as NonNullable<ItemDaAcaoNaConta["resultado"]>), desfeito: r.ok, motivo_desfazer: r.ok ? undefined : r.motivo } });
+    await auditLog({
+      correlationId: crypto.randomUUID(), toolName: `mesa_ads_desfazer_${i.tipo}`, origin: PRINCIPAL_MESA_ADS,
+      keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: [i.na_meta ? "ads:write" : "ads:mesa"],
+      input: { client_id: m.client_id, mensagem_id: m.id, item: i.id, tipo: i.tipo, alvo: i.alvo, volta_para: i.de },
+      success: r.ok, statusCode: r.ok ? 200 : 409, durationMs: 0, errorCode: r.ok ? null : "nao_desfeito", errorMessage: r.ok ? null : r.motivo ?? null,
+      resultRef: i.alvo ? i.alvo.meta_id : m.id,
+    });
+  }
+  const novo = await gravar({ ...anexo, itens, desfeita_em: new Date().toISOString(), desfeita_por: chamador.userId });
+  return json({ anexo: novo, voltaram, custo_usd: 0 });
+}
+
+// ---- kit de recepção do ângulo (kit-recepcao.ts)
+
+const NIVEIS_COERENCIA_POST = [
+  "O post fala de outra coisa: quem veio do anúncio não reconhece a promessa.",
+  "O post toca no assunto, mas não confirma a promessa do anúncio.",
+  "Confirma a promessa em parte, sem a prova ou o mecanismo do ângulo.",
+  "Confirma a promessa com prova ou mecanismo do ângulo.",
+  "Confirma a mesma promessa, com a prova do ângulo, e leva direto para a conversa.",
+];
+const NIVEIS_FIDELIDADE_ROTEIRO = [
+  "Promete preço, prazo, garantia ou resultado que não estão na oferta nem no briefing.",
+  "Tem promessa duvidosa ou fora da oferta.",
+  "Fiel à oferta, com um ponto vago.",
+  "Fiel à oferta e ao briefing.",
+  "Fiel à oferta e ao briefing, e responde às objeções com o que a equipe já escreveu.",
+];
+
+/** O Jev confere o kit (aviso, sem laço de correção): o post confirma a promessa? o roteiro é fiel? risco de política? */
+async function conferirKitComJev(
+  kit: KitDeRecepcao,
+  angulo: Angulo,
+  briefing: Briefing | null,
+  oferta: Record<string, unknown> | null,
+  cobranca: { clientId: string; referencia: { tipo: string; id: string }; criadoPor: string },
+): Promise<{ conferencia: NonNullable<KitDeRecepcao["conferencia"]>; custo: number }> {
+  const questions: Record<string, PerguntaJev> = {
+    post_confirma: { type: "score", instructions: "O post em `kit.post` confirma, para quem clicou no anúncio, a mesma promessa do ângulo em `angulo` (gancho, mecanismo e prova)?", criteria: NIVEIS_COERENCIA_POST },
+    roteiro_fiel: { type: "score", instructions: "O roteiro de atendimento em `kit.comercial` fica fiel a `oferta` e a `briefing`, sem prometer preço, prazo, garantia ou resultado que não estão lá?", criteria: NIVEIS_FIDELIDADE_ROTEIRO },
+    risco: { type: "score", instructions: "Pelas `politicas` de anúncio da Meta, qual o risco de reprovação ou denúncia do texto do post e das mensagens em `kit`? Número, depoimento ou garantia fora do `briefing` conta como alegação não comprovada.", criteria: NIVEIS_RISCO_POLITICA },
+  };
+  const vazio = { post_confirma: null, roteiro_fiel: null, risco_politica: null, alerta: false, jev_erro: null as string | null };
+  try {
+    const r = await jevPerguntar({
+      state: {
+        angulo: { nome: angulo.nome, situacao: angulo.situacao, mecanismo: angulo.mecanismo, prova: angulo.prova, gancho_verbal: angulo.gancho_verbal, gancho_visual: angulo.gancho_visual },
+        oferta,
+        briefing: briefing ? { oferta: briefing.oferta, provas: briefing.provas, objecoes: briefing.objecoes } : null,
+        politicas: POLITICAS_META,
+        kit: { promessa: kit.promessa_do_anuncio, post: kit.post, comercial: kit.comercial },
+      },
+      questions,
+    });
+    const cobrado = await cobrarJev(r, { clientId: cobranca.clientId, tarefa: TAREFA, referencia: cobranca.referencia, criadoPor: cobranca.criadoPor });
+    const post = notaDe0a10(notaScore(r.answers.post_confirma), NIVEIS_COERENCIA_POST.length);
+    const fiel = notaDe0a10(notaScore(r.answers.roteiro_fiel), NIVEIS_FIDELIDADE_ROTEIRO.length);
+    const brutaRisco = notaScore(r.answers.risco);
+    const risco = notaDe0a10(brutaRisco, NIVEIS_RISCO_POLITICA.length);
+    return {
+      conferencia: { post_confirma: post, roteiro_fiel: fiel, risco_politica: risco, alerta: alertaDePolitica(brutaRisco) || (post !== null && post < 5) || (fiel !== null && fiel < 5), jev_erro: null },
+      custo: cobrado?.custoUsd ?? 0,
+    };
+  } catch (err) {
+    const codigo = err instanceof JevErro ? err.codigo : "jev_falhou";
+    console.error("[mesa-ads] jev do kit falhou", { codigo });
+    return { conferencia: { ...vazio, jev_erro: codigo }, custo: 0 };
+  }
+}
+
+/** Plano e ângulo do pedido, com o acesso conferido. */
+async function anguloDoPedido(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const plano = await carregarPlano(servico, corpo.plano_id);
+  await exigirAcessoAoCliente(chamador, plano.client_id);
+  const anguloId = String(corpo.angulo_id ?? "");
+  const angulo = plano.angulos.find((a) => a.id === anguloId);
+  if (!angulo) throw new ErroHttp(404, "angulo_inexistente", "Este ângulo não está no plano.");
+  return { plano, angulo };
+}
+
+/** Grava o kit no ângulo relendo o plano logo antes (não pisa em outra mudança do plano). */
+async function gravarKitNoAngulo(servico: SupabaseClient, planoId: string, anguloId: string, kit: KitDeRecepcao | ((anterior: KitDeRecepcao | null) => KitDeRecepcao)) {
+  const atual = await carregarPlano(servico, planoId);
+  const angulos = atual.angulos.map((a) => {
+    if (a.id !== anguloId) return a;
+    const anterior = ((a as unknown as { kit_recepcao?: KitDeRecepcao }).kit_recepcao) ?? null;
+    return { ...a, kit_recepcao: typeof kit === "function" ? kit(anterior) : kit };
+  });
+  return await salvarPlano(servico, atual, { angulos });
+}
+
+/**
+ * kit_recepcao_gerar { plano_id, angulo_id, modelo_id?, raciocinio? }
+ * -> { kit, plano, custo_usd, saldo_usd, jev_erro }
+ * Uma chamada do estrategista (post de recepção, ajustes do perfil e roteiro
+ * comercial, a partir da oferta e das objeções do briefing) e uma conferência
+ * do Jev como aviso. Fica no ângulo (ads_planos.angulos[i].kit_recepcao).
+ */
+async function kitRecepcaoGerar(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { plano, angulo } = await anguloDoPedido(servico, chamador, corpo);
+  const clientId = plano.client_id;
+  const ofertaId = typeof plano.estrutura.oferta_id === "string" ? plano.estrutura.oferta_id : null;
+  const [briefing, ofertasQ, perfil, modeloEscolhido] = await Promise.all([
+    carregarBriefing(servico, clientId).catch(() => null),
+    servico.from("ads_ofertas").select("*").eq("client_id", clientId).neq("status", "arquivada").order("atualizado_em", { ascending: false }).limit(6),
+    servico.from("profiles").select("company_name, full_name").eq("id", clientId).maybeSingle(),
+    resolverModelo(corpo.modelo_id, corpo.raciocinio, "estrategista"),
+  ]);
+  const ofertas = ((ofertasQ.data as LinhaOferta[] | null) ?? []).map(ofertaDaLinha);
+  const oferta = ofertas.find((o) => o.id === ofertaId) ?? ofertas.find((o) => o.status === "escolhida") ?? ofertas[0] ?? null;
+  const ofertaCurta = oferta ? { nome: oferta.nome, para_quem: oferta.para_quem, promessa: oferta.promessa, mecanismo: oferta.mecanismo, entregaveis: oferta.entregaveis, bonus: oferta.bonus, garantia: oferta.garantia, urgencia_real: oferta.urgencia_real, cta: oferta.cta } : null;
+  const p = (perfil.data ?? {}) as { company_name?: string | null; full_name?: string | null };
+  const cliente = String(p.company_name || p.full_name || "Cliente");
+  const cobranca = { clientId, referencia: { tipo: REF_PLANO, id: plano.id }, criadoPor: chamador.userId };
+  const s = await chamarTexto({
+    timeoutMs: TIMEOUT_TEXTO_ADS_MS,
+    clientId,
+    tarefa: TAREFA,
+    agente: AGENTE,
+    modeloId: modeloEscolhido.modelo.id,
+    sistema: sistemaDoEstrategista("oferta", angulo.objetivo),
+    mensagens: [{ papel: "usuario", conteudo: pedidoDoKit(angulo, briefing, ofertaCurta, cliente) }],
+    raciocinio: modeloEscolhido.raciocinio,
+    esquemaJson: ESQUEMA_KIT_RECEPCAO,
+    referencia: cobranca.referencia,
+    criadoPor: chamador.userId,
+  });
+  const kit = normalizarKit(s.json);
+  if (!kit) throw new ErroHttp(502, "kit_vazio", "O estrategista não devolveu o kit. Tente de novo.", { custo_usd: s.custoUsd });
+  const conf = await conferirKitComJev(kit, angulo, briefing, ofertaCurta, cobranca);
+  const custo = arred6(s.custoUsd + conf.custo);
+  const salvo = await gravarKitNoAngulo(servico, plano.id, angulo.id, (anterior) => ({
+    ...kit,
+    conferencia: conf.conferencia,
+    gerado_em: new Date().toISOString(),
+    custo_usd: custo,
+    agenda: anterior && anterior.agenda ? anterior.agenda : null,
+  }));
+  await somarCustoDoPlano(servico, plano.id, clientId, custo);
+  const final = (salvo.angulos.find((a) => a.id === angulo.id) as unknown as { kit_recepcao?: KitDeRecepcao }).kit_recepcao ?? kit;
+  return json({ kit: final, plano: salvo, custo_usd: custo, saldo_usd: s.saldoUsd, jev_erro: conf.conferencia.jev_erro });
+}
+
+/**
+ * kit_agenda { plano_id, angulo_id, data } -> { task_id, data, kit, custo_usd: 0 }
+ * O post de recepção entra na agenda da Mesa pelo mesmo serviço do MCP que o
+ * agente do Mês usa para gravar (createEditorialItem), com idempotência por
+ * ângulo e versão. A tela mostra antes o que vai entrar e só chama isto no
+ * Confirmar. Com { desfazer: true } (depois de arquivar a peça pela Agenda),
+ * só esquece o vínculo do kit com a tarefa.
+ */
+async function kitAgenda(servico: SupabaseClient, chamador: Chamador, corpo: Record<string, unknown>) {
+  const { plano, angulo } = await anguloDoPedido(servico, chamador, corpo);
+  const kit = (angulo as unknown as { kit_recepcao?: KitDeRecepcao }).kit_recepcao ?? null;
+  if (!kit) throw new ErroHttp(409, "kit_inexistente", "Gere o kit de recepção deste ângulo antes.");
+  if (corpo.desfazer === true) {
+    const salvo = await gravarKitNoAngulo(servico, plano.id, angulo.id, (anterior) => ({ ...(anterior ?? kit), agenda: null }));
+    return json({ plano: salvo, custo_usd: 0 });
+  }
+  if (kit.agenda && kit.agenda.task_id) throw new ErroHttp(409, "ja_na_agenda", "O post de recepção deste ângulo já está na agenda.", { task_id: kit.agenda.task_id });
+  const data = String(corpo.data ?? "");
+  if (!DATA.test(data) || data < hojeSaoPaulo()) throw new ErroHttp(400, "data_invalida", "Escolha uma data de hoje em diante (AAAA-MM-DD).");
+  const projectId = await projetoAtivo(servico, plano.client_id);
+  if (!projectId) throw new ErroHttp(409, "sem_projeto_ativo", "Este cliente não tem projeto ativo, e todo post da agenda precisa de um projeto.");
+  const versao = Number((kit as unknown as { agenda_versao?: number }).agenda_versao ?? 0) + 1;
+  const item = itemDaAgendaDoKit(kit, angulo, { plano_id: plano.id, angulo_id: angulo.id, versao });
+  const correlationId = crypto.randomUUID();
+  const ctx: WriteCtx = {
+    keyId: PRINCIPAL_MESA_ADS,
+    origin: PRINCIPAL_MESA_ADS,
+    correlationId,
+    dataScope: { unrestricted: false, clientIds: [plano.client_id], principalUserId: chamador.userId, source: "oauth" as const },
+    resultRefHolder: {},
+  };
+  const entrada = { client_id: plano.client_id, project_id: projectId, title: item.title, description: item.description, format: item.format, due_date: data, priority: "medium" as const, idempotency_key: item.idempotency_key };
+  const inicio = Date.now();
+  let taskId: string;
+  try {
+    const r = await createEditorialItem(createEditorialItemSchema.parse(entrada), ctx);
+    taskId = String((r.record as Record<string, unknown>).id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await auditLog({
+      correlationId, toolName: "aceleriq_create_editorial_item", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["editorial:write"],
+      input: { ...entrada, description: "[post de recepção]", plano_id: plano.id, angulo_id: angulo.id }, success: false,
+      statusCode: err instanceof WriteError && err.code === "conflict" ? 409 : 500, durationMs: Date.now() - inicio, errorCode: "handler_error", errorMessage: msg,
+    });
+    throw new ErroHttp(503, "agenda_nao_gravada", "O post não entrou na agenda. Tente de novo.", { detalhe: msg.slice(0, 200) });
+  }
+  await auditLog({
+    correlationId, toolName: "aceleriq_create_editorial_item", origin: PRINCIPAL_MESA_ADS, keyId: `${PRINCIPAL_MESA_ADS}:${chamador.userId}`, scopes: ["editorial:write"],
+    input: { ...entrada, description: "[post de recepção]", plano_id: plano.id, angulo_id: angulo.id }, success: true, statusCode: 200, durationMs: Date.now() - inicio, resultRef: taskId,
+  });
+  const salvo = await gravarKitNoAngulo(servico, plano.id, angulo.id, (anterior) => ({ ...(anterior ?? kit), agenda: { task_id: taskId, data, gravado_em: new Date().toISOString() }, agenda_versao: versao } as KitDeRecepcao));
+  return json({ task_id: taskId, data, plano: salvo, custo_usd: 0 });
+}
+
 
 const ETAPAS_POR_POSICAO = (i: number, total: number) => (i === 0 ? "tensao" : i === total - 1 ? "proximo_passo" : i === 1 ? "explicacao" : i === 2 ? "demonstracao" : "objecao");
 
@@ -5979,6 +6581,12 @@ const ACOES: Record<string, (s: SupabaseClient, c: Chamador, corpo: Record<strin
   conta_conversa_ler: contaConversaLer,
   pacote_otimizacao_dados: pacoteOtimizacaoDados,
   pacote_importar: pacoteImportar,
+  // 25/09 à noite: o agente sênior age na conta (com confirmação), plano de teste já preenchido e kit de recepção do ângulo.
+  conta_acao_executar: contaAcaoExecutar,
+  conta_acao_desfazer: contaAcaoDesfazer,
+  plano_do_agente: planoDoAgente,
+  kit_recepcao_gerar: kitRecepcaoGerar,
+  kit_agenda: kitAgenda,
 };
 
 /**
@@ -5991,6 +6599,7 @@ const ACOES_LONGAS = new Set([
   "referencia_abrir", "referencia_importar_url", "biblioteca_do_nicho", "copy_pacote", "pacote_enviar",
   "evolucao", "desempenho_cliente",
   "vinculos_automaticos", "conta_conversar", "pacote_otimizacao_dados", "pacote_importar",
+  "conta_acao_executar", "conta_acao_desfazer", "kit_recepcao_gerar",
   "referencia_para_estudio",
 ]);
 

@@ -16,6 +16,7 @@
  */
 import { CTAS_META, ESTILOS_VISUAIS_IDS } from "../_shared/conhecimento-ads.ts";
 import { semTravessao } from "./calculos.ts";
+import { REGRA_DAS_ACOES_DA_CONTA, TIPOS_DE_ACAO } from "./acoes-conta.ts";
 
 export const OBJETIVOS_SENIOR = ["vendas", "mensagens", "leads", "seguidores", "agendamento", "trafego", "reconhecimento"] as const;
 export const FORMATOS_SENIOR = ["feed_4x5", "quadrado_1x1", "stories_9x16", "carrossel"] as const;
@@ -68,6 +69,26 @@ export const ESQUEMA_AGENTE_SENIOR = {
     })),
     pesquisa: lista(obj({ achado: S("string"), fonte: S("string") })),
     perguntas: lista(S("string")),
+    // Ações que o agente faria na conta (a equipe confirma; acoes-conta.ts traduz os apelidos).
+    resumo_das_acoes: S("string"),
+    acoes: lista(obj({
+      tipo: S("string", { enum: [...TIPOS_DE_ACAO] }),
+      ref: S(["string", "null"]),
+      criativo_ref: S(["string", "null"]),
+      texto: S(["string", "null"]),
+      variacao_pct: S(["number", "null"]),
+      motivo: S("string"),
+    })),
+    // O plano de teste já preenchido (o botão "Levar ao Plano de teste" cria sem formulário vazio).
+    plano_de_teste: obj({
+      hipotese: S("string"),
+      variavel: S("string"),
+      publico: S("string"),
+      orcamento_diario_brl: S(["number", "null"]),
+      duracao_dias: S(["integer", "null"]),
+      metrica_decisao: S("string"),
+      criterio_vitoria: S("string"),
+    }),
   }),
 };
 
@@ -101,6 +122,15 @@ export type EstrategiaSenior = {
   }[];
   pesquisa: { achado: string; fonte: string }[];
   perguntas: string[];
+  plano_de_teste: {
+    hipotese: string;
+    variavel: string;
+    publico: string;
+    orcamento_diario_brl: number | null;
+    duracao_dias: number | null;
+    metrica_decisao: string;
+    criterio_vitoria: string;
+  } | null;
 };
 
 const txt = (v: unknown, max = 2000) => (typeof v === "string" ? semTravessao(v.trim()).slice(0, max) : "");
@@ -165,7 +195,24 @@ export function normalizarEstrategia(bruto: unknown, ads: Map<string, { resultad
     })).filter((c) => c.titulo),
     pesquisa: arr(r.pesquisa).map((p) => ({ achado: txt(p.achado, 800), fonte: txt(p.fonte, 500) })).filter((p) => p.achado).slice(0, 12),
     perguntas: (Array.isArray(r.perguntas) ? r.perguntas : []).map((p) => txt(p, 400)).filter(Boolean).slice(0, 6),
+    plano_de_teste: planoDeTesteBruto(r.plano_de_teste),
   };
+}
+
+/** O plano_de_teste do modelo, sem número negativo; null quando veio vazio. */
+function planoDeTesteBruto(v: unknown): EstrategiaSenior["plano_de_teste"] {
+  const p = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const dias = valor(p.duracao_dias);
+  const plano = {
+    hipotese: txt(p.hipotese, 1200),
+    variavel: txt(p.variavel, 300),
+    publico: txt(p.publico, 600),
+    orcamento_diario_brl: valor(p.orcamento_diario_brl),
+    duracao_dias: dias === null ? null : Math.min(30, Math.max(1, Math.round(dias))),
+    metrica_decisao: txt(p.metrica_decisao, 200),
+    criterio_vitoria: txt(p.criterio_vitoria, 600),
+  };
+  return plano.hipotese || plano.criterio_vitoria || plano.publico ? plano : null;
 }
 
 const reais = (v: number | null) => (v == null ? "sem valor definido" : `R$ ${v.toFixed(2).replace(".", ",")}`);
@@ -224,6 +271,18 @@ export function estrategiaEmMarkdown(e: EstrategiaSenior, nomeDe: (adId: string)
       L.push("");
     });
   }
+  if (e.plano_de_teste) {
+    const t = e.plano_de_teste;
+    L.push("## Plano de teste", "");
+    if (t.hipotese) L.push(`- Hipótese: ${t.hipotese}`);
+    if (t.variavel) L.push(`- Variável testada: ${t.variavel}`);
+    if (t.publico) L.push(`- Público: ${t.publico}`);
+    L.push(`- Verba diária: ${reais(t.orcamento_diario_brl)}`);
+    if (t.duracao_dias) L.push(`- Duração: ${t.duracao_dias} dias`);
+    if (t.metrica_decisao) L.push(`- Métrica de decisão: ${t.metrica_decisao}`);
+    if (t.criterio_vitoria) L.push(`- Critério de vitória: ${t.criterio_vitoria}`);
+    L.push("");
+  }
   if (e.pesquisa.length) {
     L.push("## O que a pesquisa mostrou", "");
     for (const p of e.pesquisa) L.push(`- ${p.achado}${p.fonte ? ` (fonte: ${p.fonte})` : ""}`);
@@ -238,8 +297,11 @@ export function estrategiaEmMarkdown(e: EstrategiaSenior, nomeDe: (adId: string)
 }
 
 /** Pedido de cada mensagem ao agente sênior (o contexto vai antes, em JSON). */
-export function tarefaDoAgenteSenior(opcoes: { pesquisaWeb: boolean; bibliotecaConsultada: boolean; temPlano: boolean }): string {
-  return `TAREFA: você é o gestor de tráfego sênior da agência, especialista no nicho deste cliente. Responda à MENSAGEM DA EQUIPE e devolva a estratégia estruturada.
+export function tarefaDoAgenteSenior(opcoes: { pesquisaWeb: boolean; bibliotecaConsultada: boolean; temPlano: boolean; modoAgir?: boolean }): string {
+  const agir = opcoes.modoAgir
+    ? "MODO AGIR: a equipe quer ação, não conversa. resposta em no máximo 2 frases; diagnostico com até 3 achados; entregue acoes concretas (com os apelidos) e o plano_de_teste preenchido.\n"
+    : "";
+  return `${agir}TAREFA: você é o gestor de tráfego sênior da agência, especialista no nicho deste cliente. Responda à MENSAGEM DA EQUIPE e devolva a estratégia estruturada.
 Como pensar, nesta ordem:
 1. Entenda o negócio pelo contexto (o que vende, para quem, onde a venda acontece: WhatsApp, Direct, site, loja) e o nicho.
 2. Leia a conta: onde o dinheiro está por objetivo (MIX_DE_OBJETIVOS, calculado pelo painel), o que traz resultado de verdade e o que só gera curtida. Engajamento barato não paga conta: se o negócio vende por conversa, o objetivo que decide é mensagem; se vende no site com pixel, é compra.
@@ -253,6 +315,9 @@ Saída:
 - reestruturacao: objetivo principal, evento de otimização, campanhas com conjuntos (público e verba) e os anúncios de cada um (ad_ids existentes ou títulos dos próximos criativos), verba total e passos na ordem. Verba só a partir do gasto real do período ou da verba do briefing; sem base, null e diga na resposta.
 - proximos_criativos: de 3 a 6 peças com ângulo, ganchos, formato, estilo, objetivo, botão e o anúncio base (base_ad_id) quando partir de um que performou.
 - perguntas: o que falta saber para decidir melhor (no máximo 4).
+- plano_de_teste: o teste que você rodaria com os proximos_criativos, já preenchido para a equipe só revisar: hipotese (uma frase), variavel (a única coisa que muda entre os anúncios), publico, orcamento_diario_brl (do gasto real ou da verba do briefing; sem base, null), duracao_dias, metrica_decisao e criterio_vitoria (com o número de corte quando houver custo de referência no contexto).
+${REGRA_DAS_ACOES_DA_CONTA}
+- resumo_das_acoes: uma frase dizendo o que as acoes fazem ("pausar 2 anúncios que gastam sem conversa e subir 20% da verba do vencedor"); vazio sem acoes. Na resposta, diga que a lista está pronta para confirmar e que nada muda na conta sem a confirmação.
 Regras: nunca invente número, depoimento, preço ou resultado; política da Meta é regra dura; sem travessão; período curto ou pouco volume é inconclusivo, diga isso.`;
 }
 

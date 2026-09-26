@@ -34,6 +34,7 @@ import PainelDaCopy from "./PainelDaCopy";
 import PosicionamentosDoAnuncio from "./PosicionamentosDoAnuncio";
 import type { CopyDoAnuncio } from "./adsApi";
 import { EnvioAoGestor } from "./PacoteDaCopy";
+import KitDeRecepcao from "./KitDeRecepcao";
 
 /**
  * Etapa 4, Estúdio Ads: os criativos por plano e ângulo, cada um com a
@@ -460,6 +461,9 @@ export default function AbaEstudioAds({
             </div>
 
             <ResultadoDoCriativo criativo={aberto} angulo={anguloAberto} />
+
+            {/* 25/09: o que recebe quem clica neste anúncio (post de recepção e roteiro de vendas do ângulo). */}
+            {planoAberto && anguloAberto && <KitDeRecepcao key={`${planoAberto.id}:${anguloAberto.id}`} plano={planoAberto} angulo={anguloAberto} compacto />}
 
             {trabalho ? (
               <ArteDoCriativo key={aberto.id} criativo={aberto} trabalho={trabalho} onAtualizar={atualizarTrabalhos} irmaos={irmaos} />
