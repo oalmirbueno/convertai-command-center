@@ -480,13 +480,20 @@ async function baixar(bucket: string, caminho: string, max = MAX_BYTES_ORIGINAL)
  * função estourou o limite de 2 s de CPU ("CPU Time exceeded") e a variação
  * morria no meio. O gerador aceita a foto maior; só custa um pouco mais de envio.
  */
-const MAX_BYTES_SEM_REDUZIR = 12 * 1024 * 1024;
+const MAX_BYTES_SEM_REDUZIR = 3 * 1024 * 1024;
 /** Só reduz aqui o que é barato de abrir (cerca de 0,1 s). */
 const MAX_PIXELS_REDUZIR_AQUI = 1_500_000;
+/** Cópia média (2048 px, JPEG) usada como está: o provedor reduz; evita abrir aqui. */
+const COPIA_MAIOR_ACEITA = 2 * 1024 * 1024;
 
 async function baixarReduzida(bucket: string, caminho: string, lado: number, nome: string): Promise<ImagemEntrada> {
-  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, { maxBytes: MAX_BYTES_ORIGINAL, maxPixels: MAX_PIXELS_REDUZIR_AQUI });
-  if (r && r.cabe && r.largura && r.altura && Math.max(r.largura, r.altura) <= lado + 2) {
+  const r = await reduzidaSemTransformacao(servico(), bucket, caminho, lado, lado, {
+    maxBytes: MAX_BYTES_ORIGINAL,
+    maxPixels: MAX_PIXELS_REDUZIR_AQUI,
+    pedirCopia: true,
+    aceitarCopiaMaiorAte: COPIA_MAIOR_ACEITA,
+  });
+  if (r && r.cabe) {
     return { bytes: r.bytes, mime: r.mime, nome: `${nomeSeguro(nome)}.${extensaoDe(r.mime)}` };
   }
   const original = r ? r.bytes : await baixar(bucket, caminho);

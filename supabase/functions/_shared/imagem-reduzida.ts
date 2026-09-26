@@ -62,7 +62,40 @@ export type OpcoesDaReducao = {
   /** Teto de pixels para reduzir o original aqui. */
   maxPixels?: number;
   qualidadeJpeg?: number;
+  /**
+   * Sem cópia e com o original caro de abrir aqui: pede a cópia a outra
+   * chamada (copias-leves, com o próprio limite de CPU) e usa a média gravada.
+   */
+  pedirCopia?: boolean;
+  /** Aceita a cópia média maior que a caixa, sem reabrir, até este tamanho em bytes. */
+  aceitarCopiaMaiorAte?: number;
 };
+
+/**
+ * Pede a cópia leve de uma imagem à função copias-leves (uma imagem por
+ * chamada, com o próprio limite de CPU). Nunca lança: false quando não deu.
+ */
+export async function pedirCopiaLeve(bucket: string, caminho: string, prazoMs = 25_000): Promise<boolean> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const chave = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !chave) return false;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), prazoMs);
+  try {
+    const r = await fetch(`${url}/functions/v1/copias-leves`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${chave}` },
+      body: JSON.stringify({ bucket, caminho }),
+      signal: ctrl.signal,
+    });
+    await r.body?.cancel().catch(() => undefined);
+    return r.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 async function baixarBytes(db: SupabaseClient, bucket: string, caminho: string, maxBytes: number): Promise<Uint8Array | null> {
   try {
@@ -113,6 +146,10 @@ export async function reduzidaSemTransformacao(
       if (opcoes.copiaSoEmPng && mime !== "image/png") continue;
       const d = dimensoesDoCabecalho(bytes);
       if (cabeNaCaixa(d, maxL, maxA, folga)) return { cabe: true, bytes, mime, largura: d!.largura, altura: d!.altura, origem };
+      // Quem chama várias imagens de uma vez aceita a cópia um pouco maior como está (sem gastar CPU abrindo).
+      if (opcoes.aceitarCopiaMaiorAte && bytes.byteLength <= opcoes.aceitarCopiaMaiorAte) {
+        return { cabe: true, bytes, mime, largura: d?.largura ?? null, altura: d?.altura ?? null, origem };
+      }
       // Cópia maior que a caixa: reduzir a cópia (no máximo 2048 px) é barato.
       const r = await reduzirParaCaber(bytes, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels: LADO_MEDIA * LADO_MEDIA });
       if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem };
@@ -124,7 +161,19 @@ export async function reduzidaSemTransformacao(
   if (!original || !mime) return null;
   const d = dimensoesDoCabecalho(original);
   if (cabeNaCaixa(d, maxL, maxA, folga)) return { cabe: true, bytes: original, mime, largura: d!.largura, altura: d!.altura, origem: "original" };
-  const r = await reduzirParaCaber(original, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels });
-  if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "original" };
+  const caroDeAbrir = !d || d.largura * d.altura > maxPixels;
+  if (!caroDeAbrir) {
+    const r = await reduzirParaCaber(original, maxL, maxA, { qualidadeJpeg: opcoes.qualidadeJpeg, maxPixels });
+    if (r) return { cabe: true, bytes: r.bytes, mime: r.mime, largura: r.largura, altura: r.altura, origem: "original" };
+  }
+  // Caro de abrir aqui: a cópia média vem de outra chamada (copias-leves) e é usada como está.
+  if (opcoes.pedirCopia && (await pedirCopiaLeve(bucket, caminho))) {
+    const copia = await baixarBytes(db, bucket, caminhoDaMedia(caminho), maxBytes);
+    const mc = copia ? mimeDaImagem(copia) : null;
+    const dc = copia ? dimensoesDoCabecalho(copia) : null;
+    if (copia && mc && (cabeNaCaixa(dc, maxL, maxA, folga) || copia.byteLength <= (opcoes.aceitarCopiaMaiorAte ?? 0))) {
+      return { cabe: true, bytes: copia, mime: mc, largura: dc?.largura ?? null, altura: dc?.altura ?? null, origem: "media" };
+    }
+  }
   return { cabe: false, bytes: original, mime, largura: d?.largura ?? null, altura: d?.altura ?? null, origem: "original" };
 }
